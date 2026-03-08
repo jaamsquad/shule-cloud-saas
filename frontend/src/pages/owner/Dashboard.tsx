@@ -1,0 +1,234 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Shield, Building2, CreditCard, Users, Activity,
+  Plus, MoreVertical, CheckCircle, XCircle, Clock, LogOut
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import StatCard from "@/components/StatCard";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from "@/components/ui/table";
+
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
+
+export default function OwnerDashboard() {
+  const [tab, setTab] = useState<"tenants" | "plans" | "billing">("tenants");
+  const navigate = useNavigate();
+
+  const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
+    queryKey: ["owner-tenants"],
+    queryFn: async () => {
+      const res = await api.get("/owner/tenants");
+      return res.data;
+    }
+  });
+
+  const { data: plans = [], isLoading: plansLoading } = useQuery({
+    queryKey: ["owner-plans"],
+    queryFn: async () => {
+      const res = await api.get("/owner/plans");
+      return res.data;
+    }
+  });
+
+  const { data: revenue, isLoading: revenueLoading } = useQuery({
+    queryKey: ["owner-revenue"],
+    queryFn: async () => {
+      const res = await api.get("/owner/billing/revenue-report");
+      return res.data;
+    }
+  });
+
+  // Compute stats from real data
+  const totalTenants = tenants.length;
+  const activeTenants = tenants.filter((t: any) => t.status === 'active').length;
+  const totalRevenue = revenue?.totalRevenue || 0;
+
+  const handleLogout = () => {
+    localStorage.removeItem('owner_token');
+    navigate('/owner');
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Owner Header */}
+      <header className="h-14 bg-foreground border-b border-border flex items-center px-6 justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
+            <Shield className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <span className="font-heading font-bold text-primary-foreground text-sm">ShuleCloud Owner Portal</span>
+        </div>
+        <button onClick={handleLogout} className="text-muted-foreground hover:text-primary-foreground transition-colors" title="Logout">
+          <LogOut className="w-4 h-4" />
+        </button>
+      </header>
+
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="Total Schools"
+            value={tenantsLoading ? "..." : totalTenants.toLocaleString()}
+            change={`${activeTenants} active`}
+            changeType="positive"
+            icon={Building2}
+            iconBg="bg-accent"
+          />
+          <StatCard
+            label="Active Plans"
+            value={plansLoading ? "..." : plans.length.toLocaleString()}
+            change="Available tiers"
+            icon={CreditCard}
+            iconBg="gradient-gold"
+          />
+          <StatCard
+            label="Platform Revenue"
+            value={revenueLoading ? "..." : `KES ${totalRevenue.toLocaleString()}`}
+            change="Total collected"
+            changeType="positive"
+            icon={Activity}
+            iconBg="bg-accent"
+          />
+          <StatCard
+            label="Active Subscriptions"
+            value={tenantsLoading ? "..." : tenants.filter((t: any) => t.subscription).length.toLocaleString()}
+            icon={Users}
+            iconBg="gradient-gold"
+          />
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-border">
+          {(["tenants", "plans", "billing"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "tenants" && (
+          <Card className="shadow-card">
+            <CardHeader className="flex-row items-center justify-between pb-3">
+              <CardTitle className="text-base font-heading">Tenant Schools</CardTitle>
+              <Button size="sm"><Plus className="w-4 h-4 mr-1.5" /> Add Tenant</Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-xs">SCHOOL</TableHead>
+                    <TableHead className="text-xs">SUBDOMAIN</TableHead>
+                    <TableHead className="text-xs">PLAN</TableHead>
+                    <TableHead className="text-xs">STATUS</TableHead>
+                    <TableHead className="text-xs">CREATED</TableHead>
+                    <TableHead className="text-xs w-10"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tenantsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10 text-muted-foreground animate-pulse">Loading schools...</TableCell>
+                    </TableRow>
+                  ) : tenants.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">No schools registered yet.</TableCell>
+                    </TableRow>
+                  ) : (
+                    tenants.map((t: any) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium text-sm">{t.name}</TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-primary font-mono">
+                            {t.domains?.[0]?.domain || 'N/A'}.shulecloud.co.ke
+                          </code>
+                        </TableCell>
+                        <TableCell><Badge variant="secondary" className="text-xs">{t.subscription?.plan?.name || "No Plan"}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {t.status === 'active' ? <CheckCircle className="w-3.5 h-3.5 text-success" /> : <XCircle className="w-3.5 h-3.5 text-destructive" />}
+                            <span className="text-xs capitalize">{t.status}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(t.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {tab === "plans" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {plansLoading ? (
+              <div className="col-span-3 text-center py-10 text-muted-foreground animate-pulse">Loading plans...</div>
+            ) : plans.length === 0 ? (
+              <div className="col-span-3 text-center py-10 text-muted-foreground">No plans configured yet.</div>
+            ) : (
+              plans.map((p: any) => (
+                <Card key={p.id} className="shadow-card">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-heading">{p.name}</CardTitle>
+                    <p className="text-2xl font-bold text-primary">
+                      KES {Number(p.priceMonthly || p.price || 0).toLocaleString()}/mo
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Status</span>
+                      <Badge className={p.isActive !== false ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}>
+                        {p.isActive !== false ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Max Students</span>
+                      <span className="font-medium">{p.limits?.maxStudents?.toLocaleString() || "Unlimited"}</span>
+                    </div>
+                    {p.description && (
+                      <p className="text-xs text-muted-foreground pt-2">{p.description}</p>
+                    )}
+                    <Button variant="outline" size="sm" className="w-full mt-2">Edit Plan</Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === "billing" && (
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle className="text-base font-heading">Revenue Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-6">
+                <p className="text-3xl font-bold text-primary">KES {totalRevenue.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground mt-1">Total platform revenue collected</p>
+                <Button variant="outline" className="mt-4" onClick={() => navigate("/owner/billing")}>
+                  View Full Billing Dashboard
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}

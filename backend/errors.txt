@@ -1,0 +1,32 @@
+prisma/seed.ts(36,13): error TS2353: Object literal may only specify known properties, and 'cycle' does not exist in type '(Without<PlanCreateInput, PlanUncheckedCreateInput> & PlanUncheckedCreateInput) | (Without<...> & PlanCreateInput)'.
+prisma/seed.ts(48,13): error TS2353: Object literal may only specify known properties, and 'cycle' does not exist in type '(Without<PlanCreateInput, PlanUncheckedCreateInput> & PlanUncheckedCreateInput) | (Without<...> & PlanCreateInput)'.
+src/auth/auth.service.ts(23,11): error TS2353: Object literal may only specify known properties, and 'isActive' does not exist in type '(Without<TenantCreateInput, TenantUncheckedCreateInput> & TenantUncheckedCreateInput) | (Without<...> & TenantCreateInput)'.
+src/owner/announcements/owner-announcements.controller.ts(18,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/announcements/owner-announcements.controller.ts(24,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/auth/owner-auth.controller.ts(22,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/auth/owner-auth.controller.ts(28,17): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/auth/owner-auth.controller.ts(34,26): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/auth/owner-auth.guards.ts(3,38): error TS7016: Could not find a declaration file for module 'passport-jwt'. 'D:/shulecloud-connect-37/backend/node_modules/passport-jwt/lib/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/passport-jwt` if it exists or add a new declaration (.d.ts) file containing `declare module 'passport-jwt';`
+src/owner/auth/owner-auth.service.ts(23,72): error TS2345: Argument of type 'null' is not assignable to parameter of type 'string | undefined'.
+src/owner/auth/owner-auth.service.ts(72,63): error TS18047: 'user' is possibly 'null'.
+src/owner/billing/owner-billing.controller.ts(23,22): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/plans/owner-plans.controller.ts(23,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/plans/owner-plans.controller.ts(29,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/plans/owner-plans.controller.ts(35,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/settings/owner-settings.controller.ts(18,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/subscriptions/owner-subscriptions.controller.ts(18,22): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/subscriptions/owner-subscriptions.controller.ts(24,23): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/subscriptions/owner-subscriptions.controller.ts(30,26): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/subscriptions/owner-subscriptions.service.ts(20,17): error TS2322: Type 'JsonValue' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'null' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+src/owner/subscriptions/owner-subscriptions.service.ts(27,17): error TS2322: Type 'JsonValue' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'null' is not assignable to type 'JsonNull | InputJsonValue'.
+src/owner/tenants/owner-tenants.controller.ts(23,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/tenants/owner-tenants.controller.ts(29,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/tenants/owner-tenants.controller.ts(35,19): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/tenants/owner-tenants.controller.ts(41,22): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/owner/tenants/owner-tenants.controller.ts(47,18): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/staff/staff.controller.ts(9,19): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/staff/staff.controller.ts(15,19): error TS7006: Parameter 'req' implicitly has an 'any' type.
+src/tenancy/tenancy.middleware.ts(64,34): error TS2339: Property 'isActive' does not exist on type '{ subscription: { id: string; createdAt: Date; updatedAt: Date; status: string; trialEnd: Date | null; currentPeriodEnd: Date | null; limitsSnapshot: JsonValue; ... 6 more ...; tenantId: string; } | null; } & { ...; }'.
