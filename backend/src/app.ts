@@ -5,6 +5,7 @@ import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
+import ownerRoutes from './routes/owner.routes';
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(tenancyMiddleware);
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);
+app.use('/api/v1/owner', ownerRoutes);
 
 // Root path
 app.get('/', (req, res) => {
