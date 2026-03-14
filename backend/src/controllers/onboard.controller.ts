@@ -1,0 +1,145 @@
+import { Request, Response } from 'express';
+import { getDb } from '../lib/mongodb';
+import bcrypt from 'bcrypt';
+import { ObjectId } from 'mongodb';
+
+export const checkSubdomain = async (req: Request, res: Response) => {
+    const { subdomain } = req.query;
+    if (!subdomain || typeof subdomain !== 'string') {
+        return res.status(400).json({ message: 'Subdomain is required' });
+    }
+
+    const reserved = ['owner', 'api', 'www', 'admin', 'support', 'mail', 'localhost', '127'];
+    if (reserved.includes(subdomain.toLowerCase())) {
+        return res.json({ available: false, message: 'Reserved subdomain' });
+    }
+
+    try {
+        const db = getDb();
+        const existing = await db.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+
+        return res.json({
+            available: !existing,
+            message: existing ? 'Subdomain already taken' : 'Available'
+        });
+    } catch (e) {
+        return res.json({ available: true, message: 'Available' });
+    }
+};
+
+export const registerTenant = async (req: Request, res: Response) => {
+    const { schoolName, subdomain, planId, adminName, adminEmail, adminPhone, password } = req.body;
+
+    try {
+        const db = getDb();
+
+        // 1. Basic check
+        const existing = await db.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+        if (existing) return res.status(409).json({ message: 'Subdomain already taken' });
+
+        // 2. Fetch or Create plan
+        let plan;
+        if (planId) {
+            plan = await db.collection('Plan').findOne({ _id: new ObjectId(planId) });
+        } else {
+            plan = await db.collection('Plan').findOne({ name: 'Basic' });
+        }
+
+        if (!plan) {
+            const planResult = await db.collection('Plan').insertOne({
+                name: 'Basic',
+                description: 'Default Basic Plan',
+                price: 0,
+                billingCycle: 'monthly',
+                isActive: true,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            plan = { _id: planResult.insertedId, name: 'Basic' };
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // 3. Create Tenant
+        const tenantResult = await db.collection('Tenant').insertOne({
+            name: schoolName,
+            subdomain: subdomain.toLowerCase(),
+            contactEmail: adminEmail,
+            contactPhone: adminPhone,
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        const tenantId = tenantResult.insertedId;
+
+        // Create Domain
+        await db.collection('TenantDomain').insertOne({
+            tenantId: tenantId,
+            domain: subdomain.toLowerCase(),
+            isPrimary: true
+        });
+
+        // Create Subscription
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 30);
+
+        await db.collection('TenantSubscription').insertOne({
+            tenantId: tenantId,
+            planId: plan._id,
+            status: 'trial',
+            trialEnd,
+            startDate: new Date()
+        });
+
+        // Seed Roles
+        const roleNames = ['Super Admin', 'Teacher', 'Bursar', 'Student', 'Parent'];
+        const createdRoles: Record<string, ObjectId> = {};
+
+        for (const name of roleNames) {
+            const roleResult = await db.collection('Role').insertOne({
+                tenantId: tenantId,
+                name,
+                createdAt: new Date()
+            });
+            createdRoles[name] = roleResult.insertedId;
+        }
+
+        // Create Admin User
+        const userResult = await db.collection('User').insertOne({
+            tenantId: tenantId,
+            email: adminEmail,
+            passwordHash: hashedPassword,
+            status: 'active',
+            createdAt: new Date()
+        });
+        const userId = userResult.insertedId;
+
+        // Assign Role
+        await db.collection('UserRole').insertOne({
+            userId: userId,
+            roleId: createdRoles['Super Admin']
+        });
+
+        // Settings
+        await db.collection('SchoolSetting').insertOne({
+            tenantId: tenantId,
+            jsonSettings: {
+                currency: 'KES',
+                timezone: 'Africa/Nairobi'
+            }
+        });
+
+        return res.status(201).json({
+            message: 'Onboarding successful',
+            tenant: {
+                id: tenantId,
+                name: schoolName,
+                subdomain: subdomain.toLowerCase(),
+                loginUrl: `http://${subdomain.toLowerCase()}.localhost:8080/login`
+            }
+        });
+    } catch (error: any) {
+        console.error('Registration Error:', error);
+        return res.status(500).json({ message: error.message || 'Registration failed' });
+    }
+};

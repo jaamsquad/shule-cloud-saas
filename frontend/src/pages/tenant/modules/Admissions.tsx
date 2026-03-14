@@ -1,5 +1,5 @@
 import { useState } from "react";
-<<<<<<< HEAD:frontend/src/pages/tenant/modules/Admissions.tsx
+
 import {
     Search, Plus, UserPlus, ClipboardCheck, Calendar, CheckCircle2, XCircle,
     MoreVertical, Pencil, Trash2, Eye, GraduationCap, Users, School,
@@ -424,99 +424,5 @@ export default function Admissions() {
             </Dialog>
         </>
     );
-=======
-import { Search, Plus, Filter, FileUp } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const applications = [
-  { id: "APP-001", name: "Grace Wambui", class: "Grade 7", guardian: "Joyce Wambui", phone: "+254 711 222 333", date: "2026-02-20", status: "Pending" },
-  { id: "APP-002", name: "Mark Otieno", class: "Grade 7", guardian: "Peter Otieno", phone: "+254 722 333 444", date: "2026-02-18", status: "Approved" },
-  { id: "APP-003", name: "Fatima Ali", class: "Grade 8", guardian: "Hassan Ali", phone: "+254 733 444 555", date: "2026-02-15", status: "Approved" },
-  { id: "APP-004", name: "Samuel Kiprop", class: "Grade 7", guardian: "Elijah Kiprop", phone: "+254 744 555 666", date: "2026-02-12", status: "Rejected" },
-  { id: "APP-005", name: "Mercy Njoki", class: "Grade 9", guardian: "Ann Njoki", phone: "+254 755 666 777", date: "2026-02-10", status: "Pending" },
-];
-
-export default function Admissions() {
-  const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const filtered = applications.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
-
-  return (
-    <>
-      <AppHeader title="Admissions" subtitle="New student enrollment and applications" />
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <Card><CardContent className="pt-6"><p className="text-2xl font-bold text-foreground">12</p><p className="text-xs text-muted-foreground">Total Applications</p></CardContent></Card>
-          <Card><CardContent className="pt-6"><p className="text-2xl font-bold text-warning">5</p><p className="text-xs text-muted-foreground">Pending Review</p></CardContent></Card>
-          <Card><CardContent className="pt-6"><p className="text-2xl font-bold text-success">6</p><p className="text-xs text-muted-foreground">Approved</p></CardContent></Card>
-          <Card><CardContent className="pt-6"><p className="text-2xl font-bold text-destructive">1</p><p className="text-xs text-muted-foreground">Rejected</p></CardContent></Card>
-        </div>
-
-        {showForm ? (
-          <Card>
-            <CardHeader><CardTitle className="text-base">New Application</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5"><Label className="text-xs">First Name</Label><Input placeholder="Enter first name" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">Last Name</Label><Input placeholder="Enter last name" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">Date of Birth</Label><Input type="date" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">Gender</Label>
-                  <Select><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem></SelectContent></Select>
-                </div>
-                <div className="space-y-1.5"><Label className="text-xs">Applying for Class</Label>
-                  <Select><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger><SelectContent><SelectItem value="7">Grade 7</SelectItem><SelectItem value="8">Grade 8</SelectItem><SelectItem value="9">Grade 9</SelectItem></SelectContent></Select>
-                </div>
-                <div className="space-y-1.5"><Label className="text-xs">Guardian Name</Label><Input placeholder="Guardian full name" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">Guardian Phone</Label><Input placeholder="+254 7XX XXX XXX" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">Guardian Email</Label><Input type="email" placeholder="guardian@email.com" /></div>
-              </div>
-              <div className="flex gap-2">
-                <Button>Submit Application</Button>
-                <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search applications..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm"><FileUp className="w-4 h-4 mr-1.5" />Bulk Import</Button>
-                <Button size="sm" onClick={() => setShowForm(true)}><Plus className="w-4 h-4 mr-1.5" />New Application</Button>
-              </div>
-            </div>
-            <Card className="shadow-card overflow-hidden">
-              <Table>
-                <TableHeader><TableRow><TableHead className="text-xs">APP ID</TableHead><TableHead className="text-xs">STUDENT NAME</TableHead><TableHead className="text-xs">CLASS</TableHead><TableHead className="text-xs">GUARDIAN</TableHead><TableHead className="text-xs">PHONE</TableHead><TableHead className="text-xs">DATE</TableHead><TableHead className="text-xs">STATUS</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {filtered.map(a => (
-                    <TableRow key={a.id}>
-                      <TableCell className="text-sm font-mono text-primary">{a.id}</TableCell>
-                      <TableCell className="text-sm font-medium">{a.name}</TableCell>
-                      <TableCell className="text-sm">{a.class}</TableCell>
-                      <TableCell className="text-sm">{a.guardian}</TableCell>
-                      <TableCell className="text-sm">{a.phone}</TableCell>
-                      <TableCell className="text-sm">{a.date}</TableCell>
-                      <TableCell><Badge variant={a.status === "Approved" ? "default" : a.status === "Pending" ? "secondary" : "destructive"} className="text-xs">{a.status}</Badge></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </>
-        )}
-      </div>
-    </>
-  );
->>>>>>> 77ad23531057427f302c2871fe4722f1f20fe25e:src/pages/modules/Admissions.tsx
 }
