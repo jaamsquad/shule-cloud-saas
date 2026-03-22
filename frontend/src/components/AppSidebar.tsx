@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardCheck,
   Calendar, UserCheck, Library, Heart, Bell, BarChart3, Settings,
   CreditCard, School, ChevronDown, ChevronRight, LogOut, Shield,
-  PlusCircle, ListChecks, UserPlus, Info, Briefcase, Layers
+  PlusCircle, ListChecks, UserPlus, Info, Briefcase, Layers, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -66,7 +66,20 @@ const navItems: NavItem[] = [
   { label: "Timetable", icon: Calendar, path: "/timetable" },
   { label: "Attendance", icon: UserCheck, path: "/attendance" },
   { label: "Fees & Money", icon: CreditCard, path: "/finance" },
-  { label: "Library", icon: Library, path: "/library" },
+  {
+    label: "Library", icon: Library, children: [
+      { label: "Dashboard", path: "/library" },
+      { label: "Book Catalog", path: "/library/catalog" },
+      { label: "Issued Books", path: "/library/issued" },
+      { label: "Returns", path: "/library/returns" },
+      { label: "Overdue Alerts", path: "/library/overdue" },
+      { label: "Members", path: "/library/members" },
+      { label: "Fines", path: "/library/fines" },
+      { label: "Authors", path: "/library/authors" },
+      { label: "Categories", path: "/library/categories" },
+      { label: "Settings", path: "/library/settings" },
+    ]
+  },
   { label: "Clinic", icon: Heart, path: "/clinic" },
   { label: "Online Learning", icon: School, path: "/lms" },
   { label: "Settings", icon: Settings, path: "/settings" },
@@ -82,21 +95,31 @@ const ownerNavItems: NavItem[] = [
   { label: "Settings", icon: Settings, path: "/owner/settings" },
 ];
 
-export default function AppSidebar() {
+interface AppSidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const location = useLocation();
   const [expanded, setExpanded] = useState<string[]>([]);
 
   const isOwnerPortal = location.pathname.startsWith('/owner');
   const items = isOwnerPortal ? ownerNavItems : navItems;
 
+  const prevPath = useRef(location.pathname);
+
   // Auto-expand active group
   useEffect(() => {
     const activeGroup = items.find(item =>
       item.children?.some(child => location.pathname === child.path)
     );
-    if (activeGroup && !expanded.includes(activeGroup.label)) {
-      setExpanded(prev => [...new Set([...prev, activeGroup.label])]);
+    if (activeGroup) {
+      setExpanded(prev =>
+        prev.includes(activeGroup.label) ? prev : [...prev, activeGroup.label]
+      );
     }
+    prevPath.current = location.pathname;
   }, [location.pathname, items]);
 
   const toggle = (label: string) => {
@@ -108,8 +131,16 @@ export default function AppSidebar() {
   const isActive = (path?: string) => path && location.pathname.startsWith(path);
 
   return (
-    <aside className="w-72 min-h-screen gradient-sidebar flex flex-col border-r border-sidebar-border shadow-2xl relative z-50">
-      <div className="p-6 border-b border-sidebar-border/30">
+    <aside
+      className={`
+        w-72 min-h-screen gradient-sidebar flex flex-col border-r border-sidebar-border shadow-2xl
+        fixed lg:static inset-y-0 left-0 z-50
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}
+    >
+      {/* Header */}
+      <div className="p-6 border-b border-sidebar-border/30 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-11 h-11 rounded-[0.9rem] ${isOwnerPortal ? 'bg-primary shadow-lg shadow-primary/20' : 'gradient-gold shadow-lg shadow-amber-500/10'} flex items-center justify-center transform hover:rotate-6 transition-transform`}>
             <School className={`w-6 h-6 ${isOwnerPortal ? 'text-primary-foreground' : 'text-secondary-foreground'}`} />
@@ -126,6 +157,14 @@ export default function AppSidebar() {
             </div>
           </div>
         </div>
+        {/* Close button — mobile only */}
+        <button
+          onClick={onClose}
+          className="lg:hidden p-1.5 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/30 transition-colors"
+          aria-label="Close menu"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       <nav className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">

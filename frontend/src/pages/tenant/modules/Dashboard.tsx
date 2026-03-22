@@ -46,7 +46,7 @@ export default function Dashboard() {
   return (
     <>
       <AppHeader title="Dashboard" subtitle="Your school at a glance" />
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-muted/30">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8 bg-muted/30">
 
         {/* Welcome Hero (Premium) */}
         <motion.div
@@ -56,7 +56,7 @@ export default function Dashboard() {
         >
           <div className="absolute inset-0 bg-gradient-to-r from-primary to-indigo-600 rounded-[3rem] opacity-90" />
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
-          <div className="relative p-10 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="relative p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
             <div className="space-y-4 text-white text-center md:text-left">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[10px] font-black uppercase tracking-widest">
                 <Sparkles className="w-3.5 h-3.5" /> School Overview

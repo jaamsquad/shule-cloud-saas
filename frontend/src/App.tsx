@@ -79,6 +79,20 @@ import Settings from "./pages/tenant/modules/Settings";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import NotFound from "./pages/NotFound";
 
+// Library Module
+import {
+  LibraryDashboard,
+  BookCatalog,
+  IssuedBooks,
+  Returns,
+  OverdueBooks,
+  Members,
+  Fines,
+  Authors,
+  Categories,
+  LibrarySettings
+} from "./modules/library";
+
 const queryClient = new QueryClient();
 
 const getPortal = () => {
@@ -196,7 +210,21 @@ const App = () => {
 
               {/* More Modules */}
               <Route path="/timetable" element={<Timetable />} />
-              <Route path="/library" element={<PlaceholderPage title="Library" subtitle="Catalog & Circulation" />} />
+              
+              {/* Library Module */}
+              <Route path="/library">
+                <Route index element={<LibraryDashboard />} />
+                <Route path="catalog" element={<BookCatalog />} />
+                <Route path="issued" element={<IssuedBooks />} />
+                <Route path="returns" element={<Returns />} />
+                <Route path="overdue" element={<OverdueBooks />} />
+                <Route path="members" element={<Members />} />
+                <Route path="fines" element={<Fines />} />
+                <Route path="authors" element={<Authors />} />
+                <Route path="categories" element={<Categories />} />
+                <Route path="settings" element={<LibrarySettings />} />
+              </Route>
+
               <Route path="/clinic" element={<PlaceholderPage title="Clinic" subtitle="Medical profiles" />} />
               <Route path="/lms" element={<PlaceholderPage title="LMS" subtitle="E-learning platform" />} />
               <Route path="/communications" element={<PlaceholderPage title="Communications" subtitle="Announcements & messaging" />} />

@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   School, GraduationCap, Users, CreditCard, Shield, BarChart3,
   Calendar, BookOpen, ClipboardCheck, Heart, Library, Bell,
-  ChevronRight, Check, Star, ArrowRight
+  ChevronRight, Check, Star, ArrowRight, Menu, X
 } from "lucide-react";
 
 const features = [
@@ -35,13 +36,15 @@ const testimonials = [
 ];
 
 export default function Landing() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}
       <nav className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
+            <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center flex-shrink-0">
               <School className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="font-heading text-xl font-bold text-foreground">ShuleCloud</span>
@@ -52,15 +55,43 @@ export default function Landing() {
             <Link to="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Contact</Link>
             <Link to="/status" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Status</Link>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
+          <div className="flex items-center gap-2 md:gap-3">
+            <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
               <Link to="/login">Sign In</Link>
             </Button>
             <Button size="sm" asChild>
               <Link to="/register">Get Started</Link>
             </Button>
+            <button
+              onClick={() => setMobileMenuOpen(prev => !prev)}
+              className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+        {/* Mobile dropdown menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-border bg-card px-4 py-3 space-y-1">
+            {[
+              { label: "Features", to: "/features" },
+              { label: "Pricing", to: "/pricing" },
+              { label: "Contact", to: "/contact" },
+              { label: "Status", to: "/status" },
+              { label: "Sign In", to: "/login" },
+            ].map(link => (
+              <Link
+                key={link.to}
+                to={link.to}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* Hero */}
@@ -86,7 +117,7 @@ export default function Landing() {
               <Link to="/features">Explore Features</Link>
             </Button>
           </div>
-          <div className="mt-16 flex justify-center gap-12 md:gap-20 animate-fade-in">
+          <div className="mt-12 md:mt-16 flex flex-wrap justify-center gap-8 md:gap-12 lg:gap-20 animate-fade-in">
             {stats.map(s => (
               <div key={s.label} className="text-center">
                 <p className="text-2xl md:text-3xl font-heading font-bold text-foreground">{s.value}</p>
@@ -154,7 +185,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-border py-12 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-md gradient-primary flex items-center justify-center">
