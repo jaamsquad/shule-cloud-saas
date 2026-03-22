@@ -62,7 +62,7 @@ import Staff from "./pages/tenant/modules/Staff";
 import Departments from "./pages/tenant/modules/Departments";
 import Subjects from "./pages/tenant/modules/Subjects";
 import Finance from "./pages/tenant/modules/Finance";
-import Timetable from "./pages/tenant/modules/Timetable";
+import TimetableWrapper from "./pages/tenant/modules/TimetableWrapper";
 import Attendance from "./pages/tenant/modules/Attendance";
 import Academics from "./pages/tenant/modules/Academics";
 import Schemes from "./pages/tenant/modules/Schemes";
@@ -195,7 +195,7 @@ const App = () => {
               <Route path="/attendance/reports" element={<PlaceholderPage title="Attendance Reports" subtitle="Historical records" />} />
 
               {/* More Modules */}
-              <Route path="/timetable" element={<Timetable />} />
+              <Route path="/timetable/*" element={<TimetableWrapper />} />
               <Route path="/library" element={<PlaceholderPage title="Library" subtitle="Catalog & Circulation" />} />
               <Route path="/clinic" element={<PlaceholderPage title="Clinic" subtitle="Medical profiles" />} />
               <Route path="/lms" element={<PlaceholderPage title="LMS" subtitle="E-learning platform" />} />
