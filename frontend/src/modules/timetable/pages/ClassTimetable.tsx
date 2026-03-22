@@ -46,7 +46,7 @@ const ClassTimetable: React.FC = () => {
       {selectedClass && (
         <Card>
           <CardHeader>
-            <CardTitle>Timetable for {selectedClass}</CardTitle>
+            <CardTitle>Timetable for: {selectedClass}</CardTitle>
           </CardHeader>
           <CardContent>
             <WeeklyGridTimetable entries={filteredEntries} />
