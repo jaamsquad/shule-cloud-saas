@@ -63,7 +63,20 @@ const navItems: NavItem[] = [
       { label: "Exam Results", path: "/assessments/results" },
     ]
   },
-  { label: "Timetable", icon: Calendar, path: "/timetable" },
+  {
+    label: "Timetable", icon: Calendar, children: [
+      { label: "Dashboard", path: "/timetable" },
+      { label: "Class Timetable", path: "/timetable/class" },
+      { label: "Teacher Timetable", path: "/timetable/teacher" },
+      { label: "Room Timetable", path: "/timetable/room" },
+      { label: "Exam Schedule", path: "/timetable/exam" },
+      { label: "Timetable Builder", path: "/timetable/builder" },
+      { label: "Conflicts", path: "/timetable/conflicts" },
+      { label: "Substitutions", path: "/timetable/substitution" },
+      { label: "Print View", path: "/timetable/print" },
+      { label: "Settings", path: "/timetable/settings" },
+    ]
+  },
   { label: "Attendance", icon: UserCheck, path: "/attendance" },
   { label: "Fees & Money", icon: CreditCard, path: "/finance" },
   { label: "Library", icon: Library, path: "/library" },
