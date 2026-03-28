@@ -3,8 +3,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Suspense } from 'react'
-import { elearningRoutes } from '../../src/modules/elearning/elearningRoutes'
 
 // Public pages
 import Landing from "./pages/public/Landing";
@@ -201,14 +199,6 @@ const App = () => {
               <Route path="/library" element={<PlaceholderPage title="Library" subtitle="Catalog & Circulation" />} />
               <Route path="/clinic" element={<PlaceholderPage title="Clinic" subtitle="Medical profiles" />} />
               <Route path="/lms" element={<PlaceholderPage title="LMS" subtitle="E-learning platform" />} />
-              {/* E-learning module routes (lazy-loaded) */}
-              {elearningRoutes.map(({ path, element: Component }) => (
-                <Route key={path} path={path} element={
-                  <Suspense fallback={<div className="p-4">Loading E-learning...</div>}>
-                    <Component />
-                  </Suspense>
-                } />
-              ))}
               <Route path="/communications" element={<PlaceholderPage title="Communications" subtitle="Announcements & messaging" />} />
               <Route path="/inventory" element={<PlaceholderPage title="Inventory" subtitle="Stores & assets" />} />
               <Route path="/transport" element={<PlaceholderPage title="Transport" subtitle="Routes & manifests" />} />
