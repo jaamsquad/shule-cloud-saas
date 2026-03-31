@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Borrower, IssueRecord, Fine } from '../types';
-import { User, Phone, X, History, Clock, DollarSign, Activity, BookText } from 'lucide-react';
+import { User, Phone, X, History, Clock, DollarSign, Activity, BookText, Award, ShieldCheck, Flame } from 'lucide-react';
 import { LibraryService } from '../services/libraryService';
 
 interface BorrowerProfilePanelProps {
@@ -98,7 +98,7 @@ export const BorrowerProfilePanel: React.FC<BorrowerProfilePanelProps> = ({ borr
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'current' | 'history' | 'fines' | 'stats')}
                 className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${
                   activeTab === tab.id 
                   ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-200 dark:ring-gray-700' 
@@ -190,7 +190,31 @@ export const BorrowerProfilePanel: React.FC<BorrowerProfilePanelProps> = ({ borr
                         <p className="text-xl font-bold text-rose-700 dark:text-rose-400">{totalFinesAcc > 0 ? '$'+totalFinesAcc.toFixed(2) : '0'}</p>
                         <p className="text-[10px] uppercase font-bold text-rose-500 dark:text-rose-600">Total Fines</p>
                       </div>
+                      <div className="border-l border-indigo-200 dark:border-indigo-800/40 pl-4">
+                        <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 justify-center"><Flame size={16}/> {borrower.readingPoints || 0}</p>
+                        <p className="text-[10px] uppercase font-bold text-emerald-500 dark:text-emerald-600">XP Points</p>
+                      </div>
                     </div>
+                  </div>
+                  
+                  {/* Badges Section */}
+                  <div className="p-4 rounded-xl border border-amber-100 bg-amber-50/30 dark:border-amber-900/30 dark:bg-amber-900/10">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Award size={18} className="text-amber-500" />
+                      <h4 className="font-semibold text-amber-900 dark:text-amber-300 text-sm">Badges Earned</h4>
+                    </div>
+                    {borrower.badges && borrower.badges.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {borrower.badges.map((badge, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700/50 rounded-full shadow-sm">
+                            {idx % 2 === 0 ? <ShieldCheck size={14} className="text-emerald-500" /> : <Award size={14} className="text-amber-500" />}
+                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">{badge}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-700/60 dark:text-amber-500/60 italic">No badges earned yet. Keep reading!</p>
+                    )}
                   </div>
                 </div>
               )}

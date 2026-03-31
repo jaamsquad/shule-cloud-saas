@@ -9,6 +9,7 @@ import { BookOpen, Users, Clock, DollarSign, Printer, TrendingUp, AlertCircle, A
 import { toast } from 'sonner';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { NotificationBell } from '../components/NotificationBell';
+import { Link } from 'react-router-dom';
 
 export const LibraryDashboard = () => {
   const [stats, setStats] = useState({ totalBooks: 0, totalBorrowers: 0, activeIssues: 0, totalFines: 0 });
@@ -20,8 +21,8 @@ export const LibraryDashboard = () => {
   
   // New metrics states
   const [timeFilter, setTimeFilter] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
-  const [trends, setTrends] = useState<any[]>([]);
-  const [mostBorrowed, setMostBorrowed] = useState<any[]>([]);
+  const [trends, setTrends] = useState<{name: string, issues: number, returns: number}[]>([]);
+  const [mostBorrowed, setMostBorrowed] = useState<{title: string, author: string, accessionNumber: string, borrows: number}[]>([]);
   const [activeBorrowers, setActiveBorrowers] = useState<Borrower[]>([]);
   const [neverBorrowed, setNeverBorrowed] = useState<Book[]>([]);
   const [avgDelay, setAvgDelay] = useState(0);
@@ -68,7 +69,7 @@ export const LibraryDashboard = () => {
           <NotificationBell />
           <select 
             value={timeFilter} 
-            onChange={(e) => setTimeFilter(e.target.value as any)}
+            onChange={(e) => setTimeFilter(e.target.value as 'weekly' | 'monthly' | 'yearly')}
             className="border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg px-3 py-2"
           >
             <option value="weekly">This Week</option>
@@ -151,6 +152,9 @@ export const LibraryDashboard = () => {
               </div>
             ))}
           </div>
+          <Link to="/library/leaderboards" className="mt-4 text-sm text-center font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg transition-colors">
+            View Full Leaderboard →
+          </Link>
         </div>
       </div>
 

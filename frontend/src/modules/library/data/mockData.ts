@@ -13,6 +13,7 @@ export const mockBooks: Book[] = [
     copiesTotal: 5,
     copiesAvailable: 3,
     status: 'Available',
+    digitalCopyUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
   },
   {
     id: 'b2',
@@ -39,6 +40,7 @@ export const mockBooks: Book[] = [
     copiesTotal: 10,
     copiesAvailable: 1,
     status: 'Low Stock',
+    digitalCopyUrl: 'https://s29.q4cdn.com/175625835/files/doc_downloads/test.pdf',
   },
 ];
 
@@ -51,6 +53,8 @@ export const mockBorrowers: Borrower[] = [
     contact: 'alice@example.com',
     booksIssued: 2,
     finesTotal: 0,
+    readingPoints: 1250,
+    badges: ['Bookworm', 'Early Bird', 'Sci-Fi Fanatic'],
   },
   {
     id: 'u2',
@@ -59,6 +63,8 @@ export const mockBorrowers: Borrower[] = [
     contact: 'bob@example.com',
     booksIssued: 1,
     finesTotal: 50,
+    readingPoints: 450,
+    badges: ['Researcher'],
   },
 ];
 

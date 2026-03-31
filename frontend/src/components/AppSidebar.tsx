@@ -77,6 +77,8 @@ const navItems: NavItem[] = [
       { label: "Fines", path: "/library/fines" },
       { label: "Authors", path: "/library/authors" },
       { label: "Categories", path: "/library/categories" },
+      { label: "Leaderboards", path: "/library/leaderboards" },
+      { label: "Acquisitions", path: "/library/acquisitions" },
       { label: "Settings", path: "/library/settings" },
     ]
   },

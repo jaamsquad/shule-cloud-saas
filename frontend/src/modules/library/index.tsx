@@ -12,6 +12,9 @@ import { LibrarySettings } from './pages/LibrarySettings';
 import { Reservations } from './pages/Reservations';
 import { LibraryCalendar } from './pages/LibraryCalendar';
 import { AuditLogs } from './pages/AuditLogs';
+import { Leaderboards } from './pages/Leaderboards';
+import { EBookReader } from './pages/EBookReader';
+import { Acquisitions } from './pages/Acquisitions';
 
 export const libraryRoutes: RouteObject[] = [
   {
@@ -53,6 +56,18 @@ export const libraryRoutes: RouteObject[] = [
   {
     path: 'settings',
     element: <LibrarySettings />
+  },
+  {
+    path: 'leaderboards',
+    element: <Leaderboards />
+  },
+  {
+    path: 'reader/:bookId',
+    element: <EBookReader />
+  },
+  {
+    path: 'acquisitions',
+    element: <Acquisitions />
   }
 ];
 
@@ -69,5 +84,8 @@ export {
   LibrarySettings,
   Reservations,
   LibraryCalendar,
-  AuditLogs
+  AuditLogs,
+  Leaderboards,
+  EBookReader,
+  Acquisitions
 }

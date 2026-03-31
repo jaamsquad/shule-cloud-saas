@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Book } from '../types';
-import { BookOpen, MapPin, Tag, Copy, X, QrCode, Bookmark, ScanLine, Lightbulb } from 'lucide-react';
+import { BookOpen, MapPin, Tag, Copy, X, QrCode, Bookmark, ScanLine, Lightbulb, PlayCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LibraryService } from '../services/libraryService';
 import { toast } from 'sonner';
 
@@ -197,6 +198,15 @@ export const BookDetailPanel: React.FC<BookDetailPanelProps> = ({ book, onClose,
          >
            Delete
          </button>
+
+         {book.digitalCopyUrl && (
+           <Link 
+             to={`/library/reader/${book.id}`}
+             className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+           >
+             <PlayCircle size={18} /> Read Online
+           </Link>
+         )}
 
          {book.copiesAvailable > 0 ? (
            <button 

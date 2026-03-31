@@ -93,7 +93,10 @@ import {
   LibrarySettings,
   Reservations,
   LibraryCalendar,
-  AuditLogs
+  AuditLogs,
+  Leaderboards,
+  EBookReader,
+  Acquisitions
 } from "./modules/library";
 
 const queryClient = new QueryClient();
@@ -229,6 +232,9 @@ const App = () => {
                 <Route path="reservations" element={<Reservations />} />
                 <Route path="calendar" element={<LibraryCalendar />} />
                 <Route path="audit-logs" element={<AuditLogs />} />
+                <Route path="leaderboards" element={<Leaderboards />} />
+                <Route path="reader/:bookId" element={<EBookReader />} />
+                <Route path="acquisitions" element={<Acquisitions />} />
               </Route>
 
               <Route path="/clinic" element={<PlaceholderPage title="Clinic" subtitle="Medical profiles" />} />

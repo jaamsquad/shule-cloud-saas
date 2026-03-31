@@ -12,6 +12,7 @@ export interface Book {
   status: 'Available' | 'Low Stock' | 'Out of Stock';
   totalBorrowed?: number;
   coverUrl?: string;
+  digitalCopyUrl?: string;
 }
 
 export interface Borrower {
@@ -22,6 +23,8 @@ export interface Borrower {
   contact: string;
   booksIssued: number;
   finesTotal: number;
+  readingPoints?: number;
+  badges?: string[];
 }
 
 export interface IssueRecord {
