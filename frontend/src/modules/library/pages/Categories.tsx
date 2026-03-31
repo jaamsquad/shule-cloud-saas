@@ -22,7 +22,7 @@ export const Categories = () => {
     fetchCategories();
   }, []);
 
-  const handleAddCategory = async (data: any) => {
+  const handleAddCategory = async (data: { name: string; description: string }) => {
     try {
       await LibraryService.addCategory(data);
       toast.success("Category added successfully!");
@@ -32,7 +32,7 @@ export const Categories = () => {
     }
   };
 
-  const handleEditCategory = async (id: string, data: any) => {
+  const handleEditCategory = async (id: string, data: Partial<Category>) => {
     try {
       await LibraryService.editCategory(id, data);
       toast.success("Category updated successfully!");
@@ -52,9 +52,10 @@ export const Categories = () => {
     }
   };
 
-  const filteredCategories = categories.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCategories = categories.filter(c => {
+    const term = searchTerm.toLowerCase();
+    return (c.name?.toLowerCase() || '').includes(term);
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">

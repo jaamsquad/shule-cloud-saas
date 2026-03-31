@@ -19,7 +19,7 @@ export const Authors = () => {
     fetchAuthors();
   }, []);
 
-  const handleAddAuthor = async (data: any) => {
+  const handleAddAuthor = async (data: { name: string }) => {
     try {
       await LibraryService.addAuthor(data);
       toast.success("Author added successfully!");
@@ -29,9 +29,10 @@ export const Authors = () => {
     }
   };
 
-  const filteredAuthors = authors.filter(a => 
-    a.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredAuthors = authors.filter(a => {
+    const term = searchTerm.toLowerCase();
+    return (a.name?.toLowerCase() || '').includes(term);
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">

@@ -10,13 +10,16 @@ export const LibrarySettings = () => {
     finePerDay: 0.50,
     loanPeriodStudents: 14,
     loanPeriodStaff: 30,
+    reservationExpiryDays: 3,
     enableAutoReminders: true,
     requireConditionCheck: true,
   });
+  const [currentRole, setCurrentRole] = useState<'Admin' | 'Librarian' | 'Student'>('Admin');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     LibraryService.getSettings().then(setSettings);
+    setCurrentRole(LibraryService.getRole());
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -27,6 +30,13 @@ export const LibrarySettings = () => {
     } else {
       setSettings(prev => ({ ...prev, [name]: Number(value) }));
     }
+  };
+
+  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newRole = e.target.value as 'Admin' | 'Librarian' | 'Student';
+    setCurrentRole(newRole);
+    LibraryService.setRole(newRole);
+    toast.success(`Role switched to ${newRole}`);
   };
 
   const handleSave = async () => {
@@ -70,9 +80,26 @@ export const LibrarySettings = () => {
                 <input type="number" name="loanPeriodStaff" value={settings.loanPeriodStaff} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fine Amount Per Day ($)</label>
-                <input type="number" step="0.10" name="finePerDay" value={settings.finePerDay} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fine Amount Per Day ($)</label>
+                <input type="number" step="0.10" name="finePerDay" value={settings.finePerDay} onChange={handleChange} className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reservation Expiry (Days)</label>
+                <input type="number" name="reservationExpiryDays" value={settings.reservationExpiryDays} onChange={handleChange} className="w-full px-4 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500" />
+              </div>
+           </div>
+        </div>
+
+        <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-indigo-50/30 dark:bg-indigo-900/10">
+           <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Mock Access Role</h3>
+           <div className="max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Simulate View As</label>
+              <select value={currentRole} onChange={handleRoleChange} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                 <option value="Admin">Administrator</option>
+                 <option value="Librarian">Librarian</option>
+                 <option value="Student">Student</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-2">Changes visibility of action buttons (e.g. Issue Book, Add Book).</p>
            </div>
         </div>
 

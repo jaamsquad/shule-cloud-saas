@@ -14,17 +14,28 @@ const mockActivities: ActivityLog[] = [
   { id: '1', message: 'System initialized and ready.', type: 'info', timestamp: new Date().toISOString() }
 ];
 
+import { Reservation } from '../types';
+const mockReservations: Reservation[] = [
+  { id: 'res1', bookId: 'b1', borrowerId: 'u1', reservationDate: new Date(Date.now() - 86400000).toISOString(), expiryDate: new Date(Date.now() + 86400000).toISOString(), status: 'Pending' }
+];
+
 let globalSettings = {
   maxBooksPerStudent: 3,
   maxBooksPerStaff: 10,
   finePerDay: 0.50,
   loanPeriodStudents: 14,
   loanPeriodStaff: 30,
+  reservationExpiryDays: 3,
   enableAutoReminders: true,
   requireConditionCheck: true,
 };
 
+let currentRole: 'Admin' | 'Librarian' | 'Student' = 'Admin';
+
 export const LibraryService = {
+  getRole: () => currentRole,
+  setRole: (role: 'Admin' | 'Librarian' | 'Student') => { currentRole = role; },
+
   // Reports
   getDailyReport: async (dateStr: string) => {
     await delay(300);
@@ -56,7 +67,7 @@ export const LibraryService = {
   getSettings: async () => {
     return Promise.resolve({ ...globalSettings });
   },
-  updateSettings: async (newSettings: any) => {
+  updateSettings: async (newSettings: Partial<typeof globalSettings>) => {
     await delay(500);
     globalSettings = { ...globalSettings, ...newSettings };
     LibraryService.addActivity("Library system settings were updated.", "info");
@@ -80,6 +91,15 @@ export const LibraryService = {
     const bookTitle = mockBooks[index].title;
     mockBooks.splice(index, 1);
     LibraryService.addActivity(`Book "${bookTitle}" was deleted from the catalog.`, "error");
+  },
+  
+  updateBookCover: async (id: string, coverUrl: string): Promise<Book> => {
+    await delay(200);
+    const book = mockBooks.find(b => b.id === id || b.accessionNumber === id);
+    if (!book) throw new Error("Book not found");
+    book.coverUrl = coverUrl;
+    LibraryService.addActivity(`Cover updated for book "${book.title}".`, "info");
+    return book;
   },
   
   getBorrowers: async (): Promise<Borrower[]> => {
@@ -161,6 +181,12 @@ export const LibraryService = {
     return issue;
   },
 
+  calculateFine: (daysLate: number, rate: number): number => {
+    const gracePeriod = globalSettings.loanPeriodStudents ? 2 : 0; // simple mock rule
+    if (daysLate <= gracePeriod) return 0;
+    return (daysLate - gracePeriod) * rate;
+  },
+
   getFines: async (): Promise<Fine[]> => {
     return Promise.resolve([...mockFines]);
   },
@@ -226,6 +252,76 @@ export const LibraryService = {
     console.log(`Notification sent to ${borrowerId}: ${message}`);
     LibraryService.addActivity(`Sent reminder notification to ${borrowerId}.`, "info");
     return Promise.resolve();
+  },
+
+  getMostBorrowedBooks: async () => {
+    // calculate from issues or mockBooks. Let's just return a mock top 10
+    const sorted = [...mockBooks].sort((a, b) => b.totalBorrowed - a.totalBorrowed).slice(0, 10);
+    // Since totalBorrowed isn't in book type yet, let's just mock it or infer from issues
+    const issueCounts: Record<string, number> = {};
+    mockIssues.forEach(i => {
+      issueCounts[i.bookId] = (issueCounts[i.bookId] || 0) + 1;
+    });
+    const booksWithCounts = mockBooks.map(b => ({
+      ...b,
+      borrows: issueCounts[b.accessionNumber] || 0
+    })).sort((a, b) => b.borrows - a.borrows).slice(0, 10);
+    return Promise.resolve(booksWithCounts);
+  },
+
+  getMostActiveBorrowers: async () => {
+    const sorted = [...mockBorrowers].sort((a, b) => b.booksIssued - a.booksIssued).slice(0, 10);
+    return Promise.resolve(sorted);
+  },
+
+  getMonthlyTrends: async () => {
+    // mock monthly trends for the chart
+    return Promise.resolve([
+      { name: 'Jan', issues: 40, returns: 24, fines: 10 },
+      { name: 'Feb', issues: 30, returns: 35, fines: 8 },
+      { name: 'Mar', issues: 20, returns: 18, fines: 5 },
+      { name: 'Apr', issues: 27, returns: 20, fines: 12 },
+      { name: 'May', issues: 18, returns: 25, fines: 4 },
+      { name: 'Jun', issues: 23, returns: 15, fines: 7 },
+      { name: 'Jul', issues: 34, returns: 30, fines: 15 },
+    ]);
+  },
+
+  getBooksNeverBorrowed: async () => {
+    const borrowedIds = new Set(mockIssues.map(i => i.bookId));
+    const neverBorrowed = mockBooks.filter(b => !borrowedIds.has(b.accessionNumber));
+    return Promise.resolve(neverBorrowed);
+  },
+
+  getAverageReturnDelay: async () => {
+    // simplified mock
+    return Promise.resolve({ days: 2.5 });
+  },
+
+  getReservations: async (): Promise<Reservation[]> => {
+    return Promise.resolve([...mockReservations]);
+  },
+  reserveBook: async (bookId: string, borrowerId: string): Promise<Reservation> => {
+    await delay(400);
+    const newRes: Reservation = {
+      id: `res${Date.now()}`,
+      bookId,
+      borrowerId,
+      reservationDate: new Date().toISOString(),
+      expiryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days expiry
+      status: 'Pending'
+    };
+    mockReservations.push(newRes);
+    LibraryService.addActivity(`Book ${bookId} was reserved by ${borrowerId}.`, "info");
+    return newRes;
+  },
+  updateReservationStatus: async (resId: string, status: Reservation['status']): Promise<void> => {
+    await delay(300);
+    const res = mockReservations.find(r => r.id === resId);
+    if (res) {
+      res.status = status;
+      LibraryService.addActivity(`Reservation ${resId} status updated to ${status}.`, "info");
+    }
   },
 
   getDashboardStats: async () => {

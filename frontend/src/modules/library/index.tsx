@@ -9,6 +9,9 @@ import { Fines } from './pages/Fines';
 import { Authors } from './pages/Authors';
 import { Categories } from './pages/Categories';
 import { LibrarySettings } from './pages/LibrarySettings';
+import { Reservations } from './pages/Reservations';
+import { LibraryCalendar } from './pages/LibraryCalendar';
+import { AuditLogs } from './pages/AuditLogs';
 
 export const libraryRoutes: RouteObject[] = [
   {
@@ -63,5 +66,8 @@ export {
   Fines,
   Authors,
   Categories,
-  LibrarySettings
+  LibrarySettings,
+  Reservations,
+  LibraryCalendar,
+  AuditLogs
 }

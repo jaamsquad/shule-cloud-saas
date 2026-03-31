@@ -10,6 +10,8 @@ export interface Book {
   copiesTotal: number;
   copiesAvailable: number;
   status: 'Available' | 'Low Stock' | 'Out of Stock';
+  totalBorrowed?: number;
+  coverUrl?: string;
 }
 
 export interface Borrower {
@@ -54,4 +56,13 @@ export interface Author {
   id: string;
   name: string;
   bookCount: number;
+}
+
+export interface Reservation {
+  id: string;
+  bookId: string;
+  borrowerId: string;
+  reservationDate: string;
+  expiryDate: string;
+  status: 'Pending' | 'Ready for pickup' | 'Expired' | 'Completed' | 'Cancelled';
 }

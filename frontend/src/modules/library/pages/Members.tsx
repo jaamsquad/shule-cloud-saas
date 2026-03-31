@@ -21,7 +21,7 @@ export const Members = () => {
     fetchMembers();
   }, []);
 
-  const handleAddMember = async (data: any) => {
+  const handleAddMember = async (data: Omit<Borrower, 'id' | 'booksIssued' | 'finesTotal'>) => {
     try {
       await LibraryService.addBorrower(data);
       toast.success("Member added successfully!");
@@ -31,11 +31,14 @@ export const Members = () => {
     }
   };
 
-  const filteredMembers = members.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.admissionNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = members.filter(m => {
+    const term = searchTerm.toLowerCase();
+    return (
+      (m.name?.toLowerCase() || '').includes(term) ||
+      (m.admissionNumber?.toLowerCase() || '').includes(term) ||
+      (m.id?.toLowerCase() || '').includes(term)
+    );
+  });
 
   return (
     <div className="relative p-6 max-w-7xl mx-auto space-y-6 h-full min-h-[calc(100vh-100px)] overflow-hidden">
