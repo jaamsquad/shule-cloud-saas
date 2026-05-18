@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { School, Eye, EyeOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { GraduationCap, Eye, EyeOff, User, Lock, ArrowRight, ShieldCheck, GraduationCap as StudentIcon, Users, Globe } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -12,6 +9,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"admin" | "employee" | "student">("admin");
   const [subdomain, setSubdomain] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -26,10 +24,11 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const actualSubdomain = detectedSubdomain || subdomain;
-    if (!actualSubdomain) {
-      toast.error("Please enter your school subdomain");
-      return;
+    if (!actualSubdomain && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        toast.error("Please enter your school subdomain");
+        return;
     }
+
     setIsLoading(true);
     try {
       const res = await api.post("/auth/login", {
@@ -37,140 +36,161 @@ export default function Login() {
         password,
         subdomain: actualSubdomain,
       });
-      // Store tokens and user info
       localStorage.setItem("auth_token", res.data.access_token);
-      localStorage.setItem("refresh_token", res.data.refresh_token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
-      localStorage.setItem("tenant", JSON.stringify(res.data.tenant));
-      toast.success(`Welcome back, ${res.data.user.firstName}!`);
+      toast.success(`Welcome back!`);
       navigate("/dashboard");
     } catch (err: any) {
-      const msg = err?.response?.data?.message || "Login failed. Please check your credentials.";
-      toast.error(msg);
+      toast.error(err?.response?.data?.message || "Login failed.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 gradient-primary relative overflow-hidden items-center justify-center p-12">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 w-64 h-64 rounded-full border border-primary-foreground/20" />
-          <div className="absolute bottom-32 right-16 w-96 h-96 rounded-full border border-primary-foreground/20" />
-          <div className="absolute top-1/2 left-1/3 w-48 h-48 rounded-full border border-primary-foreground/20" />
-        </div>
-        <div className="relative z-10 max-w-md text-center space-y-6">
-          <div className="w-16 h-16 rounded-2xl gradient-gold flex items-center justify-center mx-auto">
-            <School className="w-8 h-8 text-secondary-foreground" />
-          </div>
-          <h1 className="text-4xl font-heading font-bold text-primary-foreground">ShuleCloud</h1>
-          <p className="text-primary-foreground/80 text-lg leading-relaxed">
-            Kenya's premier CBC-compliant school management platform. Streamline administration, empower teachers, engage parents.
-          </p>
-          <div className="flex items-center justify-center gap-6 pt-4">
-            {["200+ Schools", "50K+ Students", "CBC Ready"].map(stat => (
-              <div key={stat} className="text-center">
-                <p className="text-sm font-medium text-primary-foreground/90">{stat}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-md space-y-8">
-          <div className="lg:hidden flex items-center gap-3 justify-center mb-8">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-              <School className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <h1 className="text-2xl font-heading font-bold text-foreground">ShuleCloud</h1>
-          </div>
-
+    <div className="h-screen flex bg-white font-sans overflow-hidden">
+      {/* Left Column - Form */}
+      <div className="flex-1 flex flex-col justify-center items-center px-8 lg:px-12 bg-[#f0f2ff]">
+        <div className="w-full max-w-[340px] space-y-6">
+          {/* Logo & Header */}
           <div className="space-y-2">
-            <h2 className="text-2xl font-heading font-bold text-foreground">Welcome back</h2>
-            <p className="text-muted-foreground">Sign in to your school portal</p>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 bg-gray-800 rounded-lg flex items-center justify-center text-white">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+              <h1 className="text-xl font-black tracking-tight text-gray-800">
+                shule<span className="text-[#5C67F2]">cloud</span>
+              </h1>
+            </div>
+            <p className="text-[11px] text-gray-500 font-medium">Please enter your credentials to access your school dashboard.</p>
+            <h2 className="text-base font-bold text-[#5C67F2]">Welcome Back! 👋</h2>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Show subdomain field only when not detected from URL */}
-            {!detectedSubdomain && (
-              <div className="space-y-2">
-                <Label htmlFor="subdomain">School Subdomain</Label>
-                <div className="relative">
-                  <Input
-                    id="subdomain"
+          {/* Role Selection */}
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-[#868DF4] text-center">You're</p>
+            <div className="flex justify-center gap-4">
+                <RoleButton active={role === 'admin'} onClick={() => setRole('admin')} icon={<ShieldCheck />} label="Admin" />
+                <RoleButton active={role === 'employee'} onClick={() => setRole('employee')} icon={<Users />} label="Employee" />
+                <RoleButton active={role === 'student'} onClick={() => setRole('student')} icon={<StudentIcon />} label="Student" />
+            </div>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-4">
+              {/* Show subdomain field only on localhost when not detected */}
+              {(!detectedSubdomain && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) && (
+                <div className="relative group">
+                    <Globe className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                    <input
                     type="text"
-                    placeholder="e.g. kingshigh"
+                    placeholder="School Subdomain (e.g. muzamila)"
                     value={subdomain}
                     onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    className="h-11 pr-32"
+                    className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
                     required
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded">
-                    .shulecloud.co.ke
-                  </div>
+                    />
                 </div>
+              )}
+              <div className="relative group">
+                <User className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                <input
+                  type="email"
+                  placeholder="Your Email Address"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
+                  required
+                />
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@school.ke"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="h-11"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
-              </div>
-              <div className="relative">
-                <Input
-                  id="password"
+              <div className="relative group">
+                <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="Your Password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="h-11 pr-10"
+                  className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-10 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#5C67F2]"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-11 font-medium" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="remember" className="w-3.5 h-3.5 rounded border-gray-300 text-[#5C67F2] focus:ring-[#5C67F2]" />
+              <label htmlFor="remember" className="text-[11px] font-bold text-gray-400">Remember Me</label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-11 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 text-sm"
+            >
+              <Lock className="w-4 h-4" /> {isLoading ? "LOGGING IN..." : "Login"}
+            </button>
           </form>
 
-          <p className="text-center text-sm text-muted-foreground my-4">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-primary font-semibold hover:underline">
-              Register School
+          <div className="text-center pt-2">
+            <Link to="/forgot-password" className="text-[11px] font-black text-gray-800 hover:text-[#5C67F2] transition-colors">
+              Forgot your <span className="text-[#5C67F2]">password?</span>
             </Link>
-          </p>
+          </div>
+        </div>
+      </div>
 
-          <p className="text-center text-xs text-muted-foreground">
-            Powered by ShuleCloud · CBC Compliant · Secure & Reliable
+      {/* Right Column - Brand & Image */}
+      <div className="hidden lg:flex w-[45%] bg-[#241B5C] relative flex-col items-center justify-center p-12 text-center text-white overflow-hidden">
+        {/* Sign Up Link */}
+        <div className="absolute top-10 right-10 flex items-center gap-4">
+            <span className="text-sm font-medium text-purple-200">Don't have an account?</span>
+            <Link to="/register" className="px-6 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
+                <User className="w-4 h-4" /> Sign Up
+            </Link>
+        </div>
+
+        <div className="relative z-10 space-y-4 max-w-sm mt-12">
+          <h2 className="text-3xl font-black tracking-tight leading-tight">Continue Managing!</h2>
+          <p className="text-sm text-purple-200 leading-relaxed font-medium">
+            Pick up right where you left off. Sign in to the world's favorite fast, easy, and 100% cloud-based school management platform.
           </p>
+        </div>
+
+        <div className="relative mt-auto w-full max-w-lg aspect-square">
+            {/* Abstract Shapes */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#241B5C] via-transparent to-transparent z-10"></div>
+            <img 
+                src="/auth-hero.png" 
+                alt="Student" 
+                className="w-full h-full object-contain object-bottom relative z-0 opacity-90 scale-110 translate-y-10"
+            />
         </div>
       </div>
     </div>
   );
 }
+
+function RoleButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+    return (
+        <button 
+            type="button"
+            onClick={onClick}
+            className={`flex flex-col items-center gap-1.5 transition-all ${active ? 'scale-105' : 'opacity-50 grayscale hover:opacity-100 hover:grayscale-0'}`}
+        >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center border transition-all ${active ? 'bg-[#5C67F2] border-[#5C67F2] text-white shadow-md' : 'bg-white border-gray-300 text-gray-500'}`}>
+                {React.cloneElement(icon as React.ReactElement, { className: "w-6 h-6" })}
+            </div>
+            <span className={`text-[10px] font-bold ${active ? 'text-[#5C67F2]' : 'text-gray-400'}`}>{label}</span>
+        </button>
+    );
+}
+
+import React from "react";

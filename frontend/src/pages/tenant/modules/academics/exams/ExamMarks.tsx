@@ -1,0 +1,388 @@
+import { useState } from "react";
+import {
+    Search, Save, AlertCircle, Loader2, Home, Users, CheckCircle,
+    XCircle, ChevronDown, ArrowLeft, Calculator
+} from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/api";
+import { toast } from "sonner";
+import { motion } from "framer-motion";
+
+interface MarkEntry {
+    _id?: string;
+    studentId: string;
+    studentName: string;
+    admNo?: string;
+    subjectId: string;
+    subjectName: string;
+    examId: string;
+    marksObtained: number | string;
+    totalMarks: number;
+    grade?: string;
+    gradePoints?: number;
+    remarks?: string;
+    attendanceStatus?: "Present" | "Absent" | "Sick";
+}
+
+// Dynamic grade calculator — uses saved tiers, sorted highest-first
+function autoGrade(
+    marks: number,
+    total: number,
+    tiers?: Array<{ grade: string; from: number; upto: number; status: string }>
+): { grade: string; points: number; remarks: string } {
+    const pct = total > 0 ? (marks / total) * 100 : 0;
+
+    // Use saved grading tiers if available
+    if (tiers && tiers.length > 0) {
+        const sorted = [...tiers].sort((a, b) => b.from - a.from);
+        const match = sorted.find(t => pct >= t.from && pct <= t.upto);
+        if (match) {
+            return {
+                grade: match.grade,
+                points: parseFloat((match.from / 25).toFixed(1)), // approximate points
+                remarks: match.status || (pct >= 50 ? "Pass" : "Fail")
+            };
+        }
+    }
+
+    // Hardcoded fallback
+    if (pct >= 80) return { grade: "A+", points: 4.0, remarks: "Excellent" };
+    if (pct >= 70) return { grade: "A",  points: 3.5, remarks: "Very Good" };
+    if (pct >= 60) return { grade: "B+", points: 3.0, remarks: "Good" };
+    if (pct >= 50) return { grade: "B",  points: 2.5, remarks: "Average" };
+    if (pct >= 40) return { grade: "C",  points: 2.0, remarks: "Below Average" };
+    if (pct >= 33) return { grade: "D",  points: 1.0, remarks: "Poor" };
+    return { grade: "F", points: 0.0, remarks: "Fail" };
+}
+
+export default function ExamMarks() {
+    const [selectedExam, setSelectedExam] = useState<any>(null);
+    const [selectedClass, setSelectedClass] = useState<any>(null);
+    const [selectedSubject, setSelectedSubject] = useState<any>(null);
+    const [entries, setEntries] = useState<MarkEntry[]>([]);
+    const [search, setSearch] = useState("");
+    const queryClient = useQueryClient();
+
+    const { data: exams = [] } = useQuery<any[]>({
+        queryKey: ["exams"],
+        queryFn: async () => (await api.get("/academics/exams")).data,
+    });
+
+    const { data: classes = [] } = useQuery<any[]>({
+        queryKey: ["classes"],
+        queryFn: async () => (await api.get("/academics/classes")).data,
+    });
+
+    const { data: subjects = [] } = useQuery<any[]>({
+        queryKey: ["subjects"],
+        queryFn: async () => (await api.get("/subjects")).data,
+    });
+
+    const { data: allStudents = [], isLoading: loadingStudents } = useQuery<any[]>({
+        queryKey: ["students"],
+        queryFn: async () => (await api.get("/students")).data,
+    });
+
+    // Fetch grading tiers from the saved setting (same as MarksGrading.tsx settings page)
+    const { data: gradingConfig } = useQuery<any>({
+        queryKey: ["grading_criteria"],
+        queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
+    });
+    const gradeTiers: Array<{ grade: string; from: number; upto: number; status: string }> =
+        gradingConfig?.grades || [];
+
+
+    // Filter students for the selected class — matches by classId OR by studentClass name (same as Classes.tsx)
+    const students = selectedClass
+        ? allStudents.filter((s: any) =>
+            s.classId === selectedClass._id ||
+            s.studentClass === (selectedClass.levelName || selectedClass.name)
+          )
+        : [];
+
+    const { data: existingMarks = [] } = useQuery<any[]>({
+        queryKey: ["exam-marks", selectedExam?._id, selectedClass?._id, selectedSubject?._id],
+        queryFn: async () => {
+            if (!selectedExam || !selectedClass || !selectedSubject) return [];
+            const r = await api.get(`/academics/exam-marks?examId=${selectedExam._id}&classId=${selectedClass._id}&subjectId=${selectedSubject._id}`);
+            return r.data;
+        },
+        enabled: !!selectedExam && !!selectedClass && !!selectedSubject,
+    });
+
+    const saveMutation = useMutation({
+        mutationFn: async (data: any[]) => {
+            return api.post("/academics/exam-marks/bulk", { entries: data });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["exam-marks"] });
+            toast.success("Marks saved successfully!");
+        },
+        onError: (e: any) => toast.error(e?.response?.data?.message || "Failed to save marks"),
+    });
+
+    const loadStudents = () => {
+        if (!selectedExam || !selectedClass || !selectedSubject || students.length === 0) {
+            return toast.error("Ensure exam, class, subject are selected and students are loaded.");
+        }
+        const mapped = students.map((s: any) => {
+        const name = s.studentName || (s.firstName && s.lastName ? `${s.firstName} ${s.lastName}` : null) || s.fullName || s.name || s.admNo || "Student";
+            const adm = s.admissionNumber || s.admNo || s.registrationNo || "—";
+            const existing = existingMarks.find((m: any) => m.studentId === s._id);
+            if (existing) {
+                // Re-calculate grade using saved tiers when loading existing marks
+                const m = Number(existing.marksObtained);
+                const t = Number(existing.totalMarks) || 100;
+                const { grade, points, remarks } = autoGrade(m, t, gradeTiers);
+                return { ...existing, studentName: name, admNo: adm, grade, gradePoints: points, remarks };
+            }
+            return {
+                studentId: s._id, studentName: name, admNo: adm,
+                subjectId: selectedSubject._id, subjectName: selectedSubject.name,
+                examId: selectedExam._id, marksObtained: "", totalMarks: 100,
+                grade: "", remarks: "", attendanceStatus: "Present"
+            };
+        });
+        setEntries(mapped);
+        toast.success(`Loaded ${mapped.length} students`);
+    };
+
+    const updateEntry = (idx: number, field: keyof MarkEntry, value: any) => {
+        setEntries(prev => {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], [field]: value };
+            if (field === "marksObtained" || field === "totalMarks") {
+                const marks = field === "marksObtained" ? Number(value) : Number(updated[idx].marksObtained);
+                const total = field === "totalMarks" ? Number(value) : Number(updated[idx].totalMarks);
+                if (!isNaN(marks) && !isNaN(total) && total > 0) {
+                    const { grade, points, remarks } = autoGrade(marks, total, gradeTiers);
+                    updated[idx].grade = grade;
+                    updated[idx].gradePoints = points;
+                    updated[idx].remarks = remarks;
+                }
+            }
+            return updated;
+        });
+    };
+
+    const handleSave = () => {
+        if (!selectedExam || !selectedClass || !selectedSubject) return toast.error("Please select exam, class, and subject first");
+        if (entries.length === 0) return toast.error("Load students first before saving.");
+
+        // Include all entries that have marks OR are marked Absent (save with 0)
+        const toSave = entries
+            .filter(e => e.marksObtained !== "" || e.attendanceStatus === "Absent")
+            .map(e => ({
+                ...e,
+                examId: selectedExam._id,
+                subjectId: selectedSubject._id,
+                subjectName: selectedSubject.name || selectedSubject.subjectName,
+                classId: selectedClass._id,
+                className: selectedClass.levelName || selectedClass.name,
+                // Always store as number; 0 for absent
+                marksObtained: e.attendanceStatus === "Absent" ? 0 : Number(e.marksObtained),
+                totalMarks: Number(e.totalMarks) || 100,
+            }));
+
+        if (toSave.length === 0) return toast.error("Enter at least one student's marks before saving.");
+        saveMutation.mutate(toSave);
+    };
+
+    const filtered = entries.filter(e => (e.studentName || "").toLowerCase().includes(search.toLowerCase()) || (e.admNo || "").toLowerCase().includes(search.toLowerCase()));
+
+    const setupReady = selectedExam && selectedClass && selectedSubject;
+
+    return (
+        <div className="flex-1 bg-[#f3f4f6] min-h-screen flex flex-col overflow-y-auto pb-20">
+            <div className="w-full bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+                <div className="flex items-center gap-2 text-sm">
+                    <Home className="w-4 h-4 text-[#5C67F2]" />
+                    <span className="text-gray-300">/</span>
+                    <span className="font-bold text-gray-600">Exams</span>
+                    <span className="text-gray-300">/</span>
+                    <span className="font-black text-[#5C67F2]">Add / Update Exam Marks</span>
+                </div>
+                {setupReady && (
+                    <button onClick={handleSave} disabled={saveMutation.isPending} className="flex items-center gap-2 px-6 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
+                        {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
+                    </button>
+                )}
+            </div>
+
+            <div className="flex-1 px-8 py-8 w-full max-w-7xl mx-auto">
+                <h1 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Add / Update Exam Marks</h1>
+                <p className="text-slate-400 text-sm font-medium mb-8">Select exam, class, and subject to enter or update student marks.</p>
+
+                {/* Filters */}
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                    {/* Exam */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Exam</label>
+                        <div className="relative">
+                            <select
+                                value={selectedExam?._id || ""}
+                                onChange={e => setSelectedExam(exams.find((o: any) => o._id === e.target.value) || null)}
+                                className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
+                            >
+                                <option value="">— Select Exam —</option>
+                                {exams.map((o: any) => (
+                                    <option key={o._id} value={o._id}>
+                                        {o.examName || o.name || o.label || "Unnamed Exam"}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+
+                    {/* Class */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Class</label>
+                        <div className="relative">
+                            <select
+                                value={selectedClass?._id || ""}
+                                onChange={e => setSelectedClass(classes.find((o: any) => o._id === e.target.value) || null)}
+                                className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
+                            >
+                                <option value="">— Select Class —</option>
+                                {classes.map((o: any) => (
+                                    <option key={o._id} value={o._id}>
+                                        {o.levelName || o.name || "—"}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+
+                    {/* Subject */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Subject</label>
+                        <div className="relative">
+                            <select
+                                value={selectedSubject?._id || ""}
+                                onChange={e => setSelectedSubject(subjects.find((o: any) => o._id === e.target.value) || null)}
+                                className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
+                            >
+                                <option value="">— Select Subject —</option>
+                                {subjects.map((o: any) => (
+                                    <option key={o._id} value={o._id}>
+                                        {o.name || o.subjectName || o.label || "Unnamed Subject"}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+                </div>
+
+
+                {setupReady && (
+                    <div className="mb-4 flex items-center justify-between">
+                        <button onClick={loadStudents} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#5C67F2] text-[#5C67F2] rounded-full font-black text-xs tracking-widest uppercase hover:bg-indigo-50 transition-all">
+                            <Users className="w-3.5 h-3.5" /> Load Students
+                        </button>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student…" className="h-10 pl-10 pr-4 border border-gray-200 rounded-xl text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] placeholder:text-slate-200" />
+                        </div>
+                    </div>
+                )}
+
+                {!setupReady ? (
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center py-20 gap-4">
+                        <div className="w-20 h-20 bg-amber-50 rounded-[2rem] flex items-center justify-center">
+                            <Calculator className="w-10 h-10 text-amber-500" />
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-base font-black text-slate-700">Select Exam, Class & Subject</h3>
+                            <p className="text-slate-400 text-sm font-medium mt-1">Use the dropdowns above to start entering marks.</p>
+                        </div>
+                    </div>
+                ) : entries.length === 0 ? (
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center py-16 gap-4">
+                        <Users className="w-10 h-10 text-slate-300" />
+                        <p className="text-slate-400 text-sm font-bold">Click "Load Students" to populate the marks sheet.</p>
+                    </div>
+                ) : (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-[#5C67F2]/5 to-transparent">
+                            <h3 className="font-black text-slate-700 text-sm">
+                                {selectedExam?.examName} · {selectedClass?.name} · {selectedSubject?.name}
+                            </h3>
+                            <p className="text-xs text-slate-400 font-medium mt-0.5">{filtered.length} student(s) · Grades auto-calculated</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-gray-100">
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">#</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Student</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Adm No</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Marks</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Obtained</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">%</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Grade</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</th>
+                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filtered.map((entry, idx) => {
+                                        const globalIdx = entries.indexOf(entry);
+                                        const pct = entry.totalMarks > 0 && entry.marksObtained !== "" ? Math.round((Number(entry.marksObtained) / entry.totalMarks) * 100) : null;
+                                        const isAbsent = entry.attendanceStatus === "Absent";
+                                        return (
+                                            <tr key={entry.studentId} className={`border-b border-gray-50 hover:bg-slate-50/50 transition-colors ${isAbsent ? "opacity-50" : ""}`}>
+                                                <td className="px-4 py-3 text-xs font-bold text-slate-400">{idx + 1}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 rounded-xl bg-indigo-50 text-[#5C67F2] flex items-center justify-center text-[10px] font-black">
+                                                            {(entry.studentName || "?")[0].toUpperCase()}
+                                                        </div>
+                                                        <span className="text-sm font-black text-slate-700">{entry.studentName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs font-bold text-slate-400">{entry.admNo || "—"}</td>
+                                                <td className="px-4 py-3">
+                                                    <input type="number" value={entry.totalMarks} onChange={e => updateEntry(globalIdx, "totalMarks", Number(e.target.value))} min="0" className="w-20 h-9 px-3 border border-gray-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] text-center" />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <input type="number" value={entry.marksObtained} onChange={e => updateEntry(globalIdx, "marksObtained", e.target.value)} disabled={isAbsent} min="0" max={entry.totalMarks} placeholder="—" className="w-20 h-9 px-3 border border-gray-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] text-center disabled:bg-gray-50" />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`text-xs font-black ${pct !== null ? (pct >= 50 ? "text-emerald-600" : "text-red-500") : "text-slate-300"}`}>
+                                                        {pct !== null ? `${pct}%` : "—"}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`text-xs font-black px-2 py-1 rounded-lg ${entry.grade ? "bg-indigo-50 text-[#5C67F2]" : "text-slate-200"}`}>
+                                                        {entry.grade || "—"}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <select value={entry.attendanceStatus || "Present"} onChange={e => updateEntry(globalIdx, "attendanceStatus", e.target.value)} className="h-9 px-3 border border-gray-200 rounded-lg text-xs font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2]">
+                                                        <option>Present</option>
+                                                        <option>Absent</option>
+                                                        <option>Sick</option>
+                                                    </select>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs font-bold text-slate-400">{entry.remarks || "—"}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="px-6 py-4 border-t border-gray-100 bg-slate-50/50 flex items-center justify-between">
+                            <p className="text-xs font-bold text-slate-400">{entries.filter(e => e.marksObtained !== "").length} / {entries.length} marks entered</p>
+                            <button onClick={handleSave} disabled={saveMutation.isPending} className="flex items-center gap-2 px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
+                                {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

@@ -136,3 +136,101 @@
     box-shadow: 0 10px 25px -5px hsl(160 30% 8% / 0.08), 0 8px 10px -6px hsl(160 30% 8% / 0.04);
   }
 }
+
+/* ─── Print Styles ─────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide everything that's not the main content */
+  nav,
+  aside,
+  header,
+  [data-sidebar],
+  [class*="sidebar"],
+  .print-hidden {
+    display: none !important;
+  }
+
+  /* Reset layout so content takes full width */
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  main,
+  [class*="flex-1"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    background: white !important;
+  }
+
+  /* Hide breadcrumbs, filter bars, toolbars, pagination, buttons */
+  .print\:hidden,
+  [class*="breadcrumb"],
+  [class*="print:hidden"] {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print\:block,
+  [class*="print:block"] {
+    display: block !important;
+  }
+
+  /* Clean up the table container */
+  .print\:shadow-none,
+  [class*="print:shadow-none"] {
+    box-shadow: none !important;
+  }
+
+  .print\:border-none,
+  [class*="print:border-none"] {
+    border: none !important;
+  }
+
+  .print\:rounded-none,
+  [class*="print:rounded-none"] {
+    border-radius: 0 !important;
+  }
+
+  .print\:p-0,
+  [class*="print:p-0"] {
+    padding: 0 !important;
+  }
+
+  /* Table print styles */
+  table {
+    width: 100% !important;
+    font-size: 11px !important;
+  }
+
+  table thead {
+    background: #334155 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  table thead th {
+    color: white !important;
+    padding: 8px 12px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  table tbody td {
+    padding: 6px 12px !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  /* Force colors in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Page margins */
+  @page {
+    margin: 1.5cm 1cm;
+    size: A4;
+  }
+}

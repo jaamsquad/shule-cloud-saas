@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { getDb } from '../lib/mongodb';
 
+console.log('[Tenancy] Initializing institutional security context...');
+
 export interface TenantContext {
     tenantId: string;
     tenantSubdomain: string;
@@ -19,6 +21,7 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
     const path = req.originalUrl || req.url;
 
     // Skip for non-tenant routes
+    console.log(`[Tenancy] Evaluating access for: ${path}`);
     const publicPrefixes = ['/api/v1/onboard', '/api/v1/owner'];
     if (publicPrefixes.some(p => path.startsWith(p))) {
         return next();
@@ -28,6 +31,7 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
     const xTenant = req.headers['x-tenant-subdomain'];
 
     let subdomain = typeof xTenant === 'string' ? xTenant : null;
+    console.log(`[Tenancy] Extracted Subdomain: ${subdomain} from header`);
     if (!subdomain && host) {
         const parts = host.split('.');
         if (parts.length > 2) {
@@ -37,7 +41,24 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
 
     const reserved = ['owner', 'api', 'www', 'admin', 'support', 'mail', 'localhost', '127'];
     if (!subdomain || reserved.includes(subdomain)) {
-        return next();
+        // In development, if no subdomain, try to fallback to a default tenant
+        if (process.env.NODE_ENV !== 'production' || host.includes('localhost')) {
+            console.log('[Tenancy] No subdomain found on localhost, attempting development fallback...');
+            try {
+                const db = getDb();
+                const defaultTenant = await db.collection('Tenant').findOne({ status: 'active' });
+                if (defaultTenant) {
+                    subdomain = defaultTenant.subdomain;
+                    console.log(`[Tenancy] Development Fallback: Using tenant "${subdomain}"`);
+                }
+            } catch (e) {
+                console.error('[Tenancy] Fallback failed:', e);
+            }
+        }
+        
+        if (!subdomain || reserved.includes(subdomain)) {
+            return next();
+        }
     }
 
     try {

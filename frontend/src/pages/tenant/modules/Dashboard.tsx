@@ -1,281 +1,276 @@
-import { useState, useEffect } from "react";
-import {
-  Users, GraduationCap, CreditCard, UserCheck, TrendingUp, TrendingDown,
-  AlertTriangle, BookOpen, Calendar, Clock, ArrowRight, Sparkles,
-  Search, Bell, Settings, ChevronRight, Activity, Zap, Target, BarChart3
+import { 
+    User, Briefcase, DollarSign, ChevronLeft, ChevronRight, Gift, 
+    Frown, Calendar as CalendarIcon, Smartphone, Monitor 
 } from "lucide-react";
-import AppHeader from "@/components/AppHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import api from "@/lib/api";
-import { motion, AnimatePresence } from "framer-motion";
-
-const recentActivity = [
-  { action: "New Student", detail: "Jane Wanjiku joined Form 1A", time: "2m", type: "success" },
-  { action: "Fee Payment", detail: "KES 45,000 received", time: "15m", type: "success" },
-  { action: "Exam Done", detail: "Mid Term CAT for Grade 7", time: "1h", type: "info" },
-  { action: "Absent Students", detail: "5 students absent in Form 2B", time: "2h", type: "warning" },
-];
-
-const upcomingEvents = [
-  { name: "Form 4 Mock Exams", date: "Mar 3 - Mar 14", icon: BookOpen, color: "text-indigo-500", bg: "bg-indigo-500/10" },
-  { name: "Parents Meeting", date: "Mar 8, 2:00 PM", icon: Users, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-  { name: "Sports Day", date: "Mar 15", icon: Zap, color: "text-amber-500", bg: "bg-amber-500/10" },
-];
 
 export default function Dashboard() {
-  const [greeting, setGreeting] = useState("Good Morning");
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: async () => {
-      const res = await api.get("/dashboard/stats");
-      return res.data;
-    },
-  });
-
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour >= 12 && hour < 17) setGreeting("Good Afternoon");
-    else if (hour >= 17) setGreeting("Good Evening");
-    else setGreeting("Good Morning");
-  }, []);
-
-  return (
-    <>
-      <AppHeader title="Dashboard" subtitle="Your school at a glance" />
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-muted/30">
-
-        {/* Welcome Hero (Premium) */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden group"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-primary to-indigo-600 rounded-[3rem] opacity-90" />
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
-          <div className="relative p-10 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="space-y-4 text-white text-center md:text-left">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[10px] font-black uppercase tracking-widest">
-                <Sparkles className="w-3.5 h-3.5" /> School Overview
-              </div>
-              <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-none">
-                {greeting}, <span className="text-white/70">Administrator.</span>
-              </h2>
-              <p className="text-white/60 text-sm font-medium max-w-sm">
-                Everything is running well at <span className="text-white font-bold">98.4% uptime</span>.
-                Term 1 numbers are looking good across all classes.
-              </p>
-              <div className="flex items-center gap-3 pt-2">
-                <Button className="bg-white text-primary hover:bg-white/90 rounded-2xl h-11 px-8 font-black text-xs shadow-xl shadow-white/10 group">
-                  VIEW FULL REPORT <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-all" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
-              {[
-                { label: "Students", val: stats?.totalStudents || 0, icon: Users },
-                { label: "Fees Collected", val: `${stats?.feeCollection || 0}%`, icon: CreditCard }
-              ].map((m, i) => (
-                <div key={i} className="bg-white/10 backdrop-blur-xl p-6 rounded-[2.5rem] border border-white/20 text-white min-w-[160px] hover:scale-105 transition-transform">
-                  <m.icon className="w-6 h-6 mb-3 opacity-60" />
-                  <p className="text-2xl font-black">{m.val}</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-40">{m.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Tactical Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md overflow-hidden group">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +12%</span>
-                    <span className="text-[8px] font-bold text-muted-foreground/40">VS LAST TERM</span>
-                  </div>
-                </div>
-                <h4 className="text-2xl font-black tracking-tighter">{stats?.totalStudents || 0}</h4>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mt-1 group-hover:text-primary transition-colors">Total Students</p>
-              </CardContent>
-              <div className="h-1.5 w-full bg-primary/20" />
-            </Card>
-          </motion.div>
-
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}>
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md overflow-hidden group">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
-                    <GraduationCap className="w-6 h-6" />
-                  </div>
-                  <div className="flex flex-col items-end text-muted-foreground opacity-40">
-                    <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1">OPTIMAL</span>
-                    <span className="text-[8px] font-bold uppercase tracking-widest">LOAD LEVEL</span>
-                  </div>
-                </div>
-                <h4 className="text-2xl font-black tracking-tighter">{stats?.totalStaff || 0}</h4>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mt-1 group-hover:text-indigo-500 transition-colors">Total Staff</p>
-              </CardContent>
-              <div className="h-1.5 w-full bg-indigo-500/20" />
-            </Card>
-          </motion.div>
-
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md overflow-hidden group">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
-                    <Activity className="w-6 h-6" />
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> STABLE</span>
-                    <span className="text-[8px] font-bold text-muted-foreground/40 uppercase">Daily Sync</span>
-                  </div>
-                </div>
-                <h4 className="text-2xl font-black tracking-tighter">{stats?.attendanceToday || 0}%</h4>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mt-1 group-hover:text-emerald-500 transition-colors">Attendance Today</p>
-              </CardContent>
-              <div className="h-1.5 w-full bg-emerald-500/20" />
-            </Card>
-          </motion.div>
-
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md overflow-hidden group">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
-                    <CreditCard className="w-6 h-6" />
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1"><Target className="w-3 h-3" /> ON TRACK</span>
-                    <span className="text-[8px] font-bold text-muted-foreground/40 uppercase tracking-widest">Collections</span>
-                  </div>
-                </div>
-                <h4 className="text-2xl font-black tracking-tighter">{stats?.feeCollection || 0}%</h4>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mt-1 group-hover:text-amber-500 transition-colors">Fees Collected</p>
-              </CardContent>
-              <div className="h-1.5 w-full bg-amber-500/20" />
-            </Card>
-          </motion.div>
-        </div>
-
-        {/* Performance & Events Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12">
-
-          {/* Academic Spectrum */}
-          <Card className="lg:col-span-8 border-0 shadow-soft bg-background/40 backdrop-blur-md rounded-[3rem] overflow-hidden border border-border/10">
-            <CardHeader className="p-10 pb-0">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-black flex items-center gap-3">
-                    <BarChart3 className="w-6 h-6 text-primary" /> Subject Results
-                  </CardTitle>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mt-1">Average marks by subject</p>
-                </div>
-                <Button variant="ghost" className="rounded-xl font-black text-[10px] uppercase tracking-widest gap-2 bg-muted/40 hover:bg-primary hover:text-white transition-all">
-                  See All <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-10 space-y-8">
-              {[
-                { subject: "Mathematics", avg: 72, color: "bg-primary", trend: "+3%" },
-                { subject: "English", avg: 85, color: "bg-emerald-500", trend: "+12%" },
-                { subject: "Science", avg: 61, color: "bg-indigo-500", trend: "-2%" },
-                { subject: "Social Studies", avg: 78, color: "bg-amber-500", trend: "+5%" },
-              ].map((item, idx) => (
-                <div key={idx} className="space-y-3 group">
-                  <div className="flex items-end justify-between">
-                    <div className="space-y-1">
-                      <h5 className="text-sm font-black group-hover:text-primary transition-colors">{item.subject}</h5>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Class average score</p>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-lg font-black tracking-tighter">{item.avg}%</span>
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${item.trend.startsWith('+') ? 'text-emerald-500' : 'text-rose-500'}`}>{item.trend} vs last term</span>
-                    </div>
-                  </div>
-                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${item.avg}%` }}
-                      transition={{ duration: 1, delay: idx * 0.1 }}
-                      className={`h-full ${item.color} rounded-full relative`}
-                    >
-                      <div className="absolute top-0 right-0 w-8 h-full bg-white/20 skew-x-12 animate-pulse" />
-                    </motion.div>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Tactical Events & Log */}
-          <div className="lg:col-span-4 space-y-8">
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md rounded-[3rem] overflow-hidden border border-border/10">
-              <CardHeader className="p-8 pb-4">
-                <CardTitle className="text-lg font-black flex items-center gap-3 lowercase tracking-tight">
-                  Coming Up
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-8 pb-8 space-y-4">
-                {upcomingEvents.map((event, i) => (
-                  <div key={i} className="flex items-center gap-4 p-4 rounded-[2rem] hover:bg-background transition-all duration-300 group border border-transparent hover:border-border/50">
-                    <div className={`w-12 h-12 rounded-2xl ${event.bg} flex items-center justify-center ${event.color} group-hover:scale-110 transition-transform`}>
-                      <event.icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black tracking-tight leading-tight">{event.name}</p>
-                      <p className="text-[10px] font-bold text-muted-foreground/60 uppercase mt-1">{event.date}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 ml-auto text-muted-foreground opacity-20 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md rounded-[3rem] overflow-hidden border border-border/10">
-              <CardHeader className="p-8 pb-4 flex flex-row items-center justify-between">
-                <CardTitle className="text-lg font-black lowercase tracking-tight">Recent Activity</CardTitle>
-                <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-3 h-6 border-none bg-emerald-500/10 text-emerald-600">Live</Badge>
-              </CardHeader>
-              <CardContent className="px-8 pb-8">
-                <div className="space-y-6 relative ml-2">
-                  <div className="absolute top-0 left-[7px] w-px h-full bg-muted border-dashed border-l" />
-                  {recentActivity.map((item, i) => (
-                    <div key={i} className="flex items-start gap-5 relative z-10">
-                      <div className={`w-4 h-4 rounded-full mt-1.5 border-4 border-background shadow-sm ${item.type === "success" ? "bg-emerald-500" :
-                        item.type === "warning" ? "bg-amber-500" :
-                          item.type === "info" ? "bg-indigo-500" : "bg-muted-foreground"
-                        }`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-black tracking-tight">{item.action}</p>
-                          <span className="text-[9px] font-black font-mono text-muted-foreground/40">{item.time}</span>
+    return (
+        <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
+            
+            {/* Top 4 Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="bg-[#4e4bb2] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36">
+                    <h3 className="font-bold text-sm tracking-wide">Total Students</h3>
+                    <div className="flex justify-between items-end">
+                        <div className="flex flex-col gap-3">
+                            <User className="w-8 h-8 opacity-80" strokeWidth={1.5} />
+                            <span className="text-sm opacity-80">This Month</span>
                         </div>
-                        <p className="text-[10px] font-bold text-muted-foreground/60 truncate mt-0.5">{item.detail}</p>
-                      </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-4xl font-bold">1</span>
+                            <span className="text-sm font-medium opacity-90">1</span>
+                        </div>
                     </div>
-                  ))}
                 </div>
-                <Button variant="ghost" className="w-full mt-8 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] text-muted-foreground border-t border-border/30 pt-4 hover:text-primary transition-colors">
-                  View All Activity <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+
+                <div className="bg-[#8b91db] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36">
+                    <h3 className="font-bold text-sm tracking-wide">Total Employees</h3>
+                    <div className="flex justify-between items-end">
+                        <div className="flex flex-col gap-3">
+                            <Briefcase className="w-8 h-8 opacity-80" strokeWidth={1.5} />
+                            <span className="text-sm opacity-80">This Month</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-4xl font-bold">1</span>
+                            <span className="text-sm font-medium opacity-90">1</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-[#ff808b] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36">
+                    <h3 className="font-bold text-sm tracking-wide">Revenue</h3>
+                    <div className="flex justify-between items-end">
+                        <div className="flex flex-col gap-3">
+                            <DollarSign className="w-8 h-8 opacity-80" strokeWidth={1.5} />
+                            <span className="text-sm opacity-80">This Month</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-4xl font-bold">0</span>
+                            <span className="text-sm font-medium opacity-90">$ 0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-[#6b8cff] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36">
+                    <h3 className="font-bold text-sm tracking-wide">Total Profit</h3>
+                    <div className="flex justify-between items-end">
+                        <div className="flex flex-col gap-3">
+                            <DollarSign className="w-8 h-8 opacity-80" strokeWidth={1.5} />
+                            <span className="text-sm opacity-80">This Month</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <span className="text-4xl font-bold">0</span>
+                            <span className="text-sm font-medium opacity-90">$ 0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Banners */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="lg:col-span-2 bg-[#ffe7e9] rounded-2xl p-6 flex justify-between items-center shadow-sm relative overflow-hidden">
+                    <div className="z-10 relative">
+                        <h3 className="text-[#ff5e6c] font-bold text-lg mb-1">Welcome to Admin Dashboard</h3>
+                        <p className="text-gray-600 font-medium">
+                            Your Account is not Verified yet!<br />
+                            Please Verify your email address. <a href="#" className="text-[#5C67F2] hover:underline">Verify now!</a>
+                        </p>
+                    </div>
+                    {/* Mock Illustration */}
+                    <div className="w-32 h-32 absolute right-8 -bottom-4 bg-white/40 rounded-full flex items-center justify-center pointer-events-none">
+                       <User className="w-16 h-16 text-[#ff5e6c] opacity-50" />
+                    </div>
+                </div>
+
+                <div className="bg-[#e9efff] rounded-2xl p-6 flex justify-between items-center shadow-sm">
+                    <div>
+                        <div className="flex gap-1 mb-1">
+                            {[1,2,3,4,5].map(i => <svg key={i} className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>)}
+                        </div>
+                        <h3 className="text-[#3a3f9e] font-bold text-lg mb-1">Review & earn</h3>
+                        <p className="text-gray-600 text-xs font-medium w-48">
+                            Receive $10 as a reward plus Chance to win a Desktop plan.
+                        </p>
+                    </div>
+                    <Gift className="w-12 h-12 text-[#5C67F2] opacity-70" strokeWidth={1.5} />
+                </div>
+            </div>
+
+            {/* Main Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Left Column (Main) */}
+                <div className="lg:col-span-2 space-y-6">
+                    
+                    {/* Statistics Cards */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[#8b91db] font-bold">Statistics</h3>
+                            <ChevronLeft className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+                        </div>
+                        
+                        {/* Mock Chart 1 */}
+                        <div className="flex justify-center gap-4 mb-4 text-xs font-bold text-gray-500">
+                            <div className="flex items-center gap-1"><div className="w-8 h-3 bg-[#ff808b] rounded-sm"></div> Expenses</div>
+                            <div className="flex items-center gap-1"><div className="w-8 h-3 bg-[#6b8cff] rounded-sm"></div> Income</div>
+                        </div>
+                        <div className="w-full h-40 border-l border-b border-gray-200 relative mb-10">
+                            <div className="absolute -left-6 bottom-0 text-[10px] text-gray-400">-0.2</div>
+                            <div className="absolute -left-6 top-1/2 text-[10px] text-gray-400">0.4</div>
+                            <div className="absolute -left-6 top-0 text-[10px] text-gray-400">1.0</div>
+                            {/* Line */}
+                            <div className="absolute bottom-6 left-0 w-full h-[2px] bg-[#ff808b] flex justify-between items-center">
+                                {[1,2,3,4,5,6].map(i => <div key={i} className="w-2 h-2 rounded-full bg-[#ff808b]"></div>)}
+                            </div>
+                        </div>
+
+                        {/* Mock Chart 2 */}
+                        <div className="flex justify-center gap-4 mb-4 text-xs font-bold text-gray-500">
+                            <div className="flex items-center gap-1"><div className="w-8 h-3 bg-[#6b8cff] rounded-sm"></div> Students</div>
+                        </div>
+                        <div className="w-full h-40 border-l border-b border-gray-200 relative">
+                            <div className="absolute -left-8 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">4 West</div>
+                            {/* Bar */}
+                            <div className="absolute bottom-0 left-0 w-full h-24 bg-[#6b8cff]"></div>
+                            
+                            {/* X-Axis labels */}
+                            <div className="absolute -bottom-6 left-0 w-full flex justify-between text-[10px] text-gray-400 px-2">
+                                <span>0</span><span>0.1</span><span>0.2</span><span>0.3</span><span>0.4</span><span>0.5</span><span>0.6</span><span>0.7</span><span>0.8</span><span>0.9</span><span>1.0</span>
+                            </div>
+                        </div>
+                        <div className="h-6"></div>
+                    </div>
+
+                    {/* Today Absent Students */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[#ff5e6c] font-bold">Today Absent Students</h3>
+                            <ChevronLeft className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+                        </div>
+                        <div className="flex flex-col items-center justify-center py-6 text-[#ff5e6c]">
+                            <Frown className="w-8 h-8 mb-2 opacity-50" strokeWidth={1.5} />
+                            <p className="font-medium text-sm">Attendance Not Marked Yet !</p>
+                        </div>
+                    </div>
+
+                    {/* Today Present Employees */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[#6b8cff] font-bold">Today Present Employees</h3>
+                            <ChevronLeft className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+                        </div>
+                        <div className="flex flex-col items-center justify-center py-6 text-[#ff5e6c]">
+                            <Frown className="w-8 h-8 mb-2 opacity-50" strokeWidth={1.5} />
+                            <p className="font-medium text-sm">Attendance Not Marked Yet !</p>
+                        </div>
+                    </div>
+
+                    {/* New Admissions */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[#8b91db] font-bold">New Admissions</h3>
+                            <ChevronLeft className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+                        </div>
+                        <div className="flex flex-col items-center py-4 text-center">
+                            <div className="w-16 h-16 bg-gray-100 rounded-full border-4 border-[#8b91db]/30 flex items-center justify-center mb-2 overflow-hidden">
+                                <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-2">
+                                    <div className="w-5 h-5 bg-[#fcd34d] rounded-full"></div>
+                                    <div className="w-10 h-8 bg-[#5C67F2] mt-1 rounded-t-lg"></div>
+                                </div>
+                            </div>
+                            <p className="text-xs font-bold text-gray-500 mb-0.5">S17046124</p>
+                            <p className="text-sm font-bold text-gray-800 leading-tight">Muzamil mohamed</p>
+                            <p className="text-xs font-medium text-gray-500">4 West</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column (Sidebar) */}
+                <div className="space-y-6">
+                    
+                    {/* Estimated Fee */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
+                        <h3 className="text-gray-700 font-bold mb-6 text-sm">Estimated Fee This Month</h3>
+                        <p className="text-[#ff5e6c] text-xs font-bold mb-1 flex items-center justify-center gap-1">
+                            <span className="w-2 h-2 rounded-full border border-[#ff5e6c]"></span> Estimation
+                        </p>
+                        <h2 className="text-[#ff5e6c] text-2xl font-bold tracking-tight mb-8">$ 44,550</h2>
+                        
+                        <div className="w-32 h-32 rounded-full border-[16px] border-gray-100 mx-auto mb-8"></div>
+                        
+                        <div className="flex justify-between border-t border-gray-100 pt-6">
+                            <div className="font-bold text-lg text-gray-800">$ 0</div>
+                            <div className="font-bold text-lg text-gray-800">$ 44,550</div>
+                        </div>
+                    </div>
+
+                    {/* Free SMS Gateway Banner */}
+                    <div className="bg-[#5654a8] rounded-2xl p-6 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
+                        <div className="z-10">
+                            <h3 className="font-bold text-lg mb-1">Free SMS Gateway</h3>
+                            <p className="text-sm text-indigo-200">Send Unlimited Free SMS<br/>on Mobile Numbers.</p>
+                        </div>
+                        <Smartphone className="w-16 h-16 text-white/20 absolute right-4 bottom-4" />
+                    </div>
+
+                    {/* Quick Stats List */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+                        <div className="p-4 flex justify-between items-center">
+                            <span className="text-sm font-medium text-gray-500">Today Present Students</span>
+                            <span className="text-sm font-bold text-[#6b8cff]">0%</span>
+                        </div>
+                        <div className="p-4 flex justify-between items-center">
+                            <span className="text-sm font-medium text-gray-500">Today Present Employees</span>
+                            <span className="text-sm font-bold text-[#ff5e6c]">0%</span>
+                        </div>
+                        <div className="p-4 flex justify-between items-center">
+                            <span className="text-sm font-medium text-gray-500">This Month Fee Collection</span>
+                            <span className="text-sm font-bold text-[#5C67F2]">0%</span>
+                        </div>
+                    </div>
+
+                    {/* Desktop Version Banner */}
+                    <div className="bg-[#ff808b] rounded-2xl p-6 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
+                        <div className="z-10 w-full">
+                            <h3 className="font-bold text-lg mb-1">Desktop Version</h3>
+                            <p className="text-xs text-white/80 mb-4">*Download & Install eSkooly<br/>on your PC.</p>
+                            <div className="flex gap-2">
+                                <button className="bg-white text-[#ff808b] text-[10px] font-bold px-3 py-1.5 rounded flex items-center gap-1"><Monitor className="w-3 h-3" /> Download</button>
+                                <button className="bg-white text-[#ff808b] text-[10px] font-bold px-3 py-1.5 rounded flex items-center gap-1"><Monitor className="w-3 h-3" /> Download</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Calendar Widget */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <button className="w-8 h-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-gray-100"><ChevronLeft className="w-4 h-4" /></button>
+                            <div className="text-center">
+                                <h3 className="text-[#ff5e6c] font-bold text-sm">MAY , 2026</h3>
+                                <p className="text-[#ff5e6c] text-[10px] font-bold opacity-80">THU MAY 14 2026</p>
+                            </div>
+                            <button className="w-8 h-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-gray-100"><ChevronRight className="w-4 h-4" /></button>
+                        </div>
+                        
+                        <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
+                                <div key={d} className={`text-[9px] font-bold ${d === 'SUN' || d === 'SAT' ? 'text-[#ff5e6c]' : 'text-[#8b91db]'}`}>{d}</div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 text-center text-sm font-medium text-[#8b91db]">
+                            <div className="py-1">26</div><div className="py-1">27</div><div className="py-1">28</div><div className="py-1">29</div><div className="py-1">30</div><div className="py-1 text-[#ff5e6c]">1</div><div className="py-1 text-[#ff5e6c]">2</div>
+                            <div className="py-1 text-[#ff5e6c]">3</div><div className="py-1">4</div><div className="py-1">5</div><div className="py-1">6</div><div className="py-1">7</div><div className="py-1">8</div><div className="py-1 text-[#ff5e6c]">9</div>
+                            <div className="py-1 text-[#ff5e6c]">10</div><div className="py-1">11</div><div className="py-1">12</div><div className="py-1">13</div>
+                            <div className="py-1 border border-[#ff5e6c] text-[#ff5e6c] bg-[#ff5e6c]/5 font-bold">14</div>
+                            <div className="py-1">15</div><div className="py-1 text-[#ff5e6c]">16</div>
+                            <div className="py-1 text-[#ff5e6c]">17</div><div className="py-1">18</div><div className="py-1">19</div><div className="py-1">20</div><div className="py-1">21</div><div className="py-1">22</div><div className="py-1 text-[#ff5e6c]">23</div>
+                            <div className="py-1 text-[#ff5e6c]">24</div><div className="py-1">25</div><div className="py-1">26</div><div className="py-1">27</div><div className="py-1">28</div><div className="py-1">29</div><div className="py-1 text-[#ff5e6c]">30</div>
+                            <div className="py-1 text-[#ff5e6c]">31</div><div className="py-1">1</div><div className="py-1">2</div><div className="py-1">3</div><div className="py-1">4</div><div className="py-1">5</div><div className="py-1 text-[#ff5e6c]">6</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
-      </div>
-    </>
-  );
+    );
 }

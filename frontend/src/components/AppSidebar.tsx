@@ -1,233 +1,256 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardCheck,
-  Calendar, UserCheck, Library, Heart, Bell, BarChart3, Settings,
-  CreditCard, School, ChevronDown, ChevronRight, LogOut, Shield,
-  PlusCircle, ListChecks, UserPlus, Info, Briefcase, Layers
+  Home, Settings, LayoutTemplate, BookOpen, User, Briefcase, 
+  Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil, 
+  Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video, 
+  Copy, ClipboardList, FileText, Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
 
 interface NavItem {
   label: string;
   icon: React.ElementType;
   path?: string;
-  children?: { label: string; path: string; icon?: React.ElementType }[];
+  locked?: boolean;
+  children?: { label: string; path: string; locked?: boolean }[];
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Dashboard", icon: Home, path: "/dashboard" },
+  { label: "General Settings", icon: Settings, children: [
+      { label: "Institute Profile", path: "/settings/profile" },
+      { label: "Learning Periods", path: "/academics/periods" },
+      { label: "Fees Particulars", path: "/settings/fees-particulars" },
+      { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
+      { label: "Discount Type", path: "/settings/discount-type", locked: true },
+      { label: "Accounts For Fees Invoice", path: "/settings/accounts" },
+      { label: "Rules & Regulations", path: "/settings/rules" },
+      { label: "Marks Grading", path: "/settings/grading" },
+      { label: "Report Card Templates", path: "/settings/report-templates" },
+      { label: "Theme & Language", path: "/settings/theme" },
+      { label: "Account Settings", path: "/settings/account" },
+      { label: "Log out", path: "/logout" },
+  ] },
   {
-    label: "Students", icon: Users, children: [
-      { label: "Student List", path: "/students", icon: ListChecks },
-      { label: "New Student", path: "/students/admissions", icon: UserPlus },
-      { label: "Guardians", path: "/students/guardians" },
-      { label: "Move Students", path: "/students/promotions" },
+    label: "Classes", icon: LayoutTemplate, children: [
+      { label: "All Classes", path: "/classes" },
+      { label: "New Class", path: "/classes/new" },
     ]
   },
-  {
-    label: "Staff & HR", icon: GraduationCap, children: [
-      { label: "Staff List", path: "/staff" },
-      { label: "Departments", path: "/staff/departments" },
-      { label: "Staff Leave", path: "/staff/leave" },
-      { label: "Payroll", path: "/staff/payroll" },
-    ]
-  },
-  {
-    label: "Classes", icon: School, children: [
-      { label: "Class List", path: "/classes" },
-      { label: "Class Streams", path: "/classes/streams" },
-      { label: "Learning Strands", path: "/classes/strands" },
-    ]
-  },
-  {
-    label: "Subjects", icon: BookOpen, children: [
-      { label: "Subject List", path: "/subjects" },
-      { label: "Subject Types", path: "/subjects/categories" },
-      { label: "Subjects by Dept", path: "/placeholder" },
-    ]
-  },
-  {
-    label: "CBC Lessons", icon: Layers, children: [
-      { label: "Learning Areas", path: "/academics/learning-areas" },
-      { label: "Schemes of Work", path: "/academics/schemes" },
-      { label: "Lesson Plans", path: "/academics/lessons" },
-      { label: "Skills List", path: "/placeholder" },
-    ]
-  },
-  {
-    label: "Exams", icon: ClipboardCheck, children: [
-      { label: "Questions", path: "/assessments/questions" },
-      { label: "Create Exams", path: "/assessments/create" },
-      { label: "Add Marks", path: "/assessments/marks" },
-      { label: "Exam Results", path: "/assessments/results" },
-    ]
-  },
-  {
-    label: "Timetable", icon: Calendar, children: [
-      { label: "Dashboard", path: "/timetable" },
-      { label: "Class Timetable", path: "/timetable/class" },
-      { label: "Teacher Timetable", path: "/timetable/teacher" },
-      { label: "Room Timetable", path: "/timetable/room" },
-      { label: "Exam Schedule", path: "/timetable/exam" },
-      { label: "Timetable Builder", path: "/timetable/builder" },
-      { label: "Conflicts", path: "/timetable/conflicts" },
-      { label: "Substitutions", path: "/timetable/substitution" },
-      { label: "Print View", path: "/timetable/print" },
-      { label: "Settings", path: "/timetable/settings" },
-    ]
-  },
-  { label: "Attendance", icon: UserCheck, path: "/attendance" },
-  { label: "Fees & Money", icon: CreditCard, path: "/finance" },
-  { label: "Library", icon: Library, path: "/library" },
-  { label: "Clinic", icon: Heart, path: "/clinic" },
-  { label: "Online Learning", icon: School, path: "/lms" },
-  { label: "Settings", icon: Settings, path: "/settings" },
-];
-
-const ownerNavItems: NavItem[] = [
-  { label: "Overview", icon: LayoutDashboard, path: "/owner/dashboard" },
-  { label: "Schools", icon: Users, path: "/owner/tenants" },
-  { label: "Plans & Pricing", icon: CreditCard, path: "/owner/plans" },
-  { label: "Billing", icon: BarChart3, path: "/owner/billing" },
-  { label: "Announcements", icon: Bell, path: "/owner/announcements" },
-  { label: "Audit Log", icon: Shield, path: "/owner/audit" },
-  { label: "Settings", icon: Settings, path: "/owner/settings" },
+  { label: "Subjects", icon: BookOpen, children: [ 
+      { label: "All Subjects", path: "/subjects/all" },
+      { label: "New Subject", path: "/subjects/new" },
+      { label: "Co-Curricular & Talents", path: "/subjects/activities" },
+      { label: "Classes With Subjects", path: "/subjects" },
+      { label: "Assign Subjects", path: "/subjects/assign" },
+  ] },
+  { label: "Students", icon: User, children: [ 
+      { label: "All Students", path: "/students" },
+      { label: "Add New", path: "/students/new" },
+      { label: "Manage Families", path: "/students/families", locked: false },
+      { label: "Active / Inactive", path: "/students/status", locked: false },
+      { label: "Admission Letter", path: "/students/admission-letter" },
+      { label: "Student ID Cards", path: "/students/id-cards" },
+      { label: "Print Basic List", path: "/students/print" },
+      { label: "Manage Login", path: "/students/login" },
+      { label: "Promote Students", path: "/students/promote" },
+  ] },
+  { label: "Employees", icon: Briefcase, children: [
+      { label: "All Employees", path: "/staff" },
+      { label: "Add New", path: "/staff/new" },
+      { label: "Staff ID Cards", path: "/staff/id-cards", locked: true },
+      { label: "Job Letter", path: "/staff/job-letter" },
+      { label: "Manage Login", path: "/staff/login" },
+  ] },
+  { label: "Accounts", icon: Wallet, children: [
+      { label: "Chart Of Account", path: "/accounts/chart" },
+      { label: "Add Income", path: "/accounts/income" },
+      { label: "Add Expense", path: "/accounts/expense" },
+      { label: "Account Statement", path: "/accounts/statement" },
+  ] },
+  { label: "Fees", icon: Banknote, children: [ 
+      { label: "Generate Fees Invoice", path: "/fees/generate-invoice" },
+      { label: "Collect Fees", path: "/fees/collect" },
+      { label: "Fees Paid Slip", path: "/fees/paid-slip" },
+      { label: "Fees Defaulters", path: "/fees/defaulters" },
+      { label: "Fees Report", path: "/fees/report", locked: true },
+      { label: "Delete Fees", path: "/fees/delete", locked: true },
+  ] },
+  { label: "Salary", icon: CreditCard, children: [ { label: "Payroll", path: "/staff/payroll" } ] },
+  { label: "Attendance", icon: UserCheck, children: [ 
+      { label: "Students Attendance", path: "/attendance/students" },
+      { label: "Employees Attendance", path: "/attendance/employees" },
+      { label: "Class wise Report", path: "/attendance/reports/class-wise" },
+      { label: "Students Attendance Report", path: "/attendance/reports/students" },
+      { label: "Employees Attendance Report", path: "/attendance/reports/employees" },
+  ] },
+  { label: "Reports", icon: ClipboardList, children: [
+      { label: "Students Report Card", path: "/reports/report-cards" },
+      { label: "Students Info Report", path: "/reports/students-info" },
+      { label: "Parents Info Report", path: "/reports/parents-info" },
+      { label: "Students Monthly Attendance", path: "/reports/attendance/monthly-students" },
+      { label: "Staff Monthly Attendance", path: "/reports/attendance/monthly-staff" },
+      { label: "Fee Collection Report", path: "/reports/fee-collection" },
+      { label: "Student Progress Report", path: "/reports/student-progress" },
+      { label: "Accounts Report", path: "/reports/accounts" },
+      { label: "Customised Reports", path: "/reports/custom" },
+  ] },
+  { label: "Timetable", icon: Calendar, children: [ 
+      { label: "Weekdays", path: "/timetable/weekdays" },
+      { label: "Time Periods", path: "/timetable/periods" },
+      { label: "Class Rooms", path: "/timetable/rooms" },
+      { label: "Create Timetable", path: "/timetable/create" },
+      { label: "Generate For Class", path: "/timetable/class" },
+      { label: "Generate For Teacher", path: "/timetable/teacher" },
+  ] },
+  { label: "Homework", icon: Pencil, path: "/homework" },
+  { label: "Behaviour & Skills", icon: Eye, children: [ { label: "Skills", path: "/skills" } ] },
+  { label: "Online Store & POS", icon: ShoppingCart, children: [ { label: "Store", path: "/store" } ] },
+  { label: "WhatsApp", icon: MessageCircle, path: "/whatsapp", locked: true },
+  { label: "Messaging", icon: MessageSquare, path: "/communications" },
+  { label: "SMS Services", icon: Mail, children: [ { label: "SMS", path: "/communications/sms" } ] },
+  { label: "Live Class", icon: Video, path: "/live" },
+  { label: "Question Paper", icon: Copy, children: [ { label: "Papers", path: "/papers" } ] },
+  { label: "Exams", icon: ClipboardList, children: [
+      { label: "Create New Exam", path: "/exams/create" },
+      { label: "Add / Update Exam Marks", path: "/exams/marks" },
+      { label: "Result Card", path: "/exams/result-card" },
+      { label: "Result Sheet", path: "/exams/result-sheet" },
+      { label: "Exam Schedule", path: "/exams/schedule" },
+      { label: "Date Sheet", path: "/exams/date-sheet" },
+      { label: "Blank Award List", path: "/exams/blank-award-list" },
+  ] },
+  { label: "Class Tests", icon: FileText, children: [ { label: "Tests", path: "/tests" } ] },
 ];
 
 export default function AppSidebar() {
   const location = useLocation();
-  const [expanded, setExpanded] = useState<string[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
-  const isOwnerPortal = location.pathname.startsWith('/owner');
-  const items = isOwnerPortal ? ownerNavItems : navItems;
+  const { data: theme } = useQuery({
+      queryKey: ["theme_settings"],
+      queryFn: async () => {
+          const r = await api.get("/theme_settings");
+          return r.data?.[0];
+      }
+  });
 
-  // Auto-expand active group
+  const isDark = theme?.sidebarBackground === "dark";
+  const activeBg = theme?.activeItemBackground || "bg-[#5C67F2]";
+
   useEffect(() => {
-    const activeGroup = items.find(item =>
-      item.children?.some(child => location.pathname === child.path)
+    // Expand the group that matches the current route
+    const group = navItems.find(item => 
+      item.children?.some(child => location.pathname === child.path || location.pathname.startsWith(child.path))
     );
-    if (activeGroup && !expanded.includes(activeGroup.label)) {
-      setExpanded(prev => [...new Set([...prev, activeGroup.label])]);
+    if (group && !expandedGroups.includes(group.label)) {
+      setExpandedGroups(prev => [...prev, group.label]);
     }
-  }, [location.pathname, items]);
+  }, [location.pathname]);
 
-  const toggle = (label: string) => {
-    setExpanded(prev =>
-      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
+  const toggleGroup = (label: string) => {
+    setExpandedGroups(prev => 
+      prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label]
     );
   };
 
-  const isActive = (path?: string) => path && location.pathname.startsWith(path);
-
   return (
-    <aside className="w-72 min-h-screen gradient-sidebar flex flex-col border-r border-sidebar-border shadow-2xl relative z-50">
-      <div className="p-6 border-b border-sidebar-border/30">
-        <div className="flex items-center gap-3">
-          <div className={`w-11 h-11 rounded-[0.9rem] ${isOwnerPortal ? 'bg-primary shadow-lg shadow-primary/20' : 'gradient-gold shadow-lg shadow-amber-500/10'} flex items-center justify-center transform hover:rotate-6 transition-transform`}>
-            <School className={`w-6 h-6 ${isOwnerPortal ? 'text-primary-foreground' : 'text-secondary-foreground'}`} />
-          </div>
-          <div>
-            <h1 className="font-heading text-xl font-black text-sidebar-foreground tracking-tighter">
-              {isOwnerPortal ? 'SC OWNER' : 'SHULECLOUD'}
-            </h1>
-            <div className="flex items-center gap-1.5 opacity-60">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-[10px] uppercase font-black tracking-widest text-sidebar-foreground">
-                {isOwnerPortal ? 'Cloud Control' : "School Portal"}
-              </p>
-            </div>
-          </div>
+    <div className={`flex h-full ${isDark ? 'bg-gray-900 text-gray-300' : 'bg-white text-[#4b5563]'} shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20 transition-colors duration-300`}>
+      <aside className={`w-64 flex flex-col border-r ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+        
+        {/* Header / Logo */}
+        <div className={`h-16 flex items-center px-6 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+           <span className={`font-bold text-xl ${isDark ? 'text-white' : 'text-gray-800'} tracking-tight`}>menu</span>
         </div>
-      </div>
 
-      <nav className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
-        {items.map(item => {
-          const Icon = item.icon;
-          const active = isActive(item.path) || item.children?.some(c => isActive(c.path));
-          const isExpanded = expanded.includes(item.label);
+        {/* Navigation List */}
+        <nav className="flex-1 py-4 overflow-y-auto custom-scrollbar">
+          <ul className="space-y-1 px-3">
+            {navItems.map(item => {
+              const Icon = item.icon;
+              const isExpanded = expandedGroups.includes(item.label);
+              
+              // Determine if active
+              const isParentActive = item.children 
+                ? item.children.some(c => location.pathname === c.path || location.pathname.startsWith(c.path))
+                : location.pathname === item.path;
 
-          if (item.children) {
-            return (
-              <div key={item.label} className="space-y-1">
-                <button
-                  onClick={() => toggle(item.label)}
-                  className={`group w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-[13px] font-bold transition-all ${active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground"
+              return (
+                <li key={item.label} className="relative">
+                  {/* Parent Item */}
+                  <div
+                    onClick={() => item.children ? toggleGroup(item.label) : null}
+                    className={`flex items-center justify-between px-3 py-3 rounded-lg cursor-pointer transition-colors ${
+                      isParentActive 
+                        ? `${activeBg} text-white shadow-sm` 
+                        : isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-50 text-gray-600"
                     }`}
-                >
-                  <Icon className={`w-4.5 h-4.5 transition-transform group-hover:scale-110 ${active ? 'text-sidebar-primary' : ''}`} />
-                  <span className="flex-1 text-left tracking-tight">{item.label}</span>
-                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5 opacity-50" /> : <ChevronRight className="w-3.5 h-3.5 opacity-50" />}
-                </button>
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="ml-6 mt-1 space-y-1 border-l border-sidebar-border/30 pl-4 overflow-hidden"
+                  >
+                    <Link 
+                        to={item.path || (item.children ? "#" : "#")} 
+                        className="flex items-center gap-4 flex-1"
+                        onClick={(e) => {
+                            if(item.children) e.preventDefault();
+                        }}
                     >
-                      {item.children.map(child => (
-                        <Link
-                          key={child.path}
-                          to={child.path}
-                          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${location.pathname === child.path
-                            ? "text-sidebar-primary bg-sidebar-primary/5 shadow-sm translate-x-1"
-                            : "text-sidebar-foreground/40 hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
-                            }`}
-                        >
-                          <div className={`w-1 h-1 rounded-full ${location.pathname === child.path ? 'bg-sidebar-primary scale-150' : 'bg-sidebar-foreground/20'}`} />
-                          {child.label}
-                        </Link>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          }
+                      <Icon className={`w-[18px] h-[18px] ${isParentActive ? "text-white" : isDark ? "text-gray-400" : "text-gray-500"}`} strokeWidth={1.5} />
+                      <span className={`text-[13px] ${isParentActive ? "font-bold" : "font-medium"}`}>
+                        {item.label}
+                      </span>
+                    </Link>
 
-          return (
-            <Link
-              key={item.label}
-              to={item.path!}
-              className={`group flex items-center gap-3.5 px-4 py-3 rounded-2xl text-[13px] font-bold transition-all ${active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm shadow-black/5"
-                : "text-sidebar-foreground/60 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground"
-                }`}
-            >
-              <Icon className={`w-4.5 h-4.5 group-hover:scale-110 transition-transform ${active ? 'text-sidebar-primary' : ''}`} />
-              <span className="tracking-tight">{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+                    {/* Right side icon */}
+                    {item.locked ? (
+                       <Lock className={`w-3 h-3 ${isParentActive ? 'text-white/70' : 'text-red-400'}`} />
+                    ) : item.children ? (
+                       <span className={`${isParentActive ? 'text-white/80' : isDark ? 'text-gray-500' : 'text-gray-400'} text-lg font-light leading-none`}>
+                         {isExpanded ? "-" : "+"}
+                       </span>
+                    ) : null}
+                  </div>
 
-      <div className="p-4 bg-sidebar-accent/5 mt-auto">
-        <div className="p-4 rounded-3xl bg-background/50 border border-sidebar-border/20 mb-4 group cursor-pointer hover:bg-background/80 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 font-black shadow-sm group-hover:scale-110 transition-all">
-              AD
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-black text-sidebar-foreground truncate uppercase">Admin User</p>
-              <p className="text-[9px] font-bold text-sidebar-foreground/40 truncate">School Admin</p>
-            </div>
-            <Settings className="w-4 h-4 text-sidebar-foreground/30 group-hover:rotate-45 transition-transform" />
-          </div>
-        </div>
-        <button
-          className="w-full flex items-center justify-between px-5 py-3.5 rounded-2xl text-[12px] font-black text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/5 transition-all uppercase tracking-widest border border-transparent hover:border-rose-500/10"
-        >
-          <span className="flex items-center gap-3">
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </span>
-          <ChevronRight className="w-3 h-3" />
-        </button>
-      </div>
-    </aside>
+                  {/* Children Accordion */}
+                  <AnimatePresence>
+                    {item.children && isExpanded && (
+                      <motion.ul
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className={`overflow-hidden border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} ml-[23px] mt-1 space-y-1 mb-2`}
+                      >
+                        {item.children.map((child, idx) => {
+                          const isChildActive = location.pathname === child.path || (child.path.includes('#') && location.pathname === child.path.split('#')[0]);
+                          
+                          return (
+                            <li key={idx} className="relative">
+                              <Link
+                                to={child.path}
+                                className={`flex items-center gap-3 px-4 py-2 text-[12px] transition-colors ${
+                                  isChildActive
+                                    ? isDark ? "text-white font-bold" : "text-gray-900 font-bold"
+                                    : isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"
+                                }`}
+                              >
+                                {/* Bullet indicator */}
+                                <div className={`w-1.5 h-1.5 rounded-full ${isChildActive ? activeBg : "bg-transparent"}`}></div>
+                                {child.label}
+                                {child.locked && <Lock className="w-3 h-3 text-red-300 ml-auto" />}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </motion.ul>
+                    )}
+                  </AnimatePresence>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </aside>
+    </div>
   );
 }
