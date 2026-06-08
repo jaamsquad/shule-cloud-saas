@@ -237,6 +237,9 @@ const navItems: NavItem[] = [
       { label: "Manage Test Marks", path: "/tests/marks" },
       { label: "Test Result", path: "/tests/results" }
   ] },
+  { label: "Settings", icon: Building2, moduleKey: "settings", children: [
+      { label: "Custom Domain & Branding", path: "/settings/domains" },
+  ] },
 ];
 
 export default function AppSidebar() {
