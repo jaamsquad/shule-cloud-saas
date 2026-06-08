@@ -305,7 +305,7 @@ const getDaysOverdue = (invoice: any) => {
 // GET /schools/:sid/invoices
 router.get('/schools/:sid/invoices', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { student_id, class_id, academic_year_id, semester_id, status, search, page = 1, limit = 20, sort_by = 'createdAt', sort_dir = 'DESC' } = req.query;
 
@@ -331,7 +331,7 @@ router.get('/schools/:sid/invoices', async (req: Request, res: Response) => {
                     { studentId: { $regex: search.toString(), $options: 'i' } }
                 ]
             }).toArray();
-            const studentIds = matchedStudents.map(s => s._id.toString());
+            const studentIds = matchedStudents.map((s: any) => s._id.toString());
 
             query.$and = [
                 {
@@ -357,7 +357,7 @@ router.get('/schools/:sid/invoices', async (req: Request, res: Response) => {
             .toArray();
 
         // Hydrate invoices with student information & calculate days overdue
-        const hydrated = await Promise.all(docs.map(async (doc) => {
+        const hydrated = await Promise.all(docs.map(async (doc: any) => {
             let student = null;
             try {
                 if (doc.student_id) {
@@ -388,7 +388,7 @@ router.get('/schools/:sid/invoices', async (req: Request, res: Response) => {
 // POST /schools/:sid/invoices
 router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);   // invoices + fee structures live in the tenant DB
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { student_id, class_id, academic_year_id, semester_id, fee_structure_id, due_date, override_items, discount_type, discount_value } = req.body;
@@ -472,7 +472,7 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
             total_due,
             amount_paid: 0,
             balance: total_due,
-            due_date: due_date || structure.items[0]?.due_date || new Date().toISOString().split('T')[0],
+            due_date: due_date || structure.items?.[0]?.due_date || new Date().toISOString().split('T')[0],
             status: total_due === 0 ? 'PAID' : (new Date(due_date) < new Date() ? 'OVERDUE' : 'UNPAID'),
             created_by: user.sub,
             createdAt: new Date().toISOString(),
@@ -489,7 +489,7 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
 // POST /schools/:sid/invoices/bulk
 router.post('/schools/:sid/invoices/bulk', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { class_id, academic_year_id, semester_id, fee_structure_id, due_date, skip_existing = true } = req.body;
@@ -599,7 +599,7 @@ router.post('/schools/:sid/invoices/bulk', requireRole('ADMIN'), async (req: Req
                         total_due,
                         amount_paid: 0,
                         balance: total_due,
-                        due_date: due_date || structure.items[0]?.due_date || new Date().toISOString().split('T')[0],
+                        due_date: due_date || structure.items?.[0]?.due_date || new Date().toISOString().split('T')[0],
                         status: total_due === 0 ? 'PAID' : (new Date(due_date) < new Date() ? 'OVERDUE' : 'UNPAID'),
                         created_by: user.sub,
                         createdAt: new Date().toISOString(),
@@ -1421,7 +1421,7 @@ router.get('/schools/:sid/payments', async (req: Request, res: Response) => {
             .limit(l)
             .toArray();
 
-        const hydrated = await Promise.all(docs.map(async (doc) => {
+        const hydrated = await Promise.all(docs.map(async (doc: any) => {
             let student = null;
             let invoice = null;
             try {

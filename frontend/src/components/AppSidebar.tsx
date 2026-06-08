@@ -239,6 +239,7 @@ const navItems: NavItem[] = [
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
       { label: "Custom Domain & Branding", path: "/settings/domains" },
+      { label: "M-PESA Integration", path: "/settings/mpesa" },
   ] },
 ];
 

@@ -46,7 +46,11 @@ export default function ParentDashboard() {
             </div>
 
             <PanelCard title="Student Basic information">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10">
+                <div className="flex flex-col md:flex-row gap-6">
+                    {(s.studentPhoto || s.photo || s.avatar)
+                        ? <img src={s.studentPhoto || s.photo || s.avatar} alt={s.studentName} className="w-28 h-28 rounded-full object-cover border border-black/10 flex-shrink-0" />
+                        : <div className="w-28 h-28 rounded-full bg-[#7fd0e6] flex items-center justify-center text-[#2a4a37] font-black text-3xl flex-shrink-0">{(s.studentName || s.name || "S")[0]}</div>}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 flex-1">
                     <div className="divide-y divide-black/5">
                         <Field label="Reg. No" value={s.registrationNo || s.admNo} />
                         <Field label="Name" value={(s.studentName || s.name)?.toUpperCase()} />
@@ -59,6 +63,7 @@ export default function ParentDashboard() {
                         <Field label="Parent / Guardian" value={parent.name} />
                         <Field label="Contact" value={parent.phone} />
                     </div>
+                </div>
                 </div>
             </PanelCard>
         </>

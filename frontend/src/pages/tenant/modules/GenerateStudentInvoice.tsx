@@ -58,14 +58,16 @@ export default function GenerateStudentInvoice() {
         }
     });
 
-    // Fetch periods
-    const { data: periods = [] } = useQuery({
-        queryKey: ["periods"],
-        queryFn: async () => {
-            const r = await api.get("/academics/periods");
-            return r.data || [];
-        }
+    // Academic years & terms from the academic system (v2) — the real source.
+    const { data: academicYears = [] } = useQuery({
+        queryKey: ["v2_academic_years"],
+        queryFn: async () => { const r = await api.get("/v2/academic-years"); return Array.isArray(r.data) ? r.data : (r.data?.data || []); },
     });
+    const { data: allTerms = [] } = useQuery({
+        queryKey: ["v2_terms"],
+        queryFn: async () => { const r = await api.get("/v2/terms"); return Array.isArray(r.data) ? r.data : (r.data?.data || []); },
+    });
+    const termsForYear = allTerms.filter((t: any) => String(t.academicYearId) === String(academicYearId));
 
     // Fetch transport zones
     const { data: zones = [] } = useQuery({
@@ -76,17 +78,19 @@ export default function GenerateStudentInvoice() {
         }
     });
 
-    const currentPeriod = periods.find((p: any) => p.isCurrent);
+    useEffect(() => {
+        if (!academicYearId && academicYears.length > 0) {
+            const y = academicYears.find((y: any) => y.isActive) || academicYears[0];
+            setAcademicYearId(String(y._id));
+        }
+    }, [academicYears, academicYearId]);
 
     useEffect(() => {
-        if (currentPeriod) {
-            setAcademicYearId(currentPeriod.academicYear);
-            setSemesterId(currentPeriod.label);
-        } else if (periods.length > 0) {
-            setAcademicYearId(periods[0].academicYear);
-            setSemesterId(periods[0].label);
+        if (academicYearId && termsForYear.length > 0 && !termsForYear.some((t: any) => String(t._id) === String(semesterId))) {
+            const t = termsForYear.find((t: any) => t.isActive) || termsForYear[0];
+            setSemesterId(String(t._id));
         }
-    }, [periods, currentPeriod]);
+    }, [academicYearId, allTerms]); // eslint-disable-line
 
     // Fetch fee particulars
     const { data: feeParticularsArray } = useQuery({
@@ -479,22 +483,23 @@ export default function GenerateStudentInvoice() {
                             {/* Academic Period */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Academic Year</div>
-                                    <input
-                                        type="text"
-                                        value={academicYearId}
-                                        disabled
-                                        className="w-full h-11 px-4 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500 cursor-not-allowed"
-                                    />
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Academic Year*</div>
+                                    {academicYears.length === 0 ? (
+                                        <a href="/academics/periods" className="flex items-center w-full h-11 px-4 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-700">Create one in Learning Periods →</a>
+                                    ) : (
+                                        <select value={academicYearId} onChange={e => { setAcademicYearId(e.target.value); setSemesterId(""); }}
+                                            className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]">
+                                            {academicYears.map((y: any) => <option key={y._id} value={y._id}>{y.name || `Academic Year ${y.year}`}{y.isActive ? " (Current)" : ""}</option>)}
+                                        </select>
+                                    )}
                                 </div>
                                 <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Semester / Term</div>
-                                    <input
-                                        type="text"
-                                        value={semesterId}
-                                        disabled
-                                        className="w-full h-11 px-4 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500 cursor-not-allowed"
-                                    />
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Semester / Term*</div>
+                                    <select value={semesterId} onChange={e => setSemesterId(e.target.value)} disabled={termsForYear.length === 0}
+                                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] disabled:bg-slate-100 disabled:text-slate-400">
+                                        {termsForYear.length === 0 ? <option value="">No terms for this year</option>
+                                            : termsForYear.map((t: any) => <option key={t._id} value={t._id}>{t.name}{t.isActive ? " (Current)" : ""}</option>)}
+                                    </select>
                                 </div>
                             </div>
 

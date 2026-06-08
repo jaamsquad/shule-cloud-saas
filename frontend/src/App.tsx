@@ -283,6 +283,7 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 
 // Custom domain + branding
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
+import MpesaIntegration from "./pages/tenant/modules/settings/MpesaIntegration";
 
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
@@ -421,6 +422,9 @@ const App = () => {
 
               {/* Wallet */}
               <Route path="/wallet" element={<AdminWallets />} />
+
+              {/* M-PESA integration */}
+              <Route path="/settings/mpesa" element={<MpesaIntegration />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
                <Route path="/students/admissions" element={<Admissions />} />
               <Route path="/students/guardians" element={<Guardians />} />

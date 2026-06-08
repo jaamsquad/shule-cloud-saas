@@ -4,6 +4,7 @@ import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
+import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment } from '../services/mpesa.service';
 
 const router = Router();
 
@@ -1166,9 +1167,70 @@ router.get('/student-portal/fee-structure', authed(async (req, res, db, decoded)
     res.json({ term, items });
 }));
 
+// ─── Shared M-PESA STK helpers (student & parent) ─────────────────────────────
+const initiateStk = async (req: Request, db: Db, sid: string) => {
+    const { phone, amount, invoiceId } = req.body || {};
+    if (!phone || !amount || Number(amount) <= 0) throw new Error('Phone number and a valid amount are required');
+    const cfg = await resolveMpesaConfig(db);
+    if (!isMpesaConfigured(cfg)) throw new Error('M-PESA payment is not set up for your school yet.');
+    if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured. Contact the school administrator.');
+
+    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const r = await stkPush(cfg, {
+        phone, amount: Number(amount),
+        accountRef: student?.registrationNo || student?.admNo || 'Fees',
+        description: 'School fees', callbackUrl: `${cfg.callbackBase}/mpesa/stk-callback`,
+    });
+    await getMetaDb().collection('mpesa_transactions').insertOne({
+        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId,
+        tenantDbName: (req as any).tenantContext?.databaseName, studentId: sid, studentName: student?.studentName,
+        invoiceId: invoiceId || null, amount: Number(amount), phone, status: 'pending', applied: false, createdAt: new Date(),
+    });
+    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on your phone to complete payment.' };
+};
+
+const checkStkStatus = async (req: Request, db: Db) => {
+    const checkoutRequestId = String(req.query.checkoutRequestId || '');
+    const meta = getMetaDb();
+    const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId });
+    if (!txn) return { status: 'unknown' };
+    if (txn.status === 'completed') return { status: 'completed', receipt: txn.mpesaReceipt };
+    if (txn.status === 'failed') return { status: 'failed', message: txn.resultDesc };
+
+    // Still pending → query Daraja (errors mean "still processing" → keep pending).
+    try {
+        const cfg = await resolveMpesaConfig(db);
+        const q: any = await stkQuery(cfg, checkoutRequestId);
+        const code = Number(q.ResultCode);
+        if (code === 0) {
+            const upd = await meta.collection('mpesa_transactions').updateOne(
+                { _id: txn._id, applied: { $ne: true } },
+                { $set: { status: 'completed', applied: true, resultDesc: q.ResultDesc, completedAt: new Date() } },
+            );
+            if (upd.modifiedCount > 0) {
+                await applyMpesaPayment(db, { studentId: txn.studentId, studentName: txn.studentName, invoiceId: txn.invoiceId, amount: txn.amount, receipt: txn.mpesaReceipt || checkoutRequestId, phone: txn.phone });
+            }
+            return { status: 'completed' };
+        }
+        if (!isNaN(code) && code !== 0) {
+            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: q.ResultDesc } });
+            return { status: 'failed', message: q.ResultDesc };
+        }
+    } catch { /* still processing */ }
+    return { status: 'pending' };
+};
+
 // ─── Student Portal: fee account + pay ────────────────────────────────────────
 router.get('/student-portal/fees', authed(async (req, res, db, decoded) => {
     res.json(await buildFeesSummary(db, decoded.studentId));
+}));
+
+router.post('/student-portal/pay-mpesa', authed(async (req, res, db, decoded) => {
+    res.json(await initiateStk(req, db, decoded.studentId));
+}));
+
+router.get('/student-portal/mpesa-status', authed(async (req, res, db) => {
+    res.json(await checkStkStatus(req, db));
 }));
 
 // ─── Student Portal: wallet ───────────────────────────────────────────────────
@@ -1236,29 +1298,35 @@ const tenantMetaRecord = async (req: Request) => {
     } catch { return null; }
 };
 
-router.get('/student-portal/report-card', authed(async (req, res, db, decoded) => {
-    const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
+// Builds a template-aware report card for a student (shared by student & parent).
+const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?: string) => {
+    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
     const tenant = await tenantMetaRecord(req);
     const family = templateFamily(tenant?.reportTemplate);
 
-    const all = decorateResults(await buildExamResults(db, decoded.studentId), family);
+    const all = decorateResults(await buildExamResults(db, sid), family);
     const terms = Array.from(new Set(all.map((r: any) => r.term).filter(Boolean)));
     const selectedTerm = req.query.term ? String(req.query.term) : (terms[0] || '');
     const results = selectedTerm ? all.filter((r: any) => r.term === selectedTerm) : all;
 
-    res.json({
+    return {
         template: { id: tenant?.reportTemplate || 'kcse_classic', family },
         school: { name: tenant?.name || '', crest: tenant?.crest || tenant?.logo || null },
         student: {
-            name: student?.studentName || decoded.name,
+            name: student?.studentName || fallbackName,
             registrationNo: student?.registrationNo || student?.admNo,
             class: student?.studentClass || student?.currentClass,
             gender: student?.gender,
+            photo: student?.studentPhoto || student?.photo || student?.avatar || null,
         },
         terms,
         term: selectedTerm,
         results,
-    });
+    };
+};
+
+router.get('/student-portal/report-card', authed(async (req, res, db, decoded) => {
+    res.json(await buildReportCard(db, req, decoded.studentId, decoded.name));
 }));
 
 // ─── Portal branding (school name + logo) — resolved from subdomain ───────────
@@ -1527,6 +1595,10 @@ router.get('/parent-portal/exam-results', authed(async (req, res, db, decoded) =
     res.json(await buildExamResults(db, parentStudentId(req, decoded)));
 }));
 
+router.get('/parent-portal/report-card', authed(async (req, res, db, decoded) => {
+    res.json(await buildReportCard(db, req, parentStudentId(req, decoded), decoded.parentName));
+}));
+
 router.get('/parent-portal/fee-invoices', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
     const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
@@ -1586,6 +1658,14 @@ router.get('/parent-portal/receipts', authed(async (req, res, db, decoded) => {
 
 router.get('/parent-portal/fees', authed(async (req, res, db, decoded) => {
     res.json(await buildFeesSummary(db, parentStudentId(req, decoded)));
+}));
+
+router.post('/parent-portal/pay-mpesa', authed(async (req, res, db, decoded) => {
+    res.json(await initiateStk(req, db, parentStudentId(req, decoded)));
+}));
+
+router.get('/parent-portal/mpesa-status', authed(async (req, res, db) => {
+    res.json(await checkStkStatus(req, db));
 }));
 
 // ─── Parent Portal: wallet (for the selected child) ──────────────────────────

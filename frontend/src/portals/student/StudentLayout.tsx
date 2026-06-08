@@ -81,7 +81,7 @@ export default function StudentLayout() {
             name: profile.studentName || profile.name || cached?.name || "Student",
             registrationNo: profile.registrationNo || profile.admNo || cached?.registrationNo,
             class: profile.studentClass || profile.currentClass || cached?.class,
-            photo: profile.studentPhoto || profile.photo || cached?.photo || null,
+            photo: profile.studentPhoto || profile.photo || profile.avatar || cached?.photo || null,
         }
         : cached;
 

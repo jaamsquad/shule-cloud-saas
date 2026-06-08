@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 70" width="200" height="70">
+  <rect width="200" height="70" rx="8" fill="#ffffff"/>
+  <g fill="#2c5364">
+    <!-- pediment -->
+    <path d="M100 12 L150 32 L50 32 Z"/>
+    <circle cx="100" cy="24" r="4" fill="#ffffff"/>
+    <!-- columns -->
+    <rect x="58" y="34" width="8" height="20"/>
+    <rect x="76" y="34" width="8" height="20"/>
+    <rect x="94" y="34" width="8" height="20"/>
+    <rect x="112" y="34" width="8" height="20"/>
+    <rect x="130" y="34" width="8" height="20"/>
+    <!-- base -->
+    <rect x="48" y="56" width="104" height="7" rx="2"/>
+  </g>
+</svg>
