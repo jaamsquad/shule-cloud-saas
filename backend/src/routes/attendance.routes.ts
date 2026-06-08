@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { getMetaDb } from '../lib/mongodb';
+import { Db, ObjectId } from 'mongodb';
+
+const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
 
@@ -26,10 +28,8 @@ const isWeekend = (dateStr: string): boolean => {
     return day === 0 || day === 6; // Sunday or Saturday
 };
 
-const checkHoliday = async (schoolId: string, dateStr: string) => {
-    const db = getDb();
-    const holiday = await db.collection('holidays').findOne({ schoolId, date: dateStr });
-    return holiday;
+const checkHoliday = async (db: Db, schoolId: string, dateStr: string) => {
+    return db.collection('holidays').findOne({ schoolId, date: dateStr });
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -46,7 +46,7 @@ router.get('/schools/:sid/attendance/students', async (req: Request, res: Respon
             return res.status(400).json({ errors: [{ message: 'Missing required query parameters: date, class_id' }] });
         }
 
-        const db = getDb();
+        const db = getRequestDb(req);
 
         // Find students in class
         const students = await db.collection('students').find({
@@ -99,7 +99,7 @@ router.get('/schools/:sid/attendance/students/check', async (req: Request, res: 
             return res.status(400).json({ errors: [{ message: 'Missing required query parameters' }] });
         }
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const records = await db.collection('student_attendance').find({ schoolId, classId: class_id, date: date as string }).toArray();
 
         if (records.length === 0) {
@@ -134,12 +134,12 @@ router.post('/schools/:sid/attendance/students/bulk', async (req: Request, res: 
         if (isWeekend(date)) {
             return res.status(422).json({ errors: [{ code: 'DATE_IS_WEEKEND', message: 'Cannot mark attendance on a weekend' }] });
         }
-        const holiday = await checkHoliday(schoolId, date);
+        const db = getRequestDb(req);
+        const holiday = await checkHoliday(db, schoolId, date);
         if (holiday) {
             return res.status(422).json({ errors: [{ code: 'DATE_IS_HOLIDAY', message: `Cannot mark attendance on a holiday: ${holiday.name}` }] });
         }
 
-        const db = getDb();
         let saved = 0;
         let updated = 0;
 
@@ -180,7 +180,7 @@ router.post('/schools/:sid/attendance/students/bulk', async (req: Request, res: 
 // GET /schools/:sid/attendance/students/:record_id
 router.get('/schools/:sid/attendance/students/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const record = await db.collection('student_attendance').findOne({ _id: new ObjectId(req.params.record_id) });
         if (!record) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Record not found' }] });
         res.json({ data: record, meta: {}, errors: [] });
@@ -190,7 +190,7 @@ router.get('/schools/:sid/attendance/students/:record_id', async (req: Request, 
 // PUT /schools/:sid/attendance/students/:record_id
 router.put('/schools/:sid/attendance/students/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { status, check_in, remarks } = req.body;
         const result = await db.collection('student_attendance').updateOne(
             { _id: new ObjectId(req.params.record_id) },
@@ -204,7 +204,7 @@ router.put('/schools/:sid/attendance/students/:record_id', async (req: Request, 
 // DELETE /schools/:sid/attendance/students/:record_id
 router.delete('/schools/:sid/attendance/students/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const result = await db.collection('student_attendance').deleteOne({ _id: new ObjectId(req.params.record_id) });
         if (result.deletedCount === 0) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Record not found' }] });
         res.json({ data: { success: true }, meta: {}, errors: [] });
@@ -226,7 +226,7 @@ router.get('/schools/:sid/attendance/employees', async (req: Request, res: Respo
             return res.status(400).json({ errors: [{ message: 'Missing required query parameter: date' }] });
         }
 
-        const db = getDb();
+        const db = getRequestDb(req);
 
         const staffQuery: any = {};
         if (department) staffQuery.department = department;
@@ -271,7 +271,7 @@ router.get('/schools/:sid/attendance/employees/check', async (req: Request, res:
 
         if (!date) return res.status(400).json({ errors: [{ message: 'Missing required query parameter: date' }] });
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const records = await db.collection('employee_attendance').find({ schoolId, date: date as string }).toArray();
 
         if (records.length === 0) {
@@ -301,12 +301,12 @@ router.post('/schools/:sid/attendance/employees/bulk', async (req: Request, res:
         if (isWeekend(date)) {
             return res.status(422).json({ errors: [{ code: 'DATE_IS_WEEKEND', message: 'Cannot mark attendance on a weekend' }] });
         }
-        const holiday = await checkHoliday(schoolId, date);
+        const db = getRequestDb(req);
+        const holiday = await checkHoliday(db, schoolId, date);
         if (holiday) {
             return res.status(422).json({ errors: [{ code: 'DATE_IS_HOLIDAY', message: `Cannot mark attendance on a holiday: ${holiday.name}` }] });
         }
 
-        const db = getDb();
         let saved = 0;
         let updated = 0;
 
@@ -348,7 +348,7 @@ router.post('/schools/:sid/attendance/employees/bulk', async (req: Request, res:
 // GET /schools/:sid/attendance/employees/:record_id
 router.get('/schools/:sid/attendance/employees/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const record = await db.collection('employee_attendance').findOne({ _id: new ObjectId(req.params.record_id) });
         if (!record) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Record not found' }] });
         res.json({ data: record, meta: {}, errors: [] });
@@ -358,7 +358,7 @@ router.get('/schools/:sid/attendance/employees/:record_id', async (req: Request,
 // PUT /schools/:sid/attendance/employees/:record_id
 router.put('/schools/:sid/attendance/employees/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { status, check_in, check_out, remarks } = req.body;
         const workingHours = calculateWorkingHours(check_in, check_out);
         const result = await db.collection('employee_attendance').updateOne(
@@ -373,7 +373,7 @@ router.put('/schools/:sid/attendance/employees/:record_id', async (req: Request,
 // DELETE /schools/:sid/attendance/employees/:record_id
 router.delete('/schools/:sid/attendance/employees/:record_id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const result = await db.collection('employee_attendance').deleteOne({ _id: new ObjectId(req.params.record_id) });
         if (result.deletedCount === 0) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Record not found' }] });
         res.json({ data: { success: true }, meta: {}, errors: [] });
@@ -383,7 +383,7 @@ router.delete('/schools/:sid/attendance/employees/:record_id', async (req: Reque
 // PATCH /schools/:sid/attendance/employees/:record_id/checkout
 router.patch('/schools/:sid/attendance/employees/:record_id/checkout', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { check_out } = req.body;
         const record = await db.collection('employee_attendance').findOne({ _id: new ObjectId(req.params.record_id) });
         if (!record) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Record not found' }] });
@@ -412,7 +412,7 @@ router.get('/schools/:sid/attendance/reports/class-wise', async (req: Request, r
             return res.status(400).json({ errors: [{ message: 'Missing required query parameters: class_id, from, to' }] });
         }
 
-        const db = getDb();
+        const db = getRequestDb(req);
 
         // Find students
         const students = await db.collection('students').find({
@@ -501,7 +501,7 @@ router.get('/schools/:sid/attendance/reports/class-wise/heatmap', async (req: Re
             return res.status(400).json({ errors: [{ message: 'Missing required query parameters' }] });
         }
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const records = await db.collection('student_attendance').find({
             schoolId,
             studentId: student_id,
@@ -559,7 +559,7 @@ router.get('/schools/:sid/attendance/reports/students', async (req: Request, res
 
         if (!from || !to) return res.status(400).json({ errors: [{ message: 'Missing required query parameters: from, to' }] });
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const query: any = { schoolId, date: { $gte: from as string, $lte: to as string } };
         if (student_id) query.studentId = student_id;
         if (class_id) query.classId = class_id;
@@ -607,7 +607,7 @@ router.get('/schools/:sid/attendance/reports/students/summary', async (req: Requ
         const { student_id, month } = req.query;
         if (!student_id || !month) return res.status(400).json({ errors: [{ message: 'Missing required query parameters' }] });
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const records = await db.collection('student_attendance').find({
             schoolId, studentId: student_id, date: { $regex: `^${month}` }
         }).toArray();
@@ -641,7 +641,7 @@ router.get('/schools/:sid/attendance/reports/students/low-attendance', async (re
     try {
         const schoolId = getSchoolId(req);
         const { class_id, threshold = 75, from, to } = req.query;
-        const db = getDb();
+        const db = getRequestDb(req);
 
         const students = await db.collection('students').find(class_id ? { classId: class_id } : {}).toArray();
         const records = await db.collection('student_attendance').find({ schoolId, date: { $gte: from as string, $lte: to as string } }).toArray();
@@ -683,7 +683,7 @@ router.get('/schools/:sid/attendance/reports/employees', async (req: Request, re
 
         if (!from || !to) return res.status(400).json({ errors: [{ message: 'Missing required query parameters: from, to' }] });
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const query: any = { schoolId, date: { $gte: from as string, $lte: to as string } };
         if (employee_id) query.employeeId = employee_id;
         if (status && status !== 'ALL') query.status = status;
@@ -729,7 +729,7 @@ router.get('/schools/:sid/attendance/reports/employees/summary', async (req: Req
         const { employee_id, month } = req.query;
         if (!employee_id || !month) return res.status(400).json({ errors: [{ message: 'Missing required query parameters' }] });
 
-        const db = getDb();
+        const db = getRequestDb(req);
         const records = await db.collection('employee_attendance').find({
             schoolId, employeeId: employee_id, date: { $regex: `^${month}` }
         }).toArray();
@@ -763,7 +763,7 @@ router.get('/schools/:sid/attendance/reports/employees/low-attendance', async (r
     try {
         const schoolId = getSchoolId(req);
         const { threshold = 75, from, to, department } = req.query;
-        const db = getDb();
+        const db = getRequestDb(req);
 
         const staff = await db.collection('staff').find(department ? { department } : {}).toArray();
         const records = await db.collection('employee_attendance').find({ schoolId, date: { $gte: from as string, $lte: to as string } }).toArray();
@@ -803,7 +803,7 @@ router.get('/schools/:sid/attendance/dashboard', async (req: Request, res: Respo
     try {
         const schoolId = getSchoolId(req);
         const today = new Date().toISOString().split('T')[0];
-        const db = getDb();
+        const db = getRequestDb(req);
 
         const sRecs = await db.collection('student_attendance').find({ schoolId, date: today }).toArray();
         const eRecs = await db.collection('employee_attendance').find({ schoolId, date: today }).toArray();
@@ -811,22 +811,25 @@ router.get('/schools/:sid/attendance/dashboard', async (req: Request, res: Respo
         const sTotal = await db.collection('students').countDocuments();
         const eTotal = await db.collection('staff').countDocuments();
 
+        const sMarked = sRecs.length > 0;
+        const eMarked = eRecs.length > 0;
+
         res.json({
             data: {
                 date: today,
                 students: {
                     total: sTotal > 0 ? sTotal : 150,
-                    present: sRecs.filter(r => r.status === 'PRESENT').length || 142,
-                    absent: sRecs.filter(r => r.status === 'ABSENT').length || 5,
-                    late: sRecs.filter(r => r.status === 'LATE').length || 2,
-                    excused: sRecs.filter(r => r.status === 'EXCUSED').length || 1,
+                    present: sMarked ? sRecs.filter(r => r.status === 'PRESENT').length : (sTotal > 0 ? 0 : 142),
+                    absent: sMarked ? sRecs.filter(r => r.status === 'ABSENT').length : (sTotal > 0 ? 0 : 5),
+                    late: sMarked ? sRecs.filter(r => r.status === 'LATE').length : (sTotal > 0 ? 0 : 2),
+                    excused: sMarked ? sRecs.filter(r => r.status === 'EXCUSED').length : (sTotal > 0 ? 0 : 1),
                     not_marked_classes: 0
                 },
                 employees: {
                     total: eTotal > 0 ? eTotal : 25,
-                    present: eRecs.filter(r => r.status === 'PRESENT').length || 23,
-                    absent: eRecs.filter(r => r.status === 'ABSENT').length || 1,
-                    on_leave: eRecs.filter(r => r.status === 'ON_LEAVE').length || 1,
+                    present: eMarked ? eRecs.filter(r => r.status === 'PRESENT').length : (eTotal > 0 ? 0 : 23),
+                    absent: eMarked ? eRecs.filter(r => r.status === 'ABSENT').length : (eTotal > 0 ? 0 : 1),
+                    on_leave: eMarked ? eRecs.filter(r => r.status === 'ON_LEAVE').length : (eTotal > 0 ? 0 : 1),
                     not_marked: 0
                 }
             }, meta: {}, errors: []
@@ -839,7 +842,7 @@ router.get('/schools/:sid/attendance/stats', async (req: Request, res: Response)
     try {
         const schoolId = getSchoolId(req);
         const { month = new Date().toISOString().substring(0, 7) } = req.query;
-        const db = getDb();
+        const db = getRequestDb(req);
 
         const sRecs = await db.collection('student_attendance').find({ schoolId, date: { $regex: `^${month}` } }).toArray();
         const eRecs = await db.collection('employee_attendance').find({ schoolId, date: { $regex: `^${month}` } }).toArray();
@@ -868,7 +871,7 @@ router.get('/schools/:sid/holidays', async (req: Request, res: Response) => {
     try {
         const schoolId = getSchoolId(req);
         const { from, to } = req.query;
-        const db = getDb();
+        const db = getRequestDb(req);
         const query: any = { schoolId };
         if (from && to) query.date = { $gte: from as string, $lte: to as string };
         const holidays = await db.collection('holidays').find(query).sort({ date: 1 }).toArray();
@@ -881,7 +884,7 @@ router.post('/schools/:sid/holidays', async (req: Request, res: Response) => {
         const schoolId = getSchoolId(req);
         const { date, name, type } = req.body;
         if (!date || !name || !type) return res.status(400).json({ errors: [{ message: 'Missing required fields' }] });
-        const db = getDb();
+        const db = getRequestDb(req);
         const result = await db.collection('holidays').insertOne({ schoolId, date, name, type, createdAt: new Date() });
         res.status(201).json({ data: { id: result.insertedId, date, name, type }, meta: {}, errors: [] });
     } catch (error: any) { res.status(500).json({ errors: [{ message: error.message }] }); }
@@ -889,7 +892,7 @@ router.post('/schools/:sid/holidays', async (req: Request, res: Response) => {
 
 router.put('/schools/:sid/holidays/:id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { date, name, type } = req.body;
         const result = await db.collection('holidays').updateOne(
             { _id: new ObjectId(req.params.id) },
@@ -902,7 +905,7 @@ router.put('/schools/:sid/holidays/:id', async (req: Request, res: Response) => 
 
 router.delete('/schools/:sid/holidays/:id', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const result = await db.collection('holidays').deleteOne({ _id: new ObjectId(req.params.id) });
         if (result.deletedCount === 0) return res.status(404).json({ errors: [{ code: 'NOT_FOUND', message: 'Holiday not found' }] });
         res.json({ data: { success: true }, meta: {}, errors: [] });

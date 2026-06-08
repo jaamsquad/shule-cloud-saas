@@ -23,6 +23,14 @@ export default function EditStudent() {
         queryFn: async () => { const r = await api.get("/academics/classes"); return r.data; },
     });
 
+    const { data: zones = [] } = useQuery({
+        queryKey: ["transport_zones"],
+        queryFn: async () => {
+            const r = await api.get("/transport_zones");
+            return r.data || [];
+        },
+    });
+
     const classNames = classes.map((c: any) => c.name || c.levelName).filter(Boolean);
 
     const [formData, setFormData] = useState({
@@ -63,6 +71,7 @@ export default function EditStudent() {
         motherProfession: "",
         motherIncome: "",
         avatar: "",
+        transportZone: "",
     });
     const [showParents, setShowParents] = useState(false);
 
@@ -106,6 +115,7 @@ export default function EditStudent() {
                 motherProfession: student.motherProfession || "",
                 motherIncome: student.motherIncome || "",
                 avatar: student.avatar || "",
+                transportZone: student.transportZone || "",
             });
             if (student.fatherName || student.motherName) setShowParents(true);
         }
@@ -215,6 +225,16 @@ export default function EditStudent() {
                                 </div>
                                 <div className="lg:col-start-3">
                                     <InputField name="phone" value={formData.phone} onChange={handleChange} label="Mobile No." placeholder="e.g +254xxxxxxxxx" />
+                                </div>
+                                <div className="col-span-1 md:col-span-2 lg:col-span-3">
+                                    <SelectField 
+                                        name="transportZone" 
+                                        value={formData.transportZone} 
+                                        onChange={handleChange} 
+                                        label="Transport Zone" 
+                                        placeholder="No Transport Zone (Select to Assign)" 
+                                        options={zones.map((z: any) => z.name)} 
+                                    />
                                 </div>
                             </div>
                         </div>

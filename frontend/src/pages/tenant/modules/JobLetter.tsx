@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { 
     Home, Search, User, Mail, Briefcase, 
     Printer, Download, FileText, Loader2, 
@@ -38,8 +38,34 @@ export default function JobLetter() {
         return name.includes(searchTerm.toLowerCase()) || s.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
-    const handlePrint = () => {
-        window.print();
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const printInNewWindow = () => {
+        const content = printRef.current;
+        if (!content) return;
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+            .map(el => el.outerHTML).join('\n');
+        win.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Job Offer Letter</title>
+                ${styles}
+                <style>
+                    @page { size: A4 portrait; margin: 15mm 20mm; }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 24px; background: white; }
+                    * { box-sizing: border-box; }
+                </style>
+            </head>
+            <body>${content.innerHTML}</body>
+            </html>
+        `);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); }, 800);
     };
 
     const today = new Date().toLocaleDateString('en-GB', {
@@ -215,7 +241,7 @@ export default function JobLetter() {
                                     <Download className="w-3.5 h-3.5" /> PDF
                                 </button>
                                 <button 
-                                    onClick={handlePrint}
+                                    onClick={printInNewWindow}
                                     className="px-5 py-1.5 bg-[#5C67F2] text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-md shadow-indigo-100 hover:bg-[#4a54c4] transition-all flex items-center gap-2"
                                 >
                                     <Printer className="w-3.5 h-3.5" /> Print Letter
@@ -224,7 +250,7 @@ export default function JobLetter() {
                         </div>
 
                         {/* Formal Letter Template */}
-                        <div className="w-full bg-white shadow-xl rounded-[2.5rem] p-12 relative overflow-hidden border border-gray-100 print:shadow-none print:p-0 print:border-none print:rounded-none">
+                        <div ref={printRef} className="w-full bg-white shadow-xl rounded-[2.5rem] p-12 relative overflow-hidden border border-gray-100">
                             {/* Watermark Decor - Hide on Print */}
                             <div className="absolute top-0 right-0 w-48 h-48 bg-[#5C67F2]/5 rounded-bl-[10rem] -mr-12 -mt-12 print:hidden"></div>
                             

@@ -1,203 +1,242 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { 
-    Home, Search, Calendar, User, ArrowRight, 
-    Printer, Loader2, Check, FileText, Receipt,
-    History, Filter, Building2, X
+    Home, Search, Calendar, User, Printer, Loader2, Check, 
+    FileText, Mail, MessageSquare, Download, Filter, RefreshCw
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function FeesPaidSlip() {
-    const navigate = useNavigate();
-    const [feeMonth, setFeeMonth] = useState("May 2026");
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedStudent, setSelectedStudent] = useState<any>(null);
-    const [showResults, setShowResults] = useState(false);
+    const [methodFilter, setMethodFilter] = useState("ALL");
+    const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
+    const [emailInput, setEmailInput] = useState("");
+    const [isSending, setIsSending] = useState(false);
 
-    const { data: students = [] } = useQuery({
-        queryKey: ["students", searchQuery],
+    // Fetch Receipts
+    const { data: receiptsRes, isLoading, refetch } = useQuery({
+        queryKey: ["fees_paid_receipts", searchQuery, methodFilter],
         queryFn: async () => {
-            if (!searchQuery || searchQuery.length < 2) return [];
-            const r = await api.get(`/students?search=${searchQuery}`);
+            const queryParams = new URLSearchParams();
+            if (searchQuery) queryParams.append("receipt_no", searchQuery);
+            if (methodFilter !== "ALL") queryParams.append("method", methodFilter);
+            const r = await api.get(`/schools/default/receipts?${queryParams.toString()}`);
             return r.data;
-        },
-        enabled: searchQuery.length >= 2 && !selectedStudent
-    });
-
-    const { data: transactions = [], isFetching, refetch } = useQuery({
-        queryKey: ["paid_slips", selectedStudent?._id, feeMonth],
-        queryFn: async () => {
-            if (!selectedStudent) return [];
-            const r = await api.get(`/transactions?studentId=${selectedStudent._id}&month=${feeMonth}`);
-            return r.data;
-        },
-        enabled: !!selectedStudent && showResults
-    });
-
-    const handleViewHistory = () => {
-        if (!selectedStudent) {
-            toast.error("Please select a student first");
-            return;
         }
-        setShowResults(true);
-        refetch();
+    });
+
+    const receipts = receiptsRes?.data || [];
+
+    const handlePrintReceipt = (receiptNo: string, id: string) => {
+        toast.info(`Opening print receipt: ${receiptNo}`);
+        window.open(`/api/v1/schools/default/receipts/${receiptNo}/pdf`, "_blank");
     };
 
-    const handlePrint = (tx: any) => {
-        if (tx.invoiceId || tx._id) {
-            navigate(`/fees/invoice/${tx.invoiceId || tx._id}`);
-        } else {
-            toast.error("Receipt document not found");
+    const handleDocxExport = (receiptNo: string) => {
+        toast.info(`Downloading Word stub for receipt: ${receiptNo}`);
+        window.open(`/api/v1/schools/default/receipts/${receiptNo}/word`, "_blank");
+    };
+
+    const handleEmailReceipt = async () => {
+        if (!selectedReceipt || !emailInput) {
+            toast.error("Receipt and email are required");
+            return;
+        }
+        setIsSending(true);
+        try {
+            await api.post(`/schools/default/receipts/${selectedReceipt.receipt_no}/email`, { email: emailInput });
+            toast.success("Receipt emailed successfully");
+            setSelectedReceipt(null);
+            setEmailInput("");
+        } catch {
+            toast.error("Failed to email receipt");
+        } finally {
+            setIsSending(false);
         }
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20">
+        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
             {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm sticky top-0 z-10">
+            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" />
                     <span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Fees</span>
                     <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Fees Paid Slip</span>
+                    <span className="font-black text-[#5C67F2]">Paid Receipts Slip</span>
                 </div>
             </div>
 
-            <div className="flex-1 max-w-4xl mx-auto w-full px-4 pt-10">
-                <div className="bg-white rounded-[3rem] shadow-2xl shadow-indigo-100/40 border border-slate-50 overflow-hidden">
-                    <div className="p-12">
-                        <div className="flex items-center justify-center gap-4 mb-10">
-                            <div className="w-10 h-1 bg-[#5C67F2] rounded-full" />
-                            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Fees Record</h2>
-                            <div className="w-10 h-1 bg-[#5C67F2] rounded-full" />
+            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
+                {/* Header Title */}
+                <div className="mb-10">
+                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                        Fees Paid Ledger & Receipts
+                    </h1>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Audit, print double-stub A4 templates, send SMS triggers, and export stubs</p>
+                </div>
+
+                {/* Filter and Search controls */}
+                <div className="flex flex-wrap gap-4 items-center justify-between bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm mb-8">
+                    <div className="flex gap-4 flex-1 max-w-xl">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search by Receipt Number..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full h-11 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] focus:bg-white text-xs font-bold text-slate-700"
+                            />
                         </div>
 
-                        <div className="space-y-8 max-w-md mx-auto">
-                            {/* Fee Month */}
-                            <div className="relative group">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase group-focus-within:scale-110 transition-transform">Fees Month*</div>
-                                <div className="relative">
-                                    <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                    <input 
-                                        type="text" 
-                                        value={feeMonth}
-                                        onChange={(e) => setFeeMonth(e.target.value)}
-                                        className="w-full h-14 pl-14 pr-6 bg-slate-50/50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] focus:bg-white text-slate-700 font-black text-sm transition-all"
-                                        placeholder="e.g. May 2026"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Search Student */}
-                            <div className="relative group">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase group-focus-within:scale-110 transition-transform">Search Student*</div>
-                                <div className="relative">
-                                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                    <input 
-                                        type="text" 
-                                        value={searchQuery}
-                                        onChange={(e) => {
-                                            setSearchQuery(e.target.value);
-                                            if (selectedStudent) {
-                                                setSelectedStudent(null);
-                                                setShowResults(false);
-                                            }
-                                        }}
-                                        readOnly={!!selectedStudent}
-                                        className={`w-full h-14 pl-14 pr-14 bg-slate-50/50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] focus:bg-white text-slate-700 font-black text-sm transition-all ${selectedStudent ? 'cursor-default' : ''}`}
-                                        placeholder="Search Student..."
-                                    />
-                                    {selectedStudent && (
-                                        <button 
-                                            onClick={() => {
-                                                setSelectedStudent(null);
-                                                setSearchQuery("");
-                                                setShowResults(false);
-                                            }}
-                                            className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors"
-                                        >
-                                            <X className="w-5 h-5" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Dropdown */}
-                                {students.length > 0 && searchQuery.length >= 2 && !selectedStudent && (
-                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-100 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                        {students.map((s: any) => (
-                                            <div 
-                                                key={s._id}
-                                                onClick={() => {
-                                                    setSelectedStudent(s);
-                                                    setSearchQuery(s.studentName || `${s.firstName} ${s.lastName}`);
-                                                }}
-                                                className="px-6 py-4 hover:bg-slate-50 cursor-pointer flex items-center justify-between group transition-colors"
-                                            >
-                                                <div>
-                                                    <p className="text-xs font-black text-slate-700 uppercase">{s.studentName || `${s.firstName} ${s.lastName}`}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{s.registrationNo || s.studentId} · {s.studentClass || s.currentClass}</p>
-                                                </div>
-                                                <ArrowRight className="w-4 h-4 text-slate-200 group-hover:text-[#5C67F2]" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            <button 
-                                onClick={handleViewHistory}
-                                disabled={isFetching}
-                                className="w-full h-14 bg-[#FFC165] hover:bg-[#eab05a] text-slate-900 font-black rounded-2xl shadow-xl shadow-amber-100 transition-all transform active:scale-95 flex items-center justify-center gap-3 text-xs uppercase tracking-widest disabled:opacity-50"
+                        <div className="relative w-48">
+                            <select
+                                value={methodFilter}
+                                onChange={(e) => setMethodFilter(e.target.value)}
+                                className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"
                             >
-                                {isFetching ? <Loader2 className="w-5 h-5 animate-spin" /> : <History className="w-5 h-5" />}
-                                {isFetching ? "Retrieving History..." : "View Payment History"}
-                            </button>
+                                <option value="ALL">All Methods</option>
+                                <option value="CASH">Cash</option>
+                                <option value="MPESA">M-Pesa</option>
+                                <option value="BANK">Bank Transfer</option>
+                                <option value="CHEQUE">Cheque</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={() => refetch()}
+                        className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 transition-colors"
+                    >
+                        <RefreshCw className="w-4 h-4 text-slate-500" />
+                    </button>
+                </div>
+
+                {/* Receipts Table */}
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-8">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                                    <th className="py-4 px-6">Receipt Info</th>
+                                    <th className="py-4 px-6">Student details</th>
+                                    <th className="py-4 px-6">Invoice Ref</th>
+                                    <th className="py-4 px-6 text-right">Amount (KSh)</th>
+                                    <th className="py-4 px-6 text-center">Method</th>
+                                    <th className="py-4 px-6 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
+                                {receipts.map((rcpt: any) => (
+                                    <tr key={rcpt.receipt_no} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="py-4 px-6">
+                                            <p className="font-black text-slate-800 text-sm uppercase">{rcpt.receipt_no}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-0.5">Date: {rcpt.date}</p>
+                                        </td>
+                                        <td className="py-4 px-6">
+                                            <p className="font-bold text-slate-800 uppercase">{rcpt.student_name}</p>
+                                            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight mt-0.5">{rcpt.admission_no} · {rcpt.class_name}</p>
+                                        </td>
+                                        <td className="py-4 px-6 font-black text-slate-700 uppercase">
+                                            {rcpt.invoice_no}
+                                        </td>
+                                        <td className="py-4 px-6 text-right font-black text-slate-800 text-sm">
+                                            KSh {rcpt.amount_paid.toLocaleString()}
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <span className="px-2.5 py-1 bg-indigo-55 text-slate-700 rounded-lg text-[9px] font-black uppercase tracking-wider bg-slate-100">{rcpt.method}</span>
+                                        </td>
+                                        <td className="py-4 px-6">
+                                            <div className="flex items-center justify-center gap-2">
+                                                {/* Print button using the exact requested styling */}
+                                                <button
+                                                    onClick={() => handlePrintReceipt(rcpt.receipt_no, rcpt.id)}
+                                                    className="group relative bg-white hover:bg-indigo-50 text-gray-700 hover:text-indigo-700 h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all text-sm border border-gray-200 hover:border-indigo-300 shadow-sm hover:shadow-md"
+                                                >
+                                                    <Printer className="w-4 h-4 text-indigo-500 group-hover:scale-115 transition-transform" />
+                                                    Print
+                                                </button>
+                                                
+                                                <button
+                                                    onClick={() => handleDocxExport(rcpt.receipt_no)}
+                                                    className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-600 transition-colors"
+                                                    title="Download Word Stub"
+                                                >
+                                                    <Download className="w-4 h-4" />
+                                                </button>
+
+                                                <button
+                                                    onClick={() => setSelectedReceipt(rcpt)}
+                                                    className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-[#5C67F2] transition-colors"
+                                                    title="Email Receipt stub"
+                                                >
+                                                    <Mail className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+
+                                {receipts.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="text-center py-20 text-slate-400 font-bold uppercase text-xs tracking-widest">
+                                            {isLoading ? "Retrieving ledger records..." : "No matching paid slips/receipts found"}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {/* Email Stub Modal */}
+            {selectedReceipt && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+                        <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+                        
+                        <div className="p-8">
+                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-2">Email Receipt Stub</h3>
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-wide mb-6">Receipt: {selectedReceipt.receipt_no} · Student: {selectedReceipt.student_name}</p>
+
+                            <div className="relative group">
+                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Parent Email Address</div>
+                                <input
+                                    type="email"
+                                    value={emailInput}
+                                    onChange={(e) => setEmailInput(e.target.value)}
+                                    className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] focus:bg-white text-xs font-bold transition-all"
+                                    placeholder="parent@example.com"
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 mt-8">
+                                <button
+                                    onClick={() => {
+                                        setSelectedReceipt(null);
+                                        setEmailInput("");
+                                    }}
+                                    className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleEmailReceipt}
+                                    disabled={isSending || !emailInput}
+                                    className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
+                                >
+                                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                    Send Email
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Results Section */}
-                {showResults && selectedStudent && (
-                    <div className="mt-12 space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                        <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-3">
-                            <Receipt className="w-5 h-5 text-[#5C67F2]" /> Payment Records for {selectedStudent.studentName || `${selectedStudent.firstName} ${selectedStudent.lastName}`}
-                        </h3>
-                        
-                        {transactions.length > 0 ? (
-                            <div className="grid gap-4">
-                                {transactions.map((tx: any) => (
-                                    <div key={tx._id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                                        <div className="flex items-center gap-6">
-                                            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500">
-                                                <Check className="w-7 h-7" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-black text-slate-800 uppercase">KES {tx.amount?.toLocaleString()}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Ref: {tx._id.slice(-8).toUpperCase()} · Date: {tx.date}</p>
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => handlePrint(tx)}
-                                            className="h-12 px-8 bg-slate-100 hover:bg-[#5C67F2] hover:text-white text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center gap-2"
-                                        >
-                                            <Printer className="w-4 h-4" />
-                                            Print Slip
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="bg-white p-20 rounded-[3rem] border border-dashed border-slate-200 text-center">
-                                <History className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">No payment records found for this student in {feeMonth}</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+            )}
         </div>
     );
 }

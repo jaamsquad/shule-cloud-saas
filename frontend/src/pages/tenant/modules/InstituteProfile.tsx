@@ -9,7 +9,7 @@ export default function InstituteProfile() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data: profileData, isLoading } = useQuery({
-        queryKey: ["tenant_profile"],
+        queryKey: ["tenant_profile_global"],
         queryFn: async () => {
             const r = await api.get("/auth/tenant/profile");
             return r.data;
@@ -59,7 +59,7 @@ export default function InstituteProfile() {
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["tenant_profile"] });
+            queryClient.invalidateQueries({ queryKey: ["tenant_profile_global"] });
             toast.success("Institute profile updated successfully");
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to update profile"),

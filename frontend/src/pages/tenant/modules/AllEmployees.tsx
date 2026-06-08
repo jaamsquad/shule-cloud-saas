@@ -2,11 +2,22 @@ import { useState } from "react";
 import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function AllEmployees() {
     const { items: staff, isLoading, deleteItem, updateItem } = useItems("staff");
     const { items: subjects } = useItems("subjects");
+
+    // Fetch dynamic roles from DB
+    const { data: dbRoles = [] } = useQuery<any[]>({
+        queryKey: ["roles_list"],
+        queryFn: async () => (await api.get("/roles")).data || [],
+    });
+    const roleOptions: string[] = dbRoles.length > 0
+        ? dbRoles.map((r: any) => r.name)
+        : ["Teacher","Admin","Staff","Accountant","Principal","Librarian","Transport Manager","Hostel Warden","Head of Department","Deputy Principal","Exam Director","HR Officer","ICT Officer","Bus Driver","Security","Other"];
     
     const [editingEmployee, setEditingEmployee] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({
@@ -25,7 +36,14 @@ export default function AllEmployees() {
         education: "",
         bloodGroup: "",
         dob: "",
-        specializedSubjects: []
+        specializedSubjects: [],
+        // Statutory & Bank Accounts details
+        kraPin: "",
+        nssfNo: "",
+        nhifNo: "",
+        bankName: "",
+        bankBranch: "",
+        accountNo: ""
     });
 
     const handleEditClick = (employee: any) => {
@@ -46,7 +64,13 @@ export default function AllEmployees() {
             education: employee.education || "",
             bloodGroup: employee.bloodGroup || "",
             dob: employee.dob || "",
-            specializedSubjects: employee.specializedSubjects || []
+            specializedSubjects: employee.specializedSubjects || [],
+            kraPin: employee.kraPin || "",
+            nssfNo: employee.nssfNo || "",
+            nhifNo: employee.nhifNo || "",
+            bankName: employee.bankName || "",
+            bankBranch: employee.bankBranch || "",
+            accountNo: employee.accountNo || ""
         });
     };
 
@@ -124,7 +148,11 @@ export default function AllEmployees() {
                                         <Edit className="w-4 h-4" />
                                     </button>
                                     <button 
-                                        onClick={() => deleteItem(employee._id)}
+                                        onClick={() => {
+                                            if (confirm("Are you sure you want to delete this employee?")) {
+                                                deleteItem(employee._id);
+                                            }
+                                        }}
                                         className="w-8 h-8 rounded-full bg-[#ff5e6c] hover:bg-[#e04553] text-white flex items-center justify-center transition-colors shadow-sm"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -150,8 +178,8 @@ export default function AllEmployees() {
             {/* ── Edit Employee Modal ─────────────────────────────────── */}
             {editingEmployee && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-                        <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+                    <div className="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl my-8">
+                        <div className="px-6 py-4 border-b border-gray-55 flex items-center justify-between bg-gray-50/50">
                             <h3 className="font-bold text-gray-900 flex items-center gap-2 text-base">
                                 <User className="w-5 h-5 text-[#5C67F2]" /> Edit Employee Profile
                             </h3>
@@ -159,11 +187,11 @@ export default function AllEmployees() {
                         </div>
                         
                         <form onSubmit={handleSaveEdit} className="p-6 space-y-6">
-                            <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6">
+                            <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-6">
                                 {/* Basic Section */}
                                 <div>
-                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 border-b pb-1">Basic Information</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 border-b pb-1">Personal & Contact Info</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Employee Name*</label>
                                             <input type="text" required value={editForm.employeeName} onChange={e => setEditForm({...editForm, employeeName: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
@@ -171,19 +199,74 @@ export default function AllEmployees() {
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Role/Designation*</label>
                                             <select required value={editForm.designation} onChange={e => setEditForm({...editForm, designation: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none bg-white">
-                                                <option value="Teacher">Teacher</option>
-                                                <option value="Admin">Admin</option>
-                                                <option value="Staff">Staff</option>
-                                                <option value="Accountant">Accountant</option>
+                                                <option value="">Select Role</option>
+                                                {roleOptions.map((r: string) => (
+                                                    <option key={r} value={r}>{r}</option>
+                                                ))}
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Mobile No</label>
-                                            <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Mobile No*</label>
+                                            <input type="text" required value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Monthly Salary</label>
-                                            <input type="text" value={editForm.salary} onChange={e => setEditForm({...editForm, salary: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Email Address*</label>
+                                            <input type="email" required value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">National ID / Passport*</label>
+                                            <input type="text" required value={editForm.nationalId} onChange={e => setEditForm({...editForm, nationalId: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date of Birth*</label>
+                                            <input type="date" required value={editForm.dob} onChange={e => setEditForm({...editForm, dob: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Gender*</label>
+                                            <select required value={editForm.gender} onChange={e => setEditForm({...editForm, gender: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none bg-white">
+                                                <option value="Male">Male</option>
+                                                <option value="Female">Female</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date of Joining*</label>
+                                            <input type="date" required value={editForm.joiningDate} onChange={e => setEditForm({...editForm, joiningDate: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Monthly Salary (KES)*</label>
+                                            <input type="text" required value={editForm.salary} onChange={e => setEditForm({...editForm, salary: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Statutory & Bank accounts section */}
+                                <div>
+                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 border-b pb-1">Statutory & Bank Accounts Details</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">KRA PIN</label>
+                                            <input type="text" value={editForm.kraPin} onChange={e => setEditForm({...editForm, kraPin: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">NSSF Number</label>
+                                            <input type="text" value={editForm.nssfNo} onChange={e => setEditForm({...editForm, nssfNo: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">NHIF Number</label>
+                                            <input type="text" value={editForm.nhifNo} onChange={e => setEditForm({...editForm, nhifNo: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Bank Name</label>
+                                            <input type="text" value={editForm.bankName} onChange={e => setEditForm({...editForm, bankName: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Bank Branch</label>
+                                            <input type="text" value={editForm.bankBranch} onChange={e => setEditForm({...editForm, bankBranch: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Account Number</label>
+                                            <input type="text" value={editForm.accountNo} onChange={e => setEditForm({...editForm, accountNo: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
                                         </div>
                                     </div>
                                 </div>
@@ -235,24 +318,12 @@ export default function AllEmployees() {
                                     <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 border-b pb-1">Additional Details</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Father / Husband Name</label>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Father / Spouse Name</label>
                                             <input type="text" value={editForm.fatherName} onChange={e => setEditForm({...editForm, fatherName: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Gender</label>
-                                            <select value={editForm.gender} onChange={e => setEditForm({...editForm, gender: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none bg-white">
-                                                <option value="Male">Male</option>
-                                                <option value="Female">Female</option>
-                                                <option value="Other">Other</option>
-                                            </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Experience</label>
                                             <input type="text" value={editForm.experience} onChange={e => setEditForm({...editForm, experience: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">National ID</label>
-                                            <input type="text" value={editForm.nationalId} onChange={e => setEditForm({...editForm, nationalId: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Religion</label>
@@ -260,12 +331,9 @@ export default function AllEmployees() {
                                                 <option value="">Select Religion</option>
                                                 <option value="Islam">Islam</option>
                                                 <option value="Christianity">Christianity</option>
+                                                <option value="Hinduism">Hinduism</option>
                                                 <option value="Other">Other</option>
                                             </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Email Address</label>
-                                            <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Education</label>
@@ -277,14 +345,6 @@ export default function AllEmployees() {
                                                 <option value="">Select Blood Group</option>
                                                 {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
                                             </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date of Birth</label>
-                                            <input type="date" value={editForm.dob} onChange={e => setEditForm({...editForm, dob: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date of Joining</label>
-                                            <input type="date" value={editForm.joiningDate} onChange={e => setEditForm({...editForm, joiningDate: e.target.value})} className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:border-[#5C67F2] outline-none" />
                                         </div>
                                         <div className="md:col-span-2">
                                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Home Address</label>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { 
     Search, Plus, Briefcase, Mail, Phone, Edit, Trash2, 
     ChevronRight, ArrowLeft, Camera, User, 
@@ -565,11 +565,9 @@ function ImportExportView({ onBack }: any) {
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const processFile = async (file: File) => {
         setIsProcessing(true);
         const reader = new FileReader();
 
@@ -589,16 +587,34 @@ function ImportExportView({ onBack }: any) {
                 }
 
                 // Map Excel headers to Student fields
-                const formattedItems = data.map((item: any) => ({
-                    studentName: item['Student Name'] || item['Name'] || item.name || '',
-                    registrationNo: item['Registration No'] || item['Adm No'] || item.admNo || '',
-                    studentClass: item['Class'] || item['Grade'] || '',
-                    gender: item['Gender'] || 'Male',
-                    fatherName: item['Father Name'] || item['Guardian'] || '',
-                    admissionDate: item['Admission Date'] || new Date().toISOString(),
-                    status: 'Active',
-                    balance: item['Balance'] || 0
-                }));
+                const formattedItems = data.map((item: any) => {
+                    const studentName = item['Student Name'] || item['Name'] || item.name || '';
+                    const registrationNo = item['Registration No'] || item['Adm No'] || item.registrationNo || item.admNo || '';
+                    const studentClass = item['Class'] || item['Grade'] || item.studentClass || '';
+                    
+                    const cleanReg = registrationNo.toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || "student";
+                    const portalUsername = registrationNo || studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
+                    const portalPassword = `shule@${cleanReg}`;
+
+                    return {
+                        studentName,
+                        registrationNo: registrationNo.toString(),
+                        studentClass,
+                        gender: item['Gender'] || item.gender || 'Male',
+                        fatherName: item['Father Name'] || item['Guardian'] || item.fatherName || '',
+                        admissionDate: item['Admission Date'] || item.admissionDate || new Date().toISOString().split('T')[0],
+                        status: item['Status'] || item.status || 'Active',
+                        balance: Number(item['Balance'] || item.balance) || 0,
+                        discount: String(item['Discount'] || item.discount || '0'),
+                        phone: item['Phone'] || item.phone || '',
+                        dob: item['DOB'] || item['Date of Birth'] || item.dob || '',
+                        avatar: item['Avatar'] || item.avatar || '',
+                        portalUsername,
+                        portalPassword,
+                        credentialsGenerated: true,
+                        lastPasswordReset: new Date().toISOString()
+                    };
+                });
 
                 await api.post("/students/bulk", { items: formattedItems });
                 
@@ -616,16 +632,50 @@ function ImportExportView({ onBack }: any) {
         reader.readAsBinaryString(file);
     };
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) processFile(file);
+    };
+
     const downloadSample = async () => {
-        const { utils, writeFile } = await import('xlsx');
-        const sampleData = [
-            { "Student Name": "John Doe", "Registration No": "BS101", "Class": "1 East", "Gender": "Male", "Father Name": "Peter Doe", "Balance": 0 },
-            { "Student Name": "Jane Smith", "Registration No": "BS102", "Class": "1 West", "Gender": "Female", "Father Name": "Mary Smith", "Balance": 500 }
-        ];
-        const ws = utils.json_to_sheet(sampleData);
-        const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, "Students");
-        writeFile(wb, "ShuleCloud_Student_Import_Sample.xlsx");
+        try {
+            const { utils, writeFile } = await import('xlsx');
+            const sampleData = [
+                { "Student Name": "John Doe", "Registration No": "BS101", "Class": "1 East", "Gender": "Male", "Father Name": "Peter Doe", "Balance": 0, "Discount": "0", "Phone": "+254700000000", "DOB": "2012-05-10" },
+                { "Student Name": "Jane Smith", "Registration No": "BS102", "Class": "1 West", "Gender": "Female", "Father Name": "Mary Smith", "Balance": 500, "Discount": "10", "Phone": "+254711111111", "DOB": "2013-08-15" }
+            ];
+            const ws = utils.json_to_sheet(sampleData);
+            const wb = utils.book_new();
+            utils.book_append_sheet(wb, ws, "Students");
+            writeFile(wb, "ShuleCloud_Student_Import_Template.xlsx");
+            toast.success("Excel template downloaded successfully!");
+        } catch (err) {
+            toast.error("Failed to generate Excel template");
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
+                processFile(file);
+            } else {
+                toast.error("Unsupported file format. Please upload Excel or CSV.");
+            }
+        }
     };
 
     return (
@@ -671,13 +721,25 @@ function ImportExportView({ onBack }: any) {
                 </div>
             </div>
             
-            <div className="bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[2rem] p-12 text-center">
+            <div 
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-[2rem] p-12 text-center transition-all duration-200 ${
+                    isDragging 
+                        ? 'border-[#5C67F2] bg-indigo-50/20 scale-[0.99]' 
+                        : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+                }`}
+            >
                 <div className="max-w-md mx-auto space-y-4">
                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm border border-slate-100">
-                        <FileText className="w-8 h-8 text-slate-300" />
+                        <Upload className={`w-8 h-8 ${isDragging ? 'text-[#5C67F2] animate-bounce' : 'text-slate-300'}`} />
                     </div>
-                    <h3 className="text-lg font-black text-slate-700">Import Guidelines</h3>
-                    <div className="text-[13px] text-slate-500 space-y-2 text-left bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                    <h3 className="text-lg font-black text-slate-700">
+                        {isDragging ? 'Drop your spreadsheet file here' : 'Drag and drop your spreadsheet here'}
+                    </h3>
+                    <p className="text-xs text-slate-400">or click <span className="text-[#5C67F2] underline cursor-pointer" onClick={() => fileInputRef.current?.click()}>Upload List</span> to browse</p>
+                    <div className="text-[13px] text-slate-500 space-y-2 text-left bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-4">
                         <p className="flex gap-3"><span className="text-indigo-500 font-black">1.</span> Column headers must match the sample file.</p>
                         <p className="flex gap-3"><span className="text-indigo-500 font-black">2.</span> Ensure 'Registration No' is unique for every student.</p>
                         <p className="flex gap-3"><span className="text-indigo-500 font-black">3.</span> Class names must exist in your Class Registry.</p>

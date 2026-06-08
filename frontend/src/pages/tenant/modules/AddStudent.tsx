@@ -1,13 +1,17 @@
-import { useState } from "react";
-import { Home, Settings, Plus, RotateCcw, Check, Download, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Home, Settings, Plus, RotateCcw, Check, Download, Loader2, Upload, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+} from "@/components/ui/dialog";
 
 export default function AddStudent() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { createItem, isCreating } = useItems("students");
     const [formData, setFormData] = useState({
         studentName: "",
@@ -18,13 +22,25 @@ export default function AddStudent() {
         phone: "",
         dob: "",
         gender: "Male",
-        avatar: ""
+        avatar: "",
+        transportZone: ""
     });
     const [showParents, setShowParents] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data: classesData = [] } = useQuery({
         queryKey: ["classes"],
         queryFn: async () => { const r = await api.get("/academics/classes"); return r.data; },
+    });
+    const { data: zones = [] } = useQuery({
+        queryKey: ["transport_zones"],
+        queryFn: async () => {
+            const r = await api.get("/transport_zones");
+            return r.data || [];
+        },
     });
     const classNames = classesData.map((c: any) => c.name || c.levelName).filter(Boolean);
 
@@ -54,6 +70,119 @@ export default function AddStudent() {
         });
     };
 
+    // File Import Logics
+    const processFile = async (file: File) => {
+        setIsProcessing(true);
+        const reader = new FileReader();
+
+        reader.onload = async (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const { read, utils } = await import('xlsx');
+                const wb = read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = utils.sheet_to_json(ws);
+
+                if (data.length === 0) {
+                    toast.error("The selected file appears to be empty.");
+                    setIsProcessing(false);
+                    return;
+                }
+
+                // Map Excel headers to Student fields
+                const formattedItems = data.map((item: any) => {
+                    const studentName = item['Student Name'] || item['Name'] || item.name || '';
+                    const registrationNo = item['Registration No'] || item['Adm No'] || item.registrationNo || item.admNo || '';
+                    const studentClass = item['Class'] || item['Grade'] || item.studentClass || '';
+                    
+                    const cleanReg = registrationNo.toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || "student";
+                    const portalUsername = registrationNo || studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
+                    const portalPassword = `shule@${cleanReg}`;
+
+                    return {
+                        studentName,
+                        registrationNo: registrationNo.toString(),
+                        studentClass,
+                        gender: item['Gender'] || item.gender || 'Male',
+                        fatherName: item['Father Name'] || item['Guardian'] || item.fatherName || '',
+                        admissionDate: item['Admission Date'] || item.admissionDate || new Date().toISOString().split('T')[0],
+                        status: item['Status'] || item.status || 'Active',
+                        balance: Number(item['Balance'] || item.balance) || 0,
+                        discount: String(item['Discount'] || item.discount || '0'),
+                        phone: item['Phone'] || item.phone || '',
+                        dob: item['DOB'] || item['Date of Birth'] || item.dob || '',
+                        avatar: item['Avatar'] || item.avatar || '',
+                        portalUsername,
+                        portalPassword,
+                        credentialsGenerated: true,
+                        lastPasswordReset: new Date().toISOString()
+                    };
+                });
+
+                await api.post("/students/bulk", { items: formattedItems });
+                
+                toast.success(`Successfully imported ${formattedItems.length} students!`);
+                queryClient.invalidateQueries({ queryKey: ["students-list"] });
+                setShowImportModal(false);
+                navigate("/students");
+            } catch (error: any) {
+                console.error("Import Error:", error);
+                toast.error(error.response?.data?.message || "Failed to process the student list.");
+            } finally {
+                setIsProcessing(false);
+            }
+        };
+
+        reader.readAsBinaryString(file);
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) processFile(file);
+    };
+
+    const downloadSample = async () => {
+        try {
+            const { utils, writeFile } = await import('xlsx');
+            const sampleData = [
+                { "Student Name": "John Doe", "Registration No": "BS101", "Class": "1 East", "Gender": "Male", "Father Name": "Peter Doe", "Balance": 0, "Discount": "0", "Phone": "+254700000000", "DOB": "2012-05-10" },
+                { "Student Name": "Jane Smith", "Registration No": "BS102", "Class": "1 West", "Gender": "Female", "Father Name": "Mary Smith", "Balance": 500, "Discount": "10", "Phone": "+254711111111", "DOB": "2013-08-15" }
+            ];
+            const ws = utils.json_to_sheet(sampleData);
+            const wb = utils.book_new();
+            utils.book_append_sheet(wb, ws, "Students");
+            writeFile(wb, "ShuleCloud_Student_Import_Template.xlsx");
+            toast.success("Excel template downloaded successfully!");
+        } catch (err) {
+            toast.error("Failed to generate Excel template");
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
+                processFile(file);
+            } else {
+                toast.error("Unsupported file format. Please upload Excel or CSV.");
+            }
+        }
+    };
+
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
             {/* Breadcrumb Header */}
@@ -68,7 +197,10 @@ export default function AddStudent() {
                 </div>
                 <div className="flex gap-2">
                     <button className="px-4 py-2 bg-[#ff5e5e] text-white text-xs font-bold rounded-md shadow-sm">Customize</button>
-                    <button className="px-4 py-2 bg-[#5C67F2] text-white text-xs font-bold rounded-md shadow-sm flex items-center gap-2">
+                    <button 
+                        onClick={() => setShowImportModal(true)}
+                        className="px-4 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-bold rounded-md shadow-sm flex items-center gap-2 transition-all"
+                    >
                         <Download className="w-3.5 h-3.5" /> Import Students
                     </button>
                 </div>
@@ -141,6 +273,16 @@ export default function AddStudent() {
                                 <InputField name="discount" value={formData.discount} onChange={handleChange} label="Discount In Fee*" placeholder="In %" required />
                                 <div className="md:col-start-3">
                                     <InputField name="phone" value={formData.phone} onChange={handleChange} label="Mobile No. For SMS/WhatsApp" placeholder="e.g +44xxxxxxxxxx" />
+                                </div>
+                                <div className="col-span-1 md:col-span-2 lg:col-span-3">
+                                    <SelectField 
+                                        name="transportZone" 
+                                        value={formData.transportZone} 
+                                        onChange={handleChange} 
+                                        label="Transport Zone" 
+                                        placeholder="No Transport Zone (Select to Assign)" 
+                                        options={zones.map((z: any) => z.name)} 
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -256,6 +398,96 @@ export default function AddStudent() {
                     </form>
                 </div>
             </div>
+
+            {/* Import Students Dialog */}
+            <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+                <DialogContent className="p-0 border-none overflow-hidden rounded-[24px] max-w-2xl shadow-2xl bg-white">
+                    <DialogHeader className="bg-gradient-to-r from-[#5C67F2] to-[#7A85F7] p-6 text-white flex flex-row items-center justify-between space-y-0">
+                        <div className="flex flex-col">
+                            <DialogTitle className="text-xl font-bold tracking-tight">Bulk Student Import</DialogTitle>
+                            <DialogDescription className="text-indigo-100 text-xs mt-1">
+                                Upload a CSV or Excel spreadsheet of student admission details.
+                            </DialogDescription>
+                        </div>
+                        <button 
+                            onClick={() => setShowImportModal(false)}
+                            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all shadow-sm"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </DialogHeader>
+
+                    <div className="p-6 space-y-6">
+                        {/* Drag and Drop Zone */}
+                        <div
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            className={`border-2 border-dashed rounded-[20px] p-8 text-center transition-all ${
+                                isDragging 
+                                    ? "border-[#5C67F2] bg-indigo-50/50 scale-[0.98]" 
+                                    : "border-gray-200 hover:border-gray-300 bg-slate-50/30"
+                            }`}
+                        >
+                            <div className="max-w-md mx-auto space-y-4">
+                                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm border border-slate-100">
+                                    <Upload className={`w-8 h-8 ${isDragging ? 'text-[#5C67F2] animate-bounce' : 'text-slate-400'}`} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-base font-bold text-gray-800">Drag and drop your spreadsheet here</h3>
+                                    <p className="text-xs text-gray-400">Supports .xlsx, .xls, and .csv files</p>
+                                </div>
+                                
+                                <div className="pt-2">
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileUpload}
+                                        accept=".xlsx, .xls, .csv"
+                                        className="hidden"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isProcessing}
+                                        className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-full hover:border-[#5C67F2] hover:text-[#5C67F2] transition-colors inline-flex items-center gap-2 shadow-sm disabled:opacity-50"
+                                    >
+                                        {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                        {isProcessing ? 'Processing File...' : 'Select File Manually'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Excel Template & Guidelines */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-gray-100 flex flex-col justify-between">
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Excel Template</h4>
+                                    <p className="text-[11px] text-gray-400">Download the standard spreadsheet formatting schema to structure your records.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={downloadSample}
+                                    className="mt-4 w-full py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-bold rounded-full shadow-sm flex items-center justify-center gap-2 transition-all"
+                                >
+                                    <Download className="w-3.5 h-3.5" /> Download Template
+                                </button>
+                            </div>
+
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-gray-100 space-y-3">
+                                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">Import Guidelines</h4>
+                                <ul className="text-[11px] text-gray-500 space-y-2 list-disc list-inside">
+                                    <li>Column headers must match the template exactly.</li>
+                                    <li>Registration No must be unique.</li>
+                                    <li>Class names must match existing class levels.</li>
+                                    <li>Date fields must follow YYYY-MM-DD.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

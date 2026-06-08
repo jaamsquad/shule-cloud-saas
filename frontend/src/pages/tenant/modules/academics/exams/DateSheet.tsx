@@ -11,7 +11,13 @@ export default function DateSheet() {
 
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data });
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data });
-    const { data: tenantProfile } = useQuery<any>({ queryKey: ["tenant_profile"], queryFn: async () => (await api.get("/tenant/profile")).data });
+    const { data: tenantProfile } = useQuery<any>({
+        queryKey: ["tenant_profile_global"],
+        queryFn: async () => {
+            const r = await api.get("/auth/tenant/profile");
+            return Array.isArray(r.data) ? r.data[0] : r.data;
+        },
+    });
 
     const { data: allSchedules = [], isLoading } = useQuery<any[]>({
         queryKey: ["exam-schedules"],

@@ -15,7 +15,7 @@ export default function InvoiceDetail() {
 
     const { data: invoice, isLoading } = useQuery({
         queryKey: ["invoice", id],
-        queryFn: async () => (await api.get(`/invoices/${id}`)).data,
+        queryFn: async () => (await api.get(`/invoices/${id}`)).data.data,
         enabled: !!id
     });
 
@@ -237,6 +237,35 @@ export default function InvoiceDetail() {
                                 <div className="p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100">
                                     <p className="text-sm font-black text-slate-800 uppercase mb-1">{invoice.studentName}</p>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{invoice.registrationNo} · {invoice.studentClass}</p>
+                                    
+                                    {/* Parent Contacts */}
+                                    {invoice.student?.parents && invoice.student.parents.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-slate-200/60 space-y-2">
+                                            <p className="text-[9px] font-black text-[#5C67F2] uppercase tracking-wider">Parent/Guardian Details</p>
+                                            {invoice.student.parents.map((p: any, idx: number) => (
+                                                <div key={idx} className="text-xs">
+                                                    <p className="font-bold text-slate-700">{p.name} ({p.relation || 'Parent'})</p>
+                                                    {p.phone && <p className="text-slate-500 font-mono text-[10px] mt-0.5">📞 {p.phone}</p>}
+                                                    {p.email && <p className="text-slate-500 text-[10px]">✉️ {p.email}</p>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {(!invoice.student?.parents || invoice.student.parents.length === 0) && (invoice.student?.parentName || invoice.student?.fatherName || invoice.student?.motherName) && (
+                                        <div className="mt-4 pt-4 border-t border-slate-200/60 space-y-2">
+                                            <p className="text-[9px] font-black text-[#5C67F2] uppercase tracking-wider">Parent/Guardian Details</p>
+                                            <div className="text-xs">
+                                                <p className="font-bold text-slate-700">
+                                                    {invoice.student.parentName || invoice.student.fatherName || invoice.student.motherName}
+                                                </p>
+                                                {(invoice.student.parentPhone || invoice.student.fatherPhone || invoice.student.motherPhone) && (
+                                                    <p className="text-slate-500 font-mono text-[10px] mt-0.5">
+                                                        📞 {invoice.student.parentPhone || invoice.student.fatherPhone || invoice.student.motherPhone}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="space-y-6">

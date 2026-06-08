@@ -1,26 +1,29 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  Home, Settings, LayoutTemplate, BookOpen, User, Briefcase, 
-  Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil, 
-  Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video, 
-  Copy, ClipboardList, FileText, Lock
+  Home, Settings, LayoutTemplate, BookOpen, User, Briefcase,
+  Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil,
+  Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video,
+  Copy, ClipboardList, FileText, Lock, Award, Truck, BookMarked, GraduationCap, Building2,
+  Zap, Shield, Monitor
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface NavItem {
   label: string;
   icon: React.ElementType;
   path?: string;
   locked?: boolean;
+  moduleKey?: string; // maps to permission module key
   children?: { label: string; path: string; locked?: boolean }[];
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", icon: Home, path: "/dashboard" },
-  { label: "General Settings", icon: Settings, children: [
+  { label: "Dashboard", icon: Home, path: "/dashboard", moduleKey: "dashboard" },
+  { label: "General Settings", icon: Settings, moduleKey: "settings", children: [
       { label: "Institute Profile", path: "/settings/profile" },
       { label: "Learning Periods", path: "/academics/periods" },
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
@@ -29,65 +32,99 @@ const navItems: NavItem[] = [
       { label: "Accounts For Fees Invoice", path: "/settings/accounts" },
       { label: "Rules & Regulations", path: "/settings/rules" },
       { label: "Marks Grading", path: "/settings/grading" },
+      { label: "Curriculum Settings", path: "/settings/curriculum" },
       { label: "Report Card Templates", path: "/settings/report-templates" },
+      { label: "Roles & Permissions", path: "/roles" },
       { label: "Theme & Language", path: "/settings/theme" },
       { label: "Account Settings", path: "/settings/account" },
       { label: "Log out", path: "/logout" },
   ] },
   {
-    label: "Classes", icon: LayoutTemplate, children: [
+    label: "Classes", icon: LayoutTemplate, moduleKey: "classes", children: [
       { label: "All Classes", path: "/classes" },
       { label: "New Class", path: "/classes/new" },
     ]
   },
-  { label: "Subjects", icon: BookOpen, children: [ 
+  { label: "Subjects", icon: BookOpen, moduleKey: "subjects", children: [
       { label: "All Subjects", path: "/subjects/all" },
       { label: "New Subject", path: "/subjects/new" },
-      { label: "Co-Curricular & Talents", path: "/subjects/activities" },
+      { label: "Curriculum Framework", path: "/subjects/curriculum" },
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
+      { label: "Co-Curricular & Talents", path: "/subjects/activities" },
   ] },
-  { label: "Students", icon: User, children: [ 
+  { label: "Students", icon: User, moduleKey: "students", children: [
       { label: "All Students", path: "/students" },
       { label: "Add New", path: "/students/new" },
-      { label: "Manage Families", path: "/students/families", locked: false },
-      { label: "Active / Inactive", path: "/students/status", locked: false },
-      { label: "Admission Letter", path: "/students/admission-letter" },
-      { label: "Student ID Cards", path: "/students/id-cards" },
-      { label: "Print Basic List", path: "/students/print" },
-      { label: "Manage Login", path: "/students/login" },
+      { label: "Admissions", path: "/students/admissions" },
+      { label: "Manage Families", path: "/students/families" },
       { label: "Promote Students", path: "/students/promote" },
+      { label: "Transfer Management", path: "/students/transfer" },
+      { label: "Discipline Records", path: "/students/discipline" },
+      { label: "Medical Records", path: "/students/medical" },
+      { label: "Student Documents", path: "/students/documents" },
+      { label: "Student ID Cards", path: "/students/id-cards" },
+      { label: "Admission Letter", path: "/students/admission-letter" },
+      { label: "Manage Login", path: "/students/login" },
+      { label: "Parent Login", path: "/students/parent-login" },
   ] },
-  { label: "Employees", icon: Briefcase, children: [
+  { label: "Parents", icon: UserCheck, moduleKey: "students", children: [
+      { label: "All Parents", path: "/parents" },
+      { label: "Add New Parent", path: "/parents/new" },
+  ] },
+  { label: "Student Wallets", icon: Wallet, moduleKey: "fees", path: "/wallet" },
+  { label: "Portal Requests", icon: ClipboardList, moduleKey: "students", children: [
+      { label: "Academic Requisitions", path: "/admin/requisitions" },
+      { label: "Clearance Requests", path: "/admin/clearance" },
+  ] },
+  { label: "Employees", icon: Briefcase, moduleKey: "employees", children: [
       { label: "All Employees", path: "/staff" },
+      { label: "Teachers", path: "/staff/teachers" },
       { label: "Add New", path: "/staff/new" },
       { label: "Staff ID Cards", path: "/staff/id-cards", locked: true },
       { label: "Job Letter", path: "/staff/job-letter" },
       { label: "Manage Login", path: "/staff/login" },
   ] },
-  { label: "Accounts", icon: Wallet, children: [
+  { label: "Accounts", icon: Wallet, moduleKey: "accounts", children: [
       { label: "Chart Of Account", path: "/accounts/chart" },
       { label: "Add Income", path: "/accounts/income" },
       { label: "Add Expense", path: "/accounts/expense" },
       { label: "Account Statement", path: "/accounts/statement" },
   ] },
-  { label: "Fees", icon: Banknote, children: [ 
+  { label: "Fees", icon: Banknote, moduleKey: "fees", children: [ 
       { label: "Generate Fees Invoice", path: "/fees/generate-invoice" },
+      { label: "Generate Per Student", path: "/fees/generate-student-invoice" },
+      { label: "Generated Invoices", path: "/fees/invoices" },
       { label: "Collect Fees", path: "/fees/collect" },
+      { label: "Student Ledger", path: "/fees/ledger" },
       { label: "Fees Paid Slip", path: "/fees/paid-slip" },
       { label: "Fees Defaulters", path: "/fees/defaulters" },
       { label: "Fees Report", path: "/fees/report", locked: true },
       { label: "Delete Fees", path: "/fees/delete", locked: true },
   ] },
-  { label: "Salary", icon: CreditCard, children: [ { label: "Payroll", path: "/staff/payroll" } ] },
-  { label: "Attendance", icon: UserCheck, children: [ 
+  { label: "Salary", icon: CreditCard, moduleKey: "salary", children: [
+      { label: "Pay Salary", path: "/salary/pay" },
+      { label: "Salary Paid Slip", path: "/salary/paid-slip" },
+      { label: "Salary Sheet", path: "/salary/sheet" },
+      { label: "Salary Report", path: "/salary/report" },
+      { label: "Salary Components", path: "/salary/components" },
+  ] },
+  { label: "Transport", icon: Truck, moduleKey: "transport", children: [
+      { label: "Zones", path: "/transport/zones" },
+      { label: "New Zone", path: "/transport/zones/new" },
+      { label: "Buses", path: "/transport/buses" },
+      { label: "New Bus", path: "/transport/buses/new" },
+      { label: "Assign Student", path: "/transport/assign" },
+      { label: "Report", path: "/transport/report" }
+  ] },
+  { label: "Attendance", icon: UserCheck, moduleKey: "attendance", children: [ 
       { label: "Students Attendance", path: "/attendance/students" },
       { label: "Employees Attendance", path: "/attendance/employees" },
       { label: "Class wise Report", path: "/attendance/reports/class-wise" },
       { label: "Students Attendance Report", path: "/attendance/reports/students" },
       { label: "Employees Attendance Report", path: "/attendance/reports/employees" },
   ] },
-  { label: "Reports", icon: ClipboardList, children: [
+  { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
       { label: "Students Report Card", path: "/reports/report-cards" },
       { label: "Students Info Report", path: "/reports/students-info" },
       { label: "Parents Info Report", path: "/reports/parents-info" },
@@ -98,7 +135,7 @@ const navItems: NavItem[] = [
       { label: "Accounts Report", path: "/reports/accounts" },
       { label: "Customised Reports", path: "/reports/custom" },
   ] },
-  { label: "Timetable", icon: Calendar, children: [ 
+  { label: "Timetable", icon: Calendar, moduleKey: "timetable", children: [ 
       { label: "Weekdays", path: "/timetable/weekdays" },
       { label: "Time Periods", path: "/timetable/periods" },
       { label: "Class Rooms", path: "/timetable/rooms" },
@@ -106,29 +143,129 @@ const navItems: NavItem[] = [
       { label: "Generate For Class", path: "/timetable/class" },
       { label: "Generate For Teacher", path: "/timetable/teacher" },
   ] },
-  { label: "Homework", icon: Pencil, path: "/homework" },
-  { label: "Behaviour & Skills", icon: Eye, children: [ { label: "Skills", path: "/skills" } ] },
-  { label: "Online Store & POS", icon: ShoppingCart, children: [ { label: "Store", path: "/store" } ] },
-  { label: "WhatsApp", icon: MessageCircle, path: "/whatsapp", locked: true },
-  { label: "Messaging", icon: MessageSquare, path: "/communications" },
-  { label: "SMS Services", icon: Mail, children: [ { label: "SMS", path: "/communications/sms" } ] },
-  { label: "Live Class", icon: Video, path: "/live" },
-  { label: "Question Paper", icon: Copy, children: [ { label: "Papers", path: "/papers" } ] },
-  { label: "Exams", icon: ClipboardList, children: [
+  { label: "Academic System", icon: BookMarked, moduleKey: "exams", children: [
+      { label: "Academic Years & Terms", path: "/academic-system/years" },
+      { label: "Classes & Streams", path: "/academic-system/classes" },
+      { label: "Student Enrollments", path: "/academic-system/enrollments" },
+      { label: "Promotion Wizard", path: "/academic-system/promote" },
+      { label: "Marks Entry (V2)", path: "/academic-system/marks" },
+      { label: "Report Cards", path: "/academic-system/report-cards" },
+  ] },
+  { label: "Academic Content", icon: GraduationCap, moduleKey: "academics_content", children: [
+      { label: "Lesson Plans", path: "/academics/lesson-plans" },
+      { label: "Schemes of Work", path: "/academics/schemes-of-work" },
+      { label: "Notes & Resources", path: "/academics/resources" },
+      { label: "Assignments", path: "/academics/assignments" },
+  ] },
+  { label: "Homework", icon: Pencil, path: "/homework", moduleKey: "homework" },
+  { label: "Behaviour & Skills", icon: Eye, moduleKey: "behaviour", children: [
+      { label: "Rate Behaviours", path: "/behaviour/rate" },
+      { label: "Rate Skills", path: "/skills/rate" },
+      { label: "Observation Diary", path: "/behaviour/observations" },
+      { label: "Affective Report", path: "/behaviour/reports/affective" },
+      { label: "Psychomotor Report", path: "/behaviour/reports/psychomotor" }
+  ] },
+  { label: "Certificates", icon: Award, moduleKey: "certificates", children: [
+      { label: "Generate Certificate", path: "/certificates/generate" },
+      { label: "Saved Certificates", path: "/certificates/saved" },
+      { label: "Certificate Templates", path: "/certificates/templates" }
+  ] },
+  { label: "Hostel", icon: Building2, moduleKey: "hostel", children: [
+      { label: "Dashboard", path: "/hostel/dashboard" },
+      { label: "Rooms & Blocks", path: "/hostel/rooms" },
+      { label: "Bed Management", path: "/hostel/beds" },
+      { label: "Room Allocation", path: "/hostel/allocation" },
+      { label: "Hostel Attendance", path: "/hostel/attendance" },
+      { label: "Hostel Fees", path: "/hostel/fees" },
+      { label: "Settings", path: "/hostel/settings" },
+  ] },
+  { label: "Library", icon: BookOpen, moduleKey: "library", children: [
+      { label: "Dashboard", path: "/library/dashboard" },
+      { label: "Books Catalog", path: "/library/books" },
+      { label: "Book Categories", path: "/library/categories" },
+      { label: "Issue Book", path: "/library/issue" },
+      { label: "Return Book", path: "/library/return" },
+      { label: "Overdue & Fines", path: "/library/overdue" },
+      { label: "Members", path: "/library/members" },
+      { label: "Reports", path: "/library/reports" },
+  ] },
+  { label: "Point of Sale", icon: ShoppingCart, moduleKey: "pos", children: [
+      { label: "Store Analytics", path: "/pos-admin/analytics" },
+      { label: "Product Categories", path: "/pos-admin/categories" },
+      { label: "Product Tax", path: "/pos-admin/tax" },
+      { label: "Products", path: "/pos-admin/products" },
+      { label: "New Order", path: "/pos-admin/new-order" },
+      { label: "All Orders", path: "/pos-admin/orders" },
+  ] },
+  { label: "Communications", icon: MessageSquare, moduleKey: "communications", children: [
+      { label: "Announcements", path: "/communications/announcements" },
+      { label: "Bulk SMS", path: "/communications/sms" },
+      { label: "Email Broadcast", path: "/communications/email" },
+      { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },
+      { label: "Report Notifications", path: "/communications/notifications" },
+      { label: "Communication Settings", path: "/communications/preferences" },
+      { label: "Gateway Settings", path: "/communications/settings" },
+  ] },
+  { label: "Live Class & LMS", icon: Video, moduleKey: "live_class", children: [
+      { label: "Live Classes (Jitsi)", path: "/live" },
+      { label: "Courses", path: "/lms/courses" },
+      { label: "Quizzes & Exams", path: "/lms/quizzes" },
+      { label: "Learning Materials", path: "/lms/lessons" },
+      { label: "LMS Dashboard", path: "/lms" },
+  ] },
+  { label: "Integrations", icon: Zap, path: "/integrations", moduleKey: "integrations" },
+  { label: "Roles & Permissions", icon: Shield, path: "/roles", moduleKey: "roles" },
+  { label: "Question Paper", icon: Copy, moduleKey: "question_paper", children: [
+      { label: "AI Past Paper Importer", path: "/papers/import" },
+      { label: "Subject Chapters", path: "/papers/chapters" },
+      { label: "Question Bank", path: "/papers/questions" },
+      { label: "Create Question Paper", path: "/papers/create" }
+  ] },
+  { label: "Exams", icon: ClipboardList, moduleKey: "exams", children: [
       { label: "Create New Exam", path: "/exams/create" },
       { label: "Add / Update Exam Marks", path: "/exams/marks" },
+      { label: "Generate Report Cards", path: "/exams/generate-reports" },
       { label: "Result Card", path: "/exams/result-card" },
+      { label: "Class Report Cards", path: "/exams/class-reports" },
       { label: "Result Sheet", path: "/exams/result-sheet" },
+      { label: "Student Rankings", path: "/exams/rankings" },
       { label: "Exam Schedule", path: "/exams/schedule" },
       { label: "Date Sheet", path: "/exams/date-sheet" },
       { label: "Blank Award List", path: "/exams/blank-award-list" },
   ] },
-  { label: "Class Tests", icon: FileText, children: [ { label: "Tests", path: "/tests" } ] },
+  { label: "Class Tests", icon: FileText, moduleKey: "exams", children: [
+      { label: "Manage Test Marks", path: "/tests/marks" },
+      { label: "Test Result", path: "/tests/results" }
+  ] },
 ];
 
 export default function AppSidebar() {
   const location = useLocation();
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const perms = usePermissions();
+
+  // Filter nav items by DB-fetched permissions for this role.
+  // Every sidebar item MUST have a moduleKey to be shown to non-admins.
+  // Dashboard is the only exception — always visible when authenticated.
+  const visibleNavItems = navItems.filter(item => {
+    // Admin → show everything
+    if (perms.isAdmin) return true;
+
+    // Still fetching from DB → only show Dashboard to avoid incorrect flash
+    if (!perms.loaded) return item.path === "/dashboard";
+
+    const allowed = perms.modules;
+    if (!allowed?.length) return false;
+    if (allowed.includes("*")) return true;
+
+    // Dashboard is always visible for authenticated users
+    if (item.path === "/dashboard") return true;
+
+    // Items without a moduleKey are hidden for non-admins
+    if (!item.moduleKey) return false;
+
+    return allowed.includes(item.moduleKey);
+  });
 
   const { data: theme } = useQuery({
       queryKey: ["theme_settings"],
@@ -147,14 +284,14 @@ export default function AppSidebar() {
       item.children?.some(child => location.pathname === child.path || location.pathname.startsWith(child.path))
     );
     if (group && !expandedGroups.includes(group.label)) {
-      setExpandedGroups(prev => [...prev, group.label]);
+      // Accordion: only the active route's group stays open.
+      setExpandedGroups([group.label]);
     }
   }, [location.pathname]);
 
   const toggleGroup = (label: string) => {
-    setExpandedGroups(prev => 
-      prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label]
-    );
+    // Accordion: opening a group closes any other open group.
+    setExpandedGroups(prev => (prev.includes(label) ? [] : [label]));
   };
 
   return (
@@ -169,7 +306,7 @@ export default function AppSidebar() {
         {/* Navigation List */}
         <nav className="flex-1 py-4 overflow-y-auto custom-scrollbar">
           <ul className="space-y-1 px-3">
-            {navItems.map(item => {
+            {visibleNavItems.map(item => {
               const Icon = item.icon;
               const isExpanded = expandedGroups.includes(item.label);
               
@@ -226,19 +363,41 @@ export default function AppSidebar() {
                           
                           return (
                             <li key={idx} className="relative">
-                              <Link
-                                to={child.path}
-                                className={`flex items-center gap-3 px-4 py-2 text-[12px] transition-colors ${
-                                  isChildActive
-                                    ? isDark ? "text-white font-bold" : "text-gray-900 font-bold"
-                                    : isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"
-                                }`}
-                              >
-                                {/* Bullet indicator */}
-                                <div className={`w-1.5 h-1.5 rounded-full ${isChildActive ? activeBg : "bg-transparent"}`}></div>
-                                {child.label}
-                                {child.locked && <Lock className="w-3 h-3 text-red-300 ml-auto" />}
-                              </Link>
+                              {child.path.startsWith("http") ? (
+                                <a
+                                  href={child.path}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-3 px-4 py-2 text-[12px] transition-colors ${
+                                    isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-850"
+                                  }`}
+                                >
+                                  <div className="w-1.5 h-1.5 rounded-full bg-transparent"></div>
+                                  {child.label}
+                                </a>
+                              ) : child.path === "/logout" ? (
+                                <button
+                                  onClick={() => { window.location.href = "/logout"; }}
+                                  className={`w-full flex items-center gap-3 px-4 py-2 text-[12px] transition-colors text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg`}
+                                >
+                                  <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>
+                                  {child.label}
+                                </button>
+                              ) : (
+                                <Link
+                                  to={child.path}
+                                  className={`flex items-center gap-3 px-4 py-2 text-[12px] transition-colors ${
+                                    isChildActive
+                                      ? isDark ? "text-white font-bold" : "text-gray-900 font-bold"
+                                      : isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-800"
+                                  }`}
+                                >
+                                  {/* Bullet indicator */}
+                                  <div className={`w-1.5 h-1.5 rounded-full ${isChildActive ? activeBg : "bg-transparent"}`}></div>
+                                  {child.label}
+                                  {child.locked && <Lock className="w-3 h-3 text-red-300 ml-auto" />}
+                                </Link>
+                              )}
                             </li>
                           );
                         })}

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { currentTenantSubdomain } from "./portal";
 
 const api = axios.create({
     baseURL: "/api/v1",
@@ -22,11 +23,12 @@ api.interceptors.request.use((config) => {
         const token = localStorage.getItem('auth_token');
         if (token) config.headers.Authorization = `Bearer ${token}`;
 
-        // Send subdomain header for tenant context
-        const host = window.location.hostname;
-        const parts = host.split('.');
-        if (parts.length > 2 && parts[0] !== 'www') {
-            config.headers['x-tenant-subdomain'] = parts[0];
+        // Send subdomain header for tenant context.
+        // Handles tenant hosts (egerton.localhost) as well as portal-prefixed
+        // hosts (students.egerton.localhost, staff.egerton.localhost, ...).
+        const sub = currentTenantSubdomain();
+        if (sub) {
+            config.headers['x-tenant-subdomain'] = sub;
         }
 
         // Also check localStorage for subdomain (for localhost dev)
@@ -44,11 +46,27 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// Auto-redirect to login on 401
+// Auto-redirect / clear session on auth errors
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        const status = error.response?.status;
+        const code   = error.response?.data?.code;
+
+        if (status === 403 && code === 'TOKEN_SUBDOMAIN_MISMATCH') {
+            // Token belongs to a different school — clear session and redirect to login
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('tenant');
+            // Redirect to bare localhost login so they can pick their school
+            const { protocol } = window.location;
+            const port = window.location.port ? `:${window.location.port}` : '';
+            const msg = encodeURIComponent('Your session is not valid for this school. Please log in.');
+            window.location.href = `${protocol}//localhost${port}/login?error=${msg}`;
+            return Promise.reject(error);
+        }
+
+        if (status === 401) {
             if (isOwnerContext()) {
                 localStorage.removeItem('owner_token');
                 if (!window.location.pathname.startsWith('/owner/register') && window.location.pathname !== '/owner') {
@@ -60,7 +78,7 @@ api.interceptors.response.use(
                 localStorage.removeItem('user');
                 localStorage.removeItem('tenant');
                 if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-                    window.location.href = '/login';
+                    window.location.href = '/login?session=expired';
                 }
             }
         }

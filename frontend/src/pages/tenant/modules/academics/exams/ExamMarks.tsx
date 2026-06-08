@@ -63,20 +63,67 @@ export default function ExamMarks() {
     const [search, setSearch] = useState("");
     const queryClient = useQueryClient();
 
-    const { data: exams = [] } = useQuery<any[]>({
+    // Determine if current user is a teacher (data isolation)
+    const currentUser = (() => { try { return JSON.parse(localStorage.getItem("user") || "{}"); } catch { return {}; } })();
+    const isTeacher = (currentUser.role || "").toLowerCase().includes("teacher");
+    const teacherName = currentUser.name || "";
+
+    const { data: examsRaw = [] } = useQuery<any[]>({
         queryKey: ["exams"],
         queryFn: async () => (await api.get("/academics/exams")).data,
     });
+    const exams = examsRaw;
+
+    // Fetch the full exam detail to get subjectConfigs and missingMarkPolicy
+    const { data: examDetail } = useQuery<any>({
+        queryKey: ["exam_detail_marks", selectedExam?._id],
+        queryFn: async () => (await api.get(`/academics/exams/${selectedExam._id}`)).data,
+        enabled: !!selectedExam,
+    });
+    // subjectConfigs from exam creation — tells us which subjects are examined + their max marks
+    const examSubjectConfigs: Array<{ subjectId: string; subjectName: string; maxMarks: number }> =
+        examDetail?.subjectConfigs || [];
 
     const { data: classes = [] } = useQuery<any[]>({
         queryKey: ["classes"],
         queryFn: async () => (await api.get("/academics/classes")).data,
     });
 
-    const { data: subjects = [] } = useQuery<any[]>({
+    const { data: subjectsRaw = [] } = useQuery<any[]>({
         queryKey: ["subjects"],
         queryFn: async () => (await api.get("/subjects")).data,
     });
+    // Filter subjects: if exam has subjectConfigs, only show those subjects
+    const subjects = (() => {
+        let base = isTeacher
+            ? subjectsRaw.filter((s: any) =>
+                !s.teacherId ||
+                s.teacherName?.toLowerCase().includes(teacherName.toLowerCase()) ||
+                s.teacherId === currentUser.id
+              )
+            : subjectsRaw;
+
+        // If the selected exam has configured subjects, restrict to those only
+        if (examSubjectConfigs.length > 0) {
+            const allowedIds   = new Set(examSubjectConfigs.map(c => c.subjectId));
+            const allowedNames = new Set(examSubjectConfigs.map(c => c.subjectName?.toLowerCase()));
+            base = base.filter((s: any) =>
+                allowedIds.has(s._id?.toString()) ||
+                allowedNames.has((s.name || s.subjectName || "").toLowerCase())
+            );
+        }
+        return base;
+    })();
+
+    // Get the max marks for the selected subject from exam's subjectConfigs
+    const subjectMaxMarks = (() => {
+        if (!selectedSubject || examSubjectConfigs.length === 0) return 100;
+        const cfg = examSubjectConfigs.find(c =>
+            c.subjectId === selectedSubject._id?.toString() ||
+            c.subjectName?.toLowerCase() === (selectedSubject.name || "").toLowerCase()
+        );
+        return cfg?.maxMarks || 100;
+    })();
 
     const { data: allStudents = [], isLoading: loadingStudents } = useQuery<any[]>({
         queryKey: ["students"],
@@ -139,7 +186,7 @@ export default function ExamMarks() {
             return {
                 studentId: s._id, studentName: name, admNo: adm,
                 subjectId: selectedSubject._id, subjectName: selectedSubject.name,
-                examId: selectedExam._id, marksObtained: "", totalMarks: 100,
+                examId: selectedExam._id, marksObtained: "", totalMarks: subjectMaxMarks,
                 grade: "", remarks: "", attendanceStatus: "Present"
             };
         });
@@ -150,8 +197,28 @@ export default function ExamMarks() {
     const updateEntry = (idx: number, field: keyof MarkEntry, value: any) => {
         setEntries(prev => {
             const updated = [...prev];
+
+            // Cap obtained marks so they never exceed the total marks
+            if (field === "marksObtained") {
+                const totalMarks = Number(updated[idx].totalMarks) || 100;
+                const entered    = Number(value);
+                if (!isNaN(entered) && entered > totalMarks) {
+                    value = totalMarks; // hard cap
+                    toast.error(`Obtained cannot exceed max marks (${totalMarks})`, { id: "marks-cap" });
+                }
+                if (!isNaN(entered) && entered < 0) value = 0;
+            }
+
             updated[idx] = { ...updated[idx], [field]: value };
             if (field === "marksObtained" || field === "totalMarks") {
+                // If totalMarks changes, also re-cap any existing obtained value
+                if (field === "totalMarks") {
+                    const newTotal = Number(value) || 100;
+                    const existing = Number(updated[idx].marksObtained);
+                    if (!isNaN(existing) && existing > newTotal) {
+                        updated[idx].marksObtained = newTotal;
+                    }
+                }
                 const marks = field === "marksObtained" ? Number(value) : Number(updated[idx].marksObtained);
                 const total = field === "totalMarks" ? Number(value) : Number(updated[idx].totalMarks);
                 if (!isNaN(marks) && !isNaN(total) && total > 0) {
@@ -307,10 +374,28 @@ export default function ExamMarks() {
                 ) : (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-[#5C67F2]/5 to-transparent">
-                            <h3 className="font-black text-slate-700 text-sm">
-                                {selectedExam?.examName} · {selectedClass?.name} · {selectedSubject?.name}
-                            </h3>
-                            <p className="text-xs text-slate-400 font-medium mt-0.5">{filtered.length} student(s) · Grades auto-calculated</p>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h3 className="font-black text-slate-700 text-sm">
+                                        {selectedExam?.examName} · {selectedClass?.name} · {selectedSubject?.name}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                        {filtered.length} student(s) · Grades auto-calculated · Max marks: <strong className="text-[#5C67F2]">{subjectMaxMarks}</strong>
+                                        {examSubjectConfigs.length > 0 && (
+                                            <span className="ml-2 text-emerald-600 font-bold">✓ From exam configuration</span>
+                                        )}
+                                    </p>
+                                </div>
+                                {examSubjectConfigs.length > 0 && !examSubjectConfigs.some(c =>
+                                    c.subjectId === selectedSubject?._id?.toString() ||
+                                    c.subjectName?.toLowerCase() === (selectedSubject?.name || "").toLowerCase()
+                                ) && (
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl">
+                                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                                        <span className="text-[10px] font-black text-amber-700">Subject not configured for this exam</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full">
@@ -348,7 +433,20 @@ export default function ExamMarks() {
                                                     <input type="number" value={entry.totalMarks} onChange={e => updateEntry(globalIdx, "totalMarks", Number(e.target.value))} min="0" className="w-20 h-9 px-3 border border-gray-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] text-center" />
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <input type="number" value={entry.marksObtained} onChange={e => updateEntry(globalIdx, "marksObtained", e.target.value)} disabled={isAbsent} min="0" max={entry.totalMarks} placeholder="—" className="w-20 h-9 px-3 border border-gray-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] text-center disabled:bg-gray-50" />
+                                                    <input
+                                                        type="number"
+                                                        value={entry.marksObtained}
+                                                        onChange={e => updateEntry(globalIdx, "marksObtained", e.target.value)}
+                                                        disabled={isAbsent}
+                                                        min="0"
+                                                        max={entry.totalMarks}
+                                                        placeholder="—"
+                                                        className={`w-20 h-9 px-3 rounded-lg text-sm font-bold text-slate-700 focus:outline-none text-center disabled:bg-gray-50 border ${
+                                                            entry.marksObtained !== "" && Number(entry.marksObtained) >= entry.totalMarks
+                                                                ? "border-amber-400 bg-amber-50 focus:border-amber-500"
+                                                                : "border-gray-200 focus:border-[#5C67F2]"
+                                                        }`}
+                                                    />
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <span className={`text-xs font-black ${pct !== null ? (pct >= 50 ? "text-emerald-600" : "text-red-500") : "text-slate-300"}`}>

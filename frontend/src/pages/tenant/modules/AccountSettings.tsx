@@ -30,7 +30,7 @@ export default function AccountSettings() {
 
     // Fetch tenant profile for timezone, currency, subscription
     const { data: tenant, isLoading } = useQuery({
-        queryKey: ["tenant_profile"],
+        queryKey: ["tenant_profile_global"],
         queryFn: async () => {
             const res = await api.get("/auth/tenant/profile");
             return res.data;
@@ -49,7 +49,7 @@ export default function AccountSettings() {
     // Mutations
     const updateTenantProfile = useMutation({
         mutationFn: async (data: any) => await api.patch("/auth/tenant/profile", data),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tenant_profile"] }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tenant_profile_global"] }),
     });
 
     const updateUserProfile = useMutation({

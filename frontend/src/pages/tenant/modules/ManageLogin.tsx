@@ -1,5 +1,6 @@
-import { Home, Save, Mail, ChevronDown, Search, Eye, EyeOff, Lock, User as UserIcon, Loader2, RefreshCcw, Key } from "lucide-react";
+import { Home, Save, Mail, ChevronDown, Search, Eye, EyeOff, Lock, User as UserIcon, Loader2, RefreshCcw, Key, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
+import UsernameInput from "@/components/UsernameInput";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -44,27 +45,26 @@ export default function ManageLogin() {
         mutationFn: async (student: any) => {
             const username = generateUsername(student.registrationNo, student.studentName);
             const password = generatePassword(student.registrationNo);
-            return api.patch(`/students/${student._id}`, {
+            // Use the dedicated endpoint that enforces username uniqueness
+            return api.patch(`/students/${student._id}/portal-credentials`, {
                 portalUsername: username,
                 portalPassword: password,
                 credentialsGenerated: true,
-                lastPasswordReset: new Date().toISOString(),
             });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["students"] });
             toast.success("Credentials generated!");
         },
-        onError: () => toast.error("Failed to generate credentials"),
+        onError: (e: any) => toast.error(e?.response?.data?.message || "Failed to generate credentials"),
     });
 
     // Reset password for a student
     const resetMutation = useMutation({
         mutationFn: async (student: any) => {
             const newPassword = generatePassword(student.registrationNo);
-            return api.patch(`/students/${student._id}`, {
+            return api.patch(`/students/${student._id}/portal-credentials`, {
                 portalPassword: newPassword,
-                lastPasswordReset: new Date().toISOString(),
             });
         },
         onSuccess: () => {
@@ -88,11 +88,23 @@ export default function ManageLogin() {
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
             {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center shadow-sm z-10 m-4 rounded-xl">
-                <span className="font-bold text-gray-800 text-sm mr-2">Students</span>
-                <span className="text-gray-300 mx-2">|</span>
-                <Home className="w-3.5 h-3.5 text-gray-500 mr-1.5" />
-                <span className="text-gray-500 font-medium text-sm">- Manage Login</span>
+            <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl">
+                <div className="flex items-center">
+                    <span className="font-bold text-gray-800 text-sm mr-2">Students</span>
+                    <span className="text-gray-300 mx-2">|</span>
+                    <Home className="w-3.5 h-3.5 text-gray-500 mr-1.5" />
+                    <span className="text-gray-500 font-medium text-sm">- Manage Login</span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                    <a href="/students/parent-login"
+                        className="flex items-center gap-2 h-8 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all">
+                        Parent Login Mgmt
+                    </a>
+                    <a href="/student-portal" target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 h-8 px-4 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100">
+                        <Key className="w-3.5 h-3.5" /> Student Portal ↗
+                    </a>
+                </div>
             </div>
 
             <div className="p-6 pt-0 flex gap-5 items-start flex-wrap lg:flex-nowrap">
@@ -202,12 +214,16 @@ export default function ManageLogin() {
                                                         {s.studentClass || "—"}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center">
+                                                <td className="px-4 py-3">
                                                     {hasCredentials ? (
-                                                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-indigo-50 rounded-lg bg-slate-50 text-slate-800 font-bold text-[10px] shadow-sm">
-                                                            <UserIcon className="w-3 h-3 text-indigo-300" />
-                                                            {username}
-                                                        </div>
+                                                        <UsernameInput
+                                                            value={username}
+                                                            onChange={() => {}}
+                                                            excludeId={s._id}
+                                                            excludeType="student"
+                                                            placeholder="—"
+                                                            className="bg-slate-50 cursor-default"
+                                                        />
                                                     ) : (
                                                         <span className="text-[9px] text-slate-300 font-bold italic">Not generated</span>
                                                     )}

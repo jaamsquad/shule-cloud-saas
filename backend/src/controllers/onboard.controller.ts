@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
-import { getDb } from '../lib/mongodb';
+import { getMetaDb, subdomainToDbName } from '../lib/mongodb';
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
+
+// Use meta db for onboarding (Tenant / User / Plan collections)
+const getDb = () => getMetaDb();
 
 export const checkSubdomain = async (req: Request, res: Response) => {
     const { subdomain } = req.query;
@@ -60,10 +63,13 @@ export const registerTenant = async (req: Request, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 3. Create Tenant
+        // 3. Create Tenant — stamp databaseName so DB-per-tenant isolation works immediately
+        const cleanSubdomain = subdomain.toLowerCase().trim();
+        const databaseName   = subdomainToDbName(cleanSubdomain);
         const tenantResult = await db.collection('Tenant').insertOne({
             name: schoolName,
-            subdomain: subdomain.toLowerCase(),
+            subdomain: cleanSubdomain,
+            databaseName,
             contactEmail: adminEmail,
             contactPhone: adminPhone,
             status: 'active',
@@ -104,11 +110,17 @@ export const registerTenant = async (req: Request, res: Response) => {
             createdRoles[name] = roleResult.insertedId;
         }
 
-        // Create Admin User
+        // Create Admin User — stamped with tenantId, role, and school info
+        // This is the ONLY super admin for this school; tenantId is the key
+        // that binds this account to the school's subdomain forever.
         const userResult = await db.collection('User').insertOne({
-            tenantId: tenantId,
+            tenantId,
+            tenantSubdomain: cleanSubdomain,   // extra safety binding
             email: adminEmail,
             passwordHash: hashedPassword,
+            name: adminName || adminEmail.split('@')[0],
+            role: 'school_admin',
+            isSchoolAdmin: true,
             status: 'active',
             createdAt: new Date()
         });

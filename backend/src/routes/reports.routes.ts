@@ -1,13 +1,15 @@
 import { Router, Request, Response } from 'express';
-import { getDb } from '../lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { getMetaDb } from '../lib/mongodb';
+import { Db, ObjectId } from 'mongodb';
+
+const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
 
 // 1. GET /api/v1/reports/report-cards
 router.get('/reports/report-cards', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { class_id, exam_id, term, year, student_id } = req.query;
 
         const query: any = {};
@@ -125,7 +127,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
 // 2. GET /api/v1/reports/students-info
 router.get('/reports/students-info', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { class_id, gender, status, search, page = 1, limit = 50 } = req.query;
 
         const query: any = {};
@@ -200,7 +202,7 @@ router.get('/reports/students-info', async (req: Request, res: Response) => {
 // 3. GET /api/v1/reports/parents-info
 router.get('/reports/parents-info', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { student_class_id, search, relation } = req.query;
 
         const query: any = {};
@@ -323,7 +325,7 @@ router.get('/reports/parents-info', async (req: Request, res: Response) => {
 // 4. GET /api/v1/reports/attendance/monthly-students
 router.get('/reports/attendance/monthly-students', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { class_id, month, year } = req.query;
 
         const targetMonth = month ? Number(month) : new Date().getMonth() + 1;
@@ -431,7 +433,7 @@ router.get('/reports/attendance/monthly-students', async (req: Request, res: Res
 // 5. GET /api/v1/reports/attendance/monthly-staff
 router.get('/reports/attendance/monthly-staff', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { department_id, month, year } = req.query;
 
         const targetMonth = month ? Number(month) : new Date().getMonth() + 1;
@@ -524,7 +526,7 @@ router.get('/reports/attendance/monthly-staff', async (req: Request, res: Respon
 // 6. GET /api/v1/reports/fee-collection
 router.get('/reports/fee-collection', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { start_date, end_date, class_id, payment_mode, status } = req.query;
 
         const query: any = {};
@@ -563,7 +565,7 @@ router.get('/reports/fee-collection', async (req: Request, res: Response) => {
 // 7. GET /api/v1/reports/student-progress
 router.get('/reports/student-progress', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { student_id, year } = req.query;
 
         // Fetch student details
@@ -588,12 +590,14 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
         const studentIdStr = student._id?.toString();
         let marks: any[] = [];
         if (studentIdStr) {
-            marks = await db.collection('marks').find({ 
+            marks = await db.collection('exam_marks').find({ 
                 $or: [
                     { studentId: studentIdStr },
                     { studentId: new ObjectId(studentIdStr) },
                     { student_id: studentIdStr },
-                    { student_id: new ObjectId(studentIdStr) }
+                    { student_id: new ObjectId(studentIdStr) },
+                    ...(student.admNo ? [{ studentId: student.admNo }, { student_id: student.admNo }] : []),
+                    ...(student.registrationNo ? [{ studentId: student.registrationNo }, { student_id: student.registrationNo }] : [])
                 ]
             }).toArray();
         }
@@ -612,11 +616,11 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
 
             Object.entries(examGroups).forEach(([eId, mList]) => {
                 const examObj = exams.find((e: any) => e._id?.toString() === eId.toString() || e.name === eId);
-                const totalMarks = mList.reduce((sum, m) => sum + Number(m.marks || m.score || m.value || 0), 0);
+                const totalMarks = mList.reduce((sum, m) => sum + Number(m.marksObtained || m.marks || m.score || m.value || 0), 0);
                 const average = mList.length > 0 ? Math.round(totalMarks / mList.length) : 0;
                 const gpa = Number((average / 20).toFixed(2));
                 historicalExams.push({
-                    term: examObj?.term || examObj?.semester || "Term 1 2026",
+                    term: examObj?.term || examObj?.semester || "Term 1",
                     examName: examObj?.name || examObj?.examName || "Term Exam",
                     gpa,
                     totalMarks,
@@ -625,30 +629,8 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
             });
         }
 
-        if (historicalExams.length === 0) {
-            historicalExams = [
-                { term: "Term 1 2025", examName: "Mid Term Exam", gpa: 3.45, totalMarks: 380, average: 76 },
-                { term: "Term 1 2025", examName: "End Term Exam", gpa: 3.60, totalMarks: 410, average: 82 },
-                { term: "Term 2 2025", examName: "Mid Term Exam", gpa: 3.55, totalMarks: 395, average: 79 },
-                { term: "Term 2 2025", examName: "End Term Exam", gpa: 3.80, totalMarks: 430, average: 86 },
-                { term: "Term 3 2025", examName: "Final Exam", gpa: 3.90, totalMarks: 445, average: 89 },
-                { term: "Term 1 2026", examName: "Mid Term Exam", gpa: 3.85, totalMarks: 425, average: 85 }
-            ];
-        }
-
-        const attendanceTrends = [
-            { term: "Term 1 2025", presentPercentage: 98 },
-            { term: "Term 2 2025", presentPercentage: 95 },
-            { term: "Term 3 2025", presentPercentage: 97 },
-            { term: "Term 1 2026", presentPercentage: 96 }
-        ];
-
-        const evaluations = [
-            { category: "Discipline & Conduct", rating: "Excellent", remarks: "Exemplary behavior across all school activities." },
-            { category: "Leadership Skills", rating: "Very Good", remarks: "Serves effectively as class prefect." },
-            { category: "Sports & Athletics", rating: "Good", remarks: "Active participant in the athletics team." },
-            { category: "Clubs & Societies", rating: "Excellent", remarks: "Active member of the Science & Robotics Club." }
-        ];
+        const attendanceTrends: any[] = [];
+        const evaluations: any[] = [];
 
         res.json({
             student: {
@@ -669,7 +651,7 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
 // 8. GET /api/v1/reports/accounts
 router.get('/reports/accounts', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { start_date, end_date, account_id, type } = req.query;
 
         const query: any = {};
@@ -737,7 +719,7 @@ router.get('/reports/accounts', async (req: Request, res: Response) => {
 // 9. GET /api/v1/reports/custom/templates
 router.get('/reports/custom/templates', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const templates = await db.collection('custom_report_templates').find({}).toArray();
 
         const data = templates.length > 0 ? templates : [
@@ -768,7 +750,7 @@ router.get('/reports/custom/templates', async (req: Request, res: Response) => {
 // 10. POST /api/v1/reports/custom/templates
 router.post('/reports/custom/templates', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { name, description, columns, filters } = req.body;
 
         const newTemplate = {
@@ -789,7 +771,7 @@ router.post('/reports/custom/templates', async (req: Request, res: Response) => 
 // 11. POST /api/v1/reports/custom/generate
 router.post('/reports/custom/generate', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const { columns = ["admNo", "name", "studentClass"], filters = {}, sort = {}, page = 1, limit = 50 } = req.body;
 
         const query: any = {};
@@ -832,7 +814,7 @@ router.post('/reports/custom/generate', async (req: Request, res: Response) => {
 // Shared helper endpoints
 router.get('/reports/shared/classes', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const classes = await db.collection('classes').find({}).toArray();
         const data = classes.length > 0 ? classes : [
             { _id: new ObjectId(), name: "Grade 8 Stream 1", levelName: "Grade 8", streamName: "Stream 1" },
@@ -845,7 +827,7 @@ router.get('/reports/shared/classes', async (req: Request, res: Response) => {
 
 router.get('/reports/shared/exams', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const exams = await db.collection('exams').find({}).toArray();
         const data = exams.length > 0 ? exams : [
             { _id: new ObjectId(), name: "Mid Term Exam Term 1 2026", term: "Term 1", academicYear: "2026" },
@@ -857,7 +839,7 @@ router.get('/reports/shared/exams', async (req: Request, res: Response) => {
 
 router.get('/reports/shared/departments', async (req: Request, res: Response) => {
     try {
-        const db = getDb();
+        const db = getRequestDb(req);
         const depts = await db.collection('departments').find({}).toArray();
         const data = depts.length > 0 ? depts : [
             { _id: new ObjectId(), name: "Science Department" },

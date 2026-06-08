@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Home, Printer, ChevronDown, Loader2, BookOpen, GraduationCap, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -12,7 +12,13 @@ export default function BlankAwardList() {
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data });
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data });
     const { data: subjects = [] } = useQuery<any[]>({ queryKey: ["subjects"], queryFn: async () => (await api.get("/subjects")).data });
-    const { data: tenantProfile } = useQuery<any>({ queryKey: ["tenant_profile"], queryFn: async () => (await api.get("/tenant/profile")).data });
+    const { data: tenantProfile } = useQuery<any>({
+        queryKey: ["tenant_profile_global"],
+        queryFn: async () => {
+            const r = await api.get("/auth/tenant/profile");
+            return Array.isArray(r.data) ? r.data[0] : r.data;
+        },
+    });
 
     const { data: allStudents = [], isLoading } = useQuery<any[]>({
         queryKey: ["students"],
@@ -28,10 +34,39 @@ export default function BlankAwardList() {
 
     const schoolName = tenantProfile?.name || "ShuleCloud School";
     const ready = selectedExam && selectedClass && students.length > 0;
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const printInNewWindow = () => {
+        const content = printRef.current;
+        if (!content) return;
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+            .map(el => el.outerHTML).join('\n');
+        win.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Blank Award List</title>
+                ${styles}
+                <style>
+                    @page { size: A4 portrait; margin: 12mm; }
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 16px; background: white; }
+                    * { box-sizing: border-box; }
+                </style>
+            </head>
+            <body>${content.innerHTML}</body>
+            </html>
+        `);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); }, 800);
+    };
 
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen flex flex-col overflow-y-auto pb-20">
-            <div className="w-full bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10 print:hidden">
+            <div className="w-full bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" />
                     <span className="text-gray-300">/</span>
@@ -40,7 +75,7 @@ export default function BlankAwardList() {
                     <span className="font-black text-[#5C67F2]">Blank Award List</span>
                 </div>
                 {ready && (
-                    <button onClick={() => window.print()} className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all">
+                    <button onClick={printInNewWindow} className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all">
                         <Printer className="w-3.5 h-3.5" /> Print Award List
                     </button>
                 )}
@@ -88,7 +123,7 @@ export default function BlankAwardList() {
                 ) : isLoading ? (
                     <div className="flex flex-col items-center py-20 gap-4"><Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" /></div>
                 ) : (
-                    <div id="award-list" className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden print:rounded-none print:border-0">
+                    <div ref={printRef} id="award-list" className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                         {/* Printable Header */}
                         <div className="text-center border-b-2 border-slate-800 px-8 py-6">
                             <div className="flex items-center justify-center gap-4 mb-3">

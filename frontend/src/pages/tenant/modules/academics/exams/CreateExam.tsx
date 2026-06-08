@@ -2,9 +2,10 @@ import { useState } from "react";
 import {
     Plus, Search, Edit3, Trash2, Archive, BookOpen, Calendar, Loader2,
     CheckCircle, XCircle, AlertCircle, MoreHorizontal, ChevronRight,
-    GraduationCap, Eye, Copy, Home, Layers
+    GraduationCap, Eye, Copy, Home, Layers, ExternalLink, Settings
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -60,11 +61,15 @@ const PUBLISH_COLORS: Record<string, string> = {
 };
 
 export default function CreateExam() {
+    const navigate = useNavigate();
     const [showModal, setShowModal] = useState(false);
     const [editingExam, setEditingExam] = useState<Exam | null>(null);
     const [form, setForm] = useState<FormState>(BLANK_FORM);
     const [search, setSearch] = useState("");
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [filterYear, setFilterYear]   = useState("");   // "" = all years
+    const [filterTerm, setFilterTerm]   = useState("");   // "" = all terms
+    const [prefilledFilter, setPrefilledFilter] = useState(false);
     const queryClient = useQueryClient();
 
     const { data: exams = [], isLoading } = useQuery<Exam[]>({
@@ -72,11 +77,54 @@ export default function CreateExam() {
         queryFn: async () => (await api.get("/academics/exams")).data,
     });
 
+    // V2 terms (primary source of truth for current term)
+    const { data: v2Terms = [] } = useQuery<any[]>({
+        queryKey: ["v2_all_terms"],
+        queryFn: async () => (await api.get("/v2/terms")).data || [],
+    });
+    const { data: v2Years = [] } = useQuery<any[]>({
+        queryKey: ["v2_academic_years"],
+        queryFn: async () => (await api.get("/v2/academic-years")).data || [],
+    });
+
+    // Legacy periods fallback
     const { data: periods = [] } = useQuery<any[]>({
         queryKey: ["periods"],
-        queryFn: async () => (await api.get("/academics/periods")).data,
+        queryFn: async () => (await api.get("/academics/periods")).data || [],
     });
-    const currentPeriod = periods.find((p) => p.isCurrent);
+
+    // Current term: prefer V2 active term, fall back to legacy
+    const v2ActiveTerm = v2Terms.find((t: any) => t.isActive);
+    const v2ActiveYear = v2Years.find((y: any) => y.isActive);
+    const legacyPeriod = periods.find((p: any) => p.isCurrent);
+    const currentPeriod = v2ActiveTerm
+        ? { label: v2ActiveTerm.name, academicYear: v2ActiveYear?.year || "" }
+        : legacyPeriod;
+
+    // Pre-select filter to active year/term (once, when data loads)
+    if (!prefilledFilter && (v2ActiveYear || v2ActiveTerm)) {
+        setPrefilledFilter(true);
+        if (v2ActiveYear) setFilterYear(String(v2ActiveYear.year));
+        if (v2ActiveTerm) setFilterTerm(v2ActiveTerm.name);
+    }
+
+    // ── Exam status helper ────────────────────────────────────────────────────
+    // Shows "Past" when the exam's endDate is before today (regardless of stored status)
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const examDisplayStatus = (exam: any) => {
+        if (exam.endDate && new Date(exam.endDate) < today && exam.status === "Active") {
+            return { label: "Past", cls: "bg-slate-100 text-slate-600 border-slate-200" };
+        }
+        return exam.status === "Active"
+            ? { label: "Active",   cls: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+            : exam.status === "Archived"
+            ? { label: "Archived", cls: "bg-slate-100 text-slate-500 border-slate-200" }
+            : { label: "Draft",    cls: "bg-amber-50 text-amber-700 border-amber-200" };
+    };
+
+    // Unique years and terms from exams for filter dropdowns
+    const uniqueYears = [...new Set(exams.map((e: any) => e.academicYear).filter(Boolean))].sort().reverse();
+    const uniqueTerms = [...new Set(exams.map((e: any) => e.term).filter(Boolean))].sort();
 
     const { data: classes = [] } = useQuery<any[]>({
         queryKey: ["classes"],
@@ -102,6 +150,7 @@ export default function CreateExam() {
             setShowModal(false);
             toast.success("Exam updated!");
         },
+        onError: (e: any) => toast.error(e?.response?.data?.message || "Failed to update exam"),
     });
 
     const deleteMutation = useMutation({
@@ -139,20 +188,40 @@ export default function CreateExam() {
         if (!form.examName.trim()) return toast.error("Exam name is required");
         if (!form.startDate || !form.endDate) return toast.error("Start and end dates are required");
         if (new Date(form.endDate) < new Date(form.startDate)) return toast.error("End date cannot be before start date");
+
+        // Duplicate exam validation: CAT and Assignment are allowed multiple times.
+        // Others (End Term, Mid Term, Mock, KCSE, KCPE, Practical, etc.) are allowed once per term.
+        const normalizedType = (form.type || "").trim().toLowerCase();
+        const isMultipleAllowed = normalizedType === "cat" || normalizedType === "assignment";
+        if (!isMultipleAllowed) {
+            const hasDuplicate = exams.some(e =>
+                e.term === form.term &&
+                e.academicYear === form.academicYear &&
+                (e.type || "").trim().toLowerCase() === normalizedType &&
+                (!editingExam || e._id !== editingExam._id)
+            );
+            if (hasDuplicate) {
+                return toast.error(`An exam of type "${form.type}" already exists for ${form.term || "this term"}. Only CAT and Assignment can be created multiple times.`);
+            }
+        }
+
         if (editingExam) updateMutation.mutate({ id: editingExam._id, data: form });
         else createMutation.mutate(form);
     };
 
-    const filtered = exams.filter(e =>
-        (e.examName || "").toLowerCase().includes(search.toLowerCase()) ||
-        (e.examCode || "").toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = exams.filter((e: any) => {
+        const matchSearch = (e.examName || "").toLowerCase().includes(search.toLowerCase()) ||
+                            (e.examCode || "").toLowerCase().includes(search.toLowerCase());
+        const matchYear   = !filterYear || (e.academicYear || "").includes(filterYear);
+        const matchTerm   = !filterTerm || (e.term || "").toLowerCase().includes(filterTerm.toLowerCase());
+        return matchSearch && matchYear && matchTerm;
+    });
 
     const stats = [
         { label: "Total Exams", value: exams.length, color: "#5C67F2", bg: "#eef0fe" },
-        { label: "Active", value: exams.filter(e => e.status === "Active").length, color: "#10b981", bg: "#d1fae5" },
-        { label: "Published", value: exams.filter(e => e.publishStatus === "Published").length, color: "#3b82f6", bg: "#dbeafe" },
-        { label: "Draft", value: exams.filter(e => e.status === "Draft").length, color: "#f59e0b", bg: "#fef3c7" },
+        { label: "Active", value: exams.filter((e: any) => e.status === "Active" && !(e.endDate && new Date(e.endDate) < today)).length, color: "#10b981", bg: "#d1fae5" },
+        { label: "Past", value: exams.filter((e: any) => e.endDate && new Date(e.endDate) < today && e.status === "Active").length, color: "#64748b", bg: "#f1f5f9" },
+        { label: "Draft", value: exams.filter((e: any) => e.status === "Draft").length, color: "#f59e0b", bg: "#fef3c7" },
     ];
 
     const isPending = createMutation.isPending || updateMutation.isPending;
@@ -186,7 +255,7 @@ export default function CreateExam() {
                         <p className="text-slate-400 text-sm font-medium mt-1">Schedule and manage your school examinations.</p>
                     </div>
                     <button
-                        onClick={() => handleOpen()}
+                        onClick={() => navigate("/exams/new")}
                         className="flex items-center gap-2 px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all"
                     >
                         <Plus className="w-4 h-4" /> New Exam
@@ -201,6 +270,49 @@ export default function CreateExam() {
                             <p className="text-3xl font-black" style={{ color: s.color }}>{s.value}</p>
                         </div>
                     ))}
+                </div>
+
+                {/* Filter bar */}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                    {/* Year filter */}
+                    <div className="relative">
+                        <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
+                            className="h-10 pl-3 pr-8 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none shadow-sm">
+                            <option value="">All Years</option>
+                            {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none rotate-90" />
+                    </div>
+                    {/* Term filter */}
+                    <div className="relative">
+                        <select value={filterTerm} onChange={e => setFilterTerm(e.target.value)}
+                            className="h-10 pl-3 pr-8 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none shadow-sm">
+                            <option value="">All Terms</option>
+                            {uniqueTerms.map(t => <option key={t} value={t}>{t}</option>)}
+                            {/* V2 terms from active year */}
+                            {v2Terms
+                                .filter((t: any) => !filterYear || String(v2Years.find((y: any) => y._id === t.academicYearId)?.year) === filterYear)
+                                .map((t: any) => (
+                                    !uniqueTerms.includes(t.name) && <option key={t._id} value={t.name}>{t.name}</option>
+                                ))}
+                        </select>
+                        <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none rotate-90" />
+                    </div>
+                    {/* Active indicators */}
+                    {(filterYear || filterTerm) && (
+                        <button onClick={() => { setFilterYear(""); setFilterTerm(""); }}
+                            className="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors px-2 py-1">
+                            ✕ Clear
+                        </button>
+                    )}
+                    {currentPeriod && (
+                        <div className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-full">
+                            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                                {currentPeriod.label} · {currentPeriod.academicYear}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Search */}
@@ -229,7 +341,7 @@ export default function CreateExam() {
                             <h3 className="text-base font-black text-slate-700">No Exams Yet</h3>
                             <p className="text-slate-400 text-sm font-medium mt-1">Create your first examination to get started.</p>
                         </div>
-                        <button onClick={() => handleOpen()} className="h-10 px-6 bg-[#5C67F2] text-white font-black rounded-xl text-xs tracking-widest uppercase shadow-md shadow-indigo-200 flex items-center gap-2">
+                        <button onClick={() => navigate("/exams/new")} className="h-10 px-6 bg-[#5C67F2] text-white font-black rounded-xl text-xs tracking-widest uppercase shadow-md shadow-indigo-200 flex items-center gap-2">
                             <Plus className="w-3.5 h-3.5" /> Create First Exam
                         </button>
                     </div>
@@ -240,7 +352,8 @@ export default function CreateExam() {
                                 key={exam._id}
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all px-6 py-4"
+                                className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-[#5C67F2]/20 transition-all px-6 py-4 cursor-pointer group"
+                                onClick={() => navigate(`/exams/${exam._id}`)}
                             >
                                 <div className="flex items-center gap-5">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
@@ -250,7 +363,7 @@ export default function CreateExam() {
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <h3 className="text-sm font-black text-slate-800">{exam.examName}</h3>
                                             {exam.examCode && <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{exam.examCode}</span>}
-                                            <span className={`text-[9px] px-2.5 py-0.5 rounded-full border font-black uppercase ${STATUS_COLORS[exam.status] || STATUS_COLORS.Draft}`}>{exam.status}</span>
+                                            {(() => { const ds = examDisplayStatus(exam); return <span className={`text-[9px] px-2.5 py-0.5 rounded-full border font-black uppercase ${ds.cls}`}>{ds.label}</span>; })()}
                                             <span className={`text-[9px] px-2.5 py-0.5 rounded-full border font-black uppercase ${PUBLISH_COLORS[exam.publishStatus] || PUBLISH_COLORS.Unpublished}`}>{exam.publishStatus}</span>
                                         </div>
                                         <div className="flex items-center gap-4 text-[11px] text-slate-400 font-bold">
@@ -260,7 +373,10 @@ export default function CreateExam() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <button onClick={() => handleOpen(exam)} className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-100 hover:border-[#5C67F2] hover:bg-indigo-50 hover:text-[#5C67F2] text-slate-300 transition-all">
+                                        <button onClick={e => { e.stopPropagation(); navigate(`/exams/${exam._id}/settings`); }} title="Exam settings" className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-100 hover:border-[#5C67F2] hover:bg-indigo-50 hover:text-[#5C67F2] text-slate-300 transition-all">
+                                            <Settings className="w-4 h-4" />
+                                        </button>
+                                        <button onClick={e => { e.stopPropagation(); navigate(`/exams/edit/${exam._id}`); }} className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-100 hover:border-[#5C67F2] hover:bg-indigo-50 hover:text-[#5C67F2] text-slate-300 transition-all">
                                             <Edit3 className="w-4 h-4" />
                                         </button>
                                         <button onClick={() => setDeleteConfirm(exam._id)} className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-100 hover:border-red-200 hover:bg-red-50 hover:text-red-400 text-slate-300 transition-all">
