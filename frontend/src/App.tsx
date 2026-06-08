@@ -281,6 +281,9 @@ import ParentForm from "./pages/tenant/modules/parents/ParentForm";
 // Wallet module
 import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 
+// Custom domain + branding
+import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
+
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
 import POSAdminLayout from "./modules/pos/layouts/POSAdminLayout";
@@ -687,6 +690,7 @@ const App = () => {
               <Route path="/settings/grading" element={<MarksGrading />} />
               <Route path="/settings/curriculum" element={<CurriculumSettings />} />
               <Route path="/settings/report-templates" element={<ReportCardTemplates />} />
+              <Route path="/settings/domains" element={<DomainSettings />} />
               <Route path="/settings/theme" element={<ThemeLanguage />} />
               <Route path="/settings/account" element={<AccountSettings />} />
               <Route path="/settings/users" element={<PlaceholderPage title="Users & Access" subtitle="Manage school staff roles" />} />

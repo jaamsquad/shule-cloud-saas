@@ -1265,7 +1265,17 @@ router.get('/student-portal/report-card', authed(async (req, res, db, decoded) =
 router.get('/portal/branding', async (req, res) => {
     try {
         const tenant = await tenantMetaRecord(req);
-        res.json({ name: tenant?.name || '', logo: tenant?.logo || tenant?.crest || null });
+        const b = tenant?.branding || {};
+        res.json({
+            name: b.schoolName || tenant?.name || '',
+            logo: b.logo || tenant?.logo || tenant?.crest || null,
+            favicon: b.favicon || null,
+            primaryColor: b.primaryColor || null,
+            secondaryColor: b.secondaryColor || null,
+            loginBackground: b.loginBackground || null,
+            portalTheme: b.portalTheme || 'light',
+            customDomain: tenant?.customDomain || null,
+        });
     } catch (e: any) {
         res.json({ name: '', logo: null });
     }

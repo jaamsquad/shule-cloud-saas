@@ -34,6 +34,16 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
 
     let subdomain = typeof xTenant === 'string' ? xTenant.trim().toLowerCase() : null;
 
+    // ── Custom domain fast-path ───────────────────────────────────────────────
+    // portal.greenwoodschool.ac.ke → resolve the tenant by its custom domain and
+    // continue as if requested via the school's subdomain.
+    if (!subdomain && host && host.includes('.') && !host.endsWith('.localhost')) {
+        try {
+            const t = await getMetaDb().collection('Tenant').findOne({ customDomain: host.toLowerCase() });
+            if (t?.subdomain) subdomain = String(t.subdomain).toLowerCase();
+        } catch { /* ignore — fall through to subdomain resolution */ }
+    }
+
     if (!subdomain && host) {
         // Portal-prefixed hosts (students.egerton.localhost, staff.egerton.localhost,
         // parent.egerton.localhost) carry the tenant in the SECOND label. Strip the

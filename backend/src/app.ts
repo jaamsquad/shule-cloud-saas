@@ -21,6 +21,7 @@ import posRoutes from './routes/pos.routes';
 import academicsV2Routes from './routes/academics-v2.routes';
 import communicationsRoutes from './routes/communications.routes';
 import walletRoutes from './routes/wallet.routes';
+import domainsRoutes from './routes/domains.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -203,6 +204,7 @@ app.use('/api/v1', posRoutes);
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
 app.use('/api/v1', walletRoutes);
+app.use('/api/v1', domainsRoutes);
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);

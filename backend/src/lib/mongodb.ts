@@ -43,6 +43,9 @@ export const connectDB = async (): Promise<Db> => {
         try {
             await metaDb.collection('Tenant').createIndex({ subdomain: 1 }, { unique: true });
             await metaDb.collection('Tenant').createIndex({ databaseName: 1 }, { unique: true, sparse: true });
+            // One custom domain → one tenant only.
+            await metaDb.collection('Tenant').createIndex({ customDomain: 1 }, { unique: true, sparse: true });
+            await metaDb.collection('domain_audit_logs').createIndex({ tenantId: 1, createdAt: -1 });
         } catch (_) {}
 
         return metaDb;
