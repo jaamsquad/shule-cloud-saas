@@ -85,7 +85,7 @@ export default function DashboardLayout() {
                 {/* Desktop: pushes content. Mobile: overlays as drawer from left. */}
                 <div className={`
                     transition-all duration-300 ease-in-out flex-shrink-0
-                    md:relative md:z-auto
+                    md:relative md:top-0 md:z-auto
                     fixed left-0 top-16 bottom-0 z-30
                     ${sidebarOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full md:w-0 md:translate-x-0 md:overflow-hidden"}
                 `}>

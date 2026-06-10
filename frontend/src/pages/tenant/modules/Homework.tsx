@@ -180,18 +180,19 @@ export default function Homework() {
                 ) : (
                     <div className="space-y-4">
                         {filteredHomeworks?.map((hw: any) => {
-                            const hwDate = hw.homeworkDate ? parseISO(hw.homeworkDate) : new Date();
+                            const rawDate = hw.homeworkDate || hw.dueDate || hw.date || hw.createdAt;
+                            const hwDate = rawDate ? parseISO(typeof rawDate === "string" ? rawDate : new Date(rawDate).toISOString()) : new Date();
                             const day = format(hwDate, "dd");
                             const month = format(hwDate, "MMM").toUpperCase();
 
                             const teacher = staffList?.find((s: any) => s._id === hw.teacherId);
-                            const teacherName = teacher ? (teacher.fullName || `${teacher.firstName} ${teacher.lastName}`) : "Unknown Teacher";
-                            
+                            const teacherName = teacher ? (teacher.employeeName || teacher.fullName || `${teacher.firstName || ""} ${teacher.lastName || ""}`.trim()) : (hw.teacherName || "Unknown Teacher");
+
                             const cls = classesList?.find((c: any) => c._id === hw.classId);
-                            const className = cls ? cls.className : "Unknown Class";
+                            const className = cls ? cls.className : (hw.className || hw.class || "Unknown Class");
 
                             const sub = subjectsList?.find((s: any) => s._id === hw.subjectId);
-                            const subjectName = sub ? sub.subjectName : "Unknown Subject";
+                            const subjectName = sub ? sub.subjectName : (hw.subject || hw.subjectName || "Unknown Subject");
 
                             return (
                                 <div key={hw._id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-8 group hover:shadow-md transition-shadow">

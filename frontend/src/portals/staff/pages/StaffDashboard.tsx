@@ -1,17 +1,31 @@
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { User as UserIcon, Users, BookOpen, CalendarClock } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { User as UserIcon, Users, BookOpen, CalendarClock, Pencil, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { PageTitle, PanelCard, Field } from "../../PortalShell";
 import type { StaffCtx } from "../StaffLayout";
 
 export default function StaffDashboard() {
     const { staff, api } = useOutletContext<StaffCtx>();
+    const qc = useQueryClient();
+    const [editing, setEditing] = useState(false);
+    const [email, setEmail] = useState(staff.email || "");
+    const [phone, setPhone] = useState(staff.phone || "");
 
     const { data: summary } = useQuery({
         queryKey: ["staff_summary"],
         queryFn: async () => (await api.get("/staff-portal/summary")).data,
         retry: false,
     });
+
+    const saveContact = useMutation({
+        mutationFn: async () => (await api.patch("/staff-portal/profile", { email, phone })).data,
+        onSuccess: () => { toast.success("Contact details updated"); setEditing(false); qc.invalidateQueries({ queryKey: ["staff_me"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Update failed"),
+    });
+
+    const openEdit = () => { setEmail(staff.email || ""); setPhone(staff.phone || ""); setEditing(true); };
 
     const stats = [
         { label: "My Classes", value: summary?.classCount ?? "—", icon: Users },
@@ -37,7 +51,11 @@ export default function StaffDashboard() {
                 ))}
             </div>
 
-            <PanelCard title="Basic information">
+            <PanelCard title="Basic information" action={
+                <button onClick={openEdit} className="inline-flex items-center gap-1.5 text-xs font-bold bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg">
+                    <Pencil className="w-3.5 h-3.5" /> Edit Contact
+                </button>
+            }>
                 <div className="flex flex-col md:flex-row gap-6">
                     <div className="flex-shrink-0">
                         {staff.photo ? (
@@ -64,6 +82,33 @@ export default function StaffDashboard() {
                     </div>
                 </div>
             </PanelCard>
+
+            {editing && (
+                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                            <h3 className="font-black text-slate-800">Edit Contact Details</h3>
+                            <button onClick={() => setEditing(false)} className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Email</label>
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Phone</label>
+                                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07XXXXXXXX" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
+                            </div>
+                        </div>
+                        <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
+                            <button onClick={() => setEditing(false)} className="text-sm font-bold text-slate-500 px-4 py-2">Cancel</button>
+                            <button onClick={() => saveContact.mutate()} disabled={saveContact.isPending} className="inline-flex items-center gap-1.5 bg-[#159a52] text-white text-sm font-bold px-5 py-2 rounded disabled:opacity-50">
+                                {saveContact.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

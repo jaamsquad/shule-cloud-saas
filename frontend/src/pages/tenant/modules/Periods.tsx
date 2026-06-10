@@ -12,6 +12,7 @@ import {
     ChevronLeft, ArrowRight, ArrowLeft, Wand2, Lock, Eye, EyeOff
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -63,6 +64,8 @@ const TERM_TYPES = [
 
 export default function Periods() {
     const qc = useQueryClient();
+
+    const navigate = useNavigate();
 
     // ── State ─────────────────────────────────────────────────────────────────
     const [tab, setTab] = useState<"current" | "all" | "new">("current");
@@ -607,6 +610,10 @@ export default function Periods() {
                                                                         Set as Current
                                                                     </button>
                                                                 )}
+                                                                <button onClick={() => navigate(`/settings/term-settings/${t._id}`)} title="Term settings"
+                                                                    className="w-6 h-6 rounded-lg bg-gray-50 hover:bg-indigo-50 text-gray-400 hover:text-indigo-500 flex items-center justify-center border border-gray-100 transition-all">
+                                                                    <Settings className="w-3 h-3" />
+                                                                </button>
                                                                 <button onClick={() => openEditTerm(t)}
                                                                     className="w-6 h-6 rounded-lg bg-gray-50 hover:bg-amber-50 text-gray-400 hover:text-amber-500 flex items-center justify-center border border-gray-100 transition-all">
                                                                     <Edit2 className="w-3 h-3" />

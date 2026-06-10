@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { SCHOOL_ROLES, SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
 
 // ── Excel column → staff field mapping ──────────────────────────────────────
 const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
@@ -57,23 +58,21 @@ export default function AddEmployee() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
 
-    // Fetch dynamic roles from the database
-    const { data: dbRoles = [] } = useQuery<any[]>({
-        queryKey: ["roles_list"],
-        queryFn: async () => (await api.get("/roles")).data || [],
-    });
-    const roleOptions = dbRoles.length > 0
-        ? dbRoles.map((r: any) => r.name)
-        : ["Teacher","Admin","Staff","Accountant","Principal","Accountant","Librarian","Transport Manager","Hostel Warden","Head of Department","Deputy Principal","Exam Director","HR Officer","ICT Officer","Bus Driver","Security","Other"];
+    // Roles are the fixed, predefined school roles — no custom role creation.
+    const roleOptions = SCHOOL_ROLES;
 
     // ── Single-add form state ──────────────────────────────────────────────
     const [formData, setFormData] = useState({
         employeeName: "", fatherName: "", email: "", phone: "", dob: "",
         gender: "Male", designation: "", joiningDate: "", salary: "", address: "",
         specializedSubjects: [] as string[],
+        roles: [] as string[], portalAccess: "both",
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
         kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: ""
     });
+
+    const toggleRole = (r: string) =>
+        setFormData(prev => ({ ...prev, roles: prev.roles.includes(r) ? prev.roles.filter(x => x !== r) : [...prev.roles, r] }));
 
     // ── Import state ──────────────────────────────────────────────────────
     const [showImport, setShowImport] = useState(false);
@@ -110,6 +109,8 @@ export default function AddEmployee() {
             dob:                 existingStaff.dob?.split("T")[0] || "",
             gender:              existingStaff.gender || "Male",
             designation:         existingStaff.designation || "",
+            roles:               existingStaff.roles || (existingStaff.designation ? [existingStaff.designation] : []),
+            portalAccess:        existingStaff.portalAccess || "both",
             joiningDate:         existingStaff.joiningDate?.split("T")[0] || "",
             salary:              existingStaff.salary || "",
             address:             existingStaff.address || "",
@@ -501,6 +502,47 @@ export default function AddEmployee() {
                                     <InputField name="bankName" value={formData.bankName} onChange={handleChange} label="Bank Name" placeholder="e.g. KCB, Equity" color="gray" />
                                     <InputField name="bankBranch" value={formData.bankBranch} onChange={handleChange} label="Bank Branch" placeholder="e.g. Westlands" color="gray" />
                                     <InputField name="accountNo" value={formData.accountNo} onChange={handleChange} label="Account Number" placeholder="Bank Account Number" color="gray" />
+                                </div>
+                            </div>
+
+                            {/* Portal Access & Roles */}
+                            <div>
+                                <SectionHeader num="3" title="Portal Access & Roles" />
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-2">Assigned Portal *</label>
+                                        <div className="space-y-2">
+                                            {[
+                                                { v: "both", t: "Both portals", d: "Can use the admin app and the teacher portal" },
+                                                { v: "admin", t: "Admin app only", d: "Main school system — blocked from the teacher portal" },
+                                                { v: "staff", t: "Teacher portal only", d: "Redirected to the teacher portal on login; no admin access" },
+                                            ].map(o => (
+                                                <label key={o.v} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${formData.portalAccess === o.v ? "border-[#5C67F2] bg-[#5C67F2]/5" : "border-gray-200 hover:border-gray-300"}`}>
+                                                    <input type="radio" name="portalAccess" checked={formData.portalAccess === o.v} onChange={() => setFormData(p => ({ ...p, portalAccess: o.v }))} className="mt-1 accent-[#5C67F2]" />
+                                                    <div><p className="text-sm font-bold text-gray-700">{o.t}</p><p className="text-xs text-gray-400">{o.d}</p></div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-2">Roles (select one or more)</label>
+                                        <p className="text-[11px] text-gray-400 mb-2">A staff member can hold multiple roles. The primary role is set in “Employee Role” above.</p>
+                                        <div className="border border-gray-200 rounded-xl p-3 max-h-72 overflow-y-auto space-y-3">
+                                            {SCHOOL_ROLE_GROUPS.map(g => (
+                                                <div key={g.group}>
+                                                    <p className="text-[10px] font-black uppercase tracking-wide text-gray-400 mb-1">{g.group}</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {g.roles.map(r => (
+                                                            <button type="button" key={r} onClick={() => toggleRole(r)}
+                                                                className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${formData.roles.includes(r) ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-gray-600 border-gray-200 hover:border-[#5C67F2]"}`}>
+                                                                {r}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

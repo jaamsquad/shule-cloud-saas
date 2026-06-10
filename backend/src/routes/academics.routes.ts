@@ -3,6 +3,8 @@ import * as c from '../controllers/academics.controller';
 import { encrypt, decrypt, maskKey } from '../lib/crypto';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
+import { sendEmail } from '../services/communications.service';
+import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } from '../services/report-card-pdf.service';
 
 const router = Router();
 
@@ -12,6 +14,91 @@ const getRequestDb = (req: Request): Db =>
 
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
+
+// ─── Email result cards (PDF) to parents for an exam + class ──────────────────
+router.post('/exams/email-result-cards', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { examId, classId, className } = req.body || {};
+        if (!examId) return res.status(400).json({ message: 'examId is required' });
+        const oid = (id: string) => { try { return new ObjectId(id); } catch { return null; } };
+
+        const exam = await db.collection('exams').findOne({ _id: oid(examId) || (examId as any) });
+        const cls = classId ? await db.collection('classes').findOne({ _id: oid(classId) || (classId as any) }) : null;
+        const clsName = className || cls?.className || '';
+        const students = await db.collection('students').find({
+            $or: [{ classId: classId }, { studentClass: clsName }, { currentClass: clsName }, { class: clsName }],
+        }).toArray();
+
+        const tid = (req as any).tenantContext?.tenantId;
+        const tenant = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) || (tid as any) }) : null;
+        const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
+
+        let sent = 0, failed = 0, skipped = 0;
+
+        // Process every student concurrently (bounded) so all emails go out fast.
+        const processStudent = async (st: any) => {
+            // Send to the PARENT's email only — prefer the linked Parents-module record.
+            let email = '';
+            const linkedParents = await db.collection('parents').find({ 'linkedStudents.studentId': String(st._id) }).toArray().catch(() => []);
+            const parent = linkedParents.find((p: any) => (p.linkedStudents || []).some((l: any) => String(l.studentId) === String(st._id) && l.isPrimary)) || linkedParents[0];
+            email = parent?.email || parent?.parentEmail || parent?.emailAddress || '';
+            if (!email) email = st.parentEmail || st.fatherEmail || st.motherEmail || st.guardianEmail || '';
+            if (!email) { skipped++; return; }
+            try {
+                const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
+                const data = { school: tenant?.name, logo: tenant?.logo, template: tenant?.reportTemplate, student: st, exam, className: clsName, marks, grading };
+                const pdf = await htmlToPdf(reportCardHtml(data));
+                await sendEmail(db, {
+                    to: [email],
+                    subject: `${exam?.examName || exam?.name || 'Exam'} Result Card — ${st.studentName} (${clsName})`,
+                    html: reportCardEmailHtml(data),
+                    attachments: [{ filename: `ResultCard-${(st.registrationNo || st.admNo || st.studentName || 'student').toString().replace(/[^\w-]/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
+                });
+                sent++;
+            } catch { failed++; }
+        };
+
+        const CONCURRENCY = 8;
+        let cursor = 0;
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, students.length) }, async () => {
+            while (cursor < students.length) { const i = cursor++; await processStudent(students[i]); }
+        }));
+
+        await closeReportBrowser().catch(() => {});
+        res.json({ total: students.length, sent, failed, skipped });
+    } catch (e: any) {
+        await closeReportBrowser().catch(() => {});
+        res.status(500).json({ message: e.message });
+    }
+});
+
+// ─── Global search (employees, students, subjects, invoices) ──────────────────
+router.get('/search', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const q = String((req.query.q as string) || '').trim();
+        if (q.length < 2) return res.json([]);
+        const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const out: any[] = [];
+
+        const staff = await db.collection('staff').find({ $or: [{ employeeName: rx }, { name: rx }, { email: rx }, { phone: rx }, { designation: rx }] }).limit(6).toArray().catch(() => []);
+        staff.forEach((s: any) => out.push({ type: 'Employee', id: String(s._id), label: s.employeeName || s.name || 'Staff', sub: [s.designation, s.email].filter(Boolean).join(' · ') }));
+
+        const students = await db.collection('students').find({ $or: [{ studentName: rx }, { registrationNo: rx }, { admNo: rx }] }).limit(6).toArray().catch(() => []);
+        students.forEach((s: any) => out.push({ type: 'Student', id: String(s._id), label: s.studentName || 'Student', sub: [s.registrationNo || s.admNo, s.studentClass].filter(Boolean).join(' · ') }));
+
+        const subjects = await db.collection('subjects').find({ $or: [{ name: rx }, { subjectName: rx }, { code: rx }] }).limit(6).toArray().catch(() => []);
+        subjects.forEach((s: any) => out.push({ type: 'Subject', id: String(s._id), label: s.name || s.subjectName || 'Subject', sub: s.code || '' }));
+
+        const invoices = await db.collection('invoices').find({ $or: [{ invoice_no: rx }, { studentName: rx }] }).limit(6).toArray().catch(() => []);
+        invoices.forEach((i: any) => out.push({ type: 'Invoice', id: String(i._id), label: i.invoice_no || 'Invoice', sub: [i.studentName, i.total_due ? `KSh ${Number(i.total_due).toLocaleString()}` : ''].filter(Boolean).join(' · ') }));
+
+        res.json(out);
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
 
 // ─── Exams / Assessments ───────────────────────────────────────────────────
 router.get('/exams',              c.getItems('exams'));
@@ -229,7 +316,7 @@ router.get('/academics/audit_trails',   c.getItems('audit_trails'));
 router.get('/academics/audit-trails',   c.getItems('audit_trails'));
 
 // ─── Other Collections ────────────────────────────────────────────────────────
-['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs'].forEach(col => {
+['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs','term_settings','term_breaks','term_holidays','term_activities'].forEach(col => {
     router.get(`/${col}`,    c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
     router.post(`/${col}`,   c.createItem(col));

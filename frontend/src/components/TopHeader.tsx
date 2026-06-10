@@ -1,14 +1,78 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     Menu, Search, Maximize, MessageSquare, Bell,
-    ChevronDown, GraduationCap, Settings, Building2, Lock
+    ChevronDown, GraduationCap, Settings, Building2, Lock,
+    LayoutGrid, User, Users, BookOpen, FileText, X
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { navItems } from "./AppSidebar";
+
+// Flatten the sidebar nav into searchable {label, path, group} entries.
+const NAV_LINKS = navItems.flatMap((item: any) =>
+    item.children
+        ? item.children.filter((c: any) => c.path && c.path !== "/logout").map((c: any) => ({ label: c.label, path: c.path, group: item.label }))
+        : item.path && item.path !== "/logout" ? [{ label: item.label, path: item.path, group: "" }] : []
+);
+
+const TYPE_META: Record<string, { icon: any; link: (id: string) => string }> = {
+    Page: { icon: LayoutGrid, link: () => "#" },
+    Employee: { icon: User, link: id => `/staff/edit/${id}` },
+    Student: { icon: Users, link: id => `/students/edit/${id}` },
+    Subject: { icon: BookOpen, link: () => `/subjects/all` },
+    Invoice: { icon: FileText, link: id => `/fees/invoice/${id}` },
+};
+
+// Highlight the matched part of a string.
+function Highlight({ text, q }: { text: string; q: string }) {
+    if (!q) return <>{text}</>;
+    const i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i === -1) return <>{text}</>;
+    return <>{text.slice(0, i)}<mark className="bg-yellow-200 text-inherit rounded px-0.5">{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
+}
 
 export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void }) {
+    const navigate = useNavigate();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [q, setQ] = useState("");
+    const [results, setResults] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const searchRef = useRef<HTMLDivElement>(null);
+
+    // Sidebar-tab matches (client-side).
+    const pageMatches = q.length >= 1
+        ? NAV_LINKS.filter(n => n.label.toLowerCase().includes(q.toLowerCase())).slice(0, 6).map(n => ({ type: "Page", id: n.path, label: n.label, sub: n.group, path: n.path }))
+        : [];
+
+    // DB search (debounced).
+    useEffect(() => {
+        if (!searchOpen || q.trim().length < 2) { setResults([]); return; }
+        setLoading(true);
+        const t = setTimeout(async () => {
+            try { const r = await api.get(`/search?q=${encodeURIComponent(q.trim())}`); setResults(Array.isArray(r.data) ? r.data : []); }
+            catch { setResults([]); }
+            finally { setLoading(false); }
+        }, 250);
+        return () => clearTimeout(t);
+    }, [q, searchOpen]);
+
+    useEffect(() => {
+        const onClick = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false); };
+        document.addEventListener("mousedown", onClick);
+        return () => document.removeEventListener("mousedown", onClick);
+    }, []);
+
+    const all = [...pageMatches, ...results];
+    const grouped: Record<string, any[]> = {};
+    all.forEach(r => { (grouped[r.type] ||= []).push(r); });
+
+    const go = (r: any) => {
+        const path = r.path || TYPE_META[r.type]?.link(r.id) || "#";
+        setSearchOpen(false); setQ("");
+        navigate(path);
+    };
     const { data: profileData } = useQuery<any>({
         queryKey: ["tenant_profile_global"],
         queryFn: async () => {
@@ -69,9 +133,49 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                 >
                     <Menu className="w-6 h-6" />
                 </button>
-                <button className={`hidden sm:block ${textSecondary} ${hoverSecondary} transition-colors`}>
-                    <Search className="w-5 h-5" />
-                </button>
+                <div className="relative hidden sm:block" ref={searchRef}>
+                    <button onClick={() => setSearchOpen(o => !o)} className={`${textSecondary} ${hoverSecondary} transition-colors`} aria-label="Search">
+                        <Search className="w-5 h-5" />
+                    </button>
+                    {searchOpen && (
+                        <div className="absolute left-0 mt-3 w-[26rem] max-w-[90vw] bg-white rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-gray-100 z-50 overflow-hidden">
+                            <div className="flex items-center gap-2 px-3 border-b border-gray-100">
+                                <Search className="w-4 h-4 text-gray-400" />
+                                <input
+                                    autoFocus value={q} onChange={e => setQ(e.target.value)}
+                                    placeholder="Search pages, employees, students, subjects, invoices…"
+                                    className="flex-1 h-11 text-sm text-gray-700 outline-none bg-transparent"
+                                />
+                                {q && <button onClick={() => setQ("")} className="text-gray-300 hover:text-gray-500"><X className="w-4 h-4" /></button>}
+                            </div>
+                            <div className="max-h-[60vh] overflow-y-auto py-1">
+                                {q.trim().length < 1 ? (
+                                    <p className="text-xs text-gray-400 px-4 py-6 text-center">Type to search across the school…</p>
+                                ) : all.length === 0 ? (
+                                    <p className="text-xs text-gray-400 px-4 py-6 text-center">{loading ? "Searching…" : "No matches found."}</p>
+                                ) : (
+                                    Object.entries(grouped).map(([type, items]) => {
+                                        const Icon = TYPE_META[type]?.icon || LayoutGrid;
+                                        return (
+                                            <div key={type} className="py-1">
+                                                <p className="px-4 py-1 text-[10px] font-black uppercase tracking-widest text-gray-400">{type === "Page" ? "Pages" : type + "s"}</p>
+                                                {items.map((r: any) => (
+                                                    <button key={r.type + r.id} onClick={() => go(r)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 text-left">
+                                                        <Icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                        <span className="min-w-0">
+                                                            <span className="block text-sm font-semibold text-gray-700 truncate"><Highlight text={r.label} q={q} /></span>
+                                                            {r.sub && <span className="block text-xs text-gray-400 truncate">{r.sub}</span>}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
                 <button
                     onClick={toggleFullscreen}
                     className={`hidden sm:block ${textSecondary} ${hoverSecondary} transition-colors`}

@@ -156,7 +156,21 @@ export default function Login() {
                     break;
 
                 case "teacher":
-                case "staff":
+                case "staff": {
+                    // Staff assigned to the staff portal are redirected there (SSO).
+                    const { redirectPortal, staffSso } = res.data;
+                    if (redirectPortal === "staff" && staffSso) {
+                        const sub = tenantSubdomain || activeSubdomain;
+                        const { protocol, hostname, port } = window.location;
+                        const p = port ? `:${port}` : "";
+                        const rootDomain = (hostname === "localhost" || hostname.endsWith(".localhost"))
+                            ? "localhost"
+                            : (hostname.split(".").length > 2 ? hostname.split(".").slice(1).join(".") : hostname);
+                        const hash = `#sso=${encodeURIComponent(JSON.stringify(staffSso))}`;
+                        toast.success(`Welcome, ${user.name}! Opening your teacher portal…`);
+                        window.location.href = `${protocol}//teacher.${sub}.${rootDomain}${p}/login${hash}`;
+                        return;
+                    }
                     localStorage.setItem("auth_token", authToken);
                     localStorage.setItem("user", JSON.stringify(user));
                     if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
@@ -164,6 +178,7 @@ export default function Login() {
                     toast.success(`Welcome back, ${user.name}!`);
                     goToDashboard(redirect || "/dashboard");
                     break;
+                }
 
                 default: // admin
                     localStorage.setItem("auth_token", authToken);

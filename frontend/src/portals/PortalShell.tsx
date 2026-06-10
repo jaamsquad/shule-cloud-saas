@@ -34,6 +34,7 @@ export default function PortalShell({
 }: PortalShellProps) {
     const [open, setOpen] = useState(false);   // mobile drawer
     const [menuOpen, setMenuOpen] = useState(false);
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});  // collapsible nav groups
 
     const initials = user.name
         ?.split(" ")
@@ -75,32 +76,39 @@ export default function PortalShell({
                     <span className="font-black text-sm leading-tight truncate" style={{ color: accent }}>{brandName}</span>
                 </div>
 
-                {/* Nav */}
+                {/* Nav — collapsible groups */}
                 <nav className="flex-1 overflow-y-auto py-3">
-                    {sections.map(section => (
-                        <div key={section.label} className="mb-1">
-                            <p className="px-5 pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-white/60">
-                                {section.label}
-                            </p>
-                            {section.items.map(item => (
-                                <NavLink
-                                    key={item.to}
-                                    to={item.to}
-                                    end
-                                    onClick={() => setOpen(false)}
-                                    className={({ isActive }) =>
-                                        `flex items-center gap-3 px-5 py-2.5 text-sm font-semibold transition-colors
-                                        ${isActive
-                                            ? "bg-black/15 text-white border-l-4 border-white"
-                                            : "text-white/90 hover:bg-black/10 border-l-4 border-transparent"}`
-                                    }
+                    {sections.map(section => {
+                        const isCollapsed = collapsed[section.label];
+                        return (
+                            <div key={section.label} className="mb-1">
+                                <button
+                                    onClick={() => setCollapsed(c => ({ ...c, [section.label]: !c[section.label] }))}
+                                    className="w-full flex items-center justify-between px-5 pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-colors"
                                 >
-                                    <item.icon className="w-4 h-4 flex-shrink-0" />
-                                    <span className="truncate">{item.label}</span>
-                                </NavLink>
-                            ))}
-                        </div>
-                    ))}
+                                    <span>{section.label}</span>
+                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                                </button>
+                                {!isCollapsed && section.items.map(item => (
+                                    <NavLink
+                                        key={item.to}
+                                        to={item.to}
+                                        end
+                                        onClick={() => setOpen(false)}
+                                        className={({ isActive }) =>
+                                            `flex items-center gap-3 px-5 py-2.5 text-sm font-semibold transition-colors
+                                            ${isActive
+                                                ? "bg-black/15 text-white border-l-4 border-white"
+                                                : "text-white/90 hover:bg-black/10 border-l-4 border-transparent"}`
+                                        }
+                                    >
+                                        <item.icon className="w-4 h-4 flex-shrink-0" />
+                                        <span className="truncate">{item.label}</span>
+                                    </NavLink>
+                                ))}
+                            </div>
+                        );
+                    })}
                 </nav>
             </aside>
 

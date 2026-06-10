@@ -5,6 +5,8 @@ import {
   Calendar, BookOpen, ClipboardCheck, Heart, Library, Bell,
   ChevronRight, Check, Star, ArrowRight
 } from "lucide-react";
+import { resolvePortal } from "@/lib/portal";
+import SchoolLanding from "./SchoolLanding";
 
 const features = [
   { icon: Users, title: "Student Management", desc: "Full lifecycle from admission to alumni with CBC tracking" },
@@ -35,6 +37,10 @@ const testimonials = [
 ];
 
 export default function Landing() {
+  // On a school subdomain (e.g. egerton.localhost) show the school's own
+  // branded site instead of the ShuleCloud marketing page.
+  if (resolvePortal().portal === "tenant") return <SchoolLanding />;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}

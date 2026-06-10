@@ -284,6 +284,9 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 // Custom domain + branding
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
 import MpesaIntegration from "./pages/tenant/modules/settings/MpesaIntegration";
+import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
+import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
+import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
 
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
@@ -468,6 +471,10 @@ const App = () => {
               {/* Academic System V2 — Enrollment-Based Architecture */}
               {/* /academic-system/years uses the same unified Periods page as /academics/periods */}
               <Route path="/academic-system/years" element={<Periods />} />
+              <Route path="/settings/term-settings" element={<AcademicTermSettings />} />
+              <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
+              <Route path="/departments" element={<DepartmentManagement />} />
+              <Route path="/staff-roles" element={<StaffRoles />} />
               <Route path="/academic-system/classes" element={<ClassesStreamsPage />} />
               <Route path="/academic-system/enrollments" element={<EnrollmentPage />} />
               <Route path="/academic-system/enroll" element={<EnrollmentFormPage />} />
@@ -571,7 +578,8 @@ const App = () => {
               <Route path="/integrations/:key" element={<IntegrationDetail />} />
 
               {/* Roles & Permissions */}
-              <Route path="/roles" element={<RolesPermissions />} />
+              <Route path="/roles" element={<StaffRoles />} />
+              <Route path="/roles/matrix" element={<RolesPermissions />} />
 
               {/* LMS / E-Learning */}
               <Route path="/lms" element={<LMSDashboard />} />

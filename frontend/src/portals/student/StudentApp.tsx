@@ -5,6 +5,7 @@ import PersonalProfile from "./pages/PersonalProfile";
 import Registration from "./pages/Registration";
 import ExamResults from "./pages/ExamResults";
 import StudentLive from "./pages/StudentLive";
+import StudentTasks from "./pages/StudentTasks";
 import PrintTimetable from "./pages/PrintTimetable";
 import LiveRoom from "../../pages/tenant/modules/LiveRoom";
 import AcademicRequisition from "./pages/AcademicRequisition";
@@ -26,6 +27,8 @@ export default function StudentApp() {
                 <Route path="/registration" element={<Registration />} />
                 <Route path="/exam-results" element={<ExamResults />} />
                 <Route path="/live" element={<StudentLive />} />
+                <Route path="/assignments" element={<StudentTasks type="assignment" title="Assignments" />} />
+                <Route path="/homework" element={<StudentTasks type="homework" title="Homework" />} />
                 <Route path="/timetable" element={<PrintTimetable />} />
                 <Route path="/requisition" element={<AcademicRequisition />} />
                 <Route path="/clearance" element={<ClearanceRequest />} />

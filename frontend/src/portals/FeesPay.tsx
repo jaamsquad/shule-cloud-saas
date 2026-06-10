@@ -1,19 +1,40 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
-import { Loader2, Smartphone, X, Check, Phone, AlertTriangle } from "lucide-react";
+import { Loader2, Smartphone, X, Check, Phone, AlertTriangle, FileText } from "lucide-react";
 import { PageTitle, PanelCard } from "./PortalShell";
+import { useBranding } from "./useBranding";
+import { invoiceHtml } from "./printInvoice";
 
 interface Props {
     api: AxiosInstance;
     base: string;            // "/student-portal" | "/parent-portal"
     title?: string;
+    student?: { name?: string; registrationNo?: string };
 }
 
 type Stage = "form" | "sending" | "waiting" | "success" | "failed";
 
-export default function FeesPay({ api, base, title = "Pay Fees" }: Props) {
+export default function FeesPay({ api, base, title = "Pay Fees", student }: Props) {
     const qc = useQueryClient();
+    const { data: brand } = useBranding(api);
+    const [viewHtml, setViewHtml] = useState<string | null>(null);
+
+    const viewInvoice = (inv: any) => {
+        const total = Number(inv.total_due || inv.amount || 0);
+        const paidAmt = Number(inv.paid_amount || inv.amount_paid || 0);
+        const html = invoiceHtml(
+            { schoolName: brand?.name, schoolLogo: brand?.logo || null, studentName: data?.studentName || student?.name, studentNo: data?.registrationNo || student?.registrationNo, payBill: "—" },
+            {
+                invoiceNo: inv.invoice_no || inv.invoiceNo || `INV-${String(inv._id).slice(-6)}`,
+                date: inv.createdAt || inv.created_at, dueDate: inv.due_date, term: inv.term || inv.period,
+                lineItems: (inv.line_items || inv.items || []).map((it: any) => ({ description: it.description || it.category || it.name, amount: Number(it.amount || 0), qty: it.qty || 1 })),
+                subtotal: Number(inv.subtotal || total), discount: Number(inv.discount_amount || 0),
+                total, paid: paidAmt, balance: Math.max(0, Number(inv.balance ?? total - paidAmt)),
+            },
+        );
+        setViewHtml(html);
+    };
     const [modal, setModal] = useState<null | { invoiceId?: string; amount: number }>(null);
     const [amount, setAmount] = useState("");
     const [phone, setPhone] = useState("");
@@ -122,10 +143,16 @@ export default function FeesPay({ api, base, title = "Pay Fees" }: Props) {
                                                 <p className="font-bold text-slate-700 text-sm">{inv.invoice_no || inv.invoiceNo || `INV-${String(inv._id).slice(-6)}`}</p>
                                                 <p className="text-xs text-slate-400">{inv.term || inv.period || "—"} · Bal KSh {ibal.toLocaleString()}</p>
                                             </div>
-                                            {ibal > 0 && (
-                                                <button onClick={() => setModal({ invoiceId: inv._id, amount: ibal })}
-                                                    className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded">Pay</button>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => viewInvoice(inv)}
+                                                    className="inline-flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold px-3 py-1.5 rounded">
+                                                    <FileText className="w-3.5 h-3.5" /> View
+                                                </button>
+                                                {ibal > 0 && (
+                                                    <button onClick={() => setModal({ invoiceId: inv._id, amount: ibal })}
+                                                        className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded">Pay</button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -151,6 +178,23 @@ export default function FeesPay({ api, base, title = "Pay Fees" }: Props) {
                         )}
                     </PanelCard>
                 </>
+            )}
+
+            {/* Invoice viewer (inline, in-browser) */}
+            {viewHtml && (
+                <div className="fixed inset-0 bg-black/60 z-[200] flex flex-col items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-3xl rounded-lg shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh" }}>
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+                            <p className="text-sm font-bold text-slate-700">Invoice</p>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => { const f = document.getElementById("inv-frame") as HTMLIFrameElement; f?.contentWindow?.print(); }}
+                                    className="text-xs font-bold px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-white">Print / Download</button>
+                                <button onClick={() => setViewHtml(null)} className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400"><X className="w-4 h-4" /></button>
+                            </div>
+                        </div>
+                        <iframe id="inv-frame" title="Invoice" srcDoc={viewHtml} className="w-full flex-1" style={{ border: 0, minHeight: "60vh" }} />
+                    </div>
+                </div>
             )}
 
             {/* M-PESA payment modal */}

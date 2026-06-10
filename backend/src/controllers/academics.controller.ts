@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
+import { syncParentToStudents, syncStudentToParents } from '../services/parent-student-sync.service';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -35,9 +36,14 @@ export const bulkCreate = (collectionName: string) => async (req: Request, res: 
             }
         }
 
-        const result = await db.collection(collectionName).insertMany(
-            items.map((i: any) => ({ ...i, createdAt: new Date() }))
-        );
+        const docs = items.map((i: any) => ({ ...i, createdAt: new Date() }));
+        const result = await db.collection(collectionName).insertMany(docs);
+        // Auto-create linked Parent records (Father/Mother) for imported students.
+        if (collectionName === 'students') {
+            Object.values(result.insertedIds).forEach((oid: any, idx: number) => {
+                syncStudentToParents(db, String(oid), docs[idx]).catch(() => {});
+            });
+        }
         res.status(201).json({ message: 'Bulk creation successful', count: result.insertedCount });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -80,6 +86,9 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
         }
 
         const result = await db.collection(collectionName).insertOne(data);
+        // Keep Parents module and student father/mother fields in sync.
+        if (collectionName === 'parents') syncParentToStudents(db, { ...data, _id: result.insertedId }).catch(() => {});
+        if (collectionName === 'students') syncStudentToParents(db, String(result.insertedId), data).catch(() => {});
         res.status(201).json({ id: result.insertedId, ...data });
     } catch (error) {
         res.status(500).json({ message: 'Error creating item', error });
@@ -153,6 +162,9 @@ export const updateItem = (collectionName: string) => async (req: Request, res: 
         );
 
         if (result.matchedCount === 0) return res.status(404).json({ message: 'Item not found' });
+        // Two-way parent ↔ student sync on save.
+        if (collectionName === 'parents') { const p = await db.collection('parents').findOne({ _id: new ObjectId(id) }); if (p) syncParentToStudents(db, p).catch(() => {}); }
+        if (collectionName === 'students') { const s = await db.collection('students').findOne({ _id: new ObjectId(id) }); if (s) syncStudentToParents(db, id, s).catch(() => {}); }
         res.json({ message: 'Item updated' });
     } catch (error) {
         res.status(500).json({ message: 'Error updating item', error });

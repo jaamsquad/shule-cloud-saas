@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import {
-    ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits,
+    ensureWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits,
 } from '../services/wallet.service';
+import { initiateStkTopup, checkStkAndComplete } from '../services/mpesa.service';
 
 const router = Router();
 const db = (req: any) => req.tenantDb || getMetaDb();
@@ -43,12 +44,25 @@ router.get('/wallets/student/:studentId/transactions', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Top-up is M-PESA only — initiates an STK push; the wallet is credited on confirmation.
 router.post('/wallets/student/:studentId/topup', async (req, res) => {
     try {
-        const { amount, source, reference } = req.body || {};
-        const w = await creditWallet(db(req), req.params.studentId, amount, { source: source || 'Cash Deposit', reference, by: 'admin' });
-        res.json(w);
+        const { amount, phone } = req.body || {};
+        if (!phone || !amount || Number(amount) <= 0) return res.status(400).json({ message: 'An M-PESA phone number and a valid amount are required' });
+        const wallet = await ensureWallet(db(req), req.params.studentId);
+        const r = await initiateStkTopup(db(req), {
+            tenantDbName: (req as any).tenantContext?.databaseName,
+            studentId: req.params.studentId, phone, amount: Number(amount),
+            purpose: 'wallet', accountRef: wallet.code, studentName: wallet.studentName,
+        });
+        res.json(r);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// Poll the status of an admin-initiated wallet top-up.
+router.get('/wallets/mpesa-status', async (req, res) => {
+    try { res.json(await checkStkAndComplete(db(req), String(req.query.checkoutRequestId || ''))); }
+    catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 router.post('/wallets/student/:studentId/deduct', async (req, res) => {

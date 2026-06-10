@@ -14,7 +14,6 @@ export default function StaffMarksEntry() {
 
     const [examId, setExamId] = useState("");
     const [pair, setPair] = useState("");
-    const [outOf, setOutOf] = useState(100);
     const [rows, setRows] = useState<any[]>([]);
 
     const { data: exams = [] } = useQuery({
@@ -35,6 +34,7 @@ export default function StaffMarksEntry() {
     useEffect(() => { if (roster) setRows(roster.map((r: any) => ({ ...r }))); }, [roster]);
 
     const exam = exams.find((e: any) => e._id === examId);
+    const outOf = Number(exam?.totalMarks) || 100;   // from the exam's Total Marks setting
 
     const save = useMutation({
         mutationFn: async () => (await api.post("/staff-portal/marks", {
@@ -69,8 +69,10 @@ export default function StaffMarksEntry() {
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-600 mb-1">Out Of</label>
-                        <input type="number" value={outOf} onChange={e => setOutOf(Number(e.target.value))}
-                            className="w-full h-10 px-3 border border-black/10 rounded text-sm" />
+                        <div className="w-full h-10 px-3 border border-black/10 rounded text-sm bg-slate-50 text-slate-600 font-bold flex items-center">
+                            {examId ? `${outOf} marks` : "— select an exam —"}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">Set in the exam's Total Marks setting</p>
                     </div>
                 </div>
                 {pairs.length === 0 && (

@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from "react";
-import { Home, Printer, ChevronDown, Loader2, Users, Award, CheckCircle2, XCircle, BarChart3, FileText, Eye } from "lucide-react";
+import { Home, Printer, ChevronDown, Loader2, Users, Award, CheckCircle2, XCircle, BarChart3, FileText, Eye, Mail } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
 
@@ -44,6 +45,20 @@ export default function ClassReportCards() {
     const [selectedExam, setSelectedExam]   = useState<any>(null);
     const [selectedClass, setSelectedClass] = useState<any>(null);
     const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+    const [emailing, setEmailing] = useState(false);
+
+    const emailAllReports = async () => {
+        if (!selectedExam || !selectedClass) { toast.error("Select an exam and class first"); return; }
+        if (!confirm(`Email report cards to all parents in ${selectedClass.levelName || selectedClass.name} for ${selectedExam.examName || selectedExam.name}?`)) return;
+        setEmailing(true);
+        try {
+            const r = await api.post("/exams/email-result-cards", { examId: selectedExam._id, classId: selectedClass._id, className: selectedClass.levelName || selectedClass.name });
+            const { sent = 0, failed = 0, skipped = 0, total = 0 } = r.data || {};
+            toast.success(`Reports emailed — ${sent} sent${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} without parent email` : ""} (of ${total}).`);
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Failed to email reports");
+        } finally { setEmailing(false); }
+    };
     const printAllRef = useRef<HTMLDivElement>(null);
 
     const { getGrade, getStatus, getColor, passMark, scale, curriculumId } = useGradingFns();
@@ -231,12 +246,20 @@ export default function ClassReportCards() {
                     <span className="text-gray-300">/</span>
                     <span className="font-black text-[#5C67F2]">Class Report Cards</span>
                 </div>
-                {studentSummaries.some(s => s.scoredSubjects > 0) && (
-                    <button onClick={printAll}
-                        className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all">
-                        <Printer className="w-3.5 h-3.5" /> Print All ({classStudents.length}) Reports
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {selectedExam && selectedClass && (
+                        <button onClick={emailAllReports} disabled={emailing}
+                            className="flex items-center gap-2 px-5 py-2 bg-[#159a52] hover:bg-[#127a42] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all disabled:opacity-60">
+                            {emailing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />} {emailing ? "Emailing…" : "Email All Reports"}
+                        </button>
+                    )}
+                    {studentSummaries.some(s => s.scoredSubjects > 0) && (
+                        <button onClick={printAll}
+                            className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all">
+                            <Printer className="w-3.5 h-3.5" /> Print All ({classStudents.length}) Reports
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="print:hidden flex-1 px-8 py-8 w-full max-w-7xl mx-auto">

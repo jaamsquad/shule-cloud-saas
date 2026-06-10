@@ -4,7 +4,8 @@ import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
-import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment } from '../services/mpesa.service';
+import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete } from '../services/mpesa.service';
+import { resolveStaffPermissions } from '../lib/permissions';
 
 const router = Router();
 
@@ -214,11 +215,24 @@ router.post('/smart-login', async (req, res) => {
             const userType = role.includes('teacher') ? 'teacher' : 'staff';
             const name = staffMatch.employeeName || staffMatch.name || username;
             const token = jwt.sign({ staffId: staffMatch._id.toString(), username, role, name, tenantId: resolvedTenantId, tenantSubdomain: resolvedTenantSubdomain }, secret, { expiresIn: '7d' });
+            const portalAccess = (staffMatch.portalAccess || 'both').toLowerCase();
+            // Teachers are sent to the teacher portal automatically (unless restricted to the admin app).
+            const isTeacher = /teacher/i.test(rawDesignation)
+                || (Array.isArray(staffMatch.roles) && staffMatch.roles.some((r: string) => /teacher/i.test(r)))
+                || staffMatch.isTeachingStaff === true
+                || (Array.isArray(staffMatch.subjectAssignments) && staffMatch.subjectAssignments.length > 0)
+                || (Array.isArray(staffMatch.specializedSubjects) && staffMatch.specializedSubjects.length > 0);
+            const goTeacherPortal = portalAccess === 'staff' || (isTeacher && portalAccess !== 'admin');
             return res.json({
                 token, access_token: token,
                 tenantSubdomain: resolvedTenantSubdomain,
                 user_type: userType,
-                user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId },
+                user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId, portalAccess },
+                // Teachers (and staff-portal-assigned staff) are sent to the teacher portal (SSO — no second login).
+                redirectPortal: goTeacherPortal ? 'staff' : null,
+                staffSso: goTeacherPortal
+                    ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
+                    : null,
                 redirect: '/dashboard',
             });
         }
@@ -363,6 +377,11 @@ router.post('/staff-login', async (req, res) => {
         const staff = await db.collection('staff').findOne({ portalUsername: username });
         if (!staff || staff.portalPassword !== password) return res.status(401).json({ message: 'Invalid username or password' });
 
+        // Strict portal assignment: staff assigned to the admin portal only may not use the staff portal.
+        if ((staff.portalAccess || 'both').toLowerCase() === 'admin') {
+            return res.status(403).json({ message: 'You are assigned to the main school portal. Please log in there instead.' });
+        }
+
         const secret = process.env.JWT_SECRET || 'shulecloud_student_secret_2024';
         const token = jwt.sign(
             { staffId: staff._id.toString(), username: staff.portalUsername, role: staff.role || 'teacher', name: staff.employeeName || staff.name },
@@ -393,7 +412,43 @@ router.get('/staff-portal/me', async (req, res) => {
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
         const staff = await db.collection('staff').findOne({ _id: new ObjectId(decoded.staffId) });
         if (!staff) return res.status(404).json({ message: 'Staff not found' });
-        res.json(staff);
+        const permissions = await resolveStaffPermissions(db, staff);
+        res.json({ ...staff, permissions });
+    } catch (e: any) {
+        res.status(401).json({ message: 'Invalid or expired token' });
+    }
+});
+
+// Teacher self-service: update own contact details (email / phone).
+router.patch('/staff-portal/profile', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ message: 'No token' });
+        const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
+        const { email, phone } = req.body || {};
+        const set: any = { updatedAt: new Date() };
+        if (email !== undefined) {
+            if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email))) return res.status(400).json({ message: 'Enter a valid email address' });
+            set.email = email;
+        }
+        if (phone !== undefined) set.phone = phone;
+        await db.collection('staff').updateOne({ _id: new ObjectId(decoded.staffId) }, { $set: set });
+        res.json({ message: 'Profile updated' });
+    } catch (e: any) {
+        res.status(401).json({ message: 'Invalid or expired token' });
+    }
+});
+
+// Roles a staff member is assigned to (for the Role Management "usage" view).
+router.get('/staff-portal/permissions', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ message: 'No token' });
+        const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
+        const staff = await db.collection('staff').findOne({ _id: new ObjectId(decoded.staffId) });
+        res.json({ permissions: staff ? await resolveStaffPermissions(db, staff) : [], roles: staff?.roles || [] });
     } catch (e: any) {
         res.status(401).json({ message: 'Invalid or expired token' });
     }
@@ -814,8 +869,14 @@ const safeObjId = (id: any): ObjectId | null => {
 const currentTermName = async (db: Db): Promise<string> => {
     try {
         const p = await db.collection('periods').findOne({ isCurrent: true });
-        return p?.name || p?.term || p?.title || 'Current Term';
-    } catch { return 'Current Term'; }
+        if (p) return p.name || p.term || p.title || 'Current Term';
+    } catch { /* ignore */ }
+    // Fall back to the active term in the v2 academic system.
+    try {
+        const t = await db.collection('terms').findOne({ isActive: true });
+        if (t) return `${t.name}${t.academicYear ? ` ${t.academicYear}` : ''}`;
+    } catch { /* ignore */ }
+    return 'Current Term';
 };
 
 const studentInvoices = async (db: Db, student: any, studentId: string) => {
@@ -1057,6 +1118,61 @@ router.get('/student-portal/summary', authed(async (req, res, db, decoded) => {
     });
 }));
 
+// ─── Academic calendar (years + terms with dates) ────────────────────────────
+// Current term + all activities/important dates configured for it (Academic Term Settings).
+const buildAcademicCalendar = async (db: Db) => {
+    const terms = await db.collection('terms').find({}).toArray().catch(() => []);
+    const term = terms.find((t: any) => t.isActive) || terms[terms.length - 1];
+    if (!term) return { term: null, activities: [] };
+
+    const years = await db.collection('academic_years').find({}).toArray().catch(() => []);
+    const year = years.find((y: any) => String(y._id) === String(term.academicYearId));
+    const s: any = (await db.collection('term_settings').findOne({ termId: String(term._id) }).catch(() => null)) || {};
+
+    const activities: any[] = [];
+    const add = (name: string, date: any, type = 'event', endDate: any = null) => { if (date) activities.push({ name, date, type, endDate }); };
+    add('School Opening', s.schoolOpening, 'milestone');
+    add('Reporting Day', s.reportingDay, 'milestone');
+    add('Mid-Term Break', s.midTermBreakStart, 'break', s.midTermBreakEnd);
+    add('Parent Meeting Day', s.parentMeetingDay, 'meeting');
+    add('Examinations', s.examStartDate, 'exam', s.examEndDate);
+    add('Assignment Due', s.assignmentDue, 'assessment');
+    add('Project Submission', s.projectSubmission, 'assessment');
+    add('Mark Entry Deadline', s.markEntryDeadline, 'assessment');
+    add('Opening Fee Due', s.openingFeeDue, 'fee');
+    add('Mid-Term Fee Due', s.midTermFeeDue, 'fee');
+    add('Final Fee Due', s.finalFeeDue, 'fee');
+    add('Results Release', s.resultRelease, 'results');
+    add('Prize Giving Day', s.prizeGivingDay, 'milestone');
+    add('Graduation', s.graduationDate, 'milestone');
+    add('Closing Day', s.closingDate, 'milestone');
+
+    // Free-text holidays ("Name | Start | End | Type") and activities ("Name | Date | Venue").
+    String(s.holidays || '').split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((line: string) => {
+        const [name, start, end] = line.split('|').map((x: string) => x?.trim());
+        if (name && start) activities.push({ name, date: start, endDate: end || null, type: 'holiday' });
+    });
+    String(s.activities || '').split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((line: string) => {
+        const [name, date, venue] = line.split('|').map((x: string) => x?.trim());
+        if (name && date) activities.push({ name, date, venue: venue || '', type: 'activity' });
+    });
+
+    activities.sort((a, b) => +new Date(a.date) - +new Date(b.date));
+
+    return {
+        term: { name: term.name, year: year?.name || (term.academicYear ? `Academic Year ${term.academicYear}` : ''), startDate: term.startDate || null, endDate: term.endDate || null, learningWeeks: s.learningWeeks || null },
+        activities,
+    };
+};
+
+router.get('/student-portal/academic-calendar', authed(async (req, res, db) => {
+    res.json(await buildAcademicCalendar(db));
+}));
+
+router.get('/parent-portal/academic-calendar', authed(async (req, res, db) => {
+    res.json(await buildAcademicCalendar(db));
+}));
+
 // ─── Student Portal: registration ─────────────────────────────────────────────
 router.get('/student-portal/registration', authed(async (req, res, db, decoded) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
@@ -1088,6 +1204,39 @@ router.get('/student-portal/timetable', authed(async (req, res, db, decoded) => 
     const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
     const classId = student?.classId ? String(student.classId) : await resolveClassId(db, student?.studentClass || student?.currentClass);
     res.json(await buildTimetable(db, { classId: classId || '___none___' }));
+}));
+
+// ─── Student Portal: assignments & homework (view + submit) ───────────────────
+const STUDENT_TASK: Record<string, string> = { assignment: 'academic_assignments', homework: 'homework' };
+
+router.get('/student-portal/tasks/:type', authed(async (req, res, db, decoded) => {
+    const col = STUDENT_TASK[req.params.type];
+    if (!col) return res.status(404).json({ message: 'Unknown task type' });
+    const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
+    const cls = String(student?.studentClass || student?.currentClass || '');
+    // Show items targeted at the student's class (or school-wide ones with no class).
+    const items = await db.collection(col).find({ $or: [{ className: cls }, { className: { $in: [null, ''] } }] }).sort({ createdAt: -1 }).toArray();
+    const subs = await db.collection('task_submissions').find({ studentId: decoded.studentId, type: req.params.type }).toArray();
+    const subMap: Record<string, any> = {};
+    subs.forEach((s: any) => { subMap[String(s.itemId)] = s; });
+    res.json(items.map((it: any) => ({ ...it, submission: subMap[String(it._id)] || null })));
+}));
+
+router.post('/student-portal/tasks/:type/:id/submit', authed(async (req, res, db, decoded) => {
+    if (!STUDENT_TASK[req.params.type]) return res.status(404).json({ message: 'Unknown task type' });
+    const { answer, attachment, attachmentName, attachmentType } = req.body || {};
+    if (!answer && !attachment) return res.status(400).json({ message: 'Provide a written answer or upload your work' });
+    const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
+    await db.collection('task_submissions').updateOne(
+        { studentId: decoded.studentId, type: req.params.type, itemId: req.params.id },
+        { $set: {
+            studentId: decoded.studentId, studentName: student?.studentName, registrationNo: student?.registrationNo || student?.admNo,
+            type: req.params.type, itemId: req.params.id, answer: answer || '', attachment: attachment || '', attachmentName, attachmentType,
+            status: 'Submitted', submittedAt: new Date(),
+        } },
+        { upsert: true },
+    );
+    res.json({ message: 'Submitted successfully' });
 }));
 
 // ─── Student Portal: academic requisitions ────────────────────────────────────
@@ -1168,7 +1317,7 @@ router.get('/student-portal/fee-structure', authed(async (req, res, db, decoded)
 }));
 
 // ─── Shared M-PESA STK helpers (student & parent) ─────────────────────────────
-const initiateStk = async (req: Request, db: Db, sid: string) => {
+const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 'wallet' = 'fees') => {
     const { phone, amount, invoiceId } = req.body || {};
     if (!phone || !amount || Number(amount) <= 0) throw new Error('Phone number and a valid amount are required');
     const cfg = await resolveMpesaConfig(db);
@@ -1176,49 +1325,23 @@ const initiateStk = async (req: Request, db: Db, sid: string) => {
     if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured. Contact the school administrator.');
 
     const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const regNo = student?.registrationNo || student?.admNo || 'Fees';
     const r = await stkPush(cfg, {
         phone, amount: Number(amount),
-        accountRef: student?.registrationNo || student?.admNo || 'Fees',
-        description: 'School fees', callbackUrl: `${cfg.callbackBase}/mpesa/stk-callback`,
+        accountRef: regNo,            // M-PESA account number = student reg number
+        description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
+        callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
     });
     await getMetaDb().collection('mpesa_transactions').insertOne({
-        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId,
+        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
         tenantDbName: (req as any).tenantContext?.databaseName, studentId: sid, studentName: student?.studentName,
-        invoiceId: invoiceId || null, amount: Number(amount), phone, status: 'pending', applied: false, createdAt: new Date(),
+        registrationNo: regNo, invoiceId: purpose === 'wallet' ? null : (invoiceId || null), amount: Number(amount), phone,
+        status: 'pending', applied: false, createdAt: new Date(),
     });
-    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on your phone to complete payment.' };
+    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on your phone to complete.' };
 };
 
-const checkStkStatus = async (req: Request, db: Db) => {
-    const checkoutRequestId = String(req.query.checkoutRequestId || '');
-    const meta = getMetaDb();
-    const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId });
-    if (!txn) return { status: 'unknown' };
-    if (txn.status === 'completed') return { status: 'completed', receipt: txn.mpesaReceipt };
-    if (txn.status === 'failed') return { status: 'failed', message: txn.resultDesc };
-
-    // Still pending → query Daraja (errors mean "still processing" → keep pending).
-    try {
-        const cfg = await resolveMpesaConfig(db);
-        const q: any = await stkQuery(cfg, checkoutRequestId);
-        const code = Number(q.ResultCode);
-        if (code === 0) {
-            const upd = await meta.collection('mpesa_transactions').updateOne(
-                { _id: txn._id, applied: { $ne: true } },
-                { $set: { status: 'completed', applied: true, resultDesc: q.ResultDesc, completedAt: new Date() } },
-            );
-            if (upd.modifiedCount > 0) {
-                await applyMpesaPayment(db, { studentId: txn.studentId, studentName: txn.studentName, invoiceId: txn.invoiceId, amount: txn.amount, receipt: txn.mpesaReceipt || checkoutRequestId, phone: txn.phone });
-            }
-            return { status: 'completed' };
-        }
-        if (!isNaN(code) && code !== 0) {
-            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: q.ResultDesc } });
-            return { status: 'failed', message: q.ResultDesc };
-        }
-    } catch { /* still processing */ }
-    return { status: 'pending' };
-};
+const checkStkStatus = (req: Request, db: Db) => checkStkAndComplete(db, String(req.query.checkoutRequestId || ''));
 
 // ─── Student Portal: fee account + pay ────────────────────────────────────────
 router.get('/student-portal/fees', authed(async (req, res, db, decoded) => {
@@ -1240,20 +1363,29 @@ router.get('/student-portal/wallet', authed(async (req, res, db, decoded) => {
     res.json({ wallet, transactions });
 }));
 
+// Wallet top-up via M-PESA STK Push (credited on confirmation).
 router.post('/student-portal/wallet/topup', authed(async (req, res, db, decoded) => {
-    const { amount, source, reference } = req.body || {};
-    const w = await creditWallet(db, decoded.studentId, amount, { source: source || 'M-PESA', reference, by: 'student' });
-    res.json(w);
+    res.json(await initiateStk(req, db, decoded.studentId, 'wallet'));
 }));
 
 router.post('/student-portal/wallet/pay-fees', authed(async (req, res, db, decoded) => {
-    const { amount } = req.body || {};
-    const w = await debitWallet(db, decoded.studentId, amount, { category: 'Fees', description: 'School fees payment from wallet', by: 'student' });
-    await db.collection('student_payment_requests').insertOne({
-        studentId: decoded.studentId, amount: Number(amount), method: 'WALLET', status: 'Pending',
-        notes: 'Paid from student wallet', submittedAt: new Date(),
-    }).catch(() => {});
-    res.json(w);
+    // Pay only the outstanding fee balance — capped by the wallet balance.
+    const summary = await buildFeesSummary(db, decoded.studentId);
+    const feeBalance = Number(summary.balance || 0);
+    if (feeBalance <= 0) return res.status(400).json({ message: 'You have no outstanding fee balance.' });
+
+    const wallet = await ensureWallet(db, decoded.studentId);
+    const payable = Math.min(feeBalance, Number(wallet.balance || 0));
+    if (payable <= 0) return res.status(400).json({ message: 'Insufficient wallet balance.' });
+
+    const w = await debitWallet(db, decoded.studentId, payable, { category: 'Fees', description: 'School fees payment from wallet', by: 'student' });
+    const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
+    await applyMpesaPayment(db, {
+        studentId: decoded.studentId, studentName: student?.studentName,
+        registrationNo: student?.registrationNo || student?.admNo,
+        amount: payable, receipt: `${Date.now().toString().slice(-8)}`, method: 'WALLET',
+    });
+    res.json({ ...w, paid: payable, message: `KSh ${payable.toLocaleString()} paid towards fees` });
 }));
 
 // ─── Student Portal: receipts ─────────────────────────────────────────────────
@@ -1428,7 +1560,11 @@ const INACTIVE_EXAM_STATUS = new Set(['draft', 'archived', 'completed', 'inactiv
 router.get('/staff-portal/exams', authed(async (req, res, db) => {
     const exams = (await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray())
         .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()));
-    res.json(exams.map((e: any) => ({ _id: String(e._id), name: e.examName || e.name || e.type || 'Exam', term: e.term, academicYear: e.academicYear })));
+    res.json(exams.map((e: any) => ({
+        _id: String(e._id), name: e.examName || e.name || e.type || 'Exam',
+        term: e.term, academicYear: e.academicYear,
+        totalMarks: Number(e.settings?.totalMarks) || 100,   // "Out Of" from exam settings
+    })));
 }));
 
 // Guard: confirm this teacher is assigned to (className, subject) before mutating.
@@ -1447,6 +1583,9 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
     const students = await studentsInClass(db, className);
+    // "Out Of" is determined by the exam's Total Marks setting.
+    const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
+    const examOutOf = Number(examDoc?.settings?.totalMarks) || 100;
     const existing = examId ? await db.collection('exam_marks').find({ examId, subjectName: subject, className }).toArray() : [];
     const markMap: Record<string, any> = {};
     existing.forEach((m: any) => { markMap[String(m.studentId)] = m; });
@@ -1455,7 +1594,7 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
         name: s.studentName,
         registrationNo: s.registrationNo || s.admNo,
         marks: markMap[String(s._id)]?.marksObtained ?? '',
-        outOf: markMap[String(s._id)]?.totalMarks ?? 100,
+        outOf: examOutOf,
     })));
 }));
 
@@ -1580,6 +1719,175 @@ router.get('/staff-portal/my-attendance', authed(async (req, res, db, decoded) =
     });
 }));
 
+// ─── Staff Portal: Academic Content (each teacher manages their own) ──────────
+const STAFF_CONTENT: Record<string, string> = {
+    'lesson-plans': 'lesson_plans',
+    'schemes': 'schemes_of_work',
+    'resources': 'academic_resources',
+    'assignments': 'academic_assignments',
+    'homework': 'homework',
+};
+const contentCollection = (type: string) => STAFF_CONTENT[type];
+const ownFilter = (decoded: any) => ({ $or: [{ createdBy: decoded.staffId }, { teacherId: decoded.staffId }] });
+
+router.get('/staff-portal/content/:type', authed(async (req, res, db, decoded) => {
+    const col = contentCollection(req.params.type);
+    if (!col) return res.status(404).json({ message: 'Unknown content type' });
+    const items = await db.collection(col).find(ownFilter(decoded)).sort({ createdAt: -1 }).limit(200).toArray();
+    res.json(items);
+}));
+
+router.post('/staff-portal/content/:type', authed(async (req, res, db, decoded) => {
+    const col = contentCollection(req.params.type);
+    if (!col) return res.status(404).json({ message: 'Unknown content type' });
+    const doc = { ...(req.body || {}), createdBy: decoded.staffId, teacherId: decoded.staffId, teacherName: decoded.name, createdAt: new Date(), updatedAt: new Date() };
+    const r = await db.collection(col).insertOne(doc);
+    res.status(201).json({ _id: r.insertedId, ...doc });
+}));
+
+router.patch('/staff-portal/content/:type/:id', authed(async (req, res, db, decoded) => {
+    const col = contentCollection(req.params.type);
+    if (!col) return res.status(404).json({ message: 'Unknown content type' });
+    const oid = safeObjId(req.params.id);
+    if (!oid) return res.status(400).json({ message: 'Invalid id' });
+    const { _id, createdBy, teacherId, createdAt, ...body } = req.body || {};
+    await db.collection(col).updateOne({ _id: oid, ...ownFilter(decoded) }, { $set: { ...body, updatedAt: new Date() } });
+    res.json({ message: 'Saved' });
+}));
+
+router.delete('/staff-portal/content/:type/:id', authed(async (req, res, db, decoded) => {
+    const col = contentCollection(req.params.type);
+    if (!col) return res.status(404).json({ message: 'Unknown content type' });
+    const oid = safeObjId(req.params.id);
+    if (!oid) return res.status(400).json({ message: 'Invalid id' });
+    const r = await db.collection(col).deleteOne({ _id: oid, ...ownFilter(decoded) });
+    if (r.deletedCount === 0) return res.status(404).json({ message: 'Not found or not yours' });
+    res.json({ message: 'Deleted' });
+}));
+
+// Teacher: view submissions for one of their assignments/homework.
+router.get('/staff-portal/content/:type/:id/submissions', authed(async (req, res, db, decoded) => {
+    const col = contentCollection(req.params.type);
+    const subType = req.params.type === 'assignments' ? 'assignment' : req.params.type === 'homework' ? 'homework' : null;
+    if (!col || !subType) return res.status(400).json({ message: 'Submissions are only for assignments and homework' });
+    const oid = safeObjId(req.params.id);
+    const item = oid ? await db.collection(col).findOne({ _id: oid, ...ownFilter(decoded) }) : null;
+    if (!item) return res.status(404).json({ message: 'Not found or not yours' });
+    const submissions = await db.collection('task_submissions').find({ type: subType, itemId: req.params.id }).sort({ submittedAt: -1 }).toArray();
+    res.json({ item: { title: item.title, totalMarks: item.totalMarks, className: item.className, subject: item.subject }, submissions });
+}));
+
+// Finance module (permission-gated): real collections/outstanding dashboard.
+router.get('/staff-portal/finance/summary', authed(async (req, res, db, decoded) => {
+    const staff = await db.collection('staff').findOne({ _id: new ObjectId(decoded.staffId) });
+    const perms = staff ? await resolveStaffPermissions(db, staff) : [];
+    if (!(perms.includes('*') || perms.includes('finance.view'))) return res.status(403).json({ message: 'You do not have finance access' });
+
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const payments = await db.collection('payments').find({}).sort({ createdAt: -1 }).toArray().catch(() => []);
+    const invoices = await db.collection('invoices').find({}).toArray().catch(() => []);
+
+    const num = (v: any) => Number(v || 0);
+    const todayCollections = payments.filter((p: any) => p.createdAt && new Date(p.createdAt) >= startOfDay).reduce((s: number, p: any) => s + num(p.amount), 0);
+    const totalCollected = payments.reduce((s: number, p: any) => s + num(p.amount), 0);
+    const billed = invoices.reduce((s: number, i: any) => s + num(i.total_due ?? i.amount), 0);
+    const paid = invoices.reduce((s: number, i: any) => s + num(i.paid_amount ?? i.amount_paid), 0);
+    const outstanding = Math.max(0, billed - paid);
+    const defaulters = new Set(invoices.filter((i: any) => num(i.balance ?? (num(i.total_due) - num(i.paid_amount))) > 0).map((i: any) => String(i.student_id || i.studentId))).size;
+
+    res.json({
+        todayCollections, totalCollected, billed, paid, outstanding, defaulters,
+        recentPayments: payments.slice(0, 8).map((p: any) => ({ name: p.studentName, amount: num(p.amount), method: p.payment_mode || p.method, reference: p.reference, date: p.createdAt })),
+    });
+}));
+
+// ── Staff-portal module dashboards (permission-gated, real data) ───────────────
+const MODULE_GUARD: Record<string, string> = {
+    accounting: 'accounting.income', hr: 'hr.manage', admissions: 'admissions.manage',
+    library: 'library.manage', transport: 'transport.manage', boarding: 'boarding.manage',
+    health: 'health.manage', reports: 'reports.view',
+};
+
+async function buildModuleSummary(db: Db, key: string) {
+    const count = async (col: string, q: any = {}) => { try { return await db.collection(col).countDocuments(q); } catch { return 0; } };
+    const all = async (col: string, q: any = {}) => { try { return await db.collection(col).find(q).toArray(); } catch { return []; } };
+    const sum = (rows: any[], f: string) => rows.reduce((s, r) => s + Number(r[f] || 0), 0);
+    const ksh = (n: number) => `KSh ${Number(n || 0).toLocaleString()}`;
+    const d = (x: any) => (x ? new Date(x).toLocaleDateString('en-GB') : '');
+
+    switch (key) {
+        case 'accounting': {
+            const income = await all('income'); const expenses = await all('expenses');
+            const inc = sum(income, 'amount'); const exp = sum(expenses, 'amount');
+            const recent = [
+                ...income.map((r: any) => ({ title: r.source || r.description || 'Income', subtitle: 'Income · ' + d(r.date || r.createdAt), right: '+' + ksh(r.amount), ts: r.date || r.createdAt })),
+                ...expenses.map((r: any) => ({ title: r.category || r.description || 'Expense', subtitle: 'Expense · ' + d(r.date || r.createdAt), right: '-' + ksh(r.amount), ts: r.date || r.createdAt })),
+            ].sort((a, b) => +new Date(b.ts || 0) - +new Date(a.ts || 0)).slice(0, 8);
+            return { stats: [{ label: 'Total Income', value: ksh(inc) }, { label: 'Total Expenses', value: ksh(exp) }, { label: 'Net Balance', value: ksh(inc - exp) }], recent };
+        }
+        case 'hr': {
+            const staff = await all('staff');
+            const teaching = staff.filter((s: any) => /teacher/i.test(s.designation || '') || s.isTeachingStaff).length;
+            const pendingLeave = await count('leave_requests', { status: { $in: ['Pending', 'HOD Approved'] } });
+            const recent = staff.slice(-8).reverse().map((s: any) => ({ title: s.employeeName || s.name, subtitle: s.designation || 'Staff', right: '' }));
+            return { stats: [{ label: 'Total Staff', value: staff.length }, { label: 'Teaching Staff', value: teaching }, { label: 'Support Staff', value: staff.length - teaching }, { label: 'Pending Leave', value: pendingLeave }], recent };
+        }
+        case 'admissions': {
+            const students = await all('students');
+            const pending = await count('admissions', { status: { $in: ['Pending', 'pending', 'New'] } });
+            const recent = [...students].sort((a, b) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0)).slice(0, 8)
+                .map((s: any) => ({ title: s.studentName, subtitle: `${s.studentClass || ''} · ${s.registrationNo || s.admNo || ''}`, right: d(s.createdAt || s.admissionDate) }));
+            return { stats: [{ label: 'Total Students', value: students.length }, { label: 'Pending Admissions', value: pending }], recent };
+        }
+        case 'library': {
+            const books = (await count('library_books')) || (await count('books'));
+            const issued = (await count('library_loans')) || (await count('book_issues'));
+            return { stats: [{ label: 'Total Books', value: books }, { label: 'Issued', value: issued }, { label: 'Available', value: Math.max(0, books - issued) }], recent: [] };
+        }
+        case 'transport': {
+            const buses = await count('buses'); const zones = await count('transport_zones');
+            const onTransport = await count('students', { transportZone: { $nin: [null, ''] } });
+            return { stats: [{ label: 'Buses', value: buses }, { label: 'Routes / Zones', value: zones }, { label: 'Students on Transport', value: onTransport }], recent: [] };
+        }
+        case 'boarding': {
+            const hostels = await count('hostels'); const beds = await count('hostel_beds'); const boarders = await count('hostel_allocations');
+            return { stats: [{ label: 'Hostels', value: hostels }, { label: 'Beds', value: beds }, { label: 'Boarders', value: boarders }], recent: [] };
+        }
+        case 'health': {
+            const records = await all('student_medical');
+            const recent = records.slice(-8).reverse().map((r: any) => ({ title: r.studentName || 'Student', subtitle: r.condition || r.notes || 'Medical record', right: d(r.date || r.createdAt) }));
+            return { stats: [{ label: 'Medical Records', value: records.length }], recent };
+        }
+        case 'reports': {
+            const students = await count('students'); const staff = await count('staff');
+            const collected = sum(await all('payments'), 'amount');
+            return { stats: [{ label: 'Students', value: students }, { label: 'Staff', value: staff }, { label: 'Total Collected', value: ksh(collected) }], recent: [] };
+        }
+        default: return { stats: [], recent: [] };
+    }
+}
+
+router.get('/staff-portal/module/:key/summary', authed(async (req, res, db, decoded) => {
+    const guard = MODULE_GUARD[req.params.key];
+    if (!guard) return res.status(404).json({ message: 'Unknown module' });
+    const staff = await db.collection('staff').findOne({ _id: new ObjectId(decoded.staffId) });
+    const perms = staff ? await resolveStaffPermissions(db, staff) : [];
+    if (!(perms.includes('*') || perms.includes(guard))) return res.status(403).json({ message: 'You do not have access to this module' });
+    res.json(await buildModuleSummary(db, req.params.key));
+}));
+
+// Teacher: grade a submission.
+router.post('/staff-portal/submissions/:id/grade', authed(async (req, res, db, decoded) => {
+    const { marks, feedback } = req.body || {};
+    const oid = safeObjId(req.params.id);
+    if (!oid) return res.status(400).json({ message: 'Invalid id' });
+    await db.collection('task_submissions').updateOne(
+        { _id: oid },
+        { $set: { marks: marks != null && marks !== '' ? Number(marks) : null, feedback: feedback || '', status: 'Graded', gradedBy: decoded.name, gradedAt: new Date() } },
+    );
+    res.json({ message: 'Graded' });
+}));
+
 // ═══ Parent Portal ═══════════════════════════════════════════════════════════
 router.get('/parent-portal/summary', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
@@ -1676,8 +1984,7 @@ router.get('/parent-portal/wallet', authed(async (req, res, db, decoded) => {
 }));
 
 router.post('/parent-portal/wallet/topup', authed(async (req, res, db, decoded) => {
-    const { amount, source, reference } = req.body || {};
-    res.json(await creditWallet(db, parentStudentId(req, decoded), amount, { source: source || 'M-PESA', reference, by: 'parent' }));
+    res.json(await initiateStk(req, db, parentStudentId(req, decoded), 'wallet'));
 }));
 
 router.post('/parent-portal/wallet/status', authed(async (req, res, db, decoded) => {

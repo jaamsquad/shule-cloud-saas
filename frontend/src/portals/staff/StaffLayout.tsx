@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video } from "lucide-react";
+import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
 import { tenantDisplayName } from "../portal";
@@ -9,31 +9,40 @@ import { PORTAL_THEME } from "../theme";
 import { useBranding } from "../useBranding";
 import { staffApi, StaffInfo } from "./staffApi";
 
+// Teacher Portal — a focused portal for teaching staff only.
 const NAV: PortalNavSection[] = [
-    {
-        label: "Dashboard",
-        items: [
-            { to: "/", label: "My Profile", icon: User },
-            { to: "/my-attendance", label: "My Attendance", icon: UserCheck },
-        ],
-    },
-    {
-        label: "Academics",
-        items: [
-            { to: "/classes", label: "My Classes", icon: Users },
-            { to: "/timetable", label: "My Timetable", icon: CalendarClock },
-            { to: "/marks", label: "Marks Entry", icon: PencilLine },
-            { to: "/results", label: "Results", icon: BarChart3 },
-            { to: "/attendance", label: "Mark Attendance", icon: CalendarCheck },
-            { to: "/live", label: "Live Classes", icon: Video },
-        ],
-    },
-    { label: "Communication", items: [{ to: "/announcements", label: "Announcements", icon: Megaphone }] },
+    { label: "Dashboard", items: [
+        { to: "/", label: "My Profile", icon: User },
+        { to: "/my-attendance", label: "My Attendance", icon: UserCheck },
+    ]},
+    { label: "Teaching", items: [
+        { to: "/classes", label: "My Classes", icon: Users },
+        { to: "/timetable", label: "My Timetable", icon: CalendarClock },
+        { to: "/live", label: "Live Classes", icon: Video },
+    ]},
+    { label: "Assessment", items: [
+        { to: "/marks", label: "Marks Entry", icon: PencilLine },
+        { to: "/results", label: "Results", icon: BarChart3 },
+    ]},
+    { label: "Attendance", items: [
+        { to: "/attendance", label: "Mark Attendance", icon: CalendarCheck },
+    ]},
+    { label: "Academic Content", items: [
+        { to: "/lesson-plans", label: "Lesson Plans", icon: NotebookPen },
+        { to: "/schemes", label: "Schemes of Work", icon: BookMarked },
+        { to: "/resources", label: "Notes & Resources", icon: BookOpen },
+        { to: "/assignments", label: "Assignments", icon: ClipboardList },
+        { to: "/homework", label: "Homework", icon: FileText },
+    ]},
+    { label: "Communication", items: [
+        { to: "/announcements", label: "Announcements", icon: Megaphone },
+    ]},
 ];
 
 export interface StaffCtx {
     staff: StaffInfo;
     api: typeof staffApi;
+    permissions: string[];
 }
 
 export default function StaffLayout() {
@@ -74,16 +83,18 @@ export default function StaffLayout() {
         return <div className="min-h-screen flex items-center justify-center bg-[#eef2f6]"><Loader2 className="w-6 h-6 animate-spin text-[#159a52]" /></div>;
     }
 
+    const permissions: string[] = profile?.permissions || [];
+
     return (
         <PortalShell
-            brandName={brand?.name || staff.schoolName || tenantDisplayName() || "Staff Portal"}
+            brandName={brand?.name || staff.schoolName || tenantDisplayName() || "Teacher Portal"}
             brandCrest={brand?.logo || staff.schoolCrest || null}
             accent={PORTAL_THEME.staff.accent}
             sections={NAV}
             user={{ name: staff.name, subtitle: staff.designation, photo: staff.photo }}
             onLogout={handleLogout}
         >
-            <Outlet context={{ staff, api: staffApi } satisfies StaffCtx} />
+            <Outlet context={{ staff, api: staffApi, permissions } satisfies StaffCtx} />
         </PortalShell>
     );
 }

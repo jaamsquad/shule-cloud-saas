@@ -16,29 +16,36 @@ interface Props {
     sections: SBSection[];
     defaults?: Record<string, any>;
     extra?: ReactNode;           // rendered below the sections
+    recordId?: string;           // edit a specific record (e.g. a term)
+    recordField?: string;        // field that holds recordId (default "recordId")
+    prefill?: Record<string, any>; // values to seed when creating (e.g. term basics)
 }
 
-// Generic config-driven settings page: loads the single doc of `collection`,
-// edits it, and saves via POST/PATCH.
-export default function SettingsBuilder({ title, subtitle, icon: Icon, collection, sections, defaults = {}, extra }: Props) {
+// Generic config-driven settings page. Edits a single doc of `collection`, or a
+// specific record when `recordId`/`recordField` are given (e.g. one per term).
+export default function SettingsBuilder({ title, subtitle, icon: Icon, collection, sections, defaults = {}, extra, recordId, recordField = "recordId", prefill }: Props) {
     const qc = useQueryClient();
     const [docId, setDocId] = useState<string | null>(null);
-    const [form, setForm] = useState<Record<string, any>>(defaults);
+    const [form, setForm] = useState<Record<string, any>>({ ...defaults, ...prefill });
 
     const { data, isLoading } = useQuery({
-        queryKey: [collection],
-        queryFn: async () => { const r = await api.get(`/${collection}`); return Array.isArray(r.data) ? r.data[0] : r.data; },
+        queryKey: [collection, recordId || "single"],
+        queryFn: async () => { const r = await api.get(`/${collection}`); return Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []); },
     });
 
     useEffect(() => {
-        if (data) { setDocId(data._id || data.id); setForm({ ...defaults, ...data }); }
-    }, [data]); // eslint-disable-line
+        const arr: any[] = Array.isArray(data) ? data : [];
+        const doc = recordId ? arr.find(d => String(d[recordField]) === String(recordId)) : arr[0];
+        if (doc) { setDocId(doc._id || doc.id); setForm({ ...defaults, ...prefill, ...doc }); }
+        else { setDocId(null); setForm({ ...defaults, ...prefill }); }
+    }, [data, recordId]); // eslint-disable-line
 
     const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
     const save = useMutation({
         mutationFn: async () => {
-            const payload = { ...form, updatedAt: new Date() };
+            const payload: any = { ...form, updatedAt: new Date() };
+            if (recordId) payload[recordField] = recordId;
             return docId ? api.patch(`/${collection}/${docId}`, payload) : api.post(`/${collection}`, payload);
         },
         onSuccess: (res: any) => { if (!docId) setDocId(res.data?.id || res.data?._id); qc.invalidateQueries({ queryKey: [collection] }); toast.success("Settings saved"); },

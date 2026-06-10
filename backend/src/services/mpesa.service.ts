@@ -1,4 +1,6 @@
 import { Db, ObjectId } from 'mongodb';
+import { getMetaDb } from '../lib/mongodb';
+import { creditWallet } from './wallet.service';
 
 // ─── Safaricom Daraja (M-PESA) integration — PER-TENANT credentials ────────────
 // Each school stores its own Daraja credentials (Consumer Key/Secret, Shortcode,
@@ -24,23 +26,31 @@ const baseFor = (env: string) => env === 'production' ? 'https://api.safaricom.c
 
 export const platformCallbackBase = () => (process.env.MPESA_CALLBACK_URL || '').replace(/\/$/, '');
 
-/** Resolve a tenant's M-PESA config from its `mpesa_settings` doc (env as fallback). */
+/**
+ * Resolve a tenant's M-PESA config. Sources (in priority order):
+ *   1. mpesa_settings (the dedicated M-PESA Integration page)
+ *   2. integration_settings { integration: 'daraja' } (the generic Integrations page)
+ *   3. environment variables (platform default)
+ */
 export const resolveMpesaConfig = async (db: Db): Promise<MpesaConfig> => {
     let s: any = {};
     try { s = (await db.collection('mpesa_settings').findOne({})) || {}; } catch { /* ignore */ }
-    const env = (s.env || process.env.MPESA_ENV || 'sandbox').toLowerCase() as 'sandbox' | 'production';
+    let ig: any = {};
+    try { ig = (await db.collection('integration_settings').findOne({ integration: 'daraja' })) || {}; } catch { /* ignore */ }
+
+    const env = String(s.env || ig.environment || ig.env || process.env.MPESA_ENV || 'sandbox').toLowerCase() as 'sandbox' | 'production';
     return {
         env,
         base: baseFor(env),
-        key: s.consumerKey || process.env.MPESA_CONSUMER_KEY || '',
-        secret: s.consumerSecret || process.env.MPESA_CONSUMER_SECRET || '',
-        shortcode: s.shortcode || process.env.MPESA_SHORTCODE || '',
-        passkey: s.passkey || process.env.MPESA_PASSKEY || '',
-        txType: s.txType || process.env.MPESA_TX_TYPE || 'CustomerPayBillOnline',
-        initiator: s.initiator || process.env.MPESA_INITIATOR || '',
-        securityCredential: s.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL || '',
+        key: s.consumerKey || ig.consumerKey || process.env.MPESA_CONSUMER_KEY || '',
+        secret: s.consumerSecret || ig.consumerSecret || process.env.MPESA_CONSUMER_SECRET || '',
+        shortcode: s.shortcode || ig.shortCode || ig.shortcode || process.env.MPESA_SHORTCODE || '',
+        passkey: s.passkey || ig.passkey || process.env.MPESA_PASSKEY || '',
+        txType: s.txType || ig.txType || process.env.MPESA_TX_TYPE || 'CustomerPayBillOnline',
+        initiator: s.initiator || ig.initiator || process.env.MPESA_INITIATOR || '',
+        securityCredential: s.securityCredential || ig.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL || '',
         callbackBase: platformCallbackBase(),
-        enabled: s.enabled !== false,
+        enabled: s.enabled !== false && ig.enabled !== false,
     };
 };
 
@@ -128,6 +138,58 @@ export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, con
     return data;
 }
 
+// Initiate an STK push for a wallet top-up or fee payment and store the txn.
+export async function initiateStkTopup(db: Db, opts: { tenantDbName: string; studentId: string; phone: string; amount: number; purpose?: 'wallet' | 'fees'; accountRef?: string; studentName?: string; registrationNo?: string; invoiceId?: string }) {
+    const cfg = await resolveMpesaConfig(db);
+    if (!isMpesaConfigured(cfg)) throw new Error('M-PESA is not configured for this school.');
+    if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured.');
+    const purpose = opts.purpose || 'wallet';
+    const r = await stkPush(cfg, {
+        phone: opts.phone, amount: Number(opts.amount),
+        accountRef: opts.accountRef || opts.registrationNo || 'Wallet',
+        description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
+        callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+    });
+    await getMetaDb().collection('mpesa_transactions').insertOne({
+        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
+        tenantDbName: opts.tenantDbName, studentId: opts.studentId, studentName: opts.studentName,
+        registrationNo: opts.registrationNo, invoiceId: opts.invoiceId || null, amount: Number(opts.amount), phone: opts.phone,
+        status: 'pending', applied: false, createdAt: new Date(),
+    });
+    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on the phone to complete.' };
+}
+
+// Poll Daraja for an STK transaction and apply it (wallet credit OR fee payment).
+export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
+    const meta = getMetaDb();
+    const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId });
+    if (!txn) return { status: 'unknown' as const };
+    if (txn.status === 'completed') return { status: 'completed' as const, receipt: txn.mpesaReceipt };
+    if (txn.status === 'failed') return { status: 'failed' as const, message: txn.resultDesc };
+    try {
+        const cfg = await resolveMpesaConfig(db);
+        const q: any = await stkQuery(cfg, checkoutRequestId);
+        const code = Number(q.ResultCode);
+        if (code === 0) {
+            const upd = await meta.collection('mpesa_transactions').updateOne(
+                { _id: txn._id, applied: { $ne: true } },
+                { $set: { status: 'completed', applied: true, resultDesc: q.ResultDesc, completedAt: new Date() } },
+            );
+            if (upd.modifiedCount > 0) {
+                const ref = txn.mpesaReceipt || checkoutRequestId;
+                if (txn.purpose === 'wallet') await creditWallet(db, txn.studentId, txn.amount, { source: 'M-PESA', reference: ref, by: 'mpesa' });
+                else await applyMpesaPayment(db, { studentId: txn.studentId, studentName: txn.studentName, registrationNo: txn.registrationNo, invoiceId: txn.invoiceId, amount: txn.amount, receipt: ref });
+            }
+            return { status: 'completed' as const };
+        }
+        if (!isNaN(code) && code !== 0) {
+            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: q.ResultDesc } });
+            return { status: 'failed' as const, message: q.ResultDesc };
+        }
+    } catch { /* still processing */ }
+    return { status: 'pending' as const };
+}
+
 export const parseStkCallback = (stk: any) => {
     const items: any[] = stk?.CallbackMetadata?.Item || [];
     const m: Record<string, any> = {};
@@ -135,23 +197,49 @@ export const parseStkCallback = (stk: any) => {
     return { amount: m.Amount, mpesaReceiptNumber: m.MpesaReceiptNumber, phoneNumber: m.PhoneNumber, transactionDate: m.TransactionDate };
 };
 
-/** Record a confirmed M-PESA payment into a tenant DB and update its invoice. */
-export async function applyMpesaPayment(db: Db, opts: { studentId?: string; studentName?: string; invoiceId?: string; amount: number; receipt: string; phone?: string }) {
-    const receiptNo = opts.receipt ? `MP${opts.receipt}` : `MP${Date.now().toString().slice(-8)}`;
+const reduceInvoice = (inv: any, pay: number) => {
+    const total = Number(inv.total_due || inv.amount || 0);
+    const newPaid = Number(inv.paid_amount || inv.amount_paid || 0) + pay;
+    const newBal = Math.max(0, total - newPaid);
+    return { paid_amount: newPaid, amount_paid: newPaid, balance: newBal, status: newBal <= 0 ? 'PAID' : 'PARTIAL', updatedAt: new Date() };
+};
+
+/**
+ * Record a confirmed M-PESA payment and reduce the student's balance. With an
+ * invoiceId it pays that invoice; otherwise the amount is allocated across the
+ * student's outstanding invoices, oldest first. The M-PESA transaction code is
+ * stored on the payment record.
+ */
+export async function applyMpesaPayment(db: Db, opts: { studentId?: string; studentName?: string; registrationNo?: string; invoiceId?: string; amount: number; receipt: string; phone?: string; method?: string }) {
+    const amount = Number(opts.amount) || 0;
+    const method = opts.method || 'MPESA';
+    const receiptNo = opts.receipt ? `${method === 'WALLET' ? 'WL' : 'MP'}${opts.receipt}` : `MP${Date.now().toString().slice(-8)}`;
+
     await db.collection('payments').insertOne({
         receipt_no: receiptNo, student_id: opts.studentId, studentId: opts.studentId, studentName: opts.studentName,
-        amount: Number(opts.amount), method: 'MPESA', payment_mode: 'M-PESA', reference: opts.receipt,
+        registrationNo: opts.registrationNo, amount, method, payment_mode: method === 'WALLET' ? 'Wallet' : 'M-PESA',
+        reference: opts.receipt, transactionId: opts.receipt, mpesaCode: method === 'WALLET' ? undefined : opts.receipt,
         phone: opts.phone, invoice_id: opts.invoiceId, status: 'Completed', createdAt: new Date(),
     }).catch(() => {});
 
-    if (opts.invoiceId) {
-        try {
+    try {
+        if (opts.invoiceId) {
             const inv = await db.collection('invoices').findOne({ _id: new ObjectId(opts.invoiceId) });
-            if (inv) {
-                const newPaid = Number(inv.paid_amount || inv.amount_paid || 0) + Number(opts.amount);
-                const newBal = Math.max(0, Number(inv.total_due || inv.amount || 0) - newPaid);
-                await db.collection('invoices').updateOne({ _id: inv._id }, { $set: { paid_amount: newPaid, amount_paid: newPaid, balance: newBal, status: newBal <= 0 ? 'PAID' : 'PARTIAL', updatedAt: new Date() } });
-            }
-        } catch { /* ignore */ }
-    }
+            if (inv) await db.collection('invoices').updateOne({ _id: inv._id }, { $set: reduceInvoice(inv, amount) });
+            return;
+        }
+        // Allocate across the student's outstanding invoices (oldest first).
+        const sid = opts.studentId;
+        const match: any = { $or: [{ studentId: sid }, { student_id: sid }, ...(opts.registrationNo ? [{ registrationNo: opts.registrationNo }] : [])] };
+        const invoices = await db.collection('invoices').find(match).sort({ createdAt: 1 }).toArray();
+        let remaining = amount;
+        for (const inv of invoices) {
+            if (remaining <= 0) break;
+            const bal = Math.max(0, Number(inv.total_due || inv.amount || 0) - Number(inv.paid_amount || inv.amount_paid || 0));
+            if (bal <= 0) continue;
+            const pay = Math.min(bal, remaining);
+            await db.collection('invoices').updateOne({ _id: inv._id }, { $set: reduceInvoice(inv, pay) });
+            remaining -= pay;
+        }
+    } catch { /* ignore */ }
 }

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
 export default function AllEmployees() {
+    const navigate = useNavigate();
     const { items: staff, isLoading, deleteItem, updateItem } = useItems("staff");
     const { items: subjects } = useItems("subjects");
 
@@ -141,8 +142,8 @@ export default function AllEmployees() {
                                     >
                                         <Search className="w-4 h-4" />
                                     </Link>
-                                    <button 
-                                        onClick={() => handleEditClick(employee)}
+                                    <button
+                                        onClick={() => navigate(`/staff/edit/${employee._id}`)}
                                         className="w-8 h-8 rounded-full bg-[#868DF4] hover:bg-[#5C67F2] text-white flex items-center justify-center transition-colors shadow-sm"
                                     >
                                         <Edit className="w-4 h-4" />

@@ -21,11 +21,12 @@ interface NavItem {
   children?: { label: string; path: string; locked?: boolean }[];
 }
 
-const navItems: NavItem[] = [
+export const navItems: NavItem[] = [
   { label: "Dashboard", icon: Home, path: "/dashboard", moduleKey: "dashboard" },
   { label: "General Settings", icon: Settings, moduleKey: "settings", children: [
       { label: "Institute Profile", path: "/settings/profile" },
       { label: "Learning Periods", path: "/academics/periods" },
+      { label: "Academic Term Settings", path: "/settings/term-settings" },
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
       { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
       { label: "Discount Type", path: "/settings/discount-type", locked: true },
@@ -80,6 +81,7 @@ const navItems: NavItem[] = [
   { label: "Employees", icon: Briefcase, moduleKey: "employees", children: [
       { label: "All Employees", path: "/staff" },
       { label: "Teachers", path: "/staff/teachers" },
+      { label: "Departments", path: "/departments" },
       { label: "Add New", path: "/staff/new" },
       { label: "Staff ID Cards", path: "/staff/id-cards", locked: true },
       { label: "Job Letter", path: "/staff/job-letter" },
@@ -148,8 +150,7 @@ const navItems: NavItem[] = [
       { label: "Classes & Streams", path: "/academic-system/classes" },
       { label: "Student Enrollments", path: "/academic-system/enrollments" },
       { label: "Promotion Wizard", path: "/academic-system/promote" },
-      { label: "Marks Entry (V2)", path: "/academic-system/marks" },
-      { label: "Report Cards", path: "/academic-system/report-cards" },
+      
   ] },
   { label: "Academic Content", icon: GraduationCap, moduleKey: "academics_content", children: [
       { label: "Lesson Plans", path: "/academics/lesson-plans" },

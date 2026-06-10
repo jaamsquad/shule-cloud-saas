@@ -10,20 +10,20 @@ const last4 = (s?: string) => (s ? `••••${String(s).slice(-4)}` : '');
 router.get('/integrations/mpesa/settings', async (req, res) => {
     try {
         const s: any = (await tdb(req).collection('mpesa_settings').findOne({})) || {};
-        const cfg = await resolveMpesaConfig(tdb(req));
+        const cfg = await resolveMpesaConfig(tdb(req));   // effective config (incl. integration_settings)
         res.json({
-            enabled: s.enabled !== false,
-            env: s.env || 'sandbox',
-            shortcode: s.shortcode || '',
-            txType: s.txType || 'CustomerPayBillOnline',
-            initiator: s.initiator || '',
-            // never return raw secrets — only masked hints
-            consumerKeyMask: last4(s.consumerKey),
-            consumerSecretSet: !!s.consumerSecret,
-            passkeySet: !!s.passkey,
-            securityCredentialSet: !!s.securityCredential,
+            enabled: cfg.enabled,
+            env: cfg.env,
+            shortcode: cfg.shortcode,
+            txType: cfg.txType,
+            initiator: cfg.initiator || '',
+            // never return raw secrets — only masked hints (from the effective config)
+            consumerKeyMask: last4(cfg.key),
+            consumerSecretSet: !!cfg.secret,
+            passkeySet: !!cfg.passkey,
+            securityCredentialSet: !!cfg.securityCredential,
             configured: isMpesaConfigured(cfg),
-            callbackBase: platformCallbackBase(),
+            callbackBase: cfg.callbackBase,
             registered: !!s.urlsRegistered,
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

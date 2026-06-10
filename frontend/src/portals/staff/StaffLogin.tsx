@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import PortalLogin from "../PortalLogin";
@@ -12,6 +12,21 @@ export default function StaffLogin() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { data: brand } = useBranding(staffApi);
+
+    // SSO: when redirected here from the main login, auto-log-in from the hash.
+    useEffect(() => {
+        const m = window.location.hash.match(/sso=([^&]+)/);
+        if (!m) return;
+        try {
+            const sso = JSON.parse(decodeURIComponent(m[1]));
+            if (sso?.token) {
+                localStorage.setItem("staff_token", sso.token);
+                localStorage.setItem("staff_info", JSON.stringify(sso.staff || {}));
+                history.replaceState(null, "", window.location.pathname);
+                navigate("/");
+            }
+        } catch { /* ignore malformed SSO */ }
+    }, [navigate]);
 
     const handleLogin = async (username: string, password: string) => {
         if (!username || !password) { setError("Enter your username and password"); return; }
@@ -33,7 +48,7 @@ export default function StaffLogin() {
 
     return (
         <PortalLogin
-            portalName="Staff Portal"
+            portalName="Teacher Portal"
             brandName={brand?.name || tenantDisplayName() || undefined}
             brandCrest={brand?.logo || undefined}
             icon={PORTAL_THEME.staff.icon}

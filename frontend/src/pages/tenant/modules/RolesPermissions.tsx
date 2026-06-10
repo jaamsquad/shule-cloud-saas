@@ -267,10 +267,6 @@ export default function RolesPermissions() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={() => setShowAddModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-sm font-bold rounded-lg shadow-sm transition-all">
-                        <Plus className="w-4 h-4" /> Add Role
-                    </button>
                     <button
                         onClick={() => saveMut.mutate({ permissions: matrix })}
                         disabled={saveMut.isPending || !isDirty}
@@ -372,13 +368,6 @@ export default function RolesPermissions() {
                                         );
                                     })}
 
-                                    {/* Add role column */}
-                                    <th className="w-14 border-l border-gray-100 bg-gray-50 rounded-tr-xl">
-                                        <button onClick={() => setShowAddModal(true)}
-                                            className="w-full h-full flex items-center justify-center py-4 text-gray-300 hover:text-[#5C67F2] hover:bg-[#5C67F2]/5 transition-all">
-                                            <Plus className="w-5 h-5" />
-                                        </button>
-                                    </th>
                                 </tr>
                             </thead>
 
@@ -420,7 +409,6 @@ export default function RolesPermissions() {
                                                         </td>
                                                     );
                                                 })}
-                                                <td className="border-l border-gray-100" />
                                             </tr>
 
                                             {/* Module rows */}
@@ -445,8 +433,7 @@ export default function RolesPermissions() {
                                                             </td>
                                                         );
                                                     })}
-                                                    <td className="border-l border-gray-100" />
-                                                </tr>
+                                                    </tr>
                                             ))}
                                         </>
                                     );

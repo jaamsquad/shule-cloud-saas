@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { parseStkCallback, applyMpesaPayment } from '../services/mpesa.service';
+import { creditWallet } from '../services/wallet.service';
 
 const router = Router();
 
 // ─── STK Push callback ──────────────────────────────────────────────────────────
-router.post('/mpesa/stk-callback', async (req, res) => {
+// Answers at both /mpesa/callback (configured URL) and /mpesa/stk-callback (alias).
+router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
     // Always acknowledge so Safaricom stops retrying.
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     try {
@@ -23,10 +25,15 @@ router.post('/mpesa/stk-callback', async (req, res) => {
                 { $set: { status: 'completed', applied: true, mpesaReceipt: m.mpesaReceiptNumber, resultDesc: stk.ResultDesc, completedAt: new Date() } },
             );
             if (upd.modifiedCount > 0 && txn.tenantDbName) {
-                await applyMpesaPayment(getTenantDb(txn.tenantDbName), {
-                    studentId: txn.studentId, studentName: txn.studentName, invoiceId: txn.invoiceId,
-                    amount: m.amount || txn.amount, receipt: m.mpesaReceiptNumber, phone: String(m.phoneNumber || txn.phone || ''),
-                });
+                const tdb = getTenantDb(txn.tenantDbName);
+                if (txn.purpose === 'wallet') {
+                    await creditWallet(tdb, txn.studentId, m.amount || txn.amount, { source: 'M-PESA', reference: m.mpesaReceiptNumber, by: 'mpesa' });
+                } else {
+                    await applyMpesaPayment(tdb, {
+                        studentId: txn.studentId, studentName: txn.studentName, registrationNo: txn.registrationNo, invoiceId: txn.invoiceId,
+                        amount: m.amount || txn.amount, receipt: m.mpesaReceiptNumber, phone: String(m.phoneNumber || txn.phone || ''),
+                    });
+                }
             }
         } else {
             await meta.collection('mpesa_transactions').updateOne(
@@ -62,7 +69,7 @@ router.post('/mpesa/c2b/confirmation', async (req, res) => {
                     const db = getTenantDb(dbName);
                     const student = await db.collection('students').findOne({ $or: [{ registrationNo: ref }, { admNo: ref }] });
                     if (student) {
-                        await applyMpesaPayment(db, { studentId: String(student._id), studentName: student.studentName, amount: Number(p.TransAmount), receipt: p.TransID, phone: p.MSISDN });
+                        await applyMpesaPayment(db, { studentId: String(student._id), studentName: student.studentName, registrationNo: ref, amount: Number(p.TransAmount), receipt: p.TransID, phone: p.MSISDN });
                         break;
                     }
                 } catch { /* try next tenant */ }

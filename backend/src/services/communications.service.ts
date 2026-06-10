@@ -83,7 +83,7 @@ export interface SendResult { to: string; status: 'sent' | 'failed'; error?: str
 
 export const sendEmail = async (
     db: Db,
-    { to, subject, message, html, from }: { to: string[]; subject: string; message?: string; html?: string; from?: string },
+    { to, subject, message, html, from, attachments }: { to: string[]; subject: string; message?: string; html?: string; from?: string; attachments?: { filename: string; content: Buffer; contentType?: string }[] },
 ): Promise<SendResult[]> => {
     const s = await getCommSettings(db);
     if (s.emailEnabled === false) throw new Error('Email sending is disabled in Communications → Settings.');
@@ -100,6 +100,7 @@ export const sendEmail = async (
             const info = await transport.sendMail({
                 from: `"${fromName}" <${fromAddr}>`, to: r, subject,
                 text: message || undefined, html: bodyHtml || undefined,
+                attachments: attachments && attachments.length ? attachments : undefined,
             });
             result = { to: r, status: 'sent', messageId: info.messageId };
         } catch (e: any) {

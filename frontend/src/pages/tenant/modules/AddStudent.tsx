@@ -100,18 +100,42 @@ export default function AddStudent() {
                     const portalUsername = registrationNo || studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
                     const portalPassword = `shule@${cleanReg}`;
 
+                    const pick = (...keys: string[]) => { for (const k of keys) { if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== '') return String(item[k]).trim(); } return ''; };
+
                     return {
                         studentName,
                         registrationNo: registrationNo.toString(),
+                        admNo: pick('Admission No', 'Adm No', 'admNo'),
                         studentClass,
-                        gender: item['Gender'] || item.gender || 'Male',
-                        fatherName: item['Father Name'] || item['Guardian'] || item.fatherName || '',
-                        admissionDate: item['Admission Date'] || item.admissionDate || new Date().toISOString().split('T')[0],
-                        status: item['Status'] || item.status || 'Active',
+                        gender: pick('Gender', 'gender') || 'Male',
+                        dob: pick('Date of Birth', 'DOB', 'dob'),
+                        email: pick('Email', 'Student Email', 'email'),
+                        phone: pick('Phone', 'Mobile', 'phone'),
+                        address: pick('Address', 'Postal Address', 'address'),
+                        bloodGroup: pick('Blood Group', 'bloodGroup'),
+                        religion: pick('Religion', 'religion'),
+                        nationality: pick('Nationality', 'nationality'),
+                        previousSchool: pick('Previous School', 'previousSchool'),
+                        transportZone: pick('Transport Zone', 'transportZone'),
+                        admissionDate: pick('Admission Date', 'admissionDate') || new Date().toISOString().split('T')[0],
+                        // Father / Guardian
+                        fatherName: pick('Father Name', 'Guardian', 'fatherName'),
+                        fatherNationalId: pick('Father National ID', 'Father ID', 'fatherNationalId'),
+                        fatherPhone: pick('Father Phone', 'Father Mobile', 'fatherPhone'),
+                        fatherOccupation: pick('Father Occupation', 'fatherOccupation'),
+                        fatherEmail: pick('Father Email', 'fatherEmail'),
+                        // Mother
+                        motherName: pick('Mother Name', 'motherName'),
+                        motherNationalId: pick('Mother National ID', 'Mother ID', 'motherNationalId'),
+                        motherPhone: pick('Mother Phone', 'Mother Mobile', 'motherPhone'),
+                        motherOccupation: pick('Mother Occupation', 'motherOccupation'),
+                        motherEmail: pick('Mother Email', 'motherEmail'),
+                        // General parent contact (used by receipts / result emails)
+                        parentEmail: pick('Father Email', 'Mother Email', 'Parent Email'),
+                        parentPhone: pick('Father Phone', 'Mother Phone', 'Parent Phone'),
+                        status: pick('Status', 'status') || 'Active',
                         balance: Number(item['Balance'] || item.balance) || 0,
                         discount: String(item['Discount'] || item.discount || '0'),
-                        phone: item['Phone'] || item.phone || '',
-                        dob: item['DOB'] || item['Date of Birth'] || item.dob || '',
                         avatar: item['Avatar'] || item.avatar || '',
                         portalUsername,
                         portalPassword,
@@ -146,8 +170,24 @@ export default function AddStudent() {
         try {
             const { utils, writeFile } = await import('xlsx');
             const sampleData = [
-                { "Student Name": "John Doe", "Registration No": "BS101", "Class": "1 East", "Gender": "Male", "Father Name": "Peter Doe", "Balance": 0, "Discount": "0", "Phone": "+254700000000", "DOB": "2012-05-10" },
-                { "Student Name": "Jane Smith", "Registration No": "BS102", "Class": "1 West", "Gender": "Female", "Father Name": "Mary Smith", "Balance": 500, "Discount": "10", "Phone": "+254711111111", "DOB": "2013-08-15" }
+                {
+                    "Student Name": "John Doe", "Registration No": "BS101", "Admission No": "ADM001", "Class": "1 East",
+                    "Gender": "Male", "Date of Birth": "2012-05-10", "Email": "", "Phone": "+254700000000",
+                    "Address": "P.O Box 123, Nairobi", "Blood Group": "O+", "Religion": "Christianity", "Nationality": "Kenyan",
+                    "Previous School": "Sunrise Academy", "Transport Zone": "Zone A", "Admission Date": "2026-01-05",
+                    "Father Name": "Peter Doe", "Father National ID": "12345678", "Father Phone": "+254700000001", "Father Occupation": "Engineer", "Father Email": "peter@example.com",
+                    "Mother Name": "Mary Doe", "Mother National ID": "87654321", "Mother Phone": "+254700000002", "Mother Occupation": "Teacher", "Mother Email": "mary@example.com",
+                    "Balance": 0, "Discount": "0",
+                },
+                {
+                    "Student Name": "Jane Smith", "Registration No": "BS102", "Admission No": "ADM002", "Class": "1 West",
+                    "Gender": "Female", "Date of Birth": "2013-08-15", "Email": "", "Phone": "+254711111111",
+                    "Address": "P.O Box 456, Nakuru", "Blood Group": "A+", "Religion": "Islam", "Nationality": "Kenyan",
+                    "Previous School": "", "Transport Zone": "", "Admission Date": "2026-01-05",
+                    "Father Name": "Ali Smith", "Father National ID": "22334455", "Father Phone": "+254711111112", "Father Occupation": "Trader", "Father Email": "ali@example.com",
+                    "Mother Name": "Fatima Smith", "Mother National ID": "55443322", "Mother Phone": "+254711111113", "Mother Occupation": "Nurse", "Mother Email": "fatima@example.com",
+                    "Balance": 500, "Discount": "10",
+                },
             ];
             const ws = utils.json_to_sheet(sampleData);
             const wb = utils.book_new();
