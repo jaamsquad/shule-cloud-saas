@@ -16,7 +16,8 @@ import {
 } from "recharts";
 
 // ─── Student-scoped axios ─────────────────────────────────────────────────────
-const sApi = axios.create({ baseURL: "/api/v1" });
+import { API_ORIGIN } from "@/lib/config";
+const sApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 sApi.interceptors.request.use(cfg => {
     const t = localStorage.getItem("student_token");
     if (t) cfg.headers.Authorization = `Bearer ${t}`;

@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { API_ORIGIN } from "@/lib/config";
 
-const pApi = axios.create({ baseURL: "/api/v1" });
+const pApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 pApi.interceptors.request.use(cfg => {
     const t = localStorage.getItem("parent_token");
     if (t) cfg.headers.Authorization = `Bearer ${t}`;

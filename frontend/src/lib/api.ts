@@ -1,8 +1,9 @@
 import axios from "axios";
 import { currentTenantSubdomain } from "./portal";
+import { API_ORIGIN } from "./config";
 
 const api = axios.create({
-    baseURL: "/api/v1",
+    baseURL: `${API_ORIGIN}/api/v1`,
 });
 
 // Detect if we are in owner context based on URL path or hostname

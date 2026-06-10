@@ -1,8 +1,9 @@
 import axios from 'axios'
 import { usePOSAuthStore } from '../stores/posAuthStore'
+import { API_ORIGIN } from '@/lib/config'
 
 const posApi = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_ORIGIN}/api`,
   timeout: 15000,
 })
 

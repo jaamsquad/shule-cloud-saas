@@ -1,4 +1,5 @@
 import axios from "axios";
+import { API_ORIGIN } from "./config";
 
 // ─── Portal / subdomain resolution ────────────────────────────────────────────
 // Maps the browser hostname to a portal type and the tenant (school) subdomain.
@@ -79,7 +80,7 @@ export function tenantDisplayName(): string {
  */
 export function makePortalApi(tokenKey: string) {
     // Portal endpoints live on the auth router → /api/v1/auth/*
-    const inst = axios.create({ baseURL: "/api/v1/auth" });
+    const inst = axios.create({ baseURL: `${API_ORIGIN}/api/v1/auth` });
     inst.interceptors.request.use(cfg => {
         const token = localStorage.getItem(tokenKey);
         if (token) cfg.headers.Authorization = `Bearer ${token}`;

@@ -30,7 +30,24 @@ console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
 
 // Middleware
-app.use(cors());
+// CORS — allow manwellstore.com, its subdomains (egerton.manwellstore.com,
+// students.egerton.manwellstore.com, …), and localhost for development.
+const isAllowedOrigin = (origin?: string): boolean => {
+    if (!origin) return true; // same-origin / server-to-server / curl
+    try {
+        const host = new URL(origin).hostname.toLowerCase();
+        return host === 'manwellstore.com'
+            || host.endsWith('.manwellstore.com')
+            || host === 'localhost'
+            || host.endsWith('.localhost');
+    } catch { return false; }
+};
+app.use(cors({
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain'],
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 
