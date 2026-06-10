@@ -1,3 +1,4 @@
+import '../crypto-polyfill';   // must run before the MongoDB driver is used
 import { MongoClient, Db } from 'mongodb';
 
 // ─── Connection setup ─────────────────────────────────────────────────────────
