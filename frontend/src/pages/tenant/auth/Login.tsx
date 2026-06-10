@@ -7,16 +7,14 @@ import {
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { currentTenantSubdomain } from "@/lib/portal";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Tenant subdomain for the current host. Correctly treats the apex (manwellstore.com)
+// and www as NO tenant — a school is egerton.manwellstore.com / egerton.localhost.
 function detectSubdomain(): string {
-    const host = window.location.hostname;   // e.g. "muzamila.localhost" or "muzamila.shulecloud.com"
-    const parts = host.split(".");
-    const reserved = new Set(["www", "app", "owner", "api", "admin", "support", "mail", "localhost"]);
-    // 2+ parts, first part is not reserved, not bare "localhost"
-    if (parts.length >= 2 && !reserved.has(parts[0])) return parts[0];
-    return "";
+    return currentTenantSubdomain() || "";
 }
 
 function buildSubdomainUrl(subdomain: string, path: string): string {
@@ -211,10 +209,13 @@ export default function Login() {
         );
     }
 
-    // ── Invalid subdomain → redirect to localhost with ?notfound= ────────────
+    // ── Invalid subdomain → redirect to the root domain with ?notfound= ──────
     if (schoolNotFound) {
-        const { protocol, port } = window.location;
-        const base = `${protocol}//localhost${port ? `:${port}` : ""}`;
+        const { protocol, hostname, port } = window.location;
+        const rootHost = (hostname === "localhost" || hostname.endsWith(".localhost"))
+            ? "localhost"
+            : hostname.split(".").slice(-2).join(".");   // manwellstore.com
+        const base = `${protocol}//${rootHost}${port ? `:${port}` : ""}`;
         window.location.replace(`${base}/login?notfound=${encodeURIComponent(activeSubdomain)}`);
         return null;
     }

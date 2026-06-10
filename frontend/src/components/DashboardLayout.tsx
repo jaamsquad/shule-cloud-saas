@@ -27,9 +27,13 @@ function useAuthGuard() {
                 return;
             }
             const hostname = window.location.hostname;
-            const parts    = hostname.split(".");
-            const reserved = new Set(["www","app","owner","api","admin","localhost"]);
-            const urlSubdomain = parts.length >= 2 && !reserved.has(parts[0]) ? parts[0] : null;
+            // Tenant from the URL — apex (manwellstore.com) & www are NOT tenants.
+            const isLocal = hostname === "localhost" || hostname.endsWith(".localhost");
+            const parts = hostname.split(".");
+            const reserved = new Set(["www", "app", "owner", "api", "admin", "localhost"]);
+            const urlSubdomain = ((isLocal && parts.length >= 2) || (!isLocal && parts.length >= 3)) && !reserved.has(parts[0])
+                ? parts[0]
+                : null;
             if (urlSubdomain && payload.tenantSubdomain && payload.tenantSubdomain !== urlSubdomain) {
                 localStorage.removeItem("auth_token");
                 localStorage.removeItem("user");

@@ -191,7 +191,7 @@ export default function Register() {
         </div>
 
         <div className="relative z-10 space-y-4 max-w-sm mt-12">
-          <h2 className="text-3xl font-black tracking-tight leading-tight">Free Forever!</h2>
+          <h2 className="text-3xl font-black tracking-tight leading-tight">Start Free Trial Today!</h2>
           <p className="text-sm text-purple-200 leading-relaxed font-medium">
             Create your school <span className="text-white font-bold">dashboard</span> and start managing <span className="text-white font-bold">instantly</span>.
           </p>
