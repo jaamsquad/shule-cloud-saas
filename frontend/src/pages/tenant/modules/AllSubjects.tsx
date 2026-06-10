@@ -1,9 +1,10 @@
-import { Plus, Home, BookOpen, ArrowLeft, Loader2, Search, Trash2, Edit2 } from "lucide-react";
+import { Plus, Home, BookOpen, ArrowLeft, Loader2, Search, Trash2, Edit2, Table } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useState } from "react";
+import SubjectBulkGrid from "./subjects/SubjectBulkGrid";
 
 export default function AllSubjects() {
     const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function AllSubjects() {
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [editingSubject, setEditingSubject] = useState<any>(null);
+    const [showBulk, setShowBulk] = useState(false);
 
     const { data: subjects = [], isLoading } = useQuery({
         queryKey: ["subjects"],
@@ -80,13 +82,26 @@ export default function AllSubjects() {
                             className="w-full h-11 pl-12 pr-6 bg-white border border-gray-100 rounded-xl focus:outline-none focus:border-[#5C67F2] shadow-sm text-slate-700 font-bold text-sm transition-all"
                         />
                     </div>
-                    <button 
+                    <button
+                        onClick={() => setShowBulk(v => !v)}
+                        className={`h-11 px-5 font-black rounded-xl shadow-sm flex items-center gap-2 transition-all uppercase tracking-widest text-[10px] border ${showBulk ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-[#5C67F2] border-gray-100 hover:bg-slate-50"}`}
+                    >
+                        <Table className="w-4 h-4" /> Bulk Add
+                    </button>
+                    <button
                         onClick={() => navigate("/subjects/new")}
                         className="h-11 px-6 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 transition-all uppercase tracking-widest text-[10px]"
                     >
                         <Plus className="w-4 h-4" /> New Subject
                     </button>
                 </div>
+
+                {/* Excel-style bulk add */}
+                {showBulk && (
+                    <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <SubjectBulkGrid onSaved={() => setShowBulk(false)} />
+                    </div>
+                )}
 
                 {/* Category Filter Pills */}
                 <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none">

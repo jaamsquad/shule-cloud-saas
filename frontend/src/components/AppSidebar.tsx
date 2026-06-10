@@ -30,12 +30,10 @@ export const navItems: NavItem[] = [
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
       { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
       { label: "Discount Type", path: "/settings/discount-type", locked: true },
-      { label: "Accounts For Fees Invoice", path: "/settings/accounts" },
       { label: "Rules & Regulations", path: "/settings/rules" },
       { label: "Marks Grading", path: "/settings/grading" },
       { label: "Curriculum Settings", path: "/settings/curriculum" },
       { label: "Report Card Templates", path: "/settings/report-templates" },
-      { label: "Roles & Permissions", path: "/roles" },
       { label: "Theme & Language", path: "/settings/theme" },
       { label: "Account Settings", path: "/settings/account" },
       { label: "Log out", path: "/logout" },
@@ -56,6 +54,7 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
       { label: "All Students", path: "/students" },
+      { label: "Student Wallets", path: "/wallet" },
       { label: "Add New", path: "/students/new" },
       { label: "Admissions", path: "/students/admissions" },
       { label: "Manage Families", path: "/students/families" },
@@ -73,7 +72,6 @@ export const navItems: NavItem[] = [
       { label: "All Parents", path: "/parents" },
       { label: "Add New Parent", path: "/parents/new" },
   ] },
-  { label: "Student Wallets", icon: Wallet, moduleKey: "fees", path: "/wallet" },
   { label: "Portal Requests", icon: ClipboardList, moduleKey: "students", children: [
       { label: "Academic Requisitions", path: "/admin/requisitions" },
       { label: "Clearance Requests", path: "/admin/clearance" },
@@ -214,8 +212,6 @@ export const navItems: NavItem[] = [
       { label: "Learning Materials", path: "/lms/lessons" },
       { label: "LMS Dashboard", path: "/lms" },
   ] },
-  { label: "Integrations", icon: Zap, path: "/integrations", moduleKey: "integrations" },
-  { label: "Roles & Permissions", icon: Shield, path: "/roles", moduleKey: "roles" },
   { label: "Question Paper", icon: Copy, moduleKey: "question_paper", children: [
       { label: "AI Past Paper Importer", path: "/papers/import" },
       { label: "Subject Chapters", path: "/papers/chapters" },
@@ -239,8 +235,11 @@ export const navItems: NavItem[] = [
       { label: "Test Result", path: "/tests/results" }
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
-      { label: "Custom Domain & Branding", path: "/settings/domains" },
+      { label: "Integrations", path: "/integrations" },
+      { label: "Payment Gateways", path: "/settings/accounts" },
       { label: "M-PESA Integration", path: "/settings/mpesa" },
+      { label: "Custom Domain & Branding", path: "/settings/domains" },
+      { label: "Roles & Permissions", path: "/roles" },
   ] },
 ];
 

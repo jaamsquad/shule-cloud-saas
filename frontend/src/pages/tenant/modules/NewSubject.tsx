@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Plus, Home, BookOpen, ArrowLeft, Loader2, Sparkles, LayoutGrid, Type } from "lucide-react";
+import { Plus, Home, BookOpen, ArrowLeft, Loader2, Sparkles, LayoutGrid, Type, Table, SquarePen } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import SubjectBulkGrid from "./subjects/SubjectBulkGrid";
 
 export default function NewSubject() {
     const navigate = useNavigate();
+    const [mode, setMode] = useState<"single" | "bulk">("bulk");
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
     const [category, setCategory] = useState("Core");
@@ -46,14 +48,24 @@ export default function NewSubject() {
             </div>
 
             <div className="p-6">
-                <div className="max-w-[600px] mx-auto animate-in zoom-in-95 fade-in duration-500">
-                    <button 
-                        onClick={() => navigate("/subjects/all")}
-                        className="mb-6 px-5 py-1.5 bg-white border border-gray-100 text-slate-400 rounded-full text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 hover:text-slate-600 transition-all flex items-center gap-2 shadow-sm"
-                    >
-                        <ArrowLeft className="w-3 h-3" /> Back to Nodes
-                    </button>
+                <div className={`${mode === "bulk" ? "max-w-3xl" : "max-w-[600px]"} mx-auto animate-in zoom-in-95 fade-in duration-500`}>
+                    <div className="mb-6 flex items-center justify-between gap-3">
+                        <button
+                            onClick={() => navigate("/subjects/all")}
+                            className="px-5 py-1.5 bg-white border border-gray-100 text-slate-400 rounded-full text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 hover:text-slate-600 transition-all flex items-center gap-2 shadow-sm"
+                        >
+                            <ArrowLeft className="w-3 h-3" /> Back to Nodes
+                        </button>
+                        {/* Mode toggle: spreadsheet (bulk) vs single */}
+                        <div className="bg-white border border-gray-100 rounded-full p-1 flex shadow-sm">
+                            <button onClick={() => setMode("bulk")} className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${mode === "bulk" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> Table (Bulk)</button>
+                            <button onClick={() => setMode("single")} className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${mode === "single" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><SquarePen className="w-3.5 h-3.5" /> Single</button>
+                        </div>
+                    </div>
 
+                    {mode === "bulk" ? (
+                        <SubjectBulkGrid onSaved={() => navigate("/subjects/all")} />
+                    ) : (
                     <div className="bg-white rounded-[2.5rem] shadow-xl shadow-indigo-100/30 border border-gray-100 p-8 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#5C67F2]/5 rounded-bl-[8rem] -mr-8 -mt-8"></div>
                         
@@ -128,6 +140,7 @@ export default function NewSubject() {
                             </div>
                         </form>
                     </div>
+                    )}
                 </div>
             </div>
         </div>
