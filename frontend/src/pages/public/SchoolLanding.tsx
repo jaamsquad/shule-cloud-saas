@@ -1,20 +1,9 @@
 import { Link } from "react-router-dom";
 import { GraduationCap, Users, UserCheck, ShieldCheck, ArrowRight, BookOpen, CalendarDays, CreditCard, Award, Phone, Mail, MapPin } from "lucide-react";
-import { makePortalApi, currentTenantSubdomain, tenantDisplayName } from "@/lib/portal";
+import { makePortalApi, tenantDisplayName } from "@/lib/portal";
 import { useBranding } from "@/portals/useBranding";
 
 const brandingApi = makePortalApi("__none__");
-
-// Build a portal subdomain URL (students./staff./parent.) for the current school.
-function portalUrl(prefix: string) {
-    const { protocol, hostname, port } = window.location;
-    const p = port ? `:${port}` : "";
-    const sub = currentTenantSubdomain();
-    const rootDomain = (hostname === "localhost" || hostname.endsWith(".localhost"))
-        ? "localhost"
-        : (hostname.split(".").length > 2 ? hostname.split(".").slice(1).join(".") : hostname);
-    return `${protocol}//${prefix}.${sub}.${rootDomain}${p}`;
-}
 
 const GREEN = "#159a52";
 const DARK = "#0f2942";
@@ -24,10 +13,11 @@ export default function SchoolLanding() {
     const name = brand?.name || tenantDisplayName() || "Our School";
     const logo = brand?.logo;
 
+    // One login per school — the role chosen at login decides which portal opens.
     const portals = [
-        { title: "Student Portal", desc: "Results, fees, timetable, assignments & more", icon: GraduationCap, href: portalUrl("students"), color: GREEN },
-        { title: "Parent Portal", desc: "Track your child's progress, fees and reports", icon: Users, href: portalUrl("parent"), color: "#7c3aed" },
-        { title: "Teacher Portal", desc: "Classes, marks entry, attendance & content", icon: UserCheck, href: portalUrl("teacher"), color: DARK },
+        { title: "Student Portal", desc: "Results, fees, timetable, assignments & more", icon: GraduationCap, href: "/login", color: GREEN },
+        { title: "Parent Portal", desc: "Track your child's progress, fees and reports", icon: Users, href: "/login", color: "#7c3aed" },
+        { title: "Teacher Portal", desc: "Classes, marks entry, attendance & content", icon: UserCheck, href: "/login", color: DARK },
     ];
 
     const highlights = [
@@ -47,9 +37,9 @@ export default function SchoolLanding() {
                         <span className="font-black text-lg" style={{ color: DARK }}>{name}</span>
                     </div>
                     <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-500">
-                        <a href={portals[0].href} className="hover:text-slate-800">Students</a>
-                        <a href={portals[1].href} className="hover:text-slate-800">Parents</a>
-                        <a href={portals[2].href} className="hover:text-slate-800">Teachers</a>
+                        <a href="/login" className="hover:text-slate-800">Students</a>
+                        <a href="/login" className="hover:text-slate-800">Parents</a>
+                        <a href="/login" className="hover:text-slate-800">Teachers</a>
                         <a href="#contact" className="hover:text-slate-800">Contact</a>
                     </nav>
                     <Link to="/login" className="inline-flex items-center gap-1.5 text-white text-sm font-bold px-4 py-2 rounded-lg" style={{ background: GREEN }}>

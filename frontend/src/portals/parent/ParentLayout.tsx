@@ -62,8 +62,9 @@ export default function ParentLayout() {
         localStorage.removeItem("parent_token");
         localStorage.removeItem("parent_info");
         localStorage.removeItem("parent_active_child");
+        localStorage.removeItem("active_portal");
         toast.success("Logged out");
-        navigate("/login");
+        window.location.href = "/login";
     };
 
     const switchChild = (id: string) => {

@@ -148,50 +148,38 @@ export default function Login() {
                 }
             };
 
+            // Single-subdomain model: store the role's token + mark the active portal,
+            // then reload to "/" so the right portal renders on THIS school subdomain.
+            if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
+            const enterPortal = (role: "student" | "parent" | "staff") => { localStorage.setItem("active_portal", role); window.location.href = "/"; };
+
             switch (user_type) {
                 case "student":
                     localStorage.setItem("student_token", authToken);
                     localStorage.setItem("student_info", JSON.stringify(user));
                     toast.success(`Welcome back, ${user.name}!`);
-                    goToDashboard(redirect || "/student-portal/dashboard");
-                    break;
+                    enterPortal("student");
+                    return;
 
                 case "parent":
                     localStorage.setItem("parent_token", authToken);
                     localStorage.setItem("parent_info", JSON.stringify(parent));
                     toast.success(`Welcome, ${parent?.name}!`);
-                    goToDashboard(redirect || "/parent-portal/dashboard");
-                    break;
+                    enterPortal("parent");
+                    return;
 
                 case "teacher":
-                case "staff": {
-                    // Staff assigned to the staff portal are redirected there (SSO).
-                    const { redirectPortal, staffSso } = res.data;
-                    if (redirectPortal === "staff" && staffSso) {
-                        const sub = tenantSubdomain || activeSubdomain;
-                        const { protocol, hostname, port } = window.location;
-                        const p = port ? `:${port}` : "";
-                        const rootDomain = (hostname === "localhost" || hostname.endsWith(".localhost"))
-                            ? "localhost"
-                            : (hostname.split(".").length > 2 ? hostname.split(".").slice(1).join(".") : hostname);
-                        const hash = `#sso=${encodeURIComponent(JSON.stringify(staffSso))}`;
-                        toast.success(`Welcome, ${user.name}! Opening your teacher portal…`);
-                        window.location.href = `${protocol}//teacher.${sub}.${rootDomain}${p}/login${hash}`;
-                        return;
-                    }
-                    localStorage.setItem("auth_token", authToken);
-                    localStorage.setItem("user", JSON.stringify(user));
-                    if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
-                    refreshPermissions();
-                    toast.success(`Welcome back, ${user.name}!`);
-                    goToDashboard(redirect || "/dashboard");
-                    break;
-                }
+                case "staff":
+                    localStorage.setItem("staff_token", authToken);
+                    localStorage.setItem("staff_info", JSON.stringify({ _id: user.id, name: user.name, designation: user.role, email: user.email }));
+                    toast.success(`Welcome, ${user.name}!`);
+                    enterPortal("staff");
+                    return;
 
                 default: // admin
                     localStorage.setItem("auth_token", authToken);
                     localStorage.setItem("user", JSON.stringify(user));
-                    if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
+                    localStorage.removeItem("active_portal");
                     refreshPermissions();
                     toast.success(`Welcome back, ${user?.name || username}!`);
                     const dest = searchParams.get("redirect");

@@ -66,8 +66,9 @@ export default function StaffLayout() {
     const handleLogout = () => {
         localStorage.removeItem("staff_token");
         localStorage.removeItem("staff_info");
+        localStorage.removeItem("active_portal");
         toast.success("Logged out");
-        navigate("/login");
+        window.location.href = "/login";   // back to the school's unified login
     };
 
     const staff: StaffInfo | null = profile

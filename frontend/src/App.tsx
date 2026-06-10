@@ -313,19 +313,29 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const { portal } = resolvePortal();
+  const active = localStorage.getItem("active_portal");
 
-  // students.<tenant> / staff.<tenant> / parent.<tenant> each get their own
-  // standalone portal app mounted at the root (so /login and / work directly).
-  if (portal === "student" || portal === "staff" || portal === "parent") {
+  // Single-subdomain model: every school is one subdomain (egerton.manwellstore.com).
+  // Everyone logs in there; the role token chosen at login decides which portal
+  // renders — all within the same subdomain. (Legacy students./staff./parent.
+  // prefixes are still honoured so local dev keeps working.)
+  const portalApp =
+    portal === "student" ? <StudentApp /> :
+    portal === "staff" ? <StaffApp /> :
+    portal === "parent" ? <ParentApp /> :
+    (portal === "tenant" && active === "student" && localStorage.getItem("student_token")) ? <StudentApp /> :
+    (portal === "tenant" && active === "parent" && localStorage.getItem("parent_token")) ? <ParentApp /> :
+    (portal === "tenant" && (active === "staff" || active === "teacher") && localStorage.getItem("staff_token")) ? <StaffApp /> :
+    null;
+
+  if (portalApp) {
     return (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            {portal === "student" && <StudentApp />}
-            {portal === "staff" && <StaffApp />}
-            {portal === "parent" && <ParentApp />}
+            {portalApp}
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
