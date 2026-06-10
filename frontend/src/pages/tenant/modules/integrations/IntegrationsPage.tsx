@@ -30,7 +30,7 @@ export const INTEGRATIONS_CONFIG = [
         description: "Direct Safaricom Daraja API integration for M-PESA STK Push payments.",
         docsUrl: "https://developer.safaricom.co.ke",
         testEndpoint: "/integrations/test/mpesa",
-        webhook: "daraja/callback",
+        webhook: "mpesa/callback",
         guide: [
             "Register at developer.safaricom.co.ke",
             "Create an app and select Lipa Na M-Pesa Online API",

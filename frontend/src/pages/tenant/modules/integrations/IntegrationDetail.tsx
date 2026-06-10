@@ -7,6 +7,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 import { INTEGRATIONS_CONFIG } from "./IntegrationsPage";
 
@@ -108,7 +109,7 @@ export default function IntegrationDetail() {
         navigator.clipboard.writeText(text).then(() => toast.success("Copied!"));
     };
 
-    const webhookBase = `${window.location.protocol}//${window.location.host}/api/v1`;
+    const webhookBase = `${API_ORIGIN}/api/v1`;   // callbacks go to the API domain, not the frontend
     const webhookUrl  = (intg as any).webhook ? `${webhookBase}/${(intg as any).webhook}` : null;
     const hasTest     = !!(intg as any).testEndpoint;
     const needsPhone  = ["africas_talking","twilio","infobip"].includes(intg.key);

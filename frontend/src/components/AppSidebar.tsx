@@ -236,8 +236,6 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
       { label: "Integrations", path: "/integrations" },
-      { label: "Payment Gateways", path: "/settings/accounts" },
-      { label: "M-PESA Integration", path: "/settings/mpesa" },
       { label: "Custom Domain & Branding", path: "/settings/domains" },
       { label: "Roles & Permissions", path: "/roles" },
   ] },
