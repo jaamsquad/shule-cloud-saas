@@ -59,11 +59,14 @@ api.interceptors.response.use(
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             localStorage.removeItem('tenant');
-            // Redirect to bare localhost login so they can pick their school
-            const { protocol } = window.location;
+            // Redirect to the root domain login so they can pick their school.
+            const { protocol, hostname } = window.location;
             const port = window.location.port ? `:${window.location.port}` : '';
+            const rootHost = (hostname === 'localhost' || hostname.endsWith('.localhost'))
+                ? 'localhost'
+                : hostname.split('.').slice(-2).join('.');
             const msg = encodeURIComponent('Your session is not valid for this school. Please log in.');
-            window.location.href = `${protocol}//localhost${port}/login?error=${msg}`;
+            window.location.href = `${protocol}//${rootHost}${port}/login?error=${msg}`;
             return Promise.reject(error);
         }
 

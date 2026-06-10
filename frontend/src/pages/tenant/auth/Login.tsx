@@ -37,6 +37,14 @@ function buildSubdomainUrl(subdomain: string, path: string): string {
     return `${protocol}//${baseHost}${port ? `:${port}` : ""}${path}`;
 }
 
+// Host label for a school subdomain on the current domain (display only).
+function subdomainHost(subdomain: string): string {
+    const h = window.location.hostname;
+    if (h === "localhost" || h === "127.0.0.1") return `${subdomain}.localhost`;
+    const parts = h.split(".");
+    return `${subdomain}.${parts.length >= 2 ? parts.slice(-2).join(".") : h}`;
+}
+
 export default function Login() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -271,7 +279,7 @@ export default function Login() {
                                 <Building2 className="w-4 h-4" />
                                 Register Your School on ShuleCloud
                             </a>
-                            <a href="http://localhost:8080/login"
+                            <a href="/login"
                                 className="w-full h-12 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-all border border-gray-200 text-sm">
                                 <GraduationCap className="w-4 h-4 text-[#5C67F2]" />
                                 Back to ShuleCloud Login
@@ -281,7 +289,7 @@ export default function Login() {
                         {/* Subdomain hint */}
                         <p className="text-[10px] text-gray-400 font-medium">
                             Looking for your school? Schools access ShuleCloud at
-                            <span className="font-mono text-[#5C67F2] mx-1">yourschool.localhost:8080</span>
+                            <span className="font-mono text-[#5C67F2] mx-1">{subdomainHost("yourschool")}</span>
                         </p>
                     </div>
                 </div>
@@ -380,11 +388,7 @@ export default function Login() {
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-20 overflow-hidden">
                                         {schoolSuggestions.map((s: any) => (
                                             <button key={s.subdomain} type="button"
-                                                onClick={() => {
-                                                    const { protocol, port } = window.location;
-                                                    const portStr = port ? `:${port}` : "";
-                                                    window.location.href = `${protocol}//${s.subdomain}.localhost${portStr}/login`;
-                                                }}
+                                                onClick={() => { window.location.href = buildSubdomainUrl(s.subdomain, "/login"); }}
                                                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#5C67F2]/5 text-left border-b border-gray-50 last:border-0 transition-colors">
                                                 {s.logo ? (
                                                     <img src={s.logo} alt={s.name} className="w-8 h-8 rounded-lg object-contain border border-gray-100" />
@@ -393,7 +397,7 @@ export default function Login() {
                                                 )}
                                                 <div>
                                                     <p className="text-sm font-black text-gray-800">{s.name}</p>
-                                                    <p className="text-[10px] text-gray-400 font-mono">{s.subdomain}.localhost</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono">{subdomainHost(s.subdomain)}</p>
                                                 </div>
                                                 <span className="ml-auto text-[10px] text-[#5C67F2] font-black">Go →</span>
                                             </button>
