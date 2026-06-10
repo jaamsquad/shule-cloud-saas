@@ -486,27 +486,6 @@ export default function Login() {
                         </Link>
                     </div>
                     )}
-
-                    {/* Direct portal links — only on subdomain */}
-                    {detectedSubdomain && (
-                        <div className="border-t border-gray-200 pt-4 space-y-2">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Direct Portal Links</p>
-                            <div className="grid grid-cols-3 gap-2">
-                                <a href="/student-portal"
-                                    className="h-9 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black text-[9px] uppercase tracking-wide rounded-xl flex items-center justify-center gap-1 border border-indigo-100 transition-all">
-                                    <StudentIcon className="w-3 h-3" /> Student
-                                </a>
-                                <a href="/parent-portal"
-                                    className="h-9 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-black text-[9px] uppercase tracking-wide rounded-xl flex items-center justify-center gap-1 border border-emerald-100 transition-all">
-                                    <Users className="w-3 h-3" /> Parent
-                                </a>
-                                <a href="/staff-portal"
-                                    className="h-9 bg-purple-50 hover:bg-purple-100 text-purple-600 font-black text-[9px] uppercase tracking-wide rounded-xl flex items-center justify-center gap-1 border border-purple-100 transition-all">
-                                    <Users className="w-3 h-3" /> Staff
-                                </a>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
