@@ -50,9 +50,10 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
         }
     });
 
-    // Filter staff for drivers and co-drivers
-    const drivers = staff.filter((s: any) => s.designation === "bus_driver");
-    const coDrivers = staff.filter((s: any) => s.designation === "co-driver");
+    // Drivers / co-drivers = staff whose designation or roles include Driver / Bus Attendant.
+    const hasRole = (s: any, re: RegExp) => re.test(String(s.designation || "")) || (Array.isArray(s.roles) && s.roles.some((r: string) => re.test(r)));
+    const drivers = staff.filter((s: any) => hasRole(s, /(^|\s)driver$/i) || hasRole(s, /^driver/i) && !hasRole(s, /co.?driver/i));
+    const coDrivers = staff.filter((s: any) => hasRole(s, /co.?driver|bus attendant/i));
 
     // Local form state for zone
     const [zoneForm, setZoneForm] = useState({
