@@ -298,6 +298,39 @@ router.post('/v2/enrollments', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Enroll MANY students into the same class/stream/year in one call.
+router.post('/v2/enrollments/bulk', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { studentIds, academicYearId, termId, classId, streamId } = req.body;
+        if (!Array.isArray(studentIds) || studentIds.length === 0 || !academicYearId || !classId || !streamId) {
+            return res.status(400).json({ message: 'studentIds[], academicYearId, classId, streamId are required' });
+        }
+        const [year, cls, stream] = await Promise.all([
+            db.collection('academic_years').findOne({ _id: toOid(academicYearId) }),
+            db.collection('v2_classes').findOne({ _id: toOid(classId) }),
+            db.collection('v2_streams').findOne({ _id: toOid(streamId) }),
+        ]);
+        let enrolled = 0, skipped = 0;
+        for (const studentId of studentIds) {
+            const existing = await db.collection('student_enrollments').findOne({ studentId, academicYearId, classId, streamId, status: 'active', deletedAt: { $exists: false } });
+            if (existing) { skipped++; continue; }
+            const student = await db.collection('students').findOne({ _id: toOid(studentId) });
+            const enrollment = {
+                studentId, studentName: student?.studentName || student?.name || '',
+                academicYearId, academicYear: year?.year || '', termId: termId || null,
+                classId, className: cls?.name || '',
+                streamId, streamName: stream?.name || '', fullClassName: stream?.fullName || `${cls?.name} ${stream?.name}`,
+                status: 'active', enrollmentDate: now(), createdAt: now(),
+            };
+            const r = await db.collection('student_enrollments').insertOne(enrollment);
+            await auditLog(db, 'CREATE_ENROLLMENT', 'student_enrollments', r.insertedId.toString(), 'system', null, enrollment);
+            enrolled++;
+        }
+        res.status(201).json({ enrolled, skipped, total: studentIds.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // 6. PROMOTION WORKFLOW
 // Creates NEW enrollment, marks old as "completed"

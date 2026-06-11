@@ -157,8 +157,9 @@ export const navItems: NavItem[] = [
       { label: "Schemes of Work", path: "/academics/schemes-of-work" },
       { label: "Notes & Resources", path: "/academics/resources" },
       { label: "Assignments", path: "/academics/assignments" },
+      { label: "Homework", path: "/homework" },
   ] },
-  { label: "Homework", icon: Pencil, path: "/homework", moduleKey: "homework" },
+  // { label: "Homework", icon: Pencil, path: "/homework", moduleKey: "homework" },
   { label: "Behaviour & Skills", icon: Eye, moduleKey: "behaviour", children: [
       { label: "Rate Behaviours", path: "/behaviour/rate" },
       { label: "Rate Skills", path: "/skills/rate" },

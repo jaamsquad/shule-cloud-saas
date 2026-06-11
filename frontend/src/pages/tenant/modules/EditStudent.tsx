@@ -186,7 +186,15 @@ export default function EditStudent() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                                 <InputField name="studentName" value={formData.studentName} onChange={handleChange} label="Student Name*" placeholder="Name of Student" required />
                                 <InputField name="registrationNo" value={formData.registrationNo} onChange={handleChange} label="Registration No*" placeholder="Registration No" required />
-                                <SelectField name="studentClass" value={formData.studentClass} onChange={handleChange} label="Select Class*" placeholder="Select Class" required options={classNames} />
+                                {/* Class is managed via the Enrollment system (preserves history). */}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Class</div>
+                                    <Link to="/academic-system/enroll"
+                                        className="w-full h-12 px-6 border border-dashed border-[#5C67F2]/40 rounded-full bg-[#5C67F2]/5 flex items-center justify-between text-sm font-bold text-[#5C67F2] hover:bg-[#5C67F2]/10 transition-colors">
+                                        <span>{formData.studentClass || "Manage via Enrollment"}</span>
+                                        <span className="text-[10px] uppercase tracking-widest">Enroll →</span>
+                                    </Link>
+                                </div>
                                 <InputField name="admissionDate" value={formData.admissionDate} onChange={handleChange} label="Date of Admission*" placeholder="dd/mm/yyyy" required isDate />
                                 <InputField name="discount" value={formData.discount} onChange={handleChange} label="Discount In Fee" placeholder="In %" />
                                 <div className="relative">

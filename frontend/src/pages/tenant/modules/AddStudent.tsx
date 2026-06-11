@@ -44,6 +44,17 @@ export default function AddStudent() {
     });
     const classNames = classesData.map((c: any) => c.name || c.levelName).filter(Boolean);
 
+    // ── V2 enrollment (replaces the old "Select Class") ──────────────────
+    const [enroll, setEnroll] = useState({ classId: "", streamId: "" });
+    const { data: v2Years = [] } = useQuery<any[]>({ queryKey: ["v2_years_add"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
+    const { data: v2Classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes_add"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
+    const { data: v2Streams = [] } = useQuery<any[]>({
+        queryKey: ["v2_streams_add", enroll.classId],
+        queryFn: async () => enroll.classId ? (await api.get(`/v2/streams?classId=${enroll.classId}`)).data || [] : [],
+        enabled: !!enroll.classId,
+    });
+    const activeYear = v2Years.find((y: any) => y.isActive) || v2Years[0];
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
@@ -56,14 +67,24 @@ export default function AddStudent() {
         const portalUsername = formData.registrationNo || formData.studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
         const portalPassword = `shule@${cleanReg}`;
 
-        createItem({ 
-            ...formData, 
-            portalUsername, 
+        createItem({
+            ...formData,
+            portalUsername,
             portalPassword,
             credentialsGenerated: true,
             lastPasswordReset: new Date().toISOString()
         }, {
-            onSuccess: () => {
+            onSuccess: async (created: any) => {
+                // Enroll the new student into the chosen class/stream via the V2 system.
+                const newId = created?._id || created?.id || created?.insertedId;
+                if (newId && enroll.classId && enroll.streamId && activeYear?._id) {
+                    try {
+                        await api.post("/v2/enrollments", {
+                            studentId: String(newId), academicYearId: activeYear._id,
+                            classId: enroll.classId, streamId: enroll.streamId,
+                        });
+                    } catch (_) { /* student still created; enrollment can be done later */ }
+                }
                 toast.success(`Student added with credentials. Pass: ${portalPassword}`);
                 navigate("/students");
             }
@@ -272,7 +293,24 @@ export default function AddStudent() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <InputField name="studentName" value={formData.studentName} onChange={handleChange} label="Student Name*" placeholder="Name of Student" required />
                                 <InputField name="registrationNo" value={formData.registrationNo} onChange={handleChange} label="Last Registration*" placeholder="Registration No" required />
-                                <SelectField name="studentClass" value={formData.studentClass} onChange={handleChange} label="Select Class*" placeholder="Select*" required options={classNames} />
+                                {/* Enrollment class (V2) */}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Class *</div>
+                                    <select value={enroll.classId} onChange={e => setEnroll({ classId: e.target.value, streamId: "" })}
+                                        className="w-full h-12 px-6 border border-gray-200 rounded-full bg-white focus:outline-none focus:border-[#5C67F2] text-sm text-gray-700 font-bold appearance-none cursor-pointer">
+                                        <option value="">Select class…</option>
+                                        {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                {/* Stream (depends on class) */}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Stream *</div>
+                                    <select value={enroll.streamId} onChange={e => setEnroll(p => ({ ...p, streamId: e.target.value }))} disabled={!enroll.classId}
+                                        className="w-full h-12 px-6 border border-gray-200 rounded-full bg-white focus:outline-none focus:border-[#5C67F2] text-sm text-gray-700 font-bold appearance-none cursor-pointer disabled:bg-slate-50 disabled:text-slate-300">
+                                        <option value="">{enroll.classId ? "Select stream…" : "Pick class first"}</option>
+                                        {v2Streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                                    </select>
+                                </div>
                                 
                                 <div className="relative">
                                     <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm border border-white/20">
