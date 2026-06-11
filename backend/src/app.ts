@@ -32,7 +32,7 @@ const app = express();
 // Middleware
 // CORS — allow manwellstore.com, its subdomains (egerton.manwellstore.com,
 // students.egerton.manwellstore.com, …), and localhost for development.
-const ALLOWED_DOMAINS = ['shulecloud.com', 'manwellstore.com'];
+const ALLOWED_DOMAINS = ['shulecloud.com'];
 const isAllowedOrigin = (origin?: string): boolean => {
     if (!origin) return true; // same-origin / server-to-server / curl
     try {

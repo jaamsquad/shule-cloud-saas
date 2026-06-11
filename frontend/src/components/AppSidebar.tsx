@@ -71,6 +71,7 @@ export const navItems: NavItem[] = [
   { label: "Parents", icon: UserCheck, moduleKey: "students", children: [
       { label: "All Parents", path: "/parents" },
       { label: "Add New Parent", path: "/parents/new" },
+      { label: "Parent Login", path: "/students/parent-login" },
   ] },
   { label: "Portal Requests", icon: ClipboardList, moduleKey: "students", children: [
       { label: "Academic Requisitions", path: "/admin/requisitions" },

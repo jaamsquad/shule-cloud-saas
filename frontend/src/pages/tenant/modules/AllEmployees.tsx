@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2 } from "lucide-react";
+import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ export default function AllEmployees() {
         ? dbRoles.map((r: any) => r.name)
         : ["Teacher","Admin","Staff","Accountant","Principal","Librarian","Transport Manager","Hostel Warden","Head of Department","Deputy Principal","Exam Director","HR Officer","ICT Officer","Bus Driver","Security","Other"];
     
+    const [view, setView] = useState<"cards" | "list">("cards");
     const [editingEmployee, setEditingEmployee] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({
         employeeName: "",
@@ -101,26 +102,67 @@ export default function AllEmployees() {
 
             <div className="p-6 pt-0 w-full mt-4">
                 
-                {/* Search Bar Area */}
-                <div className="flex justify-end mb-8 relative">
-                    <div className="relative w-96 mr-4">
-                        <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[11px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">
-                            Search Employee*
-                        </div>
-                        <input 
-                            type="text" 
-                            placeholder="Search Employee"
-                            className="w-full h-12 px-6 border border-[#5C67F2]/40 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white"
-                        />
+                {/* Toolbar: view toggle + search */}
+                <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+                    <div className="bg-white border border-gray-100 rounded-xl p-1 flex shadow-sm">
+                        <button onClick={() => setView("cards")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "cards" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-3.5 h-3.5" /> Cards</button>
+                        <button onClick={() => setView("list")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> List</button>
                     </div>
-                    <button className="h-12 px-6 bg-[#3B54A6] hover:bg-[#2c4082] text-white font-bold rounded-full shadow-md flex items-center gap-2 transition-colors absolute right-0">
-                        <Search className="w-4 h-4" /> All
-                    </button>
+                    <input type="text" placeholder="Search employee…"
+                        className="w-72 h-11 px-5 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white" />
                 </div>
 
-                {/* Grid */}
+                {/* ── LIST (Excel-style) view ─────────────────────────────── */}
+                {view === "list" ? (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                            <p className="text-xs font-black text-slate-400 uppercase">{staff.length} Employees</p>
+                            <Link to="/staff/new" className="inline-flex items-center gap-1.5 text-xs font-bold bg-[#5C67F2] text-white px-4 py-2 rounded-lg"><Plus className="w-4 h-4" /> Add New</Link>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                                        <th className="text-left px-5 py-3 font-black">Name</th>
+                                        <th className="text-left px-3 py-3 font-black">Designation</th>
+                                        <th className="text-left px-3 py-3 font-black">Email</th>
+                                        <th className="text-left px-3 py-3 font-black">Phone</th>
+                                        <th className="text-right px-5 py-3 font-black">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {isLoading ? (
+                                        <tr><td colSpan={5} className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin text-[#5C67F2] mx-auto" /></td></tr>
+                                    ) : staff.length === 0 ? (
+                                        <tr><td colSpan={5} className="py-10 text-center text-slate-400">No employees yet.</td></tr>
+                                    ) : staff.map((employee: any) => (
+                                        <tr key={employee._id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-[#868DF4]/15 flex items-center justify-center text-[#5C67F2]"><User className="w-4 h-4" /></div>
+                                                    <span className="font-bold text-slate-700">{employee.name || employee.employeeName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-3 text-slate-500">{employee.designation || "Staff"}</td>
+                                            <td className="px-3 py-3 text-slate-500">{employee.email || "—"}</td>
+                                            <td className="px-3 py-3 text-slate-500">{employee.phone || "—"}</td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <Link to={`/staff/profile/${employee._id}`} title="View" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Eye className="w-4 h-4" /></Link>
+                                                    <button onClick={() => navigate(`/staff/edit/${employee._id}`)} title="Edit" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit className="w-4 h-4" /></button>
+                                                    <button onClick={() => { if (confirm("Delete this employee?")) deleteItem(employee._id); }} title="Delete" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                /* ── CARDS view ───────────────────────────────────────────── */
                 <div className="flex gap-6 flex-wrap justify-center lg:justify-start pl-8">
-                    
+
                     {isLoading ? (
                         <div className="w-full flex justify-center py-20">
                             <Loader2 className="w-12 h-12 animate-spin text-[#5C67F2]" />
@@ -173,6 +215,7 @@ export default function AllEmployees() {
                     </Link>
 
                 </div>
+                )}
 
             </div>
 
