@@ -135,8 +135,8 @@ function IdCard({ student, onUpload, isUploading }: { student: any, onUpload: (e
                     <div className="w-36 h-36 bg-gray-50 rounded-full flex items-center justify-center border-[8px] border-white shadow-xl overflow-hidden ring-1 ring-gray-100">
                         {isUploading ? (
                             <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
-                        ) : student.avatar ? (
-                            <img src={student.avatar} alt="" className="w-full h-full object-cover" />
+                        ) : (student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto) ? (
+                            <img src={student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto} alt="" className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-8">
                                 <div className="w-12 h-12 bg-[#fcd34d] rounded-full"></div>

@@ -90,9 +90,9 @@ export default function PromoteStudents() {
                 </span>
             </div>
 
-            <div className="p-6 pt-0 flex gap-6 items-start flex-wrap lg:flex-nowrap">
+            <div className="p-6 pt-0 grid grid-cols-1 xl:grid-cols-[280px_1fr_280px] gap-6 items-start">
                 {/* Column 1: Search Sidebar Card */}
-                <div className="w-full lg:w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex-shrink-0 mt-4 animate-in fade-in slide-in-from-left-4 duration-500">
+                <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mt-4 animate-in fade-in slide-in-from-left-4 duration-500">
                     <h3 className="text-xl font-black text-center text-slate-800 mb-8 flex items-center justify-center gap-3">
                         <Search className="w-6 h-6 text-[#5C67F2]" />
                         Search
@@ -143,7 +143,7 @@ export default function PromoteStudents() {
                 </div>
 
                 {/* Column 2: Main Table Card */}
-                <div className="flex-1 bg-white rounded-3xl shadow-sm border border-gray-100 p-8 mt-4 overflow-x-auto min-w-[400px] animate-in fade-in duration-700">
+                <div className="w-full min-w-0 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mt-4 overflow-x-auto animate-in fade-in duration-700">
                     <div className="overflow-hidden rounded-2xl border border-slate-50 shadow-sm">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 text-slate-400">

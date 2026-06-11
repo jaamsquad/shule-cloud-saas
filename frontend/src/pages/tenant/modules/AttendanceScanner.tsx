@@ -19,9 +19,10 @@ export default function AttendanceScanner() {
     const { data } = useQuery({
         queryKey: ["scan_today"],
         queryFn: async () => (await api.get("/attendance/scan/today")).data,
-        refetchInterval: 5000,
+        refetchInterval: 30000,   // refresh every 30s
     });
     const rows: any[] = data?.rows || [];
+    const debounceRef = useRef<any>(null);
 
     const scan = useMutation({
         mutationFn: async (c: string) => (await api.post("/attendance/scan", { code: c })).data,
@@ -39,14 +40,24 @@ export default function AttendanceScanner() {
         onError: () => toast.error("Failed to finalize"),
     });
 
-    const submit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const c = code.trim();
-        if (!c) return;
-        scan.mutate(c);
+    // Fire a scan (used by both Enter and auto-detect).
+    const doScan = (c: string) => {
+        const v = c.trim();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (!v || scan.isPending) return;
+        scan.mutate(v);
         setCode("");
-        setTimeout(focus, 50);
+        setTimeout(focus, 30);
     };
+
+    // Auto-submit shortly after a value is detected — no Enter needed.
+    const onChange = (val: string) => {
+        setCode(val);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (val.trim().length >= 3) debounceRef.current = setTimeout(() => doScan(val), 150);
+    };
+
+    const submit = (e: React.FormEvent) => { e.preventDefault(); doScan(code); };
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">

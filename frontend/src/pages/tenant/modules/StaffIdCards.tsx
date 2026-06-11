@@ -119,12 +119,13 @@ function IdCard({ staff, onUpload, isUploading, activeStyle }: { staff: any, onU
         </label>
     );
 
+    const photo = staff.avatar || staff.photo || staff.staffPhoto || staff.image || staff.profilePhoto || staff.passportPhoto;
     const Avatar = ({ className = "w-36 h-36 bg-gray-50 rounded-full flex items-center justify-center border-[8px] border-white shadow-xl overflow-hidden ring-1 ring-gray-100" }) => (
         <div className={className}>
             {isUploading ? (
                 <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
-            ) : staff.avatar ? (
-                <img src={staff.avatar} alt="" className="w-full h-full object-cover" />
+            ) : photo ? (
+                <img src={photo} alt="" className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-8">
                     <div className="w-12 h-12 bg-[#fcd34d] rounded-full"></div>
