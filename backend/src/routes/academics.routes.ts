@@ -5,6 +5,7 @@ import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { sendEmail } from '../services/communications.service';
 import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } from '../services/report-card-pdf.service';
+import { syncStudentToParents } from '../services/parent-student-sync.service';
 
 const router = Router();
 
@@ -14,6 +15,25 @@ const getRequestDb = (req: Request): Db =>
 
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
+
+// Backfill: create/link Parent records from every student's father/mother fields
+// (for students added via bulk import before the auto-sync existed).
+router.post('/parents/generate-from-students', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const students = await db.collection('students').find({
+            $or: [{ fatherName: { $nin: [null, ''] } }, { motherName: { $nin: [null, ''] } }],
+        }).toArray();
+        const before = await db.collection('parents').countDocuments({});
+        for (const st of students) {
+            await syncStudentToParents(db, String(st._id), st).catch(() => {});
+        }
+        const after = await db.collection('parents').countDocuments({});
+        res.json({ studentsProcessed: students.length, parentsCreated: Math.max(0, after - before), totalParents: after });
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
 
 // ─── Email result cards (PDF) to parents for an exam + class ──────────────────
 router.post('/exams/email-result-cards', async (req: Request, res) => {

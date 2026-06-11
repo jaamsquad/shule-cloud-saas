@@ -32,14 +32,13 @@ const app = express();
 // Middleware
 // CORS — allow manwellstore.com, its subdomains (egerton.manwellstore.com,
 // students.egerton.manwellstore.com, …), and localhost for development.
+const ALLOWED_DOMAINS = ['shulecloud.com', 'manwellstore.com'];
 const isAllowedOrigin = (origin?: string): boolean => {
     if (!origin) return true; // same-origin / server-to-server / curl
     try {
         const host = new URL(origin).hostname.toLowerCase();
-        return host === 'manwellstore.com'
-            || host.endsWith('.manwellstore.com')
-            || host === 'localhost'
-            || host.endsWith('.localhost');
+        if (host === 'localhost' || host.endsWith('.localhost')) return true;
+        return ALLOWED_DOMAINS.some(d => host === d || host.endsWith(`.${d}`));
     } catch { return false; }
 };
 app.use(cors({

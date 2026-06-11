@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Search, Pencil, Trash2, Users, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Search, Pencil, Trash2, Users, AlertCircle, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -34,6 +34,12 @@ export default function Parents() {
         onError: (e: any) => toast.error(e.response?.data?.message || "Delete failed"),
     });
 
+    const generate = useMutation({
+        mutationFn: async () => (await api.post("/parents/generate-from-students", {})).data,
+        onSuccess: (d: any) => { toast.success(`${d.parentsCreated || 0} parent record(s) generated from ${d.studentsProcessed || 0} students`); qc.invalidateQueries({ queryKey: ["parents"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to generate parents"),
+    });
+
     const filtered = data.filter((p: any) =>
         (p.fullName || "").toLowerCase().includes(search.toLowerCase()) ||
         (p.primaryPhone || "").includes(search) ||
@@ -51,10 +57,16 @@ export default function Parents() {
                         <p className="text-xs text-slate-500">{data.length} record{data.length === 1 ? "" : "s"} · linked to students</p>
                     </div>
                 </div>
-                <button onClick={() => navigate("/parents/new")}
-                    className="inline-flex items-center gap-2 h-10 px-5 bg-[#5C67F2] text-white font-black rounded-xl text-xs uppercase tracking-widest">
-                    <Plus className="w-4 h-4" /> Add Parent
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { if (window.confirm("Generate parent records from all students' father/mother details (e.g. bulk-imported students)?")) generate.mutate(); }} disabled={generate.isPending}
+                        className="inline-flex items-center gap-2 h-10 px-4 bg-white border border-slate-200 text-slate-600 hover:text-[#5C67F2] hover:border-[#5C67F2] font-bold rounded-xl text-xs uppercase tracking-wide disabled:opacity-50">
+                        {generate.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} Generate from Students
+                    </button>
+                    <button onClick={() => navigate("/parents/new")}
+                        className="inline-flex items-center gap-2 h-10 px-5 bg-[#5C67F2] text-white font-black rounded-xl text-xs uppercase tracking-widest">
+                        <Plus className="w-4 h-4" /> Add Parent
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-4 flex items-center px-4 h-12">
