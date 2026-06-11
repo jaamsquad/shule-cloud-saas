@@ -29,66 +29,40 @@ export default function ChartOfAccount() {
                 </span>
             </div>
 
-            <div className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">
-                
-                {/* Left Side: Form */}
-                <div className="w-full lg:w-1/3 bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
-                    <div className="text-center mb-10">
-                        <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Add chart of accounts</h2>
-                        <div className="flex items-center justify-center gap-4 mt-2 text-xs">
-                            <div className="flex items-center gap-1.5 text-[#5C67F2] font-bold">
-                                <div className="w-3.5 h-1.5 bg-[#5C67F2] rounded-full"></div>
-                                Required*
-                            </div>
-                            <div className="flex items-center gap-1.5 text-gray-400 font-bold">
-                                <div className="w-3.5 h-1.5 bg-gray-300 rounded-full"></div>
-                                Optional
-                            </div>
-                        </div>
-                    </div>
+            <div className="p-6 pt-0 w-full mt-4 flex flex-col gap-6">
 
-                    <div className="space-y-8">
-                        <div className="relative">
-                            <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[10px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">
-                                Head name*
-                            </div>
-                            <input 
-                                type="text" 
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Name Of Head*"
-                                className="w-full h-12 px-6 border border-[#5C67F2]/40 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white"
+                {/* Top: Add form (horizontal) */}
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                    <div className="flex flex-col md:flex-row md:items-end gap-4">
+                        <div className="flex items-center gap-2">
+                            <Wallet className="w-5 h-5 text-[#5C67F2]" />
+                            <h2 className="text-base font-black text-gray-800">Add Chart of Accounts</h2>
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-[10px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Head Name *</label>
+                            <input
+                                type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name of head"
+                                className="w-full h-11 px-4 border border-[#5C67F2]/30 rounded-xl focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white"
                             />
                         </div>
-
-                        <div className="relative">
-                            <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[10px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">
-                                Head type*
-                            </div>
-                            <select 
-                                value={type}
-                                onChange={(e) => setType(e.target.value)}
-                                className="w-full h-12 px-6 border border-[#5C67F2]/40 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 bg-white appearance-none cursor-pointer text-sm"
+                        <div className="w-full md:w-56 relative">
+                            <label className="block text-[10px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Head Type *</label>
+                            <select
+                                value={type} onChange={(e) => setType(e.target.value)}
+                                className="w-full h-11 px-4 border border-[#5C67F2]/30 rounded-xl focus:outline-none focus:border-[#5C67F2] text-gray-700 bg-white appearance-none cursor-pointer text-sm"
                             >
-                                <option value="" disabled>Select*</option>
+                                <option value="" disabled>Select type</option>
                                 <option value="income">Income</option>
                                 <option value="expense">Expense</option>
                             </select>
-                            <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none">
-                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </div>
                         </div>
-
-                        <div className="flex justify-center">
-                            <button 
-                                onClick={handleSave}
-                                disabled={isCreating || !name || !type}
-                                className="h-12 px-10 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-md flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wallet className="w-5 h-5" />} 
-                                Save Head
-                            </button>
-                        </div>
+                        <button
+                            onClick={handleSave}
+                            disabled={isCreating || !name || !type}
+                            className="h-11 px-8 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save Head
+                        </button>
                     </div>
                 </div>
 

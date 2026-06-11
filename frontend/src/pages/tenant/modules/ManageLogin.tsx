@@ -107,68 +107,33 @@ export default function ManageLogin() {
                 </div>
             </div>
 
-            <div className="p-6 pt-0 flex gap-5 items-start flex-wrap lg:flex-nowrap">
-                {/* Search Sidebar */}
-                <div className="w-full lg:w-64 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-shrink-0 mt-4">
-                    <h3 className="text-sm font-black text-center text-slate-800 mb-6 flex items-center justify-center gap-2">
-                        <Search className="w-4 h-4 text-[#5C67F2]" />
-                        Search
-                    </h3>
-                    
-                    <div className="space-y-6">
-                        <div className="relative">
-                            <div className="absolute -top-3 left-5 bg-[#868DF4] text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">
-                                Search Student*
-                            </div>
-                            <input 
-                                type="text" 
-                                placeholder="Name or Registration..."
-                                className="w-full h-10 px-5 border border-[#5C67F2]/20 rounded-full focus:outline-none focus:border-[#5C67F2] text-slate-700 placeholder-slate-300 bg-white text-xs font-bold shadow-sm"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
+            <div className="p-6 pt-0 flex flex-col gap-5">
+                {/* Top: search bar (horizontal) */}
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-4">
+                    <div className="flex flex-col md:flex-row md:items-end gap-3">
+                        <div className="flex items-center gap-2 text-slate-700"><Search className="w-4 h-4 text-[#5C67F2]" /><span className="font-black text-sm">Search</span></div>
+                        <div className="flex-1">
+                            <label className="block text-[9px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Search Student</label>
+                            <input type="text" placeholder="Name or Registration…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full h-10 px-4 border border-[#5C67F2]/20 rounded-xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-white text-xs font-bold" />
                         </div>
-
-                        <div className="relative">
-                            <div className="absolute -top-3 left-5 bg-[#5C67F2] text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">
-                                Select Class*
-                            </div>
-                            <select 
-                                value={selectedClass}
-                                onChange={(e) => setSelectedClass(e.target.value)}
-                                className="w-full h-10 px-5 border border-[#5C67F2]/20 rounded-full focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-white appearance-none cursor-pointer text-xs font-black shadow-sm"
-                            >
+                        <div className="w-full md:w-56">
+                            <label className="block text-[9px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Class</label>
+                            <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
+                                className="w-full h-10 px-4 border border-[#5C67F2]/20 rounded-xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-white cursor-pointer text-xs font-black">
                                 <option value="all">All Classes</option>
-                                {classNames.map((c: string) => (
-                                    <option key={c} value={c}>{c}</option>
-                                ))}
+                                {classNames.map((c: string) => (<option key={c} value={c}>{c}</option>))}
                             </select>
-                            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none">
-                                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                            </div>
                         </div>
-
-                        <div className="text-center pt-1 space-y-3">
-                            <button 
-                                onClick={() => { setSearchTerm(""); setSelectedClass("all"); }}
-                                className="text-[#5C67F2] font-black text-[9px] uppercase tracking-widest hover:text-[#4a54c4] transition-colors"
-                            >
-                                or, Reload All
-                            </button>
-                            <div className="border-t border-slate-50 pt-3">
-                                <button 
-                                    onClick={handleBulkGenerate}
-                                    className="w-full h-9 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-100 transition-all"
-                                >
-                                    <Key className="w-3 h-3" /> Generate All
-                                </button>
-                            </div>
-                        </div>
+                        <button onClick={() => { setSearchTerm(""); setSelectedClass("all"); }} className="h-10 px-4 text-[#5C67F2] font-black text-[9px] uppercase tracking-widest hover:text-[#4a54c4]">Reload</button>
+                        <button onClick={handleBulkGenerate} className="h-10 px-6 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md transition-all">
+                            <Key className="w-3.5 h-3.5" /> Generate All
+                        </button>
                     </div>
                 </div>
 
-                {/* Main Table */}
-                <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-4 overflow-x-auto min-w-[500px]">
+                {/* Table below */}
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-6 overflow-x-auto">
                     <div className="overflow-hidden rounded-xl border border-slate-50 mb-4 shadow-sm">
                         <table className="w-full text-xs text-left">
                             <thead className="bg-slate-50 text-slate-400">

@@ -118,7 +118,8 @@ export const navItems: NavItem[] = [
       { label: "Assign Student", path: "/transport/assign" },
       { label: "Report", path: "/transport/report" }
   ] },
-  { label: "Attendance", icon: UserCheck, moduleKey: "attendance", children: [ 
+  { label: "Attendance", icon: UserCheck, moduleKey: "attendance", children: [
+      { label: "Card Scanner", path: "/attendance-scanner" },
       { label: "Students Attendance", path: "/attendance/students" },
       { label: "Employees Attendance", path: "/attendance/employees" },
       { label: "Class wise Report", path: "/attendance/reports/class-wise" },

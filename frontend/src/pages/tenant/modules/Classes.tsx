@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Home, DollarSign, Loader2, Edit2, Trash2, GraduationCap, X, ChevronDown, Save, Users, Layers } from "lucide-react";
+import { Plus, Home, DollarSign, Loader2, Edit2, Trash2, GraduationCap, X, ChevronDown, Save, Users, Layers, LayoutGrid, List } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -224,6 +224,7 @@ function AddClassModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 export default function Classes() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const [view, setView] = useState<"grid" | "list">("grid");
     const [editingClass, setEditingClass] = useState<any>(null);
     const [editName, setEditName] = useState("");
     const [editTeacherId, setEditTeacherId] = useState("");
@@ -328,6 +329,10 @@ export default function Classes() {
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
+                    <div className="bg-white border border-gray-100 rounded-xl p-0.5 flex shadow-sm">
+                        <button onClick={() => setView("grid")} className={`px-2.5 h-8 rounded-lg ${view === "grid" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setView("list")} className={`px-2.5 h-8 rounded-lg ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><List className="w-3.5 h-3.5" /></button>
+                    </div>
                     <a href="/academic-system/classes" className="h-8 px-4 bg-indigo-50 hover:bg-indigo-100 text-[#5C67F2] border border-indigo-100 font-black text-[9px] uppercase rounded-xl flex items-center gap-1.5 transition-all">
                         <Layers className="w-3.5 h-3.5" /> Manage V2
                     </a>
@@ -343,6 +348,43 @@ export default function Classes() {
                     <div className="flex flex-col items-center justify-center py-20 gap-3">
                         <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
                         <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Loading classes...</p>
+                    </div>
+                ) : view === "list" ? (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                                    <th className="text-left px-5 py-3 font-black">Class</th>
+                                    <th className="text-center px-3 py-3 font-black">Students</th>
+                                    <th className="text-center px-3 py-3 font-black">Boys</th>
+                                    <th className="text-center px-3 py-3 font-black">Girls</th>
+                                    <th className="text-center px-3 py-3 font-black">Capacity</th>
+                                    <th className="text-right px-5 py-3 font-black">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allClasses.length === 0 ? (
+                                    <tr><td colSpan={6} className="py-10 text-center text-slate-400">No classes yet.</td></tr>
+                                ) : allClasses.map(cls => {
+                                    const stats = getGenderStats(getClassStudents(cls));
+                                    return (
+                                        <tr key={cls._id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                            <td className="px-5 py-3 font-bold text-slate-700 cursor-pointer" onClick={() => navigate(cls.isV2 ? `/academic-system/enrollments?streamId=${cls.streamId}` : `/classes/${cls._id}`)}>{cls.name}{cls.isV2 && <span className="ml-2 text-[8px] font-black text-[#5C67F2] bg-indigo-50 px-1.5 py-0.5 rounded">V2</span>}</td>
+                                            <td className="px-3 py-3 text-center font-black text-slate-700">{stats.total}</td>
+                                            <td className="px-3 py-3 text-center text-blue-600 font-bold">{stats.boys}</td>
+                                            <td className="px-3 py-3 text-center text-pink-600 font-bold">{stats.girls}</td>
+                                            <td className="px-3 py-3 text-center text-slate-500">{cls.capacity || "—"}</td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <button onClick={() => { setEditingClass(cls); setEditName(cls.name); setEditTeacherId(cls.classTeacherId || ""); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
+                                                    <button onClick={() => { if (confirm(`Delete ${cls.name}?`)) deleteMut.mutate(cls); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">

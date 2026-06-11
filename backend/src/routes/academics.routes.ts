@@ -16,6 +16,67 @@ const getRequestDb = (req: Request): Db =>
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
 
+// ─── Card-scan attendance (student / staff) ──────────────────────────────────
+const scanDay = () => new Date().toISOString().slice(0, 10);
+
+// Scan a card → mark IN (first scan) or OUT (second scan) for today.
+router.post('/attendance/scan', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const code = String(req.body?.code || '').trim();
+        if (!code) return res.status(400).json({ message: 'No code scanned' });
+
+        let person: any = await db.collection('students').findOne({ $or: [{ registrationNo: code }, { admNo: code }, { portalUsername: code }, { studentId: code }] });
+        let personType = 'student', name = '', role = 'Student', reg = code;
+        if (person) { name = person.studentName || 'Student'; role = person.studentClass ? `Student · ${person.studentClass}` : 'Student'; reg = person.registrationNo || person.admNo || code; }
+        else {
+            person = await db.collection('staff').findOne({ $or: [{ portalUsername: code }, { staffNo: code }, { employeeId: code }, { employeeNo: code }, { nationalId: code }] });
+            if (person) { personType = 'staff'; name = person.employeeName || person.name || 'Staff'; role = person.designation || 'Staff'; reg = person.staffNo || person.employeeId || person.portalUsername || code; }
+        }
+        if (!person) return res.status(404).json({ message: `No student or staff found for "${code}"` });
+
+        const personId = String(person._id);
+        const date = scanDay();
+        const now = new Date();
+        const existing = await db.collection('scan_attendance').findOne({ date, personId });
+
+        if (!existing) {
+            const doc = { date, personId, personType, name, role, registrationNo: reg, photo: person.photo || person.avatar || person.studentPhoto || null, inTime: now, outTime: null, status: 'Present', createdAt: now };
+            await db.collection('scan_attendance').insertOne(doc);
+            return res.json({ action: 'in', ...doc });
+        }
+        await db.collection('scan_attendance').updateOne({ _id: existing._id }, { $set: { outTime: now, status: 'Present' } });
+        return res.json({ action: 'out', ...existing, outTime: now });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Today's scan log.
+router.get('/attendance/scan/today', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const rows = await db.collection('scan_attendance').find({ date: scanDay() }).sort({ inTime: -1, createdAt: -1 }).toArray();
+        const present = rows.filter((r: any) => r.status === 'Present').length;
+        res.json({ rows, present, absent: rows.filter((r: any) => r.status === 'Absent').length, total: rows.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Mark everyone NOT scanned today as Absent.
+router.post('/attendance/scan/finalize', async (req: Request, res) => {
+    try {
+        const db = getRequestDb(req);
+        const date = scanDay();
+        const scanned = await db.collection('scan_attendance').find({ date }).toArray();
+        const ids = new Set(scanned.map((s: any) => s.personId));
+        const students = await db.collection('students').find({}).toArray();
+        const staff = await db.collection('staff').find({}).toArray();
+        const absents: any[] = [];
+        students.forEach((s: any) => { if (!ids.has(String(s._id))) absents.push({ date, personId: String(s._id), personType: 'student', name: s.studentName, role: s.studentClass ? `Student · ${s.studentClass}` : 'Student', registrationNo: s.registrationNo || s.admNo, inTime: null, outTime: null, status: 'Absent', createdAt: new Date() }); });
+        staff.forEach((s: any) => { if (!ids.has(String(s._id))) absents.push({ date, personId: String(s._id), personType: 'staff', name: s.employeeName || s.name, role: s.designation || 'Staff', inTime: null, outTime: null, status: 'Absent', createdAt: new Date() }); });
+        if (absents.length) await db.collection('scan_attendance').insertMany(absents);
+        res.json({ markedAbsent: absents.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Backfill: create/link Parent records from every student's father/mother fields
 // (for students added via bulk import before the auto-sync existed).
 router.post('/parents/generate-from-students', async (req: Request, res) => {

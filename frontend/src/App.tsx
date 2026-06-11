@@ -287,6 +287,7 @@ import MpesaIntegration from "./pages/tenant/modules/settings/MpesaIntegration";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
 import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
+import AttendanceScanner from "./pages/tenant/modules/AttendanceScanner";
 
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
@@ -485,6 +486,7 @@ const App = () => {
               <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
               <Route path="/departments" element={<DepartmentManagement />} />
               <Route path="/staff-roles" element={<StaffRoles />} />
+              <Route path="/attendance-scanner" element={<AttendanceScanner />} />
               <Route path="/academic-system/classes" element={<ClassesStreamsPage />} />
               <Route path="/academic-system/enrollments" element={<EnrollmentPage />} />
               <Route path="/academic-system/enroll" element={<EnrollmentFormPage />} />

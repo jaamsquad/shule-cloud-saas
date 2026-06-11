@@ -1,4 +1,4 @@
-import { Plus, Home, BookOpen, ArrowLeft, Loader2, Search, Trash2, Edit2, Table } from "lucide-react";
+import { Plus, Home, BookOpen, ArrowLeft, Loader2, Search, Trash2, Edit2, Table, LayoutGrid, List } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
@@ -11,6 +11,7 @@ export default function AllSubjects() {
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [view, setView] = useState<"grid" | "list">("grid");
     const [editingSubject, setEditingSubject] = useState<any>(null);
     const [showBulk, setShowBulk] = useState(false);
 
@@ -82,6 +83,10 @@ export default function AllSubjects() {
                             className="w-full h-11 pl-12 pr-6 bg-white border border-gray-100 rounded-xl focus:outline-none focus:border-[#5C67F2] shadow-sm text-slate-700 font-bold text-sm transition-all"
                         />
                     </div>
+                    <div className="bg-white border border-gray-100 rounded-xl p-1 flex shadow-sm">
+                        <button onClick={() => setView("grid")} className={`px-3 h-9 rounded-lg ${view === "grid" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-4 h-4" /></button>
+                        <button onClick={() => setView("list")} className={`px-3 h-9 rounded-lg ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><List className="w-4 h-4" /></button>
+                    </div>
                     <button
                         onClick={() => setShowBulk(v => !v)}
                         className={`h-11 px-5 font-black rounded-xl shadow-sm flex items-center gap-2 transition-all uppercase tracking-widest text-[10px] border ${showBulk ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-[#5C67F2] border-gray-100 hover:bg-slate-50"}`}
@@ -125,6 +130,36 @@ export default function AllSubjects() {
                         <div className="flex flex-col items-center justify-center py-20 gap-4">
                             <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
                             <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest animate-pulse">Syncing Subject Nodes...</p>
+                        </div>
+                    ) : view === "list" ? (
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                                        <th className="text-left px-5 py-3 font-black">Subject</th>
+                                        <th className="text-left px-3 py-3 font-black">Code</th>
+                                        <th className="text-left px-3 py-3 font-black">Classification</th>
+                                        <th className="text-right px-5 py-3 font-black">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredSubjects.length === 0 ? (
+                                        <tr><td colSpan={4} className="py-10 text-center text-slate-400">No subjects found.</td></tr>
+                                    ) : filteredSubjects.map((s: any) => (
+                                        <tr key={s._id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                            <td className="px-5 py-3 font-bold text-slate-700">{s.name}</td>
+                                            <td className="px-3 py-3 text-slate-500">{s.code || "—"}</td>
+                                            <td className="px-3 py-3"><span className="px-2.5 py-0.5 bg-indigo-50 text-[#5C67F2] rounded-lg text-[10px] font-black uppercase">{s.category || "Core"}</span></td>
+                                            <td className="px-5 py-3">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <button onClick={() => setEditingSubject(s)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
+                                                    <button onClick={() => deleteMutation.mutate(s._id)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

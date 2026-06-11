@@ -100,33 +100,31 @@ export default function StaffManageLogin() {
                 </a>
             </div>
 
-            <div className="p-6 pt-0 flex gap-5 items-start flex-wrap lg:flex-nowrap">
-                {/* Search sidebar */}
-                <div className="w-full lg:w-72 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex-shrink-0 mt-4">
-                    <h3 className="text-sm font-black text-center text-slate-800 mb-5 flex items-center justify-center gap-2">
-                        <Search className="w-4 h-4 text-[#5C67F2]" /> Search
-                    </h3>
-                    <div className="space-y-5">
-                        <div className="relative">
-                            <div className="absolute -top-3 left-5 bg-[#868DF4] text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10">Search Staff*</div>
-                            <input type="text" placeholder="Name or ID..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                                className="w-full h-11 px-4 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm text-slate-700" />
+            <div className="p-6 pt-0 flex flex-col gap-5">
+                {/* Top: search bar (horizontal) */}
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mt-4">
+                    <div className="flex flex-col md:flex-row md:items-end gap-3">
+                        <div className="flex items-center gap-2 text-slate-700"><Search className="w-4 h-4 text-[#5C67F2]" /><span className="font-black text-sm">Search</span></div>
+                        <div className="flex-1">
+                            <label className="block text-[9px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Search Staff</label>
+                            <input type="text" placeholder="Name or ID…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full h-10 px-4 border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm text-slate-700" />
                         </div>
-                        <div className="relative">
-                            <div className="absolute -top-3 left-5 bg-[#868DF4] text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10">Designation</div>
-                            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="w-full h-11 px-4 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm text-slate-700 bg-white">
+                        <div className="w-full md:w-56">
+                            <label className="block text-[9px] font-black text-[#5C67F2] uppercase tracking-widest mb-1">Designation</label>
+                            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="w-full h-10 px-4 border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm text-slate-700 bg-white">
                                 <option value="all">All Roles</option>
                                 {designations.map((d: any) => <option key={d} value={d}>{d}</option>)}
                             </select>
                         </div>
-                        <button onClick={bulkGenerate} className="w-full h-11 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-100">
-                            <Key className="w-4 h-4" /> Generate All
+                        <button onClick={bulkGenerate} className="h-10 px-6 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all shadow-md">
+                            <Key className="w-3.5 h-3.5" /> Generate All
                         </button>
                     </div>
                 </div>
 
                 {/* Table */}
-                <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 mt-4 overflow-hidden">
+                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                             <thead>
