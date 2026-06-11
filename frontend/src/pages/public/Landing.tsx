@@ -239,7 +239,7 @@ export default function Landing() {
             <p className="text-sm text-slate-500 max-w-xs mb-4">The all-in-one cloud platform powering schools across Kenya — academics, finance, communication and more.</p>
             <div className="space-y-1.5 text-sm text-slate-500">
               <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-slate-300" /> hello@shulecloud.com</p>
-              <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-slate-300" /> +254 700 000 000</p>
+              <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-slate-300" /> +254 726 151 104</p>
               <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-300" /> Nairobi, Kenya</p>
             </div>
           </div>

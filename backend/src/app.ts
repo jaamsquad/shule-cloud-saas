@@ -80,7 +80,9 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
         const { getMetaDb } = await import('./lib/mongodb');
         const metaDb = getMetaDb();
         const sub = req.params.subdomain.toLowerCase().trim();
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: sub });
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Case/space-insensitive match — stored subdomain may be "Egerton" etc.
+        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
         if (!tenant) return res.status(404).json({ message: 'School not found' });
         // Only return public, non-sensitive fields
         res.json({

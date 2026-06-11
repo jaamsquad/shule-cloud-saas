@@ -202,8 +202,8 @@ export default function Login() {
         return (
             <div className="h-screen flex items-center justify-center bg-[#f0f2ff]">
                 <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#5C67F2]" />
-                    <p className="text-sm font-bold text-gray-500">Looking up <span className="text-[#5C67F2]">{activeSubdomain}</span>…</p>
+                    <Loader2 className="w-8 h-8 animate-spin text-[#1B5FE3]" />
+                    <p className="text-sm font-bold text-gray-500">Looking up <span className="text-[#1B5FE3]">{activeSubdomain}</span>…</p>
                 </div>
             </div>
         );
@@ -228,13 +228,8 @@ export default function Login() {
                 {/* Left: Not Found panel */}
                 <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
                     <div className="max-w-sm w-full space-y-6">
-                        {/* Icon */}
-                        <div className="w-20 h-20 bg-rose-100 rounded-3xl flex items-center justify-center mx-auto">
-                            <span className="text-4xl">🏫</span>
-                        </div>
-
                         <div>
-                            <h1 className="text-2xl font-black text-gray-900 mb-2">School Not Found</h1>
+                            <h1 className="text-3xl font-black mb-2" style={{ color: "#0A1B3F" }}>School Not Found</h1>
                             <p className="text-sm text-gray-500 font-medium leading-relaxed">
                                 We couldn't find a school registered under
                                 <span className="font-black text-rose-600 mx-1 font-mono">"{notFoundSubdomain}"</span>.
@@ -247,15 +242,15 @@ export default function Login() {
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">What can I do?</p>
                             <ul className="space-y-2 text-sm text-gray-600">
                                 <li className="flex items-start gap-2">
-                                    <span className="text-[#5C67F2] font-black mt-0.5">→</span>
+                                    <span className="text-[#1B5FE3] font-black mt-0.5">→</span>
                                     Check the URL — make sure you typed the subdomain correctly
                                 </li>
                                 <li className="flex items-start gap-2">
-                                    <span className="text-[#5C67F2] font-black mt-0.5">→</span>
+                                    <span className="text-[#1B5FE3] font-black mt-0.5">→</span>
                                     Ask your school admin for the correct login link
                                 </li>
                                 <li className="flex items-start gap-2">
-                                    <span className="text-[#5C67F2] font-black mt-0.5">→</span>
+                                    <span className="text-[#1B5FE3] font-black mt-0.5">→</span>
                                     Register your school on ShuleCloud below
                                 </li>
                             </ul>
@@ -264,13 +259,13 @@ export default function Login() {
                         {/* Actions */}
                         <div className="space-y-3">
                             <a href="/register"
-                                className="w-full h-12 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm text-sm">
+                                className="w-full h-12 bg-[#1B5FE3] hover:bg-[#1147B8] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm text-sm">
                                 <Building2 className="w-4 h-4" />
                                 Register Your School on ShuleCloud
                             </a>
                             <a href="/login"
                                 className="w-full h-12 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-all border border-gray-200 text-sm">
-                                <GraduationCap className="w-4 h-4 text-[#5C67F2]" />
+                                <GraduationCap className="w-4 h-4 text-[#1B5FE3]" />
                                 Back to ShuleCloud Login
                             </a>
                         </div>
@@ -278,36 +273,28 @@ export default function Login() {
                         {/* Subdomain hint */}
                         <p className="text-[10px] text-gray-400 font-medium">
                             Looking for your school? Schools access ShuleCloud at
-                            <span className="font-mono text-[#5C67F2] mx-1">{subdomainHost("yourschool")}</span>
+                            <span className="font-mono text-[#1B5FE3] mx-1">{subdomainHost("yourschool")}</span>
                         </p>
                     </div>
                 </div>
 
                 {/* Right: Brand panel */}
-                <div className="hidden lg:flex w-[45%] bg-[#241B5C] flex-col items-center justify-center p-12 text-center text-white overflow-hidden relative">
+                <div className="hidden lg:flex w-[45%] bg-[#0A1B3F] flex-col items-center justify-center p-12 text-center text-white overflow-hidden relative">
                     <div className="relative z-10 space-y-4 max-w-sm">
-                        <div className="text-6xl mb-4">🌍</div>
                         <h2 className="text-3xl font-black tracking-tight">Join ShuleCloud</h2>
-                        <p className="text-sm text-purple-200 leading-relaxed font-medium">
-                            The world's fastest-growing cloud-based School Management Platform.
-                            Register your school today and go live in minutes.
+                        <p className="text-sm leading-relaxed font-medium" style={{ color: "#9DB6E8" }}>
+                            The all-in-one cloud platform for running your school — academics, finance and communication. Register your school and go live in minutes.
                         </p>
                         <div className="mt-6 grid grid-cols-2 gap-3 text-left">
-                            {[
-                                { icon: "✅", text: "Free to start" },
-                                { icon: "🚀", text: "Setup in minutes" },
-                                { icon: "🔒", text: "Data isolated per school" },
-                                { icon: "📱", text: "Mobile friendly" },
-                            ].map(f => (
-                                <div key={f.text} className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2">
-                                    <span className="text-base">{f.icon}</span>
-                                    <span className="text-xs font-bold text-purple-100">{f.text}</span>
+                            {["Free to start", "Setup in minutes", "Data isolated per school", "Mobile friendly"].map(t => (
+                                <div key={t} className="bg-white/10 rounded-xl px-3 py-2.5">
+                                    <span className="text-xs font-bold text-white/90">{t}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 h-64 overflow-hidden opacity-10">
-                        <div className="w-96 h-96 rounded-full bg-[#5C67F2] absolute -bottom-32 -left-16" />
+                        <div className="w-96 h-96 rounded-full bg-[#1B5FE3] absolute -bottom-32 -left-16" />
                         <div className="w-64 h-64 rounded-full bg-purple-400 absolute -bottom-20 right-10" />
                     </div>
                 </div>
@@ -330,7 +317,7 @@ export default function Login() {
                                 {schoolInfo.logo ? (
                                     <img src={schoolInfo.logo} alt={schoolInfo.name} className="w-10 h-10 rounded-xl object-contain border border-gray-100 bg-white p-0.5" />
                                 ) : (
-                                    <div className="w-10 h-10 bg-[#5C67F2] rounded-xl flex items-center justify-center text-white">
+                                    <div className="w-10 h-10 bg-[#1B5FE3] rounded-xl flex items-center justify-center text-white">
                                         <Building2 className="w-5 h-5" />
                                     </div>
                                 )}
@@ -346,14 +333,14 @@ export default function Login() {
                                     <GraduationCap className="w-6 h-6" />
                                 </div>
                                 <h1 className="text-xl font-black tracking-tight text-gray-800">
-                                    shule<span className="text-[#5C67F2]">cloud</span>
+                                    shule<span className="text-[#1B5FE3]">cloud</span>
                                 </h1>
                             </div>
                         )}
                         <p className="text-[11px] text-gray-500 font-medium">
                             One login for everyone — admins, teachers, students & parents.
                         </p>
-                        <h2 className="text-base font-bold text-[#5C67F2]">Welcome Back! 👋</h2>
+                        <h2 className="text-base font-bold text-[#1B5FE3]">Welcome Back!</h2>
                     </div>
 
                     {/* Form */}
@@ -363,14 +350,14 @@ export default function Login() {
                         {!detectedSubdomain && (
                             <div className="relative">
                                 <div className="relative group">
-                                    <Building2 className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                                    <Building2 className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#1B5FE3] transition-colors" />
                                     <input
                                         type="text"
                                         value={schoolSearch}
                                         onChange={e => { setSchoolSearch(e.target.value); setShowSuggestions(true); }}
                                         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                         placeholder="Search for your school (type 4+ letters)…"
-                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
+                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#1B5FE3] transition-all text-xs text-gray-700 font-medium"
                                     />
                                 </div>
                                 {showSuggestions && schoolSuggestions.length > 0 && (
@@ -378,17 +365,17 @@ export default function Login() {
                                         {schoolSuggestions.map((s: any) => (
                                             <button key={s.subdomain} type="button"
                                                 onClick={() => { window.location.href = buildSubdomainUrl(s.subdomain, "/login"); }}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#5C67F2]/5 text-left border-b border-gray-50 last:border-0 transition-colors">
+                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#1B5FE3]/5 text-left border-b border-gray-50 last:border-0 transition-colors">
                                                 {s.logo ? (
                                                     <img src={s.logo} alt={s.name} className="w-8 h-8 rounded-lg object-contain border border-gray-100" />
                                                 ) : (
-                                                    <div className="w-8 h-8 rounded-lg bg-[#5C67F2]/10 flex items-center justify-center text-[#5C67F2] font-black text-sm">{s.name.charAt(0)}</div>
+                                                    <div className="w-8 h-8 rounded-lg bg-[#1B5FE3]/10 flex items-center justify-center text-[#1B5FE3] font-black text-sm">{s.name.charAt(0)}</div>
                                                 )}
                                                 <div>
                                                     <p className="text-sm font-black text-gray-800">{s.name}</p>
                                                     <p className="text-[10px] text-gray-400 font-mono">{subdomainHost(s.subdomain)}</p>
                                                 </div>
-                                                <span className="ml-auto text-[10px] text-[#5C67F2] font-black">Go →</span>
+                                                <span className="ml-auto text-[10px] text-[#1B5FE3] font-black">Go →</span>
                                             </button>
                                         ))}
                                     </div>
@@ -404,9 +391,9 @@ export default function Login() {
 
                         {/* Subdomain badge when already on a subdomain */}
                         {detectedSubdomain && schoolInfo && (
-                            <div className="flex items-center gap-2 bg-[#5C67F2]/8 border border-[#5C67F2]/20 rounded-xl px-3 py-2">
+                            <div className="flex items-center gap-2 bg-[#1B5FE3]/8 border border-[#1B5FE3]/20 rounded-xl px-3 py-2">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
-                                <span className="text-xs font-bold text-[#5C67F2]">{schoolInfo.name}</span>
+                                <span className="text-xs font-bold text-[#1B5FE3]">{schoolInfo.name}</span>
                                 <span className="text-[10px] text-gray-400 ml-auto font-mono">{detectedSubdomain}</span>
                             </div>
                         )}
@@ -416,7 +403,7 @@ export default function Login() {
                             <>
                                 {/* Username / Email */}
                                 <div className="relative group">
-                                    <User className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                                    <User className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#1B5FE3] transition-colors" />
                                     <input
                                         type="text"
                                         placeholder="Email, username, admission no. or phone"
@@ -424,11 +411,11 @@ export default function Login() {
                                         onChange={e => setUsername(e.target.value)}
                                         autoComplete="username"
                                         required
-                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
+                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#1B5FE3] transition-all text-xs text-gray-700 font-medium"
                                     />
                                     {hint && (
-                                        <p className="text-[9px] text-[#5C67F2] font-bold mt-0.5 flex items-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-[#5C67F2] inline-block" />
+                                        <p className="text-[9px] text-[#1B5FE3] font-bold mt-0.5 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#1B5FE3] inline-block" />
                                             {hint}
                                         </p>
                                     )}
@@ -436,7 +423,7 @@ export default function Login() {
 
                                 {/* Password */}
                                 <div className="relative group">
-                                    <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                                    <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#1B5FE3] transition-colors" />
                                     <input
                                         type={showPassword ? "text" : "password"}
                                         placeholder="Your password"
@@ -444,21 +431,21 @@ export default function Login() {
                                         onChange={e => setPassword(e.target.value)}
                                         autoComplete="current-password"
                                         required
-                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-10 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
+                                        className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-10 focus:outline-none focus:border-[#1B5FE3] transition-all text-xs text-gray-700 font-medium"
                                     />
                                     <button type="button" onClick={() => setShowPassword(p => !p)}
-                                        className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#5C67F2]">
+                                        className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1B5FE3]">
                                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                    <input type="checkbox" id="remember" className="w-3.5 h-3.5 rounded border-gray-300 text-[#5C67F2] focus:ring-[#5C67F2]" />
+                                    <input type="checkbox" id="remember" className="w-3.5 h-3.5 rounded border-gray-300 text-[#1B5FE3] focus:ring-[#1B5FE3]" />
                                     <label htmlFor="remember" className="text-[11px] font-bold text-gray-400">Remember Me</label>
                                 </div>
 
                                 <button type="submit" disabled={isLoading}
-                                    className="w-full h-11 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 text-sm">
+                                    className="w-full h-11 bg-[#1B5FE3] hover:bg-[#1147B8] text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 text-sm">
                                     {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
                                     {isLoading ? "Signing in..." : "Sign In"}
                                 </button>
@@ -481,8 +468,8 @@ export default function Login() {
                     {/* Forgot password — only on subdomain */}
                     {detectedSubdomain && (
                     <div className="text-center">
-                        <Link to="/forgot-password" className="text-[11px] font-black text-gray-800 hover:text-[#5C67F2] transition-colors">
-                            Forgot your <span className="text-[#5C67F2]">password?</span>
+                        <Link to="/forgot-password" className="text-[11px] font-black text-gray-800 hover:text-[#1B5FE3] transition-colors">
+                            Forgot your <span className="text-[#1B5FE3]">password?</span>
                         </Link>
                     </div>
                     )}
@@ -490,11 +477,11 @@ export default function Login() {
             </div>
 
             {/* ── Right: Brand panel ──────────────────────────────────────── */}
-            <div className="hidden lg:flex w-[45%] bg-[#241B5C] relative flex-col items-center justify-center p-12 text-center text-white overflow-hidden">
+            <div className="hidden lg:flex w-[45%] bg-[#0A1B3F] relative flex-col items-center justify-center p-12 text-center text-white overflow-hidden">
                 <div className="absolute top-10 right-10 flex items-center gap-4">
-                    <span className="text-sm font-medium text-purple-200">Don't have an account?</span>
+                    <span className="text-sm font-medium text-blue-100">Don't have an account?</span>
                     <Link to="/register"
-                        className="px-6 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
+                        className="px-6 py-2 bg-[#1B5FE3] hover:bg-[#1147B8] rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
                         <User className="w-4 h-4" /> Sign Up
                     </Link>
                 </div>
@@ -512,19 +499,19 @@ export default function Login() {
                         <>
                             <h2 className="text-3xl font-black tracking-tight leading-tight">{schoolInfo.name}</h2>
                             {schoolInfo.tagline && (
-                                <p className="text-sm text-purple-200 leading-relaxed font-medium">{schoolInfo.tagline}</p>
+                                <p className="text-sm text-blue-100 leading-relaxed font-medium">{schoolInfo.tagline}</p>
                             )}
                             {schoolInfo.address && (
-                                <p className="text-xs text-purple-300 font-medium">{schoolInfo.address}</p>
+                                <p className="text-xs text-blue-200 font-medium">{schoolInfo.address}</p>
                             )}
-                            <p className="text-xs text-purple-300/60 font-bold uppercase tracking-widest">
+                            <p className="text-xs text-blue-200/60 font-bold uppercase tracking-widest">
                                 Powered by shulecloud
                             </p>
                         </>
                     ) : (
                         <>
                             <h2 className="text-3xl font-black tracking-tight leading-tight">Continue Managing!</h2>
-                            <p className="text-sm text-purple-200 leading-relaxed font-medium">
+                            <p className="text-sm text-blue-100 leading-relaxed font-medium">
                                 Pick up right where you left off. Sign in to the world's favorite fast, easy, and 100% cloud-based school management platform.
                             </p>
                         </>
@@ -533,7 +520,7 @@ export default function Login() {
 
                 {/* Abstract decoration */}
                 <div className="absolute bottom-0 left-0 right-0 h-64 overflow-hidden opacity-10">
-                    <div className="w-96 h-96 rounded-full bg-[#5C67F2] absolute -bottom-32 -left-16" />
+                    <div className="w-96 h-96 rounded-full bg-[#1B5FE3] absolute -bottom-32 -left-16" />
                     <div className="w-64 h-64 rounded-full bg-purple-400 absolute -bottom-20 right-10" />
                 </div>
             </div>

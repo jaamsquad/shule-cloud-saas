@@ -79,7 +79,10 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
 
     try {
         const metaDb = getMetaDb();
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain });
+        const esc = String(subdomain).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Case/space-insensitive — the stored subdomain may be "Egerton".
+        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } })
+            || await metaDb.collection('Tenant').findOne({ subdomain });
 
         if (!tenant) {
             return res.status(404).json({ message: `School "${subdomain}" not found. Check your institution's URL.` });
