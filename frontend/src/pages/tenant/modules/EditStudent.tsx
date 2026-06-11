@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Home, Plus, RotateCcw, Check, Loader2, ArrowLeft } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
