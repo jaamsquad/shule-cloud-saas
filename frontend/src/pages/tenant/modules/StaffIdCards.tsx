@@ -4,12 +4,13 @@ import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 
 export default function StaffIdCards() {
-    const [activeStyle, setActiveStyle] = useState("Default");
+    const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("staffCardStyle") || "Landscape");
     const { items: staffMembers, isLoading, updateItem } = useItems("staff");
     const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
 
-    const styles = ["Default", "Professional", "Minimal", "Corporate"];
+    const styles = ["Landscape", "Professional", "Corporate", "Minimal", "Default"];
+    const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("staffCardStyle", s); };
     
     const selectedStaff = staffMembers?.find((s: any) => s._id === selectedStaffId) || staffMembers?.[0];
 
@@ -59,7 +60,7 @@ export default function StaffIdCards() {
                     {styles.map(s => (
                         <button 
                             key={s}
-                            onClick={() => setActiveStyle(s)}
+                            onClick={() => pickStyle(s)}
                             className={`h-10 px-6 rounded-xl font-bold text-sm shadow-sm border whitespace-nowrap transition-all ${
                                 activeStyle === s 
                                     ? "bg-[#5C67F2] text-white border-[#5C67F2]" 
@@ -251,6 +252,35 @@ function IdCard({ staff, onUpload, isUploading, activeStyle }: { staff: any, onU
                         <div className="bg-white p-2 rounded-xl">
                             <QrCode className="w-16 h-16 text-slate-900" />
                         </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (activeStyle === "Landscape") {
+        const name = staff.fullName || staff.employeeName || staff.name || "Staff Member";
+        return (
+            <div className="w-[520px] h-[330px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative flex group">
+                <UploadButton />
+                {/* Left colored panel */}
+                <div className="w-[185px] bg-gradient-to-b from-[#5C67F2] to-[#0A1B3F] flex flex-col items-center justify-center p-5 relative">
+                    <div className="absolute -right-5 top-0 bottom-0 w-10 bg-white/10 -skew-x-12 pointer-events-none" />
+                    <Avatar className="w-28 h-28 rounded-2xl border-4 border-white/80 shadow-lg overflow-hidden flex items-center justify-center bg-white/10" />
+                    <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{staff.designation || staff.role || "Staff"}</p>
+                </div>
+                {/* Right info */}
+                <div className="flex-1 p-6 flex flex-col">
+                    <div className="flex items-center gap-2 mb-1"><Briefcase className="w-4 h-4 text-[#5C67F2]" /><span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-[0.2em]">Staff Identity Card</span></div>
+                    <h3 className="font-black text-slate-900 text-xl leading-tight">{name}</h3>
+                    <div className="mt-4 space-y-2 text-xs flex-1">
+                        {[["ID No", staffId], ["Department", staff.department || "Staff"], ["Joined", staff.joiningDate || new Date().toLocaleDateString()]].map(([k, v]) => (
+                            <div key={k} className="flex items-center"><span className="w-24 text-slate-400 font-bold uppercase text-[9px] tracking-wide">{k}</span><span className="font-bold text-slate-800">→ {v}</span></div>
+                        ))}
+                    </div>
+                    <div className="flex items-end justify-between mt-2">
+                        <div className="flex flex-col"><Barcode className="h-9 w-36 text-slate-800" /><span className="text-[8px] font-black text-slate-400 tracking-[0.2em] mt-0.5">{staffId}</span></div>
+                        <div className="bg-white border border-slate-100 p-1 rounded"><QrCode className="w-12 h-12 text-slate-900" /></div>
                     </div>
                 </div>
             </div>

@@ -4,12 +4,13 @@ import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 
 export default function StudentIdCards() {
-    const [activeStyle, setActiveStyle] = useState("Default");
+    const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("studentCardStyle") || "Landscape");
     const { items: students, isLoading, updateItem } = useItems("students");
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
 
-    const styles = ["Default", "Style 1", "Style 2", "Style 3", "Style 4"];
+    const styles = ["Landscape", "Default"];
+    const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("studentCardStyle", s); };
     
     const selectedStudent = students?.find((s: any) => s._id === selectedStudentId) || students?.[0];
 
@@ -59,7 +60,7 @@ export default function StudentIdCards() {
                     {styles.map(s => (
                         <button 
                             key={s}
-                            onClick={() => setActiveStyle(s)}
+                            onClick={() => pickStyle(s)}
                             className={`h-10 px-6 rounded-xl font-bold text-sm shadow-sm border whitespace-nowrap transition-all ${
                                 activeStyle === s 
                                     ? "bg-[#5C67F2] text-white border-[#5C67F2]" 
@@ -89,7 +90,7 @@ export default function StudentIdCards() {
                         {students && students.length > 0 ? (
                             students.map((student: any) => (
                                 <div key={student._id} className="print:mb-8 print:break-inside-avoid flex justify-center">
-                                    <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} />
+                                    <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} />
                                 </div>
                             ))
                         ) : (
@@ -105,7 +106,40 @@ export default function StudentIdCards() {
     );
 }
 
-function IdCard({ student, onUpload, isUploading }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean }) {
+function IdCard({ student, onUpload, isUploading, activeStyle }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string }) {
+    const photo = student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto;
+    const regNo = student.registrationNo || student.admNo || "—";
+
+    if (activeStyle === "Landscape") {
+        return (
+            <div className="w-[520px] h-[330px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative flex group">
+                <label className="absolute top-3 right-3 cursor-pointer z-20"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-9 h-9 bg-white/80 rounded-xl border border-gray-100 shadow-sm flex items-center justify-center text-[#5C67F2]"><Camera className="w-4 h-4" /></div></label>
+                {/* Left colored panel */}
+                <div className="w-[185px] bg-gradient-to-b from-[#5C67F2] to-[#0A1B3F] flex flex-col items-center justify-center p-5 relative">
+                    <div className="absolute -right-5 top-0 bottom-0 w-10 bg-white/10 -skew-x-12 pointer-events-none" />
+                    <div className="w-28 h-28 rounded-2xl border-4 border-white/80 shadow-lg overflow-hidden flex items-center justify-center bg-white/10">
+                        {isUploading ? <Loader2 className="w-8 h-8 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap className="w-12 h-12 text-white/70" />}
+                    </div>
+                    <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{student.studentClass || "Student"}</p>
+                </div>
+                {/* Right info */}
+                <div className="flex-1 p-6 flex flex-col">
+                    <div className="flex items-center gap-2 mb-1"><GraduationCap className="w-4 h-4 text-[#5C67F2]" /><span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-[0.2em]">Student Identity Card</span></div>
+                    <h3 className="font-black text-slate-900 text-xl leading-tight">{student.studentName || "Student"}</h3>
+                    <div className="mt-4 space-y-2 text-xs flex-1">
+                        {[["Reg No", regNo], ["Class", student.studentClass || "—"], ["Gender", student.gender || "—"]].map(([k, v]) => (
+                            <div key={k} className="flex items-center"><span className="w-24 text-slate-400 font-bold uppercase text-[9px] tracking-wide">{k}</span><span className="font-bold text-slate-800">→ {v}</span></div>
+                        ))}
+                    </div>
+                    <div className="flex items-end justify-between mt-2">
+                        <div className="flex flex-col"><Barcode className="h-9 w-36 text-slate-800" /><span className="text-[8px] font-black text-slate-400 tracking-[0.2em] mt-0.5">{regNo}</span></div>
+                        <div className="bg-white border border-slate-100 p-1 rounded"><QrCode className="w-12 h-12 text-slate-900" /></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="w-[340px] h-[520px] bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative flex flex-col items-center group">
             {/* Background Pattern - Academic Icons */}
