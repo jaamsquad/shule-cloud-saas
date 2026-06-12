@@ -48,6 +48,15 @@ export default function FeeStructure() {
         },
     });
 
+    // Map raw particular keys → human-readable names for display.
+    const labelMap = new Map<string, string>();
+    (particularsData || []).forEach((p: any) => { if (p?.label) labelMap.set(p.label, p.name || p.title || p.label); });
+    const prettyLabel = (label: string) => {
+        if (labelMap.has(label)) return labelMap.get(label)!;
+        if (/^CUSTOM[-_]?\d+$/i.test(label)) return "Custom Charge";
+        return String(label).replace(/[-_]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+    };
+
     const [formData, setFormData] = useState<any>({
         className: "",
         term: "Term 1",
@@ -514,7 +523,7 @@ export default function FeeStructure() {
                                                     <div className="grid grid-cols-1 gap-1.5 max-h-36 overflow-y-auto pr-1.5 custom-scrollbar">
                                                         {amountsList.map(([label, val]) => (
                                                             <div key={label} className="flex justify-between items-center text-[10px] font-bold text-slate-500 py-1 border-b border-dashed border-slate-50 last:border-0">
-                                                                <span className="uppercase">{label}</span>
+                                                                <span className="uppercase">{prettyLabel(label)}</span>
                                                                 <span className="text-slate-800 font-extrabold">KES {Number(val).toLocaleString()}</span>
                                                             </div>
                                                         ))}

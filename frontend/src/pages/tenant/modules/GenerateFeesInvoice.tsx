@@ -210,23 +210,21 @@ export default function GenerateFeesInvoice() {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50 max-h-64 overflow-y-auto">
                                     {classes.map((c: any) => {
-                                        const isSelected = selectedClasses.includes(c.name || c.levelName);
+                                        const label = c.name || c.levelName;
+                                        const isSelected = selectedClasses.includes(label);
                                         return (
-                                            <div
-                                                key={c._id}
-                                                onClick={() => handleToggleClass(c.name || c.levelName)}
-                                                className={`p-3 border rounded-xl cursor-pointer text-center text-xs font-bold uppercase transition-all ${
-                                                    isSelected
-                                                    ? "border-[#5C67F2] bg-indigo-50/50 text-[#5C67F2]"
-                                                    : "border-slate-100 hover:border-slate-200 text-slate-600 bg-slate-50"
-                                                }`}
-                                            >
-                                                {c.name || c.levelName}
-                                            </div>
+                                            <label key={c._id} onClick={() => handleToggleClass(label)}
+                                                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-xs font-bold uppercase transition-colors ${isSelected ? "bg-indigo-50/50 text-[#5C67F2]" : "text-slate-600 hover:bg-slate-50"}`}>
+                                                <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "border-slate-300"}`}>
+                                                    {isSelected && <Check className="w-3 h-3" />}
+                                                </span>
+                                                {label}
+                                            </label>
                                         );
                                     })}
+                                    {classes.length === 0 && <p className="px-4 py-6 text-center text-[10px] text-slate-400 uppercase font-bold">No classes found</p>}
                                 </div>
                             </div>
 

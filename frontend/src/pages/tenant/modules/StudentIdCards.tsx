@@ -1,4 +1,5 @@
 import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcode, GraduationCap } from "lucide-react";
+import { IdCardPrintStyle } from "./idCardPrint";
 import { useState } from "react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ export default function StudentIdCards() {
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
+            <IdCardPrintStyle />
             {/* Header Area */}
             <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm z-10 m-4 rounded-xl flex-wrap gap-4">
                 <div className="flex items-center flex-1">
@@ -86,10 +88,10 @@ export default function StudentIdCards() {
                         <p className="text-slate-400 font-bold animate-pulse">Synchronizing student nodes...</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500 print:block print:gap-0">
+                    <div id="id-card-print" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {students && students.length > 0 ? (
                             students.map((student: any) => (
-                                <div key={student._id} className="print:mb-8 print:break-inside-avoid flex justify-center">
+                                <div key={student._id} className="flex justify-center">
                                     <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} />
                                 </div>
                             ))

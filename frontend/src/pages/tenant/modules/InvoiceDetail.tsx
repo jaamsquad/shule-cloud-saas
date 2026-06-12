@@ -13,19 +13,31 @@ export default function InvoiceDetail() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    const { data: invoice, isLoading } = useQuery({
+    const { data: raw, isLoading } = useQuery({
         queryKey: ["invoice", id],
-        queryFn: async () => (await api.get(`/invoices/${id}`)).data.data,
+        queryFn: async () => (await api.get(`/schools/default/invoices/${id}`)).data.data,
         enabled: !!id
     });
 
     const markAsPaid = useMutation({
-        mutationFn: async () => api.patch(`/invoices/${id}`, { status: "Paid" }),
+        mutationFn: async () => api.put(`/schools/default/invoices/${id}`, { status: "Paid" }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["invoice", id] });
             toast.success("Invoice settled successfully");
         }
     });
+
+    // Normalize the real invoice shape (total_due / line_items) → the fields
+    // the rest of this page expects (total / particulars / feeMonth).
+    const invoice: any = raw ? {
+        ...raw,
+        total: raw.total ?? raw.total_due ?? raw.amount_due ?? raw.amount ?? 0,
+        feeMonth: raw.feeMonth ?? raw.period ?? raw.term ?? raw.month ?? raw.due_date?.slice?.(0, 7) ?? "",
+        invoice_no: raw.invoice_no ?? raw.invoiceNo ?? "",
+        particulars: raw.particulars ?? (Array.isArray(raw.line_items) && raw.line_items.length
+            ? Object.fromEntries(raw.line_items.map((li: any) => [li.label || li.name || li.description || "Fee", li.amount || 0]))
+            : { "FEE PAYMENT": raw.total ?? raw.total_due ?? 0 }),
+    } : raw;
 
     const generatePrintHTML = () => {
         if (!invoice) return "";

@@ -33,6 +33,19 @@ export default function JobLetter() {
         },
     });
 
+    // Real school branding (same source the header uses)
+    const { data: schoolRaw } = useQuery({
+        queryKey: ["theme_settings"],
+        queryFn: async () => (await api.get("/theme_settings")).data,
+    });
+    const school = Array.isArray(schoolRaw) ? schoolRaw[0] : (schoolRaw || {});
+    const schoolName = school?.name || school?.instituteName || school?.schoolName || "Your School";
+    const schoolAddr = school?.address || school?.location || "";
+    const schoolCity = school?.city || school?.county || "";
+    const schoolEmail = school?.email || school?.contactEmail || "";
+    const schoolPhone = school?.phone || school?.contactPhone || school?.mobile || "";
+    const schoolLogo = school?.logo || school?.schoolLogo || school?.image || "";
+
     const filteredStaff = staff.filter((s: any) => {
         const name = (s.firstName ? `${s.firstName} ${s.lastName}` : (s.employeeName || s.name || '')).toLowerCase();
         return name.includes(searchTerm.toLowerCase()) || s.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -258,18 +271,18 @@ export default function JobLetter() {
                             <div className="flex justify-between items-start mb-10 relative z-10">
                                 <div>
                                     <div className="flex items-center gap-2.5 mb-3">
-                                        <div className="w-10 h-10 bg-[#5C67F2] rounded-xl flex items-center justify-center text-white shadow-md">
-                                            <Building2 className="w-6 h-6" />
+                                        <div className="w-12 h-12 bg-[#5C67F2] rounded-xl flex items-center justify-center text-white shadow-md overflow-hidden">
+                                            {schoolLogo ? <img src={schoolLogo} alt="" className="w-full h-full object-cover" /> : <Building2 className="w-6 h-6" />}
                                         </div>
                                         <div>
-                                            <h2 className="text-xl font-black text-slate-800 tracking-tighter">SHULE<span className="text-[#5C67F2]">CLOUD</span></h2>
-                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Global Academic Ecosystem</p>
+                                            <h2 className="text-xl font-black text-slate-800 tracking-tight">{schoolName}</h2>
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{school?.tagline || school?.motto || "Office of Human Resources"}</p>
                                         </div>
                                     </div>
                                     <div className="text-slate-500 text-[10px] font-medium space-y-0.5">
-                                        <p>Administration Block, Suite 402</p>
-                                        <p>Nairobi, Kenya</p>
-                                        <p>hr@shulecloud.com | +254 700 000 000</p>
+                                        {schoolAddr && <p>{schoolAddr}</p>}
+                                        {schoolCity && <p>{schoolCity}</p>}
+                                        {(schoolEmail || schoolPhone) && <p>{[schoolEmail, schoolPhone].filter(Boolean).join(" | ")}</p>}
                                     </div>
                                 </div>
                                 <div className="text-right">

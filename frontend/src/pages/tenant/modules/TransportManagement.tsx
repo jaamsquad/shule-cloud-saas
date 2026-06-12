@@ -327,63 +327,41 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                     <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
                                 </div>
                             ) : zones.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {zones.map((zone: any) => {
-                                        const assignedCount = students.filter((s: any) => s.transportZone === zone.name).length;
-                                        return (
-                                            <div key={zone._id} className="bg-slate-50/50 rounded-3xl border border-slate-100 p-6 relative overflow-hidden group shadow-sm hover:shadow-md transition-all">
-                                                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full flex items-center justify-end p-4 text-[#5C67F2] group-hover:scale-110 transition-transform">
-                                                    <Bus className="w-6 h-6" />
-                                                </div>
-                                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight pr-10">{zone.name}</h3>
-                                                <div className="mt-2 text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                                                    <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
-                                                    KES {parseFloat(zone.fee || 0).toLocaleString()} / Term
-                                                </div>
-                                                
-                                                <div className="mt-6 space-y-2.5">
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <User className="w-3.5 h-3.5 text-slate-400" />
-                                                        Driver: <span className="font-black text-slate-700">{zone.driver || "Not assigned"}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <Shield className="w-3.5 h-3.5 text-slate-400" />
-                                                        Co-Driver: <span className="font-black text-slate-700">{zone.coDriver || "Not assigned"}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <Bus className="w-3.5 h-3.5 text-slate-400" />
-                                                        Bus No: <span className="font-black text-slate-700">{zone.busNo || "Not assigned"}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-6 pt-5 border-t border-slate-100 flex justify-between items-center">
-                                                    <span className="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-[9px] font-black uppercase tracking-wider">
-                                                        {assignedCount} Assigned Students
-                                                    </span>
-                                                    <div className="flex gap-2">
-                                                        <button 
-                                                            onClick={() => navigate(`/transport/zones/edit/${zone._id}`)}
-                                                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 hover:bg-slate-50 text-slate-500 transition-colors shadow-sm"
-                                                            title="Edit Zone"
-                                                        >
-                                                            <Edit2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => {
-                                                                if (confirm("Are you sure you want to delete this transport zone?")) {
-                                                                    deleteZoneMutation.mutate(zone._id);
-                                                                }
-                                                            }}
-                                                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 hover:bg-rose-50 text-rose-500 transition-colors shadow-sm"
-                                                            title="Delete Zone"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                                                <th className="text-left px-5 py-3 font-black">Zone</th>
+                                                <th className="text-left px-3 py-3 font-black">Fee / Term</th>
+                                                <th className="text-left px-3 py-3 font-black">Driver</th>
+                                                <th className="text-left px-3 py-3 font-black">Co-Driver</th>
+                                                <th className="text-left px-3 py-3 font-black">Bus No</th>
+                                                <th className="text-center px-3 py-3 font-black">Students</th>
+                                                <th className="text-right px-5 py-3 font-black">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {zones.map((zone: any) => {
+                                                const assignedCount = students.filter((s: any) => s.transportZone === zone.name).length;
+                                                return (
+                                                    <tr key={zone._id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                        <td className="px-5 py-3 font-bold text-slate-700 uppercase">{zone.name}</td>
+                                                        <td className="px-3 py-3 text-slate-600">KES {parseFloat(zone.fee || 0).toLocaleString()}</td>
+                                                        <td className="px-3 py-3 text-slate-500">{zone.driver || "—"}</td>
+                                                        <td className="px-3 py-3 text-slate-500">{zone.coDriver || "—"}</td>
+                                                        <td className="px-3 py-3 text-slate-500">{zone.busNo || "—"}</td>
+                                                        <td className="px-3 py-3 text-center"><span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-black">{assignedCount}</span></td>
+                                                        <td className="px-5 py-3">
+                                                            <div className="flex items-center justify-end gap-1.5">
+                                                                <button onClick={() => navigate(`/transport/zones/edit/${zone._id}`)} title="Edit" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
+                                                                <button onClick={() => { if (confirm("Delete this transport zone?")) deleteZoneMutation.mutate(zone._id); }} title="Delete" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             ) : (
                                 <div className="text-center py-20 text-slate-400 flex flex-col items-center justify-center gap-4 border border-dashed border-slate-200 rounded-[2rem]">
@@ -505,57 +483,36 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                     <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
                                 </div>
                             ) : buses.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {buses.map((bus: any) => {
-                                        return (
-                                            <div key={bus._id} className="bg-slate-50/50 rounded-3xl border border-slate-100 p-6 relative overflow-hidden group shadow-sm hover:shadow-md transition-all">
-                                                <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50/50 rounded-bl-full flex items-center justify-end p-4 text-amber-500 group-hover:scale-110 transition-transform">
-                                                    <Bus className="w-6 h-6" />
-                                                </div>
-                                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight pr-10">{bus.plateNo}</h3>
-                                                <div className="mt-2 text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                                                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                                    {bus.model || "General Transport Vehicle"}
-                                                </div>
-                                                
-                                                <div className="mt-6 space-y-2.5">
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <User className="w-3.5 h-3.5 text-slate-400" />
-                                                        Driver: <span className="font-black text-slate-700">{bus.driver || "No driver assigned"}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <Shield className="w-3.5 h-3.5 text-slate-400" />
-                                                        Co-Driver: <span className="font-black text-slate-700">{bus.coDriver || "No co-driver assigned"}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 uppercase">
-                                                        <Bus className="w-3.5 h-3.5 text-slate-400" />
-                                                        Capacity: <span className="font-black text-slate-700">{bus.capacity ? `${bus.capacity} Seats` : "N/A"}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-6 pt-5 border-t border-slate-100 flex justify-end gap-2">
-                                                    <button 
-                                                        onClick={() => navigate(`/transport/buses/edit/${bus._id}`)}
-                                                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 hover:bg-slate-50 text-slate-500 transition-colors shadow-sm"
-                                                        title="Edit Bus"
-                                                    >
-                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => {
-                                                            if (confirm("Are you sure you want to delete this bus?")) {
-                                                                deleteBusMutation.mutate(bus._id);
-                                                            }
-                                                        }}
-                                                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 hover:bg-rose-50 text-rose-500 transition-colors shadow-sm"
-                                                        title="Delete Bus"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                                                <th className="text-left px-5 py-3 font-black">Plate No</th>
+                                                <th className="text-left px-3 py-3 font-black">Model / Make</th>
+                                                <th className="text-left px-3 py-3 font-black">Driver</th>
+                                                <th className="text-left px-3 py-3 font-black">Co-Driver</th>
+                                                <th className="text-center px-3 py-3 font-black">Capacity</th>
+                                                <th className="text-right px-5 py-3 font-black">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {buses.map((bus: any) => (
+                                                <tr key={bus._id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                                    <td className="px-5 py-3 font-bold text-slate-700 uppercase">{bus.plateNo}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{bus.model || "—"}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{bus.driver || "—"}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{bus.coDriver || "—"}</td>
+                                                    <td className="px-3 py-3 text-center text-slate-600">{bus.capacity ? `${bus.capacity}` : "—"}</td>
+                                                    <td className="px-5 py-3">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <button onClick={() => navigate(`/transport/buses/edit/${bus._id}`)} title="Edit" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
+                                                            <button onClick={() => { if (confirm("Delete this bus?")) deleteBusMutation.mutate(bus._id); }} title="Delete" className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             ) : (
                                 <div className="text-center py-20 text-slate-400 flex flex-col items-center justify-center gap-4 border border-dashed border-slate-200 rounded-[2rem]">

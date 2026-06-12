@@ -44,6 +44,24 @@ export default function StudentsInfoReport() {
     const students = resData?.data || [];
     const pagination = resData?.pagination || { total: 0, page: 1, pages: 1 };
 
+    // Real school branding for the print header.
+    const { data: schoolRaw } = useQuery({ queryKey: ["theme_settings"], queryFn: async () => (await api.get("/theme_settings")).data });
+    const school = Array.isArray(schoolRaw) ? schoolRaw[0] : (schoolRaw || {});
+    const schoolName = school?.name || school?.instituteName || school?.schoolName || "School";
+    const schoolAddr = [school?.address || school?.location, school?.city || school?.county].filter(Boolean).join(", ");
+    const schoolLogo = school?.logo || school?.schoolLogo || school?.image || "";
+
+    // Format admission dates — handles Excel serial numbers (46027.12…) and ISO strings.
+    const fmtDate = (v: any) => {
+        if (v === null || v === undefined || v === "") return "—";
+        const n = typeof v === "number" ? v : (/^\d+(\.\d+)?$/.test(String(v)) ? parseFloat(String(v)) : NaN);
+        let d: Date;
+        if (!isNaN(n) && n > 20000 && n < 90000) d = new Date(Math.round((n - 25569) * 86400 * 1000)); // Excel serial
+        else d = new Date(v);
+        if (isNaN(d.getTime())) return String(v);
+        return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    };
+
     const handlePrint = () => {
         const rowsHtml = students.map((s: any, i: number) => `
             <tr style="border-bottom: 1px solid #E2E8F0; background: ${i % 2 === 0 ? '#fff' : '#F8FAFC'};">
@@ -51,7 +69,7 @@ export default function StudentsInfoReport() {
                 <td style="padding: 12px 16px; font-weight: 600; color: #0F172A;">${s.name}</td>
                 <td style="padding: 12px 16px; text-align: center; color: #475569;">${s.gender}</td>
                 <td style="padding: 12px 16px; font-weight: 600; color: #334155;">${s.studentClass || s.className || 'N/A'}</td>
-                <td style="padding: 12px 16px; color: #475569;">${s.admissionDate || 'N/A'}</td>
+                <td style="padding: 12px 16px; color: #475569;">${fmtDate(s.admissionDate)}</td>
                 <td style="padding: 12px 16px; color: #334155;">${s.parents?.[0]?.name || 'N/A'} (${s.parents?.[0]?.phone || 'N/A'})</td>
                 <td style="padding: 12px 16px; text-align: center;"><span style="background:#DCFCE7;color:#15803D;padding:4px 8px;border-radius:6px;font-weight:700;font-size:10px;text-transform:uppercase;">${s.status || 'Active'}</span></td>
             </tr>
@@ -76,7 +94,9 @@ export default function StudentsInfoReport() {
         </head>
         <body>
             <div class="header">
-                <h1 class="school-title">ShuleCloud International Academy</h1>
+                ${schoolLogo ? `<img src="${schoolLogo}" style="height:54px;margin-bottom:8px;object-fit:contain;" />` : ""}
+                <h1 class="school-title">${schoolName}</h1>
+                ${schoolAddr ? `<div style="font-size:11px;color:#64748B;margin-top:2px;">${schoolAddr}</div>` : ""}
                 <div class="report-title">Students Comprehensive Information Report</div>
             </div>
 
@@ -202,7 +222,7 @@ export default function StudentsInfoReport() {
                                     <TableCell className="px-6 font-bold text-slate-800 text-sm">{s.name}</TableCell>
                                     <TableCell className="px-6 text-center text-xs font-semibold text-slate-600">{s.gender}</TableCell>
                                     <TableCell className="px-6 text-xs font-bold text-slate-600">{s.studentClass || s.className || 'N/A'}</TableCell>
-                                    <TableCell className="px-6 text-xs text-slate-500 font-medium">{s.admissionDate || 'N/A'}</TableCell>
+                                    <TableCell className="px-6 text-xs text-slate-500 font-medium">{fmtDate(s.admissionDate)}</TableCell>
                                     <TableCell className="px-6 text-xs font-semibold text-slate-700">
                                         <div className="flex flex-col">
                                             <span>{s.parents?.[0]?.name || 'N/A'}</span>
