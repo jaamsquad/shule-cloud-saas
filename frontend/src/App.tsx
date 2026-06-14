@@ -187,6 +187,8 @@ import ClassWiseReport from "./pages/tenant/modules/attendance/ClassWiseReport";
 import StudentsAttendanceReport from "./pages/tenant/modules/attendance/StudentsAttendanceReport";
 import EmployeesAttendanceReport from "./pages/tenant/modules/attendance/EmployeesAttendanceReport";
 import StudentsReportCard from "./pages/tenant/modules/reports/StudentsReportCard";
+import ReportsCenter from "./pages/tenant/modules/reports/ReportsCenter";
+import GenericReport from "./pages/tenant/modules/reports/GenericReport";
 import StudentsInfoReport from "./pages/tenant/modules/reports/StudentsInfoReport";
 import ParentsInfoReport from "./pages/tenant/modules/reports/ParentsInfoReport";
 import StudentsMonthlyAttendanceReport from "./pages/tenant/modules/reports/StudentsMonthlyAttendanceReport";
@@ -677,6 +679,8 @@ const App = () => {
               <Route path="/attendance/reports/employees" element={<EmployeesAttendanceReport />} />
 
               {/* Reports Module */}
+              <Route path="/reports" element={<ReportsCenter />} />
+              <Route path="/reports/view/:key" element={<GenericReport />} />
               <Route path="/reports/report-cards" element={<StudentsReportCard />} />
               <Route path="/reports/students-info" element={<StudentsInfoReport />} />
               <Route path="/reports/parents-info" element={<ParentsInfoReport />} />

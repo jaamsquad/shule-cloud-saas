@@ -127,6 +127,7 @@ export const navItems: NavItem[] = [
       { label: "Employees Attendance Report", path: "/attendance/reports/employees" },
   ] },
   { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
+      { label: "Reports Center", path: "/reports" },
       { label: "Students Report Card", path: "/reports/report-cards" },
       { label: "Students Info Report", path: "/reports/students-info" },
       { label: "Parents Info Report", path: "/reports/parents-info" },
