@@ -201,8 +201,8 @@ export class BehaviourController {
 
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     ratings: studentRatings
                 };
             });
@@ -290,8 +290,8 @@ export class BehaviourController {
                 const obs: any = obsMap.get(student._id.toString());
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     class_teacher_remark: obs?.class_teacher_remark || '',
                     counsellor_note: obs?.counsellor_note || '',
                     principal_remark: obs?.principal_remark || '',
@@ -453,8 +453,8 @@ export class BehaviourController {
 
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     ratings: studentRatings,
                     average_rating,
                     overall_grade

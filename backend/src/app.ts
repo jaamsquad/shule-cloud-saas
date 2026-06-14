@@ -97,6 +97,52 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
     }
 });
 
+// ── Public student application (no auth) — subdomain.shulecloud.com/application ─
+app.get('/api/v1/public/apply/:subdomain', async (req, res) => {
+    // Returns school branding + the classes a public applicant can choose.
+    try {
+        const { getMetaDb, getTenantDb, subdomainToDbName } = await import('./lib/mongodb');
+        const sub = req.params.subdomain.toLowerCase().trim();
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tenant = await getMetaDb().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant) return res.status(404).json({ message: 'School not found' });
+        const db = getTenantDb(tenant.databaseName || subdomainToDbName(tenant.subdomain));
+        const classes = await db.collection('classes').find({}).project({ name: 1, levelName: 1 }).toArray().catch(() => []);
+        res.json({
+            name: tenant.instituteName || tenant.name || sub,
+            logo: tenant.logo || tenant.schoolLogo || null,
+            subdomain: tenant.subdomain,
+            tagline: tenant.tagline || null,
+            classes: classes.map((c: any) => c.name || c.levelName).filter(Boolean),
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+app.post('/api/v1/public/apply/:subdomain', async (req, res) => {
+    try {
+        const { getMetaDb, getTenantDb, subdomainToDbName } = await import('./lib/mongodb');
+        const sub = req.params.subdomain.toLowerCase().trim();
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tenant = await getMetaDb().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant) return res.status(404).json({ message: 'School not found' });
+        const db = getTenantDb(tenant.databaseName || subdomainToDbName(tenant.subdomain));
+        const b = req.body || {};
+        if (!b.applicantName || !b.contactPhone) return res.status(400).json({ message: 'Applicant name and contact phone are required' });
+        const appNo = `APP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const doc = {
+            applicationNo: appNo,
+            applicantName: b.applicantName, dob: b.dob || '', gender: b.gender || '',
+            classApplied: b.classApplied || '', previousSchool: b.previousSchool || '',
+            parentName: b.parentName || '', contactPhone: b.contactPhone, contactEmail: b.contactEmail || '',
+            address: b.address || '', notes: b.notes || '',
+            documentName: b.documentName || '', document: b.document || '', // base64 image/pdf
+            status: 'Pending', source: 'public', createdAt: new Date(),
+        };
+        const r = await db.collection('admissions').insertOne(doc);
+        res.status(201).json({ id: r.insertedId, applicationNo: appNo, message: 'Application submitted' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── Integration test connection endpoints (no heavy auth required) ────────────
 app.post('/api/v1/integrations/test/:type', async (req, res) => {
     const { type } = req.params;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Search, Check, X, Loader2, Bed, User, RefreshCw, AlertTriangle } from "lucide-react";
+import { Home, Search, Check, X, Loader2, Bed, User, RefreshCw, AlertTriangle, Users } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -7,40 +7,60 @@ import { toast } from "sonner";
 export default function RoomAllocation() {
     const qc = useQueryClient();
     const [tab, setTab] = useState<"allocate" | "current">("allocate");
-    const [studentSearch, setStudentSearch] = useState("");
-    const [selectedStudent, setSelectedStudent] = useState<any>(null);
-    const [selectedBed, setSelectedBed] = useState<any>(null);
-    const [selectedRoom, setSelectedRoom] = useState("");
-    const [fee, setFee] = useState("");
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [classFilter, setClassFilter] = useState("");
+    const [streamFilter, setStreamFilter] = useState("");
+    const [search, setSearch] = useState("");
+    const [modalOpen, setModalOpen] = useState(false);
+    const [modalRoomId, setModalRoomId] = useState("");
     const [notes, setNotes] = useState("");
     const [searchFilter, setSearchFilter] = useState("");
     const [confirmVacate, setConfirmVacate] = useState<string | null>(null);
 
     const { data: students = [] } = useQuery({ queryKey: ["students"], queryFn: async () => { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: rooms = [] } = useQuery({ queryKey: ["hostel_rooms"], queryFn: async () => { const r = await api.get("/hostel_rooms"); return Array.isArray(r.data) ? r.data : []; } });
-    const { data: beds = [] } = useQuery({ queryKey: ["hostel_beds", selectedRoom], queryFn: async () => { if (!selectedRoom) return []; const r = await api.get(`/hostel_beds?roomId=${selectedRoom}`); return Array.isArray(r.data) ? r.data : []; }, enabled: !!selectedRoom });
     const { data: allocations = [], isLoading: loadA, refetch } = useQuery({ queryKey: ["hostel_allocations"], queryFn: async () => { const r = await api.get("/hostel_allocations?status=Active"); return Array.isArray(r.data) ? r.data : []; } });
+    const { data: modalBeds = [] } = useQuery({ queryKey: ["hostel_beds_modal", modalRoomId], queryFn: async () => modalRoomId ? (await api.get(`/hostel_beds?roomId=${modalRoomId}`)).data || [] : [], enabled: !!modalRoomId });
 
-    const allocMut = useMutation({
-        mutationFn: (p: any) => api.post("/hostel/allocate", p),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ["hostel_allocations"] }); qc.invalidateQueries({ queryKey: ["hostel_beds"] }); qc.invalidateQueries({ queryKey: ["hostel_stats"] });
-            toast.success(`${selectedStudent?.studentName} allocated to Bed ${selectedBed?.bedNumber}`);
-            setSelectedStudent(null); setSelectedBed(null); setStudentSearch(""); setSelectedRoom(""); setFee(""); setNotes("");
-            setTab("current");
+    const bulkMut = useMutation({
+        mutationFn: (p: any) => api.post("/hostel/allocate/bulk", p),
+        onSuccess: (res: any) => {
+            const d = res.data || {};
+            qc.invalidateQueries({ queryKey: ["hostel_allocations"] }); qc.invalidateQueries({ queryKey: ["hostel_stats"] }); qc.invalidateQueries({ queryKey: ["hostel_beds_modal"] });
+            toast.success(`${d.allocated ?? 0} allocated${d.skipped ? ` · ${d.skipped} already housed` : ""}${d.noBed ? ` · ${d.noBed} no free bed` : ""}`);
+            setSelectedIds(new Set()); setModalOpen(false); setModalRoomId(""); setNotes(""); setTab("current");
         },
         onError: (e: any) => toast.error(e.response?.data?.message || "Allocation failed"),
     });
 
     const vacateMut = useMutation({
         mutationFn: (id: string) => api.patch(`/hostel/allocate/${id}/vacate`, {}),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ["hostel_allocations"] }); qc.invalidateQueries({ queryKey: ["hostel_beds"] }); qc.invalidateQueries({ queryKey: ["hostel_stats"] }); toast.success("Student vacated and bed freed"); setConfirmVacate(null); },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ["hostel_allocations"] }); qc.invalidateQueries({ queryKey: ["hostel_stats"] }); toast.success("Student vacated and bed freed"); setConfirmVacate(null); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 
-    const filteredStudents = studentSearch.length >= 2 ? students.filter((s: any) => (s.studentName || `${s.firstName || ""} ${s.lastName || ""}`).toLowerCase().includes(studentSearch.toLowerCase()) || (s.registrationNo || "").toLowerCase().includes(studentSearch.toLowerCase())) : [];
-    const availableBeds = beds.filter((b: any) => !b.isOccupied);
-    const room = rooms.find((r: any) => r._id === selectedRoom);
+    // ── Filters & selection ──────────────────────────────────────────────
+    const nameOf = (s: any) => s.studentName || `${s.firstName || ""} ${s.lastName || ""}`.trim();
+    const streamOf = (s: any) => s.stream || s.studentStream || "";
+    const classes = Array.from(new Set(students.map((s: any) => s.studentClass).filter(Boolean))).sort();
+    const streams = Array.from(new Set(students.map(streamOf).filter(Boolean))).sort();
+    const allocatedIds = new Set(allocations.map((a: any) => String(a.studentId)));
+
+    const visible = students.filter((s: any) => {
+        if (classFilter && s.studentClass !== classFilter) return false;
+        if (streamFilter && streamOf(s) !== streamFilter) return false;
+        if (search) { const q = search.toLowerCase(); if (!nameOf(s).toLowerCase().includes(q) && !(s.registrationNo || "").toLowerCase().includes(q)) return false; }
+        return true;
+    });
+    const toggle = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    const selectable = visible.filter((s: any) => !allocatedIds.has(String(s._id)));
+    const allSelected = selectable.length > 0 && selectable.every((s: any) => selectedIds.has(s._id));
+    const toggleAll = () => setSelectedIds(prev => { const n = new Set(prev); if (allSelected) selectable.forEach((s: any) => n.delete(s._id)); else selectable.forEach((s: any) => n.add(s._id)); return n; });
+
+    const modalRoom = rooms.find((r: any) => r._id === modalRoomId);
+    const modalFree = (modalBeds as any[]).filter((b: any) => !b.isOccupied);
+    const roomFee = Number(modalRoom?.fee ?? modalRoom?.hostelFee ?? modalRoom?.rent ?? 0);
+
     const filteredAllocs = searchFilter ? allocations.filter((a: any) => (a.studentName || "").toLowerCase().includes(searchFilter.toLowerCase()) || (a.roomNumber || "").includes(searchFilter)) : allocations;
 
     return (
@@ -55,7 +75,7 @@ export default function RoomAllocation() {
 
             <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-8">
                 <div className="mb-6"><h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Room Allocation</h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Assign students to beds and manage hostel residents</p></div>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Select students, then allocate them to a room & beds</p></div>
 
                 <div className="flex gap-2 mb-6">
                     {[{ key: "allocate", label: "Allocate Bed" }, { key: "current", label: `Current Residents (${allocations.length})` }].map(t => (
@@ -63,102 +83,72 @@ export default function RoomAllocation() {
                     ))}
                 </div>
 
-                {/* Allocate tab */}
+                {/* ── Allocate tab: filterable multi-select student list ───────── */}
                 {tab === "allocate" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                            {/* Student search */}
-                            <div className="bg-white p-7 rounded-[2rem] border border-slate-100 shadow-sm relative">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Select Student*</div>
-                                <div className="relative">
-                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                                    <input type="text" value={studentSearch} onChange={e => { setStudentSearch(e.target.value); if (selectedStudent) setSelectedStudent(null); }} placeholder="Type student name or admission no..." className="w-full h-11 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                                </div>
-                                {filteredStudents.length > 0 && !selectedStudent && (
-                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-100 shadow-xl z-50 overflow-hidden max-h-52 overflow-y-auto">
-                                        {filteredStudents.map((s: any) => { const name = s.studentName || `${s.firstName || ""} ${s.lastName || ""}`; return <div key={s._id} onClick={() => { setSelectedStudent(s); setStudentSearch(name); }} className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50"><p className="text-xs font-black text-slate-700 uppercase">{name}</p><p className="text-[9px] text-slate-400 font-bold uppercase">{s.registrationNo} · {s.studentClass || s.currentClass}</p></div>; })}
-                                    </div>
-                                )}
-                                {selectedStudent && <div className="mt-3 flex items-center gap-3 p-3 bg-indigo-50 rounded-2xl border border-indigo-100">
-                                    <div className="w-9 h-9 rounded-xl bg-[#5C67F2] flex items-center justify-center text-white font-black text-sm">{(selectedStudent.studentName || "?")[0]}</div>
-                                    <div><p className="text-xs font-black text-slate-800">{selectedStudent.studentName || `${selectedStudent.firstName} ${selectedStudent.lastName}`}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{selectedStudent.registrationNo} · {selectedStudent.studentClass}</p></div>
-                                    <button onClick={() => { setSelectedStudent(null); setStudentSearch(""); }} className="ml-auto text-slate-300 hover:text-rose-500"><X className="w-4 h-4" /></button>
-                                </div>}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        {/* Filters */}
+                        <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or admission no…" className="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]" />
                             </div>
-
-                            {/* Room + bed selector */}
-                            <div className="bg-white p-7 rounded-[2rem] border border-slate-100 shadow-sm space-y-5">
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Select Room*</div>
-                                    <select value={selectedRoom} onChange={e => { setSelectedRoom(e.target.value); setSelectedBed(null); }} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        <option value="">— Select Room —</option>
-                                        {rooms.map((r: any) => <option key={r._id} value={r._id}>{r.hostelName} · Room {r.roomNumber} ({r.type})</option>)}
-                                    </select>
-                                </div>
-                                {selectedRoom && (
-                                    <div>
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Available Beds ({availableBeds.length})</p>
-                                        {availableBeds.length === 0 ? <p className="text-slate-400 text-xs font-bold uppercase text-center py-4 flex items-center gap-2 justify-center"><AlertTriangle className="w-4 h-4 text-amber-500" />Room is full — no available beds</p>
-                                        : <div className="grid grid-cols-4 gap-2">
-                                            {availableBeds.map((b: any) => (
-                                                <button key={b._id} onClick={() => setSelectedBed(selectedBed?._id === b._id ? null : b)}
-                                                    className={`flex flex-col items-center gap-1 p-3 rounded-2xl border-2 transition-all ${selectedBed?._id === b._id ? "border-[#5C67F2] bg-indigo-50" : "border-slate-100 bg-slate-50 hover:border-indigo-200"}`}>
-                                                    <Bed className={`w-5 h-5 ${selectedBed?._id === b._id ? "text-[#5C67F2]" : "text-slate-400"}`} />
-                                                    <span className="text-[9px] font-black uppercase">{b.bedNumber}</span>
-                                                </button>
-                                            ))}
-                                        </div>}
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Hostel Fee (KSh)</div>
-                                        <input type="number" value={fee} onChange={e => setFee(e.target.value)} placeholder="0" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Notes</div>
-                                        <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional..." className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                                    </div>
-                                </div>
-                                <button onClick={() => {
-                                    if (!selectedStudent || !selectedBed) { toast.error("Select student and bed"); return; }
-                                    const r = rooms.find((r: any) => r._id === selectedRoom);
-                                    allocMut.mutate({ studentId: selectedStudent._id, studentName: selectedStudent.studentName || `${selectedStudent.firstName} ${selectedStudent.lastName}`, admissionNo: selectedStudent.registrationNo || "", studentClass: selectedStudent.studentClass || "", bedId: selectedBed._id, roomId: selectedRoom, roomNumber: r?.roomNumber || "", hostelId: r?.hostelId || "", hostelName: r?.hostelName || "", fee: Number(fee) || 0, notes });
-                                }} disabled={allocMut.isPending || !selectedStudent || !selectedBed}
-                                    className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 transition-all">
-                                    {allocMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                    Confirm Allocation
-                                </button>
-                            </div>
+                            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                <option value="">All Classes</option>
+                                {classes.map((c: any) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <select value={streamFilter} onChange={e => setStreamFilter(e.target.value)} className="h-10 px-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                <option value="">All Streams</option>
+                                {streams.map((s: any) => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-widest">{selectedIds.size} selected</span>
                         </div>
 
-                        {/* Summary panel */}
-                        <div className="bg-white p-7 rounded-[2rem] border border-slate-100 shadow-sm">
-                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-4">Allocation Summary</h3>
-                            {selectedStudent && selectedBed ? (
-                                <div className="space-y-4">
-                                    {[
-                                        { label: "Student", value: selectedStudent.studentName || `${selectedStudent.firstName} ${selectedStudent.lastName}` },
-                                        { label: "Admission No", value: selectedStudent.registrationNo || "—" },
-                                        { label: "Class", value: selectedStudent.studentClass || "—" },
-                                        { label: "Room", value: room ? `${room.hostelName} · Room ${room.roomNumber}` : "—" },
-                                        { label: "Bed", value: `Bed ${selectedBed.bedNumber}` },
-                                        { label: "Fee", value: fee ? `KSh ${Number(fee).toLocaleString()}` : "Not set" },
-                                    ].map(f => (
-                                        <div key={f.label} className="flex justify-between border-b border-slate-50 pb-2">
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{f.label}</span>
-                                            <span className="text-xs font-black text-slate-800">{f.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-slate-300 text-xs font-bold uppercase text-center py-12">Select student and bed to see summary</p>
-                            )}
+                        {/* Student table */}
+                        <div className="overflow-x-auto max-h-[55vh] overflow-y-auto">
+                            <table className="w-full text-sm">
+                                <thead className="sticky top-0 bg-slate-50 z-10">
+                                    <tr className="text-slate-500 text-[11px] uppercase tracking-wide">
+                                        <th className="px-4 py-3 w-10"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 accent-[#5C67F2]" /></th>
+                                        <th className="text-left px-3 py-3 font-black">Student</th>
+                                        <th className="text-left px-3 py-3 font-black">Adm No</th>
+                                        <th className="text-left px-3 py-3 font-black">Class</th>
+                                        <th className="text-left px-3 py-3 font-black">Stream</th>
+                                        <th className="text-left px-3 py-3 font-black">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {visible.length === 0 ? (
+                                        <tr><td colSpan={6} className="py-10 text-center text-slate-400 text-xs font-bold uppercase">No students match the filters</td></tr>
+                                    ) : visible.map((s: any) => {
+                                        const housed = allocatedIds.has(String(s._id));
+                                        const checked = selectedIds.has(s._id);
+                                        return (
+                                            <tr key={s._id} onClick={() => !housed && toggle(s._id)} className={`border-b border-slate-50 ${housed ? "opacity-50" : "cursor-pointer hover:bg-slate-50/60"} ${checked ? "bg-indigo-50/40" : ""}`}>
+                                                <td className="px-4 py-2.5"><input type="checkbox" disabled={housed} checked={checked} onChange={() => toggle(s._id)} onClick={e => e.stopPropagation()} className="w-4 h-4 accent-[#5C67F2]" /></td>
+                                                <td className="px-3 py-2.5 font-bold text-slate-700">{nameOf(s)}</td>
+                                                <td className="px-3 py-2.5 text-slate-500">{s.registrationNo || "—"}</td>
+                                                <td className="px-3 py-2.5 text-slate-500">{s.studentClass || "—"}</td>
+                                                <td className="px-3 py-2.5 text-slate-500">{streamOf(s) || "—"}</td>
+                                                <td className="px-3 py-2.5">{housed ? <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Housed</span> : <span className="text-[10px] font-bold text-slate-400">Not housed</span>}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Allocate bar */}
+                        <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+                            <p className="text-xs font-bold text-slate-400">{visible.length} students · {selectable.length} allocatable</p>
+                            <button onClick={() => { if (selectedIds.size === 0) { toast.error("Select at least one student"); return; } setModalOpen(true); }}
+                                className="h-11 px-6 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all" disabled={selectedIds.size === 0}>
+                                <Users className="w-4 h-4" /> Allocate All Selected ({selectedIds.size})
+                            </button>
                         </div>
                     </div>
                 )}
 
-                {/* Current residents tab */}
+                {/* ── Current residents tab (unchanged) ───────────────────────── */}
                 {tab === "current" && (
                     <>
                         <div className="flex gap-4 mb-4">
@@ -168,7 +158,7 @@ export default function RoomAllocation() {
                             </div>
                             <button onClick={() => refetch()} className="p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:bg-slate-50"><RefreshCw className="w-4 h-4 text-slate-500" /></button>
                         </div>
-                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6">
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
                             {loadA ? <div className="flex items-center justify-center h-32 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading...</div>
                             : filteredAllocs.length === 0 ? <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-300 text-xs font-bold uppercase"><User className="w-8 h-8" />No active allocations</div>
                             : <div className="overflow-x-auto"><table className="w-full text-left border-collapse text-xs">
@@ -201,6 +191,56 @@ export default function RoomAllocation() {
                     </>
                 )}
             </div>
+
+            {/* ── Allocate modal (simple: room → beds) ─────────────────────── */}
+            {modalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-6 py-4 flex items-center justify-between" style={{ background: "#5C67F2" }}>
+                            <div className="text-white"><p className="text-[10px] font-black uppercase tracking-widest opacity-80">Allocate</p><h3 className="font-black">{selectedIds.size} student(s) → a room</h3></div>
+                            <button onClick={() => setModalOpen(false)} className="text-white/80 hover:text-white"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Select Room</label>
+                                <select value={modalRoomId} onChange={e => setModalRoomId(e.target.value)} className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]">
+                                    <option value="">— Choose a room —</option>
+                                    {rooms.map((r: any) => <option key={r._id} value={r._id}>{r.hostelName ? `${r.hostelName} · ` : ""}Room {r.roomNumber || r.name} {r.type ? `(${r.type})` : ""}</option>)}
+                                </select>
+                            </div>
+
+                            {modalRoomId && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 flex items-center gap-2">
+                                        <Bed className="w-5 h-5 text-[#5C67F2]" />
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase">Free Beds</p><p className="text-lg font-black text-slate-800">{modalFree.length}</p></div>
+                                    </div>
+                                    <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 flex items-center gap-2">
+                                        <span className="text-[#5C67F2] font-black">KSh</span>
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase">Room Fee</p><p className="text-lg font-black text-slate-800">{roomFee.toLocaleString()}</p></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {modalRoomId && selectedIds.size > modalFree.length && (
+                                <p className="flex items-center gap-2 text-[11px] font-bold text-amber-600"><AlertTriangle className="w-4 h-4" /> Only {modalFree.length} free bed(s) — the rest will be skipped.</p>
+                            )}
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Notes (optional)</label>
+                                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional…" className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]" />
+                            </div>
+
+                            <button onClick={() => { if (!modalRoomId) { toast.error("Choose a room"); return; } bulkMut.mutate({ studentIds: Array.from(selectedIds), roomId: modalRoomId, notes }); }}
+                                disabled={!modalRoomId || bulkMut.isPending || modalFree.length === 0}
+                                className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all">
+                                {bulkMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                Confirm Allocation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

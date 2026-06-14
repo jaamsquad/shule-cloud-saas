@@ -288,6 +288,7 @@ import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSe
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
 import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
 import AttendanceScanner from "./pages/tenant/modules/AttendanceScanner";
+import PublicApplication from "./pages/public/PublicApplication";
 
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
@@ -353,6 +354,7 @@ const App = () => {
           <Routes>
             {/* 1. PUBLIC WEBSITE */}
             <Route path="/" element={<Landing />} />
+            <Route path="/application" element={<PublicApplication />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/features" element={<Features />} />
             <Route path="/contact" element={<Contact />} />

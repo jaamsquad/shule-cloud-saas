@@ -46,9 +46,7 @@ export default function HostelFees() {
                     <span className="font-bold text-gray-600">Hostel</span><span className="text-gray-300">/</span>
                     <span className="font-black text-[#5C67F2]">Hostel Fees</span>
                 </div>
-                <button onClick={() => { setEditId(null); setForm(emptyForm); setShowModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
-                    <Plus className="w-4 h-4" /> Add Fee Structure
-                </button>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fees are set per room in Rooms &amp; Blocks</span>
             </div>
 
             <div className="flex-1 max-w-7xl mx-auto w-full px-6 pt-8">
@@ -70,7 +68,7 @@ export default function HostelFees() {
                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-7 mb-8">
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-5">Defined Fee Structures</h3>
                     {loadF ? <div className="flex items-center justify-center h-20 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-4 h-4 animate-spin text-[#5C67F2]" />Loading...</div>
-                    : feeDefs.length === 0 ? <p className="text-slate-300 text-xs font-bold uppercase text-center py-6">No fee structures defined — click Add Fee Structure</p>
+                    : feeDefs.length === 0 ? <p className="text-slate-300 text-xs font-bold uppercase text-center py-6">Hostel fees are now set per room — define them under Rooms &amp; Blocks</p>
                     : <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {feeDefs.map((f: any) => (
                             <div key={f._id} className="bg-slate-50 rounded-2xl border border-slate-100 p-4">

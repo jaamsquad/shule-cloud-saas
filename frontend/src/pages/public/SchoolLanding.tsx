@@ -42,9 +42,12 @@ export default function SchoolLanding() {
                         <a href="/login" className="hover:text-slate-800">Teachers</a>
                         <a href="#contact" className="hover:text-slate-800">Contact</a>
                     </nav>
-                    <Link to="/login" className="inline-flex items-center gap-1.5 text-white text-sm font-bold px-4 py-2 rounded-lg" style={{ background: GREEN }}>
-                        Sign In <ArrowRight className="w-4 h-4" />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <a href="/application" className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-lg border-2" style={{ borderColor: GREEN, color: GREEN }}>Apply</a>
+                        <Link to="/login" className="inline-flex items-center gap-1.5 text-white text-sm font-bold px-4 py-2 rounded-lg" style={{ background: GREEN }}>
+                            Sign In <ArrowRight className="w-4 h-4" />
+                        </Link>
+                    </div>
                 </div>
             </header>
 
@@ -57,8 +60,8 @@ export default function SchoolLanding() {
                     <h1 className="text-4xl md:text-6xl font-black mb-4" style={{ color: DARK }}>Welcome to<br /><span style={{ color: GREEN }}>{name}</span></h1>
                     <p className="text-slate-500 max-w-2xl mx-auto mb-8 text-lg">Access your portal for results, fees, timetables, attendance and school communications — all in one place.</p>
                     <div className="flex flex-wrap items-center justify-center gap-3">
-                        <a href={portals[0].href} className="inline-flex items-center gap-2 text-white font-bold px-6 py-3 rounded-lg" style={{ background: GREEN }}>Student Portal <ArrowRight className="w-4 h-4" /></a>
-                        <a href={portals[1].href} className="inline-flex items-center gap-2 font-bold px-6 py-3 rounded-lg border-2" style={{ borderColor: GREEN, color: GREEN }}>Parent Portal</a>
+                        <a href="/application" className="inline-flex items-center gap-2 text-white font-bold px-6 py-3 rounded-lg" style={{ background: GREEN }}>Apply for Admission <ArrowRight className="w-4 h-4" /></a>
+                        <a href={portals[0].href} className="inline-flex items-center gap-2 font-bold px-6 py-3 rounded-lg border-2" style={{ borderColor: GREEN, color: GREEN }}>Student Portal</a>
                     </div>
                 </div>
             </section>

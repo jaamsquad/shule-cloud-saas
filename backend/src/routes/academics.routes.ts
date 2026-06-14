@@ -819,6 +819,44 @@ router.post('/hostel/allocate', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Allocate MANY students to the free beds of one room (fee comes from the room).
+router.post('/hostel/allocate/bulk', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { studentIds, roomId, notes } = req.body;
+        if (!Array.isArray(studentIds) || !studentIds.length || !roomId) return res.status(400).json({ message: 'studentIds[] and roomId are required' });
+
+        const room: any = await db.collection('hostel_rooms').findOne({ _id: new ObjectId(roomId) }).catch(() => null)
+            || await db.collection('hostel_rooms').findOne({ _id: roomId } as any);
+        if (!room) return res.status(404).json({ message: 'Room not found' });
+        const roomFee = Number(room.fee ?? room.hostelFee ?? room.rent ?? 0);
+
+        let freeBeds = await db.collection('hostel_beds').find({ roomId: String(roomId), isOccupied: { $ne: true } }).sort({ bedNumber: 1 }).toArray();
+        if (!freeBeds.length) freeBeds = await db.collection('hostel_beds').find({ roomId: room._id, isOccupied: { $ne: true } } as any).sort({ bedNumber: 1 }).toArray();
+
+        let allocated = 0, skipped = 0, noBed = 0;
+        for (const studentId of studentIds) {
+            const existing = await db.collection('hostel_allocations').findOne({ studentId, status: 'Active' });
+            if (existing) { skipped++; continue; }
+            const bed = freeBeds.shift();
+            if (!bed) { noBed++; continue; }
+            const student: any = await db.collection('students').findOne({ _id: new ObjectId(studentId) }).catch(() => null);
+            const allocation = {
+                studentId, studentName: student?.studentName || student?.name || '',
+                admissionNo: student?.registrationNo || student?.admNo || '', studentClass: student?.studentClass || '',
+                bedId: String(bed._id), roomId: String(room._id), roomNumber: room.roomNumber || room.name || room.number,
+                hostelId: room.hostelId, hostelName: room.hostelName || room.blockName,
+                bedNumber: bed.bedNumber, allocationDate: new Date().toISOString().split('T')[0],
+                vacateDate: null, status: 'Active', fee: roomFee, paymentStatus: 'Unpaid', notes: notes || '', createdAt: new Date(),
+            };
+            await db.collection('hostel_allocations').insertOne(allocation);
+            await db.collection('hostel_beds').updateOne({ _id: bed._id }, { $set: { isOccupied: true, studentId, studentName: allocation.studentName, updatedAt: new Date() } });
+            allocated++;
+        }
+        res.json({ allocated, skipped, noBed });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.patch('/hostel/allocate/:id/vacate', async (req, res) => {
     try {
         const db = getRequestDb(req);

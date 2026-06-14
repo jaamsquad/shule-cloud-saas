@@ -96,8 +96,8 @@ export default function Admissions() {
 
     // ── Filtering ─────────────────────────────────────────────────────────
     const filtered = admissions.filter((a: any) => {
-        const name = `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
-        const mQ = !search || name.includes(search.toLowerCase()) || (a.admissionNumber || "").toLowerCase().includes(search.toLowerCase());
+        const name = (a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`).toLowerCase();
+        const mQ = !search || name.includes(search.toLowerCase()) || (a.admissionNumber || a.applicationNo || "").toLowerCase().includes(search.toLowerCase());
         const mS = statusFilter === "All" || a.status === statusFilter;
         return mQ && mS;
     });
@@ -217,8 +217,8 @@ export default function Admissions() {
                                                             {initials}
                                                         </div>
                                                         <div>
-                                                            <p className="font-black text-slate-800">{a.firstName} {a.lastName}</p>
-                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{a.gender} {a.dob ? `· ${a.dob}` : ""}</p>
+                                                            <p className="font-black text-slate-800">{a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || "Applicant"}</p>
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{a.gender} {a.dob ? `· ${a.dob}` : ""} {a.source === "public" ? "· Public" : ""}</p>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -230,7 +230,7 @@ export default function Admissions() {
                                                     </span>
                                                 </td>
                                                 <td className="py-3.5 px-5 font-bold text-slate-700">{a.parentName || "—"}</td>
-                                                <td className="py-3.5 px-5 font-bold text-slate-500">{a.parentPhone || "—"}</td>
+                                                <td className="py-3.5 px-5 font-bold text-slate-500">{a.parentPhone || a.contactPhone || "—"}</td>
                                                 <td className="py-3.5 px-5 font-bold text-slate-500">{a.applicationDate || "—"}</td>
                                                 <td className="py-3.5 px-5 text-center">
                                                     <select

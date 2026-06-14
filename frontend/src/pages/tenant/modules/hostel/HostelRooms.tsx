@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 
 const emptyHostel = { name: "", block: "", totalFloors: "1", capacity: "", gender: "Mixed", description: "", isActive: true };
-const emptyRoom = { hostelId: "", hostelName: "", roomNumber: "", floor: "1", type: "Double", capacity: "2", gender: "Mixed", amenities: "", isActive: true };
+const emptyRoom = { hostelId: "", hostelName: "", roomNumber: "", floor: "1", type: "Double", capacity: "2", gender: "Mixed", amenities: "", fee: "", isActive: true };
 
 export default function HostelRooms() {
     const [activeTab, setActiveTab] = useState<"hostels" | "rooms">("hostels");
@@ -133,7 +133,7 @@ export default function HostelRooms() {
                                             <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase ${r.isActive !== false ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>{r.isActive !== false ? "Active" : "Inactive"}</span></td>
                                             <td className="py-3 px-4">
                                                 <div className="flex gap-1.5">
-                                                    <button onClick={() => { setRoomEditId(r._id); setRoomForm({ hostelId: r.hostelId || "", hostelName: r.hostelName || "", roomNumber: r.roomNumber, floor: String(r.floor || 1), type: r.type || "Double", capacity: String(r.capacity || 2), gender: r.gender || "Mixed", amenities: r.amenities || "", isActive: r.isActive !== false }); setShowRoomModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100"><Pencil className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => { setRoomEditId(r._id); setRoomForm({ hostelId: r.hostelId || "", hostelName: r.hostelName || "", roomNumber: r.roomNumber, floor: String(r.floor || 1), type: r.type || "Double", capacity: String(r.capacity || 2), gender: r.gender || "Mixed", amenities: r.amenities || "", fee: String(r.fee ?? ""), isActive: r.isActive !== false }); setShowRoomModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100"><Pencil className="w-3.5 h-3.5" /></button>
                                                     {confirmDelete === r._id ? (<><button onClick={() => delMut.mutate({ id: r._id, col: "hostel_rooms" })} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button><button onClick={() => setConfirmDelete(null)} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>) : (<button onClick={() => setConfirmDelete(r._id)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100"><Trash2 className="w-3.5 h-3.5" /></button>)}
                                                 </div>
                                             </td>
@@ -201,7 +201,7 @@ export default function HostelRooms() {
                                         {hostels.map((h: any) => <option key={h._id} value={h._id}>{h.name}</option>)}
                                     </select>
                                 </div>
-                                {[{ label: "Room Number*", field: "roomNumber" }, { label: "Floor", field: "floor", type: "number" }, { label: "Capacity (beds)", field: "capacity", type: "number" }].map((f: any) => (
+                                {[{ label: "Room Number*", field: "roomNumber" }, { label: "Floor", field: "floor", type: "number" }, { label: "Capacity (beds)", field: "capacity", type: "number" }, { label: "Hostel Fee (KSh)", field: "fee", type: "number" }].map((f: any) => (
                                     <div key={f.field} className="relative">
                                         <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{f.label}</div>
                                         <input type={f.type || "text"} value={(roomForm as any)[f.field]} onChange={e => setRoomForm({ ...roomForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
@@ -226,7 +226,7 @@ export default function HostelRooms() {
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button onClick={() => setShowRoomModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl">Cancel</button>
-                                <button onClick={() => { if (!roomForm.roomNumber.trim()) { toast.error("Room number required"); return; } roomMut.mutate({ ...roomForm, floor: Number(roomForm.floor) || 1, capacity: Number(roomForm.capacity) || 2 }); }} disabled={roomMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
+                                <button onClick={() => { if (!roomForm.roomNumber.trim()) { toast.error("Room number required"); return; } roomMut.mutate({ ...roomForm, floor: Number(roomForm.floor) || 1, capacity: Number(roomForm.capacity) || 2, fee: Number(roomForm.fee) || 0 }); }} disabled={roomMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
                                     {roomMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{roomEditId ? "Save" : "Add Room"}
                                 </button>
                             </div>
