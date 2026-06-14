@@ -12,6 +12,13 @@ export default function StaffIdCards() {
 
     const styles = ["Landscape", "Professional", "Corporate", "Minimal", "Default"];
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("staffCardStyle", s); };
+
+    const [printOnlyId, setPrintOnlyId] = useState<string | null>(null);
+    const printOne = (id: string) => {
+        setPrintOnlyId(id);
+        document.body.classList.add("print-single");
+        setTimeout(() => { window.print(); document.body.classList.remove("print-single"); setPrintOnlyId(null); }, 80);
+    };
     
     const selectedStaff = staffMembers?.find((s: any) => s._id === selectedStaffId) || staffMembers?.[0];
 
@@ -88,10 +95,14 @@ export default function StaffIdCards() {
                         <p className="text-slate-400 font-bold animate-pulse">Synchronizing staff nodes...</p>
                     </div>
                 ) : (
-                    <div id="id-card-print" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeStyle === "Landscape" ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {staffMembers && staffMembers.length > 0 ? (
                             staffMembers.map((staff: any) => (
-                                <div key={staff._id} className="flex justify-center">
+                                <div key={staff._id} className={`flex justify-center relative group/card ${printOnlyId === staff._id ? "print-target" : ""}`}>
+                                    <button onClick={() => printOne(staff._id)} title="Print this card"
+                                        className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
+                                        <Printer className="w-4 h-4" />
+                                    </button>
                                     <IdCard staff={staff} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} />
                                 </div>
                             ))

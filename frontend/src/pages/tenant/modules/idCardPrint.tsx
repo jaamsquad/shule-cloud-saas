@@ -25,6 +25,8 @@ export function IdCardPrintStyle() {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
+  /* Print a single card only */
+  body.print-single #id-card-print > *:not(.print-target) { display: none !important; }
   /* Flat, crisp cards on paper */
   #id-card-print .group {
     box-shadow: 0 0 0 1px #e5e7eb !important;

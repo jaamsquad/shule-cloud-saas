@@ -24,6 +24,7 @@ const NAV: PortalNavSection[] = [
             { to: "/exam-results", label: "Exam Results", icon: Award },
             { to: "/assignments", label: "Assignments", icon: NotebookPen },
             { to: "/homework", label: "Homework", icon: FileText },
+            { to: "/resources", label: "Notes & Resources", icon: NotebookPen },
             { to: "/live", label: "Live Classes", icon: Video },
             { to: "/timetable", label: "Print Timetable", icon: CalendarClock },
             { to: "/requisition", label: "Academic Requisition", icon: FileText },

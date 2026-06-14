@@ -1,0 +1,66 @@
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, FileText, Eye, Download, ExternalLink, Link2, Video, File } from "lucide-react";
+import { PageTitle, PanelCard } from "../../PortalShell";
+import FileViewer from "../../FileViewer";
+import type { StaffCtx } from "../StaffLayout";
+
+const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, Other: ExternalLink };
+
+export default function StaffResources() {
+    const { api } = useOutletContext<StaffCtx>();
+    const [viewing, setViewing] = useState<{ src: string; name?: string } | null>(null);
+    const [search, setSearch] = useState("");
+
+    const { data: resources = [], isLoading } = useQuery({
+        queryKey: ["staff_shared_resources"],
+        queryFn: async () => { const r = await api.get("/staff-portal/resources"); return Array.isArray(r.data) ? r.data : []; },
+    });
+
+    const filtered = resources.filter((r: any) => !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase()));
+
+    return (
+        <>
+            <PageTitle title="Notes & Resources" subtitle="Shared notes and materials for your subjects" />
+            <PanelCard>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject…"
+                    className="w-full sm:max-w-sm h-11 px-4 mb-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#5C67F2]" />
+
+                {isLoading ? (
+                    <div className="flex items-center justify-center h-32 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                ) : filtered.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-300 text-xs font-bold uppercase"><FileText className="w-8 h-8" />No resources for your subjects yet</div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filtered.map((r: any) => {
+                            const Icon = ICON[r.type] || FileText;
+                            return (
+                                <div key={r._id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-2">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-10 h-10 rounded-2xl bg-[#5C67F2]/10 flex items-center justify-center text-[#5C67F2] flex-shrink-0"><Icon className="w-5 h-5" /></div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : ""}{r.isPublic === false ? " · Staff only" : ""}</p>
+                                        </div>
+                                    </div>
+                                    {r.description && <p className="text-[11px] text-slate-500">{r.description}</p>}
+                                    <div className="mt-1">
+                                        {r.fileData ? (
+                                            /(image|pdf)/i.test(r.fileType || "") || /\.(pdf|jpe?g|png|gif|webp)$/i.test(r.fileName || "")
+                                                ? <button onClick={() => setViewing({ src: r.fileData, name: r.fileName })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><Eye className="w-3.5 h-3.5" /> View</button>
+                                                : <a href={r.fileData} download={r.fileName} className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><Download className="w-3.5 h-3.5" /> Download</a>
+                                        ) : r.url ? (
+                                            <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
+                                        ) : <span className="text-[10px] text-slate-300 font-bold uppercase">No file</span>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </PanelCard>
+            <FileViewer open={!!viewing} src={viewing?.src} name={viewing?.name} onClose={() => setViewing(null)} />
+        </>
+    );
+}

@@ -10,6 +10,7 @@ import StaffAttendance from "./pages/StaffAttendance";
 import StaffMyAttendance from "./pages/StaffMyAttendance";
 import StaffLive from "./pages/StaffLive";
 import StaffContent from "./pages/StaffContent";
+import StaffResources from "./pages/StaffResources";
 import AnnouncementsView from "../AnnouncementsView";
 import LiveRoom from "../../pages/tenant/modules/LiveRoom";
 import { staffApi } from "./staffApi";
@@ -31,6 +32,7 @@ export default function StaffApp() {
                 <Route path="/lesson-plans" element={<StaffContent type="lesson-plans" />} />
                 <Route path="/schemes" element={<StaffContent type="schemes" />} />
                 <Route path="/resources" element={<StaffContent type="resources" />} />
+                <Route path="/shared-resources" element={<StaffResources />} />
                 <Route path="/assignments" element={<StaffContent type="assignments" />} />
                 <Route path="/homework" element={<StaffContent type="homework" />} />
                 <Route path="/announcements" element={<AnnouncementsView api={staffApi} endpoint="/staff-portal/announcements" queryKey="staff_ann" />} />

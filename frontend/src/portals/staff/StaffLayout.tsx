@@ -30,7 +30,8 @@ const NAV: PortalNavSection[] = [
     { label: "Academic Content", items: [
         { to: "/lesson-plans", label: "Lesson Plans", icon: NotebookPen },
         { to: "/schemes", label: "Schemes of Work", icon: BookMarked },
-        { to: "/resources", label: "Notes & Resources", icon: BookOpen },
+        { to: "/resources", label: "My Resources", icon: BookOpen },
+        { to: "/shared-resources", label: "Shared Library", icon: BookMarked },
         { to: "/assignments", label: "Assignments", icon: ClipboardList },
         { to: "/homework", label: "Homework", icon: FileText },
     ]},
