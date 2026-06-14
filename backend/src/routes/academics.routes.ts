@@ -411,6 +411,18 @@ router.get('/academics/audit-trails',   c.getItems('audit_trails'));
     router.delete(`/academics/${col}/:id`, c.deleteItem(col));
 });
 
+// Bulk-create hostel beds (the generic CRUD has no /:col/bulk route).
+router.post('/hostel_beds/bulk', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const items = Array.isArray(req.body?.items) ? req.body.items : [];
+        if (!items.length) return res.status(400).json({ message: 'No beds to create' });
+        const docs = items.map((b: any) => ({ ...b, isOccupied: !!b.isOccupied, createdAt: new Date() }));
+        const r = await db.collection('hostel_beds').insertMany(docs);
+        res.status(201).json({ insertedCount: r.insertedCount });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.patch('/academics/periods/:id/set-current', async (req, res) => {
     try {
         const db = getRequestDb(req);

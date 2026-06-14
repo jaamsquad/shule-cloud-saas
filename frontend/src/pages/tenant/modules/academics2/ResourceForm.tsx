@@ -20,7 +20,18 @@ export default function ResourceForm() {
     const qc = useQueryClient();
     const isEdit = !!id;
 
-    const [form, setForm] = useState({ title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true });
+    const [form, setForm] = useState({ title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true, fileData: "", fileName: "", fileType: "" });
+
+    const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const ok = /\.(pdf|docx?|pptx?|jpe?g|png|gif|webp)$/i.test(file.name) || /(image\/|application\/(pdf|msword|vnd))/.test(file.type);
+        if (!ok) { toast.error("Allowed: PDF, Word, PowerPoint, or image"); return; }
+        if (file.size > 4 * 1024 * 1024) { toast.error("File must be under 4MB"); return; }
+        const reader = new FileReader();
+        reader.onloadend = () => setForm(f => ({ ...f, fileData: String(reader.result), fileName: file.name, fileType: file.type }));
+        reader.readAsDataURL(file);
+    };
 
     const { data: subjects = [] } = useQuery({ queryKey: ["subjects"], queryFn: async () => { const r = await api.get("/subjects"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } });
@@ -32,7 +43,7 @@ export default function ResourceForm() {
     });
 
     useEffect(() => {
-        if (existing) setForm({ title: existing.title || "", type: existing.type || "Notes", subjectId: existing.subjectId || "", subjectName: existing.subjectName || "", classId: existing.classId || "", className: existing.className || "", url: existing.url || "", description: existing.description || "", isPublic: existing.isPublic !== false });
+        if (existing) setForm({ title: existing.title || "", type: existing.type || "Notes", subjectId: existing.subjectId || "", subjectName: existing.subjectName || "", classId: existing.classId || "", className: existing.className || "", url: existing.url || "", description: existing.description || "", isPublic: existing.isPublic !== false, fileData: existing.fileData || "", fileName: existing.fileName || "", fileType: existing.fileType || "" });
     }, [existing]);
 
     const saveMut = useMutation({
@@ -103,6 +114,23 @@ export default function ResourceForm() {
                             <div className="relative">
                                 <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">URL / Link (Google Drive, YouTube, OneDrive…)</div>
                                 <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://..." className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                            </div>
+
+                            {/* File upload (PDF / Word / PowerPoint / Image) */}
+                            <div className="relative">
+                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Or Upload File (PDF, Word, PowerPoint, Image · max 4MB)</div>
+                                {form.fileData ? (
+                                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-4 h-11">
+                                        <File className="w-4 h-4 text-[#5C67F2]" />
+                                        <span className="text-xs font-bold text-slate-600 flex-1 truncate">{form.fileName}</span>
+                                        <button type="button" onClick={() => setForm(f => ({ ...f, fileData: "", fileName: "", fileType: "" }))} className="text-slate-400 hover:text-rose-500 text-[10px] font-black uppercase">Remove</button>
+                                    </div>
+                                ) : (
+                                    <label className="flex items-center gap-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 h-11 cursor-pointer hover:border-[#5C67F2] text-slate-500 text-xs font-bold">
+                                        <Download className="w-4 h-4" /> Choose a file…
+                                        <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" onChange={onFile} className="hidden" />
+                                    </label>
+                                )}
                             </div>
 
                             {/* Subject + Class */}

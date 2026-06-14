@@ -272,10 +272,7 @@ export class BehaviourController {
             const tenantQuery = getTenancyQuery(req);
             const { class_id, academic_year_id, semester_id } = req.query;
 
-            const students = await db.collection('students').find({
-                tenantId: tenantQuery.tenantId,
-                classId: new ObjectId(class_id as string)
-            }).toArray();
+            const students = await getStudentsInClass(db, class_id as string);
 
             const obsList = await db.collection('student_observations').find({
                 ...tenantQuery,
@@ -395,10 +392,7 @@ export class BehaviourController {
             const tenantQuery = getTenancyQuery(req);
             const { class_id, academic_year_id, semester_id, domain } = req.query;
 
-            const students = await db.collection('students').find({
-                tenantId: tenantQuery.tenantId,
-                classId: new ObjectId(class_id as string)
-            }).toArray();
+            const students = await getStudentsInClass(db, class_id as string);
 
             const traits = await db.collection('behaviour_traits').find({
                 ...tenantQuery,

@@ -16,6 +16,7 @@ export default function GenerateFeesInvoice() {
     const [dueDate, setDueDate] = useState(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
     const [fineAmount, setFineAmount] = useState("200");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [dupInfo, setDupInfo] = useState<{ totalStudents: number; existing: number } | null>(null);
 
     const queryClient = useQueryClient();
 
@@ -86,28 +87,39 @@ export default function GenerateFeesInvoice() {
         }
     };
 
-    const handleTriggerGenerationJob = async () => {
-        if (selectedClasses.length === 0) {
-            toast.error("Please select at least one class");
-            return;
-        }
-
+    const runJob = async (mode: "skip" | "overwrite") => {
         setIsSubmitting(true);
+        setDupInfo(null);
         try {
             await api.post("/schools/default/fees/invoice-jobs", {
-                academic_year_id: academicYearId,
-                semester_id: semesterId,
-                class_ids: selectedClasses,
-                due_date: dueDate,
-                fine_amount: parseFloat(fineAmount) || 0
+                academic_year_id: academicYearId, semester_id: semesterId,
+                class_ids: selectedClasses, due_date: dueDate, fine_amount: parseFloat(fineAmount) || 0, mode,
             });
-            toast.success("Invoice generation job started in background!");
+            toast.success(`Invoice generation started (${mode === "overwrite" ? "rewriting duplicates" : "skipping duplicates"})`);
             setSelectedClasses([]);
-            refetchJobs();
+            setTimeout(refetchJobs, 800);
         } catch (err: any) {
             toast.error(err.response?.data?.errors?.[0]?.message || "Failed to start generation job");
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleTriggerGenerationJob = async () => {
+        if (selectedClasses.length === 0) { toast.error("Please select at least one class"); return; }
+        setIsSubmitting(true);
+        try {
+            // Pre-check: any students already invoiced for this term?
+            const r = await api.post("/schools/default/fees/invoice-jobs/precheck", {
+                academic_year_id: academicYearId, semester_id: semesterId, class_ids: selectedClasses,
+            });
+            const info = r.data?.data || { totalStudents: 0, existing: 0 };
+            setIsSubmitting(false);
+            if (info.existing > 0) { setDupInfo(info); return; }   // show skip/overwrite modal
+            await runJob("skip");
+        } catch (err: any) {
+            setIsSubmitting(false);
+            toast.error(err.response?.data?.errors?.[0]?.message || "Failed to check existing invoices");
         }
     };
 
@@ -307,6 +319,22 @@ export default function GenerateFeesInvoice() {
                     </div>
                 </div>
             </div>
+
+            {/* Duplicate handling modal */}
+            {dupInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setDupInfo(null)}>
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 text-center" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4"><AlertCircle className="w-7 h-7 text-amber-500" /></div>
+                        <h3 className="text-lg font-black text-slate-800">Existing invoices found</h3>
+                        <p className="text-sm text-slate-500 mt-1 mb-6"><b className="text-slate-700">{dupInfo.existing}</b> of {dupInfo.totalStudents} students already have an invoice for this term. How should we handle them?</p>
+                        <div className="space-y-2.5">
+                            <button onClick={() => runJob("skip")} disabled={isSubmitting} className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl">Skip existing — invoice only the rest</button>
+                            <button onClick={() => runJob("overwrite")} disabled={isSubmitting} className="w-full h-12 bg-white border-2 border-rose-200 text-rose-600 hover:bg-rose-50 font-black text-xs uppercase tracking-widest rounded-xl">Rewrite — replace existing invoices</button>
+                            <button onClick={() => setDupInfo(null)} className="w-full h-10 text-slate-400 hover:text-slate-600 font-bold text-xs uppercase tracking-widest">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

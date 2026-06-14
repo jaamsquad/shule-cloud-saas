@@ -1239,6 +1239,27 @@ router.post('/student-portal/tasks/:type/:id/submit', authed(async (req, res, db
     res.json({ message: 'Submitted successfully' });
 }));
 
+// ─── Notes & Resources visibility ─────────────────────────────────────────────
+// Students: resources marked available (isPublic) for their class (or unscoped).
+router.get('/student-portal/resources', authed(async (req, res, db, decoded) => {
+    const student: any = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) }).catch(() => null);
+    const cls = String(student?.studentClass || student?.className || '').toLowerCase();
+    const all = await db.collection('academic_resources').find({ isPublic: { $ne: false } }).sort({ createdAt: -1 }).toArray();
+    res.json(all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls));
+}));
+
+// Teachers: resources matching their assigned subjects (unscoped resources always shown).
+router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
+    const staffId = String(decoded.staffId || '');
+    const staff: any = await db.collection('staff').findOne({ _id: new ObjectId(staffId) }).catch(() => null);
+    const subjectIds = new Set<string>();
+    (staff?.subjects || staff?.assignedSubjects || []).forEach((s: any) => subjectIds.add(String(typeof s === 'object' ? (s.subjectId || s._id || s.id) : s)));
+    const links = await db.collection('staff_subjects').find({ $or: [{ teacherId: staffId }, { staffId }] }).toArray().catch(() => []);
+    links.forEach((l: any) => subjectIds.add(String(l.subjectId)));
+    const all = await db.collection('academic_resources').find({}).sort({ createdAt: -1 }).toArray();
+    res.json(subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all);
+}));
+
 // ─── Student Portal: academic requisitions ────────────────────────────────────
 router.get('/student-portal/requisitions', authed(async (req, res, db, decoded) => {
     const items = await db.collection('portal_requisitions').find({ studentId: decoded.studentId }).sort({ createdAt: -1 }).toArray();

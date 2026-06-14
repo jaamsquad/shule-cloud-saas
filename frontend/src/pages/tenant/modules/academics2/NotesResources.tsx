@@ -122,12 +122,18 @@ export default function NotesResources() {
                                     </div>
                                     {res.description && <p className="text-[10px] text-slate-500 font-medium leading-relaxed">{res.description}</p>}
                                     <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
-                                        {res.url ? (
+                                        {res.fileData ? (
+                                            <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
+                                                className="flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
+                                            </a>
+                                        ) : res.url ? (
                                             <a href={res.url} target="_blank" rel="noopener noreferrer"
                                                 className="flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
                                                 <ExternalLink className="w-3.5 h-3.5" /> Open Resource
                                             </a>
                                         ) : <span className="text-[9px] text-slate-300 font-bold uppercase">No link</span>}
+                                        {res.isPublic === false && <span className="text-[8px] text-amber-500 font-black uppercase">Staff only</span>}
                                         <div className="flex gap-1.5">
                                             <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-7 h-7 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3 h-3" /></button>
                                             {confirmDelete === res._id ? (

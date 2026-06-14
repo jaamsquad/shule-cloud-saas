@@ -208,7 +208,11 @@ export default function Admissions() {
                                 <tbody className="divide-y divide-slate-100">
                                     {filtered.map((a: any) => {
                                         const sc = STATUS[a.status] || STATUS.Pending;
-                                        const initials = `${(a.firstName || "?")[0]}${(a.lastName || "?")[0]}`.toUpperCase();
+                                        const displayName = a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || "Applicant";
+                                        const parts = displayName.split(/\s+/);
+                                        const initials = `${(parts[0] || "?")[0]}${(parts[1] || "")[0] || ""}`.toUpperCase();
+                                        const appDate = a.applicationDate || a.createdAt;
+                                        const dateStr = appDate ? new Date(appDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—";
                                         return (
                                             <tr key={a._id} className="hover:bg-slate-50/60 transition-colors">
                                                 <td className="py-3.5 px-5">
@@ -217,12 +221,12 @@ export default function Admissions() {
                                                             {initials}
                                                         </div>
                                                         <div>
-                                                            <p className="font-black text-slate-800">{a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || "Applicant"}</p>
+                                                            <p className="font-black text-slate-800">{displayName}</p>
                                                             <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{a.gender} {a.dob ? `· ${a.dob}` : ""} {a.source === "public" ? "· Public" : ""}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="py-3.5 px-5 font-bold text-slate-600">{a.admissionNumber || "—"}</td>
+                                                <td className="py-3.5 px-5 font-bold text-slate-600">{a.admissionNumber || a.applicationNo || "—"}</td>
                                                 <td className="py-3.5 px-5">
                                                     <span className="flex items-center gap-1.5 text-slate-700 font-bold">
                                                         <BookOpen className="w-3.5 h-3.5 text-slate-400" />
@@ -231,7 +235,7 @@ export default function Admissions() {
                                                 </td>
                                                 <td className="py-3.5 px-5 font-bold text-slate-700">{a.parentName || "—"}</td>
                                                 <td className="py-3.5 px-5 font-bold text-slate-500">{a.parentPhone || a.contactPhone || "—"}</td>
-                                                <td className="py-3.5 px-5 font-bold text-slate-500">{a.applicationDate || "—"}</td>
+                                                <td className="py-3.5 px-5 font-bold text-slate-500">{dateStr}</td>
                                                 <td className="py-3.5 px-5 text-center">
                                                     <select
                                                         value={a.status || "Pending"}

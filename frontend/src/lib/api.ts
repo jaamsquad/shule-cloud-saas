@@ -4,6 +4,7 @@ import { API_ORIGIN } from "./config";
 
 const api = axios.create({
     baseURL: `${API_ORIGIN}/api/v1`,
+    timeout: 30000,   // fail fast instead of hanging forever on an unresponsive backend
 });
 
 // Detect if we are in owner context based on URL path or hostname

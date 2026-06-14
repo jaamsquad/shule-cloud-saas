@@ -705,13 +705,33 @@ router.get('/schools/:sid/fees/invoice-jobs', async (req: Request, res: Response
     }
 });
 
+// POST /schools/:sid/fees/invoice-jobs/precheck — how many target students already have an active invoice this term
+router.post('/schools/:sid/fees/invoice-jobs/precheck', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const metaDb = getMetaDb();
+        const tenantDb = (req as any).tenantDb || metaDb;
+        const schoolId = getSchoolId(req);
+        const { class_ids, academic_year_id, semester_id } = req.body;
+        if (!Array.isArray(class_ids) || !class_ids.length) return res.json({ data: { totalStudents: 0, existing: 0 } });
+        const norm = new Set<string>();
+        class_ids.forEach((c: string) => { norm.add(c); norm.add(c.toLowerCase()); norm.add(c.toUpperCase()); });
+        const list = Array.from(norm);
+        const students = await tenantDb.collection('students').find({ $or: [{ studentClass: { $in: list } }, { currentClass: { $in: list } }] }).toArray();
+        const ids = students.map((s: any) => s._id.toString());
+        const existing = ids.length ? await metaDb.collection('invoices').countDocuments({ schoolId, student_id: { $in: ids }, academic_year_id, semester_id, status: { $ne: 'VOIDED' } }) : 0;
+        res.json({ data: { totalStudents: students.length, existing } });
+    } catch (e: any) { res.status(500).json({ data: null, errors: [{ message: e.message }] }); }
+});
+
 // POST /schools/:sid/fees/invoice-jobs
 router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
     const db = getMetaDb();
+        const tenantDb = (req as any).tenantDb || db;   // students & fee_structures live here
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { class_ids, academic_year_id, semester_id, due_date, fine_amount } = req.body;
+        const mode = req.body.mode === 'overwrite' ? 'overwrite' : 'skip';   // duplicate handling
 
         if (!Array.isArray(class_ids) || class_ids.length === 0 || !academic_year_id || !semester_id) {
             return res.status(400).json({
@@ -753,8 +773,8 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                 });
                 const classNamesList = Array.from(normalizedClasses);
 
-                // Find all target students matching the class names (case-insensitive)
-                const students = await db.collection('students').find({
+                // Find all target students matching the class names (case-insensitive) — TENANT db.
+                const students = await tenantDb.collection('students').find({
                     $or: [
                         { studentClass: { $in: classNamesList } },
                         { currentClass: { $in: classNamesList } }
@@ -782,8 +802,8 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     const student = students[index];
                     const studentClass = student.studentClass || student.currentClass || '';
 
-                    // Find fee structure for this class/year/semester (supporting old and new schema)
-                    const structure = await db.collection('fee_structures').findOne({
+                    // Find fee structure for this class/year/semester — TENANT db (supporting old and new schema)
+                    const structure = await tenantDb.collection('fee_structures').findOne({
                         $or: [
                             {
                                 schoolId,
@@ -828,13 +848,15 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     });
 
                     if (existing) {
-                        processed_count++;
-                        const progress = Math.round((processed_count / total_count) * 100);
-                        await db.collection('bulk_jobs').updateOne(
-                            { _id: jobId },
-                            { $set: { progress, processed_count } }
-                        );
-                        continue;
+                        if (mode === 'overwrite') {
+                            // Void the old invoice so the new one replaces it for this term.
+                            await db.collection('invoices').updateOne({ _id: existing._id }, { $set: { status: 'VOIDED', voidedAt: new Date(), voidedReason: 'Replaced by bulk re-generation' } });
+                        } else {
+                            processed_count++;
+                            const progress = Math.round((processed_count / total_count) * 100);
+                            await db.collection('bulk_jobs').updateOne({ _id: jobId }, { $set: { progress, processed_count, skipped_count: (await db.collection('bulk_jobs').findOne({ _id: jobId }))?.skipped_count + 1 || 1 } });
+                            continue;
+                        }
                     }
 
                     // Extract items from structure
@@ -1796,10 +1818,11 @@ router.post('/schools/:sid/payments/:id/send-receipt', requireRole('ADMIN'), asy
 router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request, res: Response) => {
     try {
     const db = getMetaDb();
+        const tenantDb = (req as any).tenantDb || db;   // students live in the tenant DB
         const schoolId = getSchoolId(req);
         const studentId = req.params.student_id;
 
-        const student = await db.collection('students').findOne({ _id: new ObjectId(studentId) });
+        const student = await tenantDb.collection('students').findOne({ _id: new ObjectId(studentId) });
         if (!student) {
             return res.status(404).json({ data: null, meta: {}, errors: [{ code: 'NOT_FOUND', message: 'Student not found' }] });
         }

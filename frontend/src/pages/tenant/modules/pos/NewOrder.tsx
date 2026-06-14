@@ -228,10 +228,21 @@ export default function NewOrder() {
     });
 
     const { data: institute } = useQuery({
-        queryKey: ["tenant_profile"],
+        queryKey: ["pos_institute"],
         queryFn: async () => {
-            const r = await api.get("/tenant_profile");
-            return Array.isArray(r.data) ? r.data[0] : r.data;
+            // Prefer theme_settings (same source as the header) for the real school name/logo.
+            let t: any = null;
+            try { const r = await api.get("/theme_settings"); t = Array.isArray(r.data) ? r.data[0] : r.data; } catch { /* ignore */ }
+            let p: any = null;
+            try { const r = await api.get("/tenant_profile"); p = Array.isArray(r.data) ? r.data[0] : r.data; } catch { /* ignore */ }
+            const s = { ...(p || {}), ...(t || {}) };
+            return {
+                schoolName: s.name || s.instituteName || s.schoolName || p?.schoolName,
+                name: s.name || s.instituteName || s.schoolName,
+                address: s.address || s.location || p?.address || "",
+                phone: s.phone || s.contactPhone || s.mobile || p?.phone || "",
+                logo: s.logo || s.schoolLogo || s.image || p?.logo || null,
+            };
         },
     });
 
