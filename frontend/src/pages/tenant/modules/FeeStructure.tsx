@@ -265,15 +265,16 @@ export default function FeeStructure() {
                                     type="button"
                                     onClick={() => {
                                         const unused = particularsData.find((p: any) => !formData.amounts.hasOwnProperty(p.label));
-                                        const label = unused ? unused.label : `Custom-${Date.now()}`;
-                                        const amount = unused?.amount || "0";
-                                        setFormData({
-                                            ...formData,
-                                            amounts: {
-                                                ...formData.amounts,
-                                                [label]: amount
-                                            }
-                                        });
+                                        let label = unused?.label;
+                                        let amount = unused?.amount || "0";
+                                        if (!label) {
+                                            // No predefined particular left — ask for a real name instead of "Custom-<timestamp>".
+                                            const name = window.prompt("Name this fee item (e.g. Tuition, Transport, Lunch):", "");
+                                            if (!name || !name.trim()) return;
+                                            label = name.trim();
+                                            if (formData.amounts.hasOwnProperty(label)) { toast.error("That item already exists"); return; }
+                                        }
+                                        setFormData({ ...formData, amounts: { ...formData.amounts, [label]: amount } });
                                     }}
                                     className="px-4 py-2 bg-[#5C67F2]/10 hover:bg-[#5C67F2]/20 text-[#5C67F2] rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all"
                                 >
@@ -302,12 +303,12 @@ export default function FeeStructure() {
                                                         const isAlreadySelected = formData.amounts.hasOwnProperty(p.label) && p.label !== label;
                                                         return (
                                                             <option key={p.label} value={p.label} disabled={isAlreadySelected}>
-                                                                {p.label} {isAlreadySelected ? "(already added)" : ""}
+                                                                {prettyLabel(p.label)} {isAlreadySelected ? "(already added)" : ""}
                                                             </option>
                                                         );
                                                     })}
                                                     {!particularsData.some((p: any) => p.label === label) && (
-                                                        <option value={label}>{label}</option>
+                                                        <option value={label}>{prettyLabel(label)}</option>
                                                     )}
                                                 </select>
                                             </div>
