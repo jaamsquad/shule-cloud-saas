@@ -192,7 +192,7 @@ export default function NewOrder() {
 
     // ── UI state ──────────────────────────────────────────────────────────────
     const [mode, setMode]           = useState<"grid" | "scan">("grid");
-    const [viewStyle, setViewStyle] = useState<"grid" | "list">("grid");
+    const [viewStyle, setViewStyle] = useState<"grid" | "list">("list");
     const [scanInput, setScanInput] = useState("");
     const [search, setSearch]       = useState("");
     const [activeCategory, setActiveCategory] = useState("ALL");
@@ -467,14 +467,22 @@ export default function NewOrder() {
                                     );
                                 })}
                                 {filtered.length === 0 && (
-                                    <div className={`col-span-full flex flex-col items-center justify-center h-40 gap-3 ${t.empty}`}>
+                                    <div className={`col-span-full flex flex-col items-center justify-center h-48 gap-3 ${t.empty}`}>
                                         <ShoppingCart className="w-10 h-10" />
-                                        <p className="text-xs font-black uppercase tracking-widest">No products found</p>
+                                        <p className="text-xs font-black uppercase tracking-widest">{products.length === 0 ? "No products in the store yet" : "No products match your search"}</p>
+                                        {products.length === 0 && <a href="/pos-admin/products" className="text-[11px] font-black uppercase tracking-widest text-[#5C67F2] hover:underline">+ Add products</a>}
                                     </div>
                                 )}
                             </div>
                         ) : (
                             <div className="space-y-2">
+                                {filtered.length === 0 && (
+                                    <div className={`flex flex-col items-center justify-center h-48 gap-3 ${t.empty}`}>
+                                        <ShoppingCart className="w-10 h-10" />
+                                        <p className="text-xs font-black uppercase tracking-widest">{products.length === 0 ? "No products in the store yet" : "No products match your search"}</p>
+                                        {products.length === 0 && <a href="/pos-admin/products" className="text-[11px] font-black uppercase tracking-widest text-[#5C67F2] hover:underline">+ Add products</a>}
+                                    </div>
+                                )}
                                 {filtered.map((p: any) => {
                                     const inCart = cart.find(c => c.productId === p._id);
                                     const oos = Number(p.stock) <= 0;

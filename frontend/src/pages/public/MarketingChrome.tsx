@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
 import { GraduationCap, ArrowRight, Menu, Mail, Phone, MapPin } from "lucide-react";
 
-export const BLUE = "#1B5FE3";
-export const NAVY = "#0A1B3F";
-export const TEAL = "#16B364";
+export const BLUE = "#2563EB";
+export const NAVY = "#0B1B34";
+export const TEAL = "#10B981";
 export const CONTACT_PHONE = "+254 726 151 104";
 export const CONTACT_PHONE_RAW = "+254726151104";
 export const CONTACT_EMAIL = "hello@shulecloud.com";
