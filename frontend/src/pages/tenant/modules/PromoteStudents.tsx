@@ -90,9 +90,11 @@ export default function PromoteStudents() {
                 </span>
             </div>
 
-            <div className="p-6 pt-0 grid grid-cols-1 xl:grid-cols-[280px_1fr_280px] gap-6 items-start">
-                {/* Column 1: Search Sidebar Card */}
-                <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mt-4 animate-in fade-in slide-in-from-left-4 duration-500">
+            <div className="p-6 pt-0 flex flex-col gap-6">
+                {/* Top row: Search + Promote cards */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start mt-4">
+                {/* Search Card */}
+                <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 animate-in fade-in slide-in-from-left-4 duration-500">
                     <h3 className="text-xl font-black text-center text-slate-800 mb-8 flex items-center justify-center gap-3">
                         <Search className="w-6 h-6 text-[#5C67F2]" />
                         Search
@@ -142,8 +144,36 @@ export default function PromoteStudents() {
                     </div>
                 </div>
 
-                {/* Column 2: Main Table Card */}
-                <div className="w-full min-w-0 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mt-4 overflow-x-auto animate-in fade-in duration-700">
+                {/* Promote in Card (top row, beside Search) */}
+                <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-8 text-center animate-in fade-in slide-in-from-right-4 duration-500">
+                    <div className="flex justify-center mb-6">
+                        <div className="w-16 h-16 bg-[#868DF4]/10 rounded-2xl flex items-center justify-center text-[#868DF4]"><Sparkles className="w-8 h-8" /></div>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Promote in</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Bulk Move Operation</p>
+                    <div className="relative mb-8 text-left max-w-md mx-auto">
+                        <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[10px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-lg shadow-indigo-100">TARGET CLASS*</div>
+                        <select value={targetClass} onChange={(e) => setTargetClass(e.target.value)} className="w-full h-12 px-6 border border-[#5C67F2]/20 rounded-full focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-white appearance-none cursor-pointer text-sm font-black shadow-sm">
+                            <option value="">Select Target...</option>
+                            <option value="Graduated">Graduated (Exit)</option>
+                            {uniqueClasses.map((c: any) => (<option key={c} value={c}>{c}</option>))}
+                        </select>
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none"><ChevronDown className="w-4 h-4 text-slate-400" /></div>
+                    </div>
+                    <div className="bg-slate-50 rounded-2xl p-4 mb-8 border border-slate-100 max-w-md mx-auto">
+                        <div className="flex justify-between items-center mb-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected</span><span className="text-lg font-black text-[#5C67F2]">{selectedStudentIds.length}</span></div>
+                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-[#5C67F2] transition-all duration-500" style={{ width: `${(selectedStudentIds.length / (filteredStudents?.length || 1)) * 100}%` }}></div></div>
+                    </div>
+                    <button onClick={handlePromote} disabled={promoting || selectedStudentIds.length === 0}
+                        className={`h-14 px-8 w-full max-w-md mx-auto rounded-full shadow-lg flex items-center justify-center gap-3 transition-all text-sm font-black tracking-widest ${promoting || selectedStudentIds.length === 0 ? 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed' : 'bg-[#5C67F2] hover:bg-[#4a54c4] text-white shadow-indigo-100 hover:scale-[1.02] active:scale-[0.98]'}`}>
+                        {promoting ? <Loader2 className="w-5 h-5 animate-spin" /> : <GraduationCap className="w-5 h-5" />}
+                        {promoting ? 'PROMOTING...' : 'SAVE CHANGES'}
+                    </button>
+                </div>
+                </div>
+
+                {/* Main Table Card (full width, below) */}
+                <div className="w-full min-w-0 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 overflow-x-auto animate-in fade-in duration-700">
                     <div className="overflow-hidden rounded-2xl border border-slate-50 shadow-sm">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 text-slate-400">
@@ -216,62 +246,6 @@ export default function PromoteStudents() {
                     </div>
                 </div>
 
-                {/* Column 3: Promote in Card */}
-                <div className="w-full lg:w-72 bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex-shrink-0 mt-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-                    <div className="flex justify-center mb-6">
-                        <div className="w-16 h-16 bg-[#868DF4]/10 rounded-2xl flex items-center justify-center text-[#868DF4]">
-                            <Sparkles className="w-8 h-8" />
-                        </div>
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Promote in</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Bulk Move Operation</p>
-                    
-                    <div className="relative mb-8 text-left">
-                        <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[10px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-lg shadow-indigo-100">
-                            TARGET CLASS*
-                        </div>
-                        <select 
-                            value={targetClass}
-                            onChange={(e) => setTargetClass(e.target.value)}
-                            className="w-full h-12 px-6 border border-[#5C67F2]/20 rounded-full focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-white appearance-none cursor-pointer text-sm font-black shadow-sm"
-                        >
-                            <option value="">Select Target...</option>
-                            <option value="Graduated">Graduated (Exit)</option>
-                            {uniqueClasses.map((c: any) => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
-                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none">
-                            <ChevronDown className="w-4 h-4 text-slate-400" />
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-50 rounded-2xl p-4 mb-8 border border-slate-100">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected</span>
-                            <span className="text-lg font-black text-[#5C67F2]">{selectedStudentIds.length}</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-[#5C67F2] transition-all duration-500" 
-                                style={{ width: `${(selectedStudentIds.length / (filteredStudents?.length || 1)) * 100}%` }}
-                            ></div>
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={handlePromote}
-                        disabled={promoting || selectedStudentIds.length === 0}
-                        className={`h-14 px-8 w-full rounded-full shadow-lg flex items-center justify-center gap-3 transition-all text-sm font-black tracking-widest ${
-                            promoting || selectedStudentIds.length === 0 
-                            ? 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed' 
-                            : 'bg-[#5C67F2] hover:bg-[#4a54c4] text-white shadow-indigo-100 hover:scale-[1.02] active:scale-[0.98]'
-                        }`}
-                    >
-                        {promoting ? <Loader2 className="w-5 h-5 animate-spin" /> : <GraduationCap className="w-5 h-5" />}
-                        {promoting ? 'PROMOTING...' : 'SAVE CHANGES'}
-                    </button>
-                </div>
             </div>
         </div>
     );

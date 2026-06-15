@@ -1,0 +1,165 @@
+import { Router, Request } from 'express';
+import { ObjectId } from 'mongodb';
+
+const router = Router();
+const getDb = (req: Request) => (req as any).tenantDb;
+const today = () => new Date().toISOString().slice(0, 10);
+
+const resolveStudent = async (db: any, code: string) =>
+    db.collection('students').findOne({ $or: [{ registrationNo: code }, { admNo: code }, { portalUsername: code }, { studentId: code }] });
+
+const studentCard = (s: any) => ({
+    id: String(s._id), name: s.studentName || s.name,
+    admissionNo: s.registrationNo || s.admNo || '',
+    class: s.studentClass || '', boarding: s.boarding || s.residence || s.boardingStatus || 'Day Scholar',
+    photo: s.photo || s.studentPhoto || s.avatar || s.image || null,
+    walletBalance: Number(s.walletBalance || 0),
+});
+
+// ── Kitchen: look up a scanned student (no serve yet) ─────────────────────────
+router.get('/cafeteria/student/:code', async (req, res) => {
+    try {
+        const s = await resolveStudent(getDb(req), String(req.params.code).trim());
+        if (!s) return res.status(404).json({ message: `No student found for "${req.params.code}"` });
+        res.json(studentCard(s));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Kitchen: serve a meal (with food photo evidence) ──────────────────────────
+router.post('/cafeteria/serve', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const { code, mealType = 'Lunch', photo, staffName } = req.body || {};
+        const student = await resolveStudent(db, String(code || '').trim());
+        if (!student) return res.status(404).json({ message: `No student found for "${code}"` });
+        const date = today();
+        const existing = await db.collection('meal_services').findOne({ studentId: String(student._id), date, mealType });
+        if (existing) return res.status(400).json({ message: `${student.studentName} was already served ${mealType} today` });
+        const doc = {
+            studentId: String(student._id), studentName: student.studentName,
+            admissionNo: student.registrationNo || student.admNo || '', studentClass: student.studentClass || '',
+            boarding: student.boarding || student.residence || 'Day Scholar',
+            mealType, date, time: new Date(), photo: photo || null, staffName: staffName || 'Kitchen Staff', createdAt: new Date(),
+        };
+        await db.collection('meal_services').insertOne(doc);
+        res.status(201).json({ ...doc, student: studentCard(student) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Kitchen: today's meal counts + recent ─────────────────────────────────────
+router.get('/cafeteria/meals/today', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const rows = await db.collection('meal_services').find({ date: today() }).sort({ time: -1 }).toArray();
+        const c = (t: string) => rows.filter((r: any) => r.mealType === t).length;
+        const totalStudents = await db.collection('students').countDocuments({});
+        res.json({ breakfast: c('Breakfast'), lunch: c('Lunch'), supper: c('Supper'), served: rows.length, pending: Math.max(0, totalStudents - new Set(rows.map((r: any) => r.studentId)).size), rows: rows.slice(0, 60) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Kitchen: meal history ─────────────────────────────────────────────────────
+router.get('/cafeteria/meals', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const { date, mealType, q } = req.query as any;
+        const filter: any = {};
+        if (date) filter.date = date;
+        if (mealType) filter.mealType = mealType;
+        if (q) filter.$or = [{ studentName: { $regex: String(q), $options: 'i' } }, { admissionNo: { $regex: String(q), $options: 'i' } }];
+        const rows = await db.collection('meal_services').find(filter).sort({ time: -1 }).limit(300).toArray();
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Canteen settings (Included in Fees / Wallet / Both) ───────────────────────
+router.get('/canteen/settings', async (req, res) => {
+    try { const s = await getDb(req).collection('canteen_settings').findOne({}); res.json({ mode: s?.mode || 'wallet' }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/canteen/settings', async (req, res) => {
+    try { await getDb(req).collection('canteen_settings').updateOne({}, { $set: { mode: req.body?.mode || 'wallet', updatedAt: new Date() } }, { upsert: true }); res.json({ ok: true }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Canteen: quick sale (wallet deduction / fees) ─────────────────────────────
+router.post('/canteen/sale', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const { code, items = [], paymentMode } = req.body || {};
+        if (!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'No items in the sale' });
+        const total = items.reduce((s: number, i: any) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
+        const student = code ? await resolveStudent(db, String(code).trim()) : null;
+        const settings = await db.collection('canteen_settings').findOne({});
+        const mode = (paymentMode || settings?.mode || 'wallet').toLowerCase();
+
+        let newBalance: number | null = null;
+        if (mode === 'wallet') {
+            if (!student) return res.status(400).json({ message: 'Scan a student card for wallet payment' });
+            const bal = Number(student.walletBalance || 0);
+            if (bal < total) return res.status(400).json({ message: `Insufficient wallet balance (KES ${bal.toLocaleString()})` });
+            newBalance = bal - total;
+            await db.collection('students').updateOne({ _id: student._id }, { $set: { walletBalance: newBalance } });
+            await db.collection('wallet_transactions').insertOne({ studentId: String(student._id), type: 'debit', amount: total, reason: 'Canteen purchase', balanceAfter: newBalance, createdAt: new Date() }).catch(() => { });
+        }
+        // mode "fees" / "included" → no deduction, just recorded against the student
+        const doc = {
+            orderNo: `CSALE-${Date.now().toString().slice(-7)}`,
+            studentId: student ? String(student._id) : null, studentName: student?.studentName || 'Walk-in',
+            admissionNo: student?.registrationNo || student?.admNo || '',
+            items, total, paymentMode: mode, date: today(), createdAt: new Date(),
+        };
+        await db.collection('canteen_sales').insertOne(doc);
+        for (const it of items) { if (it.productId && ObjectId.isValid(it.productId)) await db.collection('pos_products').updateOne({ _id: new ObjectId(it.productId) }, { $inc: { stock: -(Number(it.qty) || 1) } }).catch(() => { }); }
+        res.status(201).json({ ...doc, newBalance });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Canteen: today stats + transactions ───────────────────────────────────────
+router.get('/canteen/sales/today', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const rows = await db.collection('canteen_sales').find({ date: today() }).sort({ createdAt: -1 }).toArray();
+        const totalSales = rows.reduce((s: number, r: any) => s + (r.total || 0), 0);
+        const itemCounts: Record<string, number> = {};
+        rows.forEach((r: any) => (r.items || []).forEach((i: any) => { itemCounts[i.name] = (itemCounts[i.name] || 0) + (Number(i.qty) || 1); }));
+        const topItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, qty]) => ({ name, qty }));
+        const wallet = rows.filter((r: any) => r.paymentMode === 'wallet').reduce((s: number, r: any) => s + (r.total || 0), 0);
+        res.json({ totalSales, count: rows.length, students: new Set(rows.map((r: any) => r.studentId).filter(Boolean)).size, wallet, topItems, rows: rows.slice(0, 60) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.get('/canteen/sales', async (req, res) => {
+    try { const rows = await getDb(req).collection('canteen_sales').find({}).sort({ createdAt: -1 }).limit(300).toArray(); res.json(rows); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Foods (dishes that can be served) ─────────────────────────────────────────
+router.get('/cafeteria/foods', async (req, res) => {
+    try { res.json(await getDb(req).collection('cafeteria_foods').find({}).sort({ name: 1 }).toArray()); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/cafeteria/foods', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const name = String(req.body?.name || '').trim();
+        if (!name) return res.status(400).json({ message: 'Food name is required' });
+        const category = req.body?.category || 'Main';
+        const r = await db.collection('cafeteria_foods').insertOne({ name, category, createdAt: new Date() });
+        res.status(201).json({ _id: r.insertedId, name, category });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.delete('/cafeteria/foods/:id', async (req, res) => {
+    try { await getDb(req).collection('cafeteria_foods').deleteOne({ _id: new ObjectId(req.params.id) }); res.json({ ok: true }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Weekly meal timetable (the plan the kitchen serves from) ──────────────────
+router.get('/cafeteria/menu', async (req, res) => {
+    try { const d = await getDb(req).collection('cafeteria_menu').findOne({}); res.json({ plan: d?.plan || {} }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/cafeteria/menu', async (req, res) => {
+    try { await getDb(req).collection('cafeteria_menu').updateOne({}, { $set: { plan: req.body?.plan || {}, updatedAt: new Date() } }, { upsert: true }); res.json({ ok: true }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+export default router;

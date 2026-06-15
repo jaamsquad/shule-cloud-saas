@@ -825,13 +825,15 @@ router.post('/reports/custom/generate', async (req: Request, res: Response) => {
 router.get('/reports/shared/classes', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
+        // The real classes are whatever students actually belong to — this is what
+        // the report filters match against (student.studentClass).
+        const distinct: string[] = (await db.collection('students').distinct('studentClass')).filter(Boolean);
+        if (distinct.length > 0) {
+            return res.json(distinct.sort().map((name: string) => ({ _id: name, name, levelName: name })));
+        }
+        // Fallback to the classes collection (use any available label field).
         const classes = await db.collection('classes').find({}).toArray();
-        const data = classes.length > 0 ? classes : [
-            { _id: new ObjectId(), name: "Grade 8 Stream 1", levelName: "Grade 8", streamName: "Stream 1" },
-            { _id: new ObjectId(), name: "Grade 8 Stream 2", levelName: "Grade 8", streamName: "Stream 2" },
-            { _id: new ObjectId(), name: "Grade 7 Stream 1", levelName: "Grade 7", streamName: "Stream 1" }
-        ];
-        res.json(data);
+        res.json(classes.map((c: any) => ({ _id: c._id, name: c.name || c.levelName || c.className, levelName: c.levelName || c.name })).filter((c: any) => c.name));
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 

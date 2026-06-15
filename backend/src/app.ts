@@ -25,6 +25,7 @@ import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
 import integrationsRoutes from './routes/integrations.routes';
 import departmentsRoutes from './routes/departments.routes';
+import cafeteriaRoutes from './routes/cafeteria.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -276,6 +277,7 @@ app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenan
 app.use('/api', mpesaRoutes);             // also served at /api/mpesa/callback (configured URL)
 app.use('/api/v1', integrationsRoutes);   // tenancy-aware M-PESA settings
 app.use('/api/v1', departmentsRoutes);    // department management
+app.use('/api/v1', cafeteriaRoutes);      // kitchen meal service + canteen quick sale
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);

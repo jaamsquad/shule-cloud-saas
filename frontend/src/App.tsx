@@ -291,6 +291,12 @@ import DepartmentManagement from "./pages/tenant/modules/departments/Departments
 import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
 import AttendanceScanner from "./pages/tenant/modules/AttendanceScanner";
 import PublicApplication from "./pages/public/PublicApplication";
+import MealService from "./pages/tenant/modules/cafeteria/MealService";
+import MealHistory from "./pages/tenant/modules/cafeteria/MealHistory";
+import QuickSale from "./pages/tenant/modules/cafeteria/QuickSale";
+import CanteenSettings from "./pages/tenant/modules/cafeteria/CanteenSettings";
+import MealMenu from "./pages/tenant/modules/cafeteria/MealMenu";
+import CanteenTransactions from "./pages/tenant/modules/cafeteria/CanteenTransactions";
 
 // ── School POS Module ─────────────────────────────────────────────────────────
 import POSLogin from "./modules/pos/pages/POSLogin";
@@ -491,6 +497,12 @@ const App = () => {
               <Route path="/departments" element={<DepartmentManagement />} />
               <Route path="/staff-roles" element={<StaffRoles />} />
               <Route path="/attendance-scanner" element={<AttendanceScanner />} />
+              <Route path="/cafeteria/meal-service" element={<MealService />} />
+              <Route path="/cafeteria/meal-history" element={<MealHistory />} />
+              <Route path="/canteen/quick-sale" element={<QuickSale />} />
+              <Route path="/canteen/settings" element={<CanteenSettings />} />
+              <Route path="/cafeteria/menu" element={<MealMenu />} />
+              <Route path="/canteen/transactions" element={<CanteenTransactions />} />
               <Route path="/academic-system/classes" element={<ClassesStreamsPage />} />
               <Route path="/academic-system/enrollments" element={<EnrollmentPage />} />
               <Route path="/academic-system/enroll" element={<EnrollmentFormPage />} />

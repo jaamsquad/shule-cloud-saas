@@ -5,7 +5,7 @@ import {
   Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil,
   Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video,
   Copy, ClipboardList, FileText, Lock, Award, Truck, BookMarked, GraduationCap, Building2,
-  Zap, Shield, Monitor
+  Zap, Shield, Monitor, Utensils
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -125,6 +125,14 @@ export const navItems: NavItem[] = [
       { label: "Class wise Report", path: "/attendance/reports/class-wise" },
       { label: "Students Attendance Report", path: "/attendance/reports/students" },
       { label: "Employees Attendance Report", path: "/attendance/reports/employees" },
+  ] },
+  { label: "Cafeteria", icon: Utensils, moduleKey: "students", children: [
+      { label: "Meal Service (Kitchen)", path: "/cafeteria/meal-service" },
+      { label: "Weekly Meal Menu", path: "/cafeteria/menu" },
+      { label: "Meal History", path: "/cafeteria/meal-history" },
+      { label: "Quick Sale (Canteen)", path: "/canteen/quick-sale" },
+      { label: "Canteen Transactions", path: "/canteen/transactions" },
+      { label: "Canteen Settings", path: "/canteen/settings" },
   ] },
   { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
       { label: "Reports Center", path: "/reports" },
