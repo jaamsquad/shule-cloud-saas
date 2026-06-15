@@ -130,7 +130,7 @@ export default function Login() {
                 subdomain: activeSubdomain || undefined,
             });
 
-            const { token, access_token, user_type, user, parent, redirect, tenantSubdomain } = res.data;
+            const { token, access_token, user_type, user, parent, redirect, tenantSubdomain, redirectPortal, staffSso, canTeacherPortal } = res.data;
             const authToken = access_token || token;
 
             // Helper: after storing the token, navigate to the right place.
@@ -167,17 +167,39 @@ export default function Login() {
                     return;
 
                 case "teacher":
-                case "staff":
-                    localStorage.setItem("staff_token", authToken);
-                    localStorage.setItem("staff_info", JSON.stringify({ _id: user.id, name: user.name, designation: user.role, email: user.email }));
-                    toast.success(`Welcome, ${user.name}!`);
-                    enterPortal("staff");
+                case "staff": {
+                    const sso = staffSso || { token: authToken, staff: { _id: user.id, name: user.name, designation: user.role, email: user.email } };
+                    // Teacher-only → straight to the teaching portal.
+                    if (redirectPortal === "staff") {
+                        localStorage.setItem("staff_token", sso.token);
+                        localStorage.setItem("staff_info", JSON.stringify(sso.staff));
+                        toast.success(`Welcome, ${user.name}!`);
+                        enterPortal("staff");
+                        return;
+                    }
+                    // "Both" → land on the admin app first; stash SSO so the top bar
+                    // can show an "Open Teaching Portal" button.
+                    localStorage.setItem("auth_token", authToken);
+                    localStorage.setItem("user", JSON.stringify(user));
+                    localStorage.removeItem("active_portal");
+                    if (canTeacherPortal) {
+                        localStorage.setItem("staff_token", sso.token);
+                        localStorage.setItem("staff_info", JSON.stringify(sso.staff));
+                        localStorage.setItem("can_teacher_portal", "1");
+                    } else {
+                        localStorage.removeItem("can_teacher_portal");
+                    }
+                    refreshPermissions();
+                    toast.success(`Welcome back, ${user?.name || username}!`);
+                    goToDashboard("/dashboard");
                     return;
+                }
 
                 default: // admin
                     localStorage.setItem("auth_token", authToken);
                     localStorage.setItem("user", JSON.stringify(user));
                     localStorage.removeItem("active_portal");
+                    localStorage.removeItem("can_teacher_portal");
                     refreshPermissions();
                     toast.success(`Welcome back, ${user?.name || username}!`);
                     const dest = searchParams.get("redirect");

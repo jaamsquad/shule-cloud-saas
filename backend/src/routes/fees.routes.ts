@@ -1891,6 +1891,7 @@ router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request
 router.get('/schools/:sid/receipts', async (req: Request, res: Response) => {
     try {
     const db = getMetaDb();
+        const tenantDb = (req as any).tenantDb || db;   // students live here
         const schoolId = getSchoolId(req);
         const { student_id, invoice_id, receipt_no, from, to, method, page = 1, limit = 20 } = req.query;
 
@@ -1918,14 +1919,15 @@ router.get('/schools/:sid/receipts', async (req: Request, res: Response) => {
             .limit(l)
             .toArray();
 
+        const sLookup = async (sid: any) => { try { return await tenantDb.collection('students').findOne({ _id: new ObjectId(sid) }); } catch { return null; } };
+
         const data = await Promise.all(docs.map(async (doc) => {
-            const student = await db.collection('students').findOne({ _id: new ObjectId(doc.student_id) });
-            const invoice = await db.collection('invoices').findOne({ _id: new ObjectId(doc.invoice_id) });
-            
+            const student = await sLookup(doc.student_id);
+            const invoice = await db.collection('invoices').findOne({ _id: new ObjectId(doc.invoice_id) }).catch(() => null);
             return {
                 receipt_no: doc.receipt_no,
                 date: doc.payment_date,
-                student_name: student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || 'N/A',
+                student_name: student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || doc.studentName || 'N/A',
                 class_name: student?.studentClass || student?.currentClass || 'N/A',
                 admission_no: student?.registrationNo || student?.studentId || 'N/A',
                 invoice_no: invoice?.invoice_no || 'N/A',
@@ -1937,9 +1939,33 @@ router.get('/schools/:sid/receipts', async (req: Request, res: Response) => {
             };
         }));
 
+        // Also surface PAID invoices that have no payment record (e.g. marked paid directly).
+        if (!receipt_no && p === 1) {
+            const paidInvoices = await db.collection('invoices').find({ schoolId, status: { $regex: /^paid$/i } }).limit(200).toArray();
+            const seenInvoices = new Set(docs.map((d: any) => String(d.invoice_id)));
+            for (const inv of paidInvoices) {
+                if (seenInvoices.has(String(inv._id))) continue;
+                if (method && method !== 'INVOICE') continue;
+                const student = await sLookup(inv.student_id);
+                data.push({
+                    receipt_no: inv.invoice_no || `RCPT-${String(inv._id).slice(-6).toUpperCase()}`,
+                    date: inv.paidAt || inv.updatedAt || inv.createdAt,
+                    student_name: student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || inv.studentName || 'N/A',
+                    class_name: student?.studentClass || inv.class_id || 'N/A',
+                    admission_no: student?.registrationNo || 'N/A',
+                    invoice_no: inv.invoice_no || 'N/A',
+                    amount_paid: inv.amount_paid ?? inv.total_due ?? inv.total ?? 0,
+                    method: 'Invoice',
+                    reference: '',
+                    collected_by_name: 'Bursar',
+                    balance_after: inv.balance ?? 0,
+                });
+            }
+        }
+
         res.json({
             data,
-            meta: { page: p, limit: l, total, pages: Math.ceil(total / l) },
+            meta: { page: p, limit: l, total: total + data.length - docs.length, pages: Math.ceil(total / l) || 1 },
             errors: []
         });
     } catch (e: any) {

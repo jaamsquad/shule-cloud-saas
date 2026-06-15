@@ -191,6 +191,15 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
 
                 {/* Profile Tools */}
                 <div className="flex items-center gap-5 relative">
+                    {/* For staff with "both" portal access — jump to the teaching portal */}
+                    {typeof window !== "undefined" && localStorage.getItem("can_teacher_portal") === "1" && localStorage.getItem("staff_token") && (
+                        <button
+                            onClick={() => { localStorage.setItem("active_portal", "staff"); window.location.href = "/"; }}
+                            title="Open your Teaching Portal"
+                            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-black uppercase tracking-wide shadow-sm transition-colors">
+                            <GraduationCap className="w-4 h-4" /> Teaching Portal
+                        </button>
+                    )}
                     <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
                         <MessageSquare className="w-6 h-6" strokeWidth={1.5} />
                     </button>

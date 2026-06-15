@@ -268,8 +268,8 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                         </p>
                     </div>
                     {(tab === "buses" || tab === "new-bus" || tab === "edit-bus") ? (
-                        tab !== "new-bus" && (
-                            <button 
+                        tab === "buses" && (
+                            <button
                                 onClick={() => navigate("/transport/buses/new")}
                                 className="flex items-center justify-center gap-2 px-8 py-3.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs uppercase tracking-widest"
                             >
@@ -277,8 +277,8 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                             </button>
                         )
                     ) : (
-                        tab !== "new" && tab !== "edit" && (
-                            <button 
+                        tab === "zones" && (
+                            <button
                                 onClick={() => navigate("/transport/zones/new")}
                                 className="flex items-center justify-center gap-2 px-8 py-3.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-xl shadow-indigo-100 transition-all transform active:scale-95 text-xs uppercase tracking-widest"
                             >

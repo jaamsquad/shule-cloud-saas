@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useReportSchool } from "./useReportSchool";
 import { toast } from "sonner";
 import { 
     CreditCard, Printer, Search, Filter, TrendingUp, 
@@ -15,6 +16,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 export default function FeeCollectionReport() {
+    const school = useReportSchool();
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [selectedClass, setSelectedClass] = useState("");
@@ -97,7 +99,7 @@ export default function FeeCollectionReport() {
         </head>
         <body>
             <div class="header">
-                <h1 class="school-title">ShuleCloud International Academy</h1>
+                <h1 class="school-title">${school.name}</h1>
                 <div class="report-title">Fee Collection & Revenue Summary Report</div>
             </div>
 

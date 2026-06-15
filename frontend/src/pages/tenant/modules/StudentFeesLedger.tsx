@@ -204,9 +204,9 @@ export default function StudentFeesLedger() {
                     <p className="text-slate-500 text-sm mt-1">Search for a student to view all invoices, balances, and payment history</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Left Panel: Student Search & Metrics */}
-                    <div className="md:col-span-1 space-y-6">
+                <div className="flex flex-col gap-6">
+                    {/* Top bar: Student Search & Metrics (horizontal) */}
+                    <div className="flex flex-col lg:flex-row gap-4 [&>*]:flex-1">
                         {/* Search Input */}
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative group">
                             <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider block mb-2">Search Student</label>
@@ -302,7 +302,7 @@ export default function StudentFeesLedger() {
                     </div>
 
                     {/* Middle Panel: Ledger Views */}
-                    <div className="md:col-span-2 space-y-6">
+                    <div className="w-full space-y-6">
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
                             
                             {/* Tabs */}

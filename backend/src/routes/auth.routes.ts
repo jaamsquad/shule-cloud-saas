@@ -216,23 +216,33 @@ router.post('/smart-login', async (req, res) => {
             const name = staffMatch.employeeName || staffMatch.name || username;
             const token = jwt.sign({ staffId: staffMatch._id.toString(), username, role, name, tenantId: resolvedTenantId, tenantSubdomain: resolvedTenantSubdomain }, secret, { expiresIn: '7d' });
             const portalAccess = (staffMatch.portalAccess || 'both').toLowerCase();
-            // Teachers are sent to the teacher portal automatically (unless restricted to the admin app).
             const isTeacher = /teacher/i.test(rawDesignation)
                 || (Array.isArray(staffMatch.roles) && staffMatch.roles.some((r: string) => /teacher/i.test(r)))
                 || staffMatch.isTeachingStaff === true
                 || (Array.isArray(staffMatch.subjectAssignments) && staffMatch.subjectAssignments.length > 0)
                 || (Array.isArray(staffMatch.specializedSubjects) && staffMatch.specializedSubjects.length > 0);
-            const goTeacherPortal = portalAccess === 'staff' || (isTeacher && portalAccess !== 'admin');
+
+            // Portal access resolution:
+            //   admin   → admin app only (blocked from teacher portal)
+            //   teacher → teacher portal only (redirected on login, no admin)
+            //   both    → land on the admin app first; offer a "Teaching Portal" button
+            const isAdminOnly   = portalAccess === 'admin' || portalAccess === 'admin app only';
+            const isTeacherOnly = portalAccess === 'teacher' || portalAccess === 'staff' || portalAccess === 'teacher portal only';
+            const canTeacherPortal = !isAdminOnly && (isTeacher || portalAccess === 'both' || portalAccess === 'both portals' || isTeacherOnly);
+            const goTeacherPortal  = isTeacherOnly && canTeacherPortal;
+            const staffSso = canTeacherPortal
+                ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
+                : null;
+
             return res.json({
                 token, access_token: token,
                 tenantSubdomain: resolvedTenantSubdomain,
                 user_type: userType,
                 user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId, portalAccess },
-                // Teachers (and staff-portal-assigned staff) are sent to the teacher portal (SSO — no second login).
-                redirectPortal: goTeacherPortal ? 'staff' : null,
-                staffSso: goTeacherPortal
-                    ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
-                    : null,
+                portalAccess,
+                canTeacherPortal,           // admin app shows a "Teaching Portal" button when true
+                redirectPortal: goTeacherPortal ? 'staff' : null,   // only teacher-only is auto-redirected
+                staffSso,                   // present for teacher-only AND both → enables SSO into teacher portal
                 redirect: '/dashboard',
             });
         }

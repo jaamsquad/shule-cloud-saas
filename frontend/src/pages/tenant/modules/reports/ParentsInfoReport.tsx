@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useReportSchool } from "./useReportSchool";
 import { toast } from "sonner";
 import { 
     UserPlus, Printer, Search, Filter, Phone, Mail, 
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/table";
 
 export default function ParentsInfoReport() {
+    const school = useReportSchool();
     const [selectedClass, setSelectedClass] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedRelation, setSelectedRelation] = useState("");
@@ -70,7 +72,7 @@ export default function ParentsInfoReport() {
         </head>
         <body>
             <div class="header">
-                <h1 class="school-title">ShuleCloud International Academy</h1>
+                <h1 class="school-title">${school.name}</h1>
                 <div class="report-title">Parents & Guardians Contact Registry Report</div>
             </div>
 

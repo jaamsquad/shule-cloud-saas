@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useReportSchool } from "./useReportSchool";
 import { toast } from "sonner";
 import { 
     Sliders, Printer, Search, Filter, Save, CheckCircle, 
@@ -25,6 +26,7 @@ const AVAILABLE_COLUMNS = [
 ];
 
 export default function CustomisedReports() {
+    const school = useReportSchool();
     const queryClient = useQueryClient();
     const [selectedColumns, setSelectedColumns] = useState<string[]>(["admNo", "name", "studentClass", "balance"]);
     const [filterStatus, setFilterStatus] = useState("");
@@ -134,7 +136,7 @@ export default function CustomisedReports() {
         </head>
         <body>
             <div class="header">
-                <h1 class="school-title">ShuleCloud International Academy</h1>
+                <h1 class="school-title">${school.name}</h1>
                 <div class="report-title">Custom User-Defined Data Query Report</div>
             </div>
 
