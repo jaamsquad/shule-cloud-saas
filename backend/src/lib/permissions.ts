@@ -48,6 +48,10 @@ export async function resolveStaffPermissions(db: Db, staff: any): Promise<strin
         perms.forEach(p => set.add(p));
     }
 
+    // Direct per-staff permissions (manual assignment) add on top of role permissions.
+    if (Array.isArray(staff?.permissions)) staff.permissions.forEach((p: string) => set.add(p));
+    if (set.has('*')) return ['*'];
+
     // Teaching staff always get the full teacher toolkit (every original staff-portal
     // tab). Extra roles add their modules on top (multi-role). Legacy staff with no
     // recognised role also fall back to the teacher view so the portal is never empty.
