@@ -45,7 +45,7 @@ export default function StudentsInfoReport() {
     const pagination = resData?.pagination || { total: 0, page: 1, pages: 1 };
 
     // Real school branding for the print header.
-    const { data: schoolRaw } = useQuery({ queryKey: ["theme_settings"], queryFn: async () => (await api.get("/theme_settings")).data });
+    const { data: schoolRaw } = useQuery({ queryKey: ["tenant_profile_global"], queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
     const school = Array.isArray(schoolRaw) ? schoolRaw[0] : (schoolRaw || {});
     const schoolName = school?.name || school?.instituteName || school?.schoolName || "School";
     const schoolAddr = [school?.address || school?.location, school?.city || school?.county].filter(Boolean).join(", ");

@@ -36,7 +36,7 @@ export default function AccountsReport() {
         }
     });
 
-    const summary = resData?.summary || { openingBalance: 2450000, closingBalance: 2855000, totalIncome: 462500, totalExpense: 78000 };
+    const summary = resData?.summary || { openingBalance: 0, closingBalance: 0, totalIncome: 0, totalExpense: 0 };
     const breakdown = resData?.breakdown || [];
     const ledger = resData?.data || [];
 
@@ -84,6 +84,7 @@ export default function AccountsReport() {
         </head>
         <body>
             <div class="header">
+                ${school.logo ? `<img src="${school.logo}" style="height:56px;margin-bottom:8px;object-fit:contain;" />` : ""}
                 <h1 class="school-title">${school.name}</h1>
                 <div class="report-title">Financial Accounts Ledger & Statement Report</div>
             </div>

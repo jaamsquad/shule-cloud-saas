@@ -72,6 +72,7 @@ export default function ParentsInfoReport() {
         </head>
         <body>
             <div class="header">
+                ${school.logo ? `<img src="${school.logo}" style="height:56px;margin-bottom:8px;object-fit:contain;" />` : ""}
                 <h1 class="school-title">${school.name}</h1>
                 <div class="report-title">Parents & Guardians Contact Registry Report</div>
             </div>

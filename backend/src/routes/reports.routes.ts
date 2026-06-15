@@ -678,18 +678,28 @@ router.get('/reports/accounts', async (req: Request, res: Response) => {
             recordedBy: t.recordedBy || "Admin"
         }));
 
-        const combinedEntries = [...ledgerEntries, ...mappedFeeTxns];
+        // Real income / expense entries from the Accounts module.
+        const dateFilter: any = (start_date && end_date) ? { $or: [{ date: { $gte: start_date, $lte: end_date } }, { transactionDate: { $gte: start_date, $lte: end_date } }] } : {};
+        const mapAcc = (e: any, t: 'income' | 'expense') => ({
+            _id: e._id,
+            date: e.date || e.transactionDate || (e.createdAt instanceof Date ? e.createdAt.toISOString().split('T')[0] : '') || '',
+            reference: e.reference || e.refNo || e.voucherNo || `${t === 'income' ? 'INC' : 'EXP'}-${e._id.toString().slice(-6).toUpperCase()}`,
+            description: e.description || e.title || e.name || e.head || e.source || (t === 'income' ? 'Income' : 'Expense'),
+            type: t,
+            category: e.category || e.head || e.accountHead || e.source || 'General',
+            amount: Number(e.amount || 0),
+            paymentMethod: e.paymentMethod || e.mode || e.method || 'Cash',
+            recordedBy: e.recordedBy || 'Admin',
+        });
+        const incomeEntries = (await db.collection('income').find(dateFilter).toArray()).map((e: any) => mapAcc(e, 'income'));
+        const expenseEntries = (await db.collection('expenses').find(dateFilter).toArray()).map((e: any) => mapAcc(e, 'expense'));
 
-        // Fallback sample data if empty
-        const data = combinedEntries.length > 0 ? combinedEntries : [
-            { _id: new ObjectId(), date: "2026-05-01", reference: "TXN-801", description: "Tuition Fee Deposit", type: "income", category: "Tuition Fees", amount: 450000, paymentMethod: "Bank Transfer", recordedBy: "Admin" },
-            { _id: new ObjectId(), date: "2026-05-03", reference: "TXN-802", description: "Purchase of Laboratory Chemicals", type: "expense", category: "Academic Supplies", amount: 35000, paymentMethod: "Cheque", recordedBy: "Bursar" },
-            { _id: new ObjectId(), date: "2026-05-05", reference: "TXN-803", description: "School Bus Fuel & Maintenance", type: "expense", category: "Transport", amount: 28000, paymentMethod: "Cash", recordedBy: "Bursar" },
-            { _id: new ObjectId(), date: "2026-05-08", reference: "TXN-804", description: "Library Book Replacement Fines", type: "income", category: "Library", amount: 12500, paymentMethod: "M-Pesa", recordedBy: "Librarian" },
-            { _id: new ObjectId(), date: "2026-05-12", reference: "TXN-805", description: "Staff Tea & Welfare Expenses", type: "expense", category: "Staff Welfare", amount: 15000, paymentMethod: "Cash", recordedBy: "Bursar" }
-        ];
+        let combinedEntries = [...ledgerEntries, ...incomeEntries, ...expenseEntries, ...mappedFeeTxns];
+        if (type) combinedEntries = combinedEntries.filter((e: any) => e.type === type);
+        combinedEntries.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
 
-        const openingBalance = 2450000;
+        const data = combinedEntries;   // real data only — no fabricated samples
+        const openingBalance = 0;
         const totalIncome = data.filter((d: any) => d.type === "income").reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
         const totalExpense = data.filter((d: any) => d.type === "expense").reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
         const closingBalance = openingBalance + totalIncome - totalExpense;
@@ -782,29 +792,29 @@ router.post('/reports/custom/generate', async (req: Request, res: Response) => {
         const skip = (Number(page) - 1) * Number(limit);
         const students = await db.collection('students').find(query).skip(skip).limit(Number(limit)).toArray();
 
-        const activeStudents = students.length > 0 ? students : [
-            { _id: new ObjectId(), admNo: "BS001", name: "Fatuma Waridi", gender: "Female", studentClass: "Grade 8 Stream 1", status: "Active", balance: 5000, parentName: "Amina Waridi", parentPhone: "+254711223344" },
-            { _id: new ObjectId(), admNo: "BS002", name: "John Doe", gender: "Male", studentClass: "Grade 8 Stream 1", status: "Active", balance: 12000, parentName: "Peter Doe", parentPhone: "+254722334455" },
-            { _id: new ObjectId(), admNo: "BS003", name: "Alice Smith", gender: "Female", studentClass: "Grade 7 Stream 2", status: "Active", balance: 0, parentName: "Mary Smith", parentPhone: "+254733445566" }
-        ];
-
-        // Project only selected columns
-        const projectedData = activeStudents.map((item: any) => {
+        // Map report column keys → the actual student fields (real data).
+        const resolve: Record<string, (s: any) => any> = {
+            admNo: s => s.registrationNo || s.admNo || s.admissionNo || s.admissionNumber || 'N/A',
+            name: s => s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim() || s.name || 'N/A',
+            studentName: s => s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'N/A',
+            studentClass: s => s.studentClass || s.currentClass || s.className || 'N/A',
+            gender: s => s.gender || 'N/A',
+            status: s => s.status || 'Active',
+            dob: s => s.dob || s.dateOfBirth || 'N/A',
+            balance: s => Number(s.feeBalance ?? s.balance ?? s.outstanding ?? 0),
+            parentName: s => s.fatherName || s.motherName || s.guardianName || s.parentName || 'N/A',
+            parentPhone: s => s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone || s.parentPhone || 'N/A',
+        };
+        const projectedData = students.map((item: any) => {
             const projected: any = { _id: item._id };
-            columns.forEach((col: string) => {
-                projected[col] = item[col] !== undefined ? item[col] : "N/A";
-            });
+            columns.forEach((col: string) => { projected[col] = resolve[col] ? resolve[col](item) : (item[col] ?? 'N/A'); });
             return projected;
         });
 
+        const total = await db.collection('students').countDocuments(query);
         res.json({
             data: projectedData,
-            pagination: {
-                total: activeStudents.length,
-                page: Number(page),
-                limit: Number(limit),
-                pages: 1
-            }
+            pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / Number(limit)) || 1 }
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message });

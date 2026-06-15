@@ -57,7 +57,7 @@ export default function GenericReport() {
     queryFn: async () => { const r = await api.get(`/${cfg!.collection}`); return Array.isArray(r.data) ? r.data : []; },
     enabled: !!cfg,
   });
-  const { data: schoolRaw } = useQuery({ queryKey: ["theme_settings"], queryFn: async () => (await api.get("/theme_settings")).data });
+  const { data: schoolRaw } = useQuery({ queryKey: ["tenant_profile_global"], queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
   const school = Array.isArray(schoolRaw) ? schoolRaw[0] : (schoolRaw || {});
   const schoolName = school?.name || school?.instituteName || "School";
   const schoolLogo = school?.logo || school?.schoolLogo || "";

@@ -99,7 +99,9 @@ export default function FeeCollectionReport() {
         </head>
         <body>
             <div class="header">
+                ${school.logo ? `<img src="${school.logo}" style="height:56px;margin-bottom:8px;object-fit:contain;" />` : ""}
                 <h1 class="school-title">${school.name}</h1>
+                ${school.address ? `<div style="font-size:11px;color:#64748B;margin-top:2px;">${school.address}</div>` : ""}
                 <div class="report-title">Fee Collection & Revenue Summary Report</div>
             </div>
 

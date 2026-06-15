@@ -802,27 +802,19 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     const student = students[index];
                     const studentClass = student.studentClass || student.currentClass || '';
 
-                    // Find fee structure for this class/year/semester — TENANT db (supporting old and new schema)
-                    const structure = await tenantDb.collection('fee_structures').findOne({
-                        $or: [
-                            {
-                                schoolId,
-                                academic_year_id,
-                                semester_id,
-                                class_ids: studentClass
-                            },
-                            {
-                                className: { $regex: new RegExp(`^${studentClass}$`, 'i') },
-                                term: semester_id,
-                                year: academic_year_id
-                            },
-                            {
-                                className: { $regex: new RegExp(`^${studentClass}$`, 'i') },
-                                term: { $regex: new RegExp(`^${semester_id}$`, 'i') },
-                                year: { $regex: new RegExp(`^${academic_year_id}$`, 'i') }
-                            }
-                        ]
-                    });
+                    // Find the fee structure for this student's CLASS — TENANT db.
+                    // Fee structures store year/term as NAMES ("2026" / "Term 2"), not the
+                    // selected IDs, so we match primarily by class and prefer the latest.
+                    const clsRx = new RegExp(`^${studentClass}$`, 'i');
+                    const structure = await tenantDb.collection('fee_structures').findOne(
+                        { $or: [
+                            { className: { $regex: clsRx } },
+                            { class_ids: studentClass },
+                            { class_ids: { $in: [studentClass] } },
+                            { class_ids: { $elemMatch: { $regex: clsRx } } },
+                        ] },
+                        { sort: { createdAt: -1, updatedAt: -1 } }
+                    );
 
                     if (!structure) {
                         errors.push({
@@ -990,11 +982,47 @@ router.get('/schools/:sid/invoices/:id', async (req: Request, res: Response) => 
     }
 });
 
+// POST /schools/:sid/invoices/:id/remind — send a fee reminder via SMS / Email / WhatsApp
+router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Response) => {
+    try {
+        const metaDb = getMetaDb();
+        const tenantDb = (req as any).tenantDb || metaDb;
+        const channel = String(req.body?.channel || 'sms').toLowerCase();
+        const invoice = await metaDb.collection('invoices').findOne({ _id: new ObjectId(req.params.id) }).catch(() => null);
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+        const student = await tenantDb.collection('students').findOne({ _id: new ObjectId(invoice.student_id) }).catch(() => null);
+        const name = student?.studentName || invoice.studentName || 'your child';
+        const balance = Number(invoice.balance ?? invoice.total_due ?? invoice.total ?? 0);
+        const phone = student?.fatherPhone || student?.motherPhone || student?.guardianPhone || student?.parentPhone || student?.phone || '';
+        const email = student?.fatherEmail || student?.motherEmail || student?.guardianEmail || student?.parentEmail || student?.email || '';
+        const school = await tenantDb.collection('theme_settings').findOne({}).catch(() => null);
+        const text = req.body?.message ||
+            `Dear Parent, ${name} has a fee balance of KSh ${balance.toLocaleString()} on invoice ${invoice.invoice_no || ''}. Kindly clear it. ${school?.name || ''}`.trim();
+
+        const { sendEmail, sendWhatsApp } = await import('../services/communications.service');
+        if (channel === 'email') {
+            if (!email) return res.status(400).json({ message: 'No parent email on record for this student' });
+            await sendEmail(tenantDb, { to: [email], subject: `Fee Reminder — ${invoice.invoice_no || 'Invoice'}`, message: text, html: `<p>${text}</p>` });
+        } else if (channel === 'whatsapp') {
+            if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
+            await sendWhatsApp(tenantDb, { to: [phone], message: text });
+        } else { // sms
+            if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
+            await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: 'Queued', purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });
+        }
+        res.json({ data: { sent: true, channel, to: channel === 'email' ? email : phone }, message: 'Reminder sent' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // PUT /schools/:sid/invoices/:id
 router.put('/schools/:sid/invoices/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
     const db = getMetaDb();
         const schoolId = getSchoolId(req);
+        if (!ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'INVALID_ID', message: 'This invoice has not been generated yet. Generate it first, then edit.' }] });
+        }
         const { due_date, line_items, discount_type, discount_value } = req.body;
 
         const invoice = await db.collection('invoices').findOne({ _id: new ObjectId(req.params.id), $or: [{ schoolId }, { schoolId: { $exists: false } }] });
