@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 
 export default function CollectFees() {
@@ -99,10 +100,13 @@ export default function CollectFees() {
 
             toast.success("Fees payment recorded successfully");
             
-            // Auto-print receipt in new tab
+            // Auto-print receipt in new tab. The backend returns a relative
+            // /api/v1/... path — prefix the API origin so it doesn't resolve
+            // against the frontend domain (which would 404 in the SPA).
             const receiptPdfUrl = response.data?.data?.receipt_pdf_url;
             if (receiptPdfUrl) {
-                window.open(receiptPdfUrl, "_blank");
+                const url = /^https?:\/\//.test(receiptPdfUrl) ? receiptPdfUrl : `${API_ORIGIN}${receiptPdfUrl}`;
+                window.open(url, "_blank");
             }
 
             // Reset forms & refetch

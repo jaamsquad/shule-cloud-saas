@@ -1684,20 +1684,41 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
         const studentId = payment.student_id || invoice?.student_id || invoice?.studentId;
         const student = studentId ? await db.collection('students').findOne({ _id: new ObjectId(studentId) }) : null;
 
-        const tenant = await db.collection('Tenant').findOne({ _id: new ObjectId(schoolId) });
+        // Real school profile lives in the meta DB Tenant registry (same source
+        // as /auth/tenant/profile) — the tenant-DB copy is empty/stale.
+        const tenant = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(schoolId) })
+            || await db.collection('Tenant').findOne({ _id: new ObjectId(schoolId) });
 
                 const invoiceTotalDue = invoice ? (parseFloat(invoice.total_due ?? invoice.total) || 0) : 0;
         const invoiceBalance = invoice ? (parseFloat(invoice.balance ?? (invoice.status?.toLowerCase() === 'paid' ? 0 : invoiceTotalDue)) || 0) : 0;
         const invoiceNo = invoice?.invoice_no || (invoice ? `INV-${invoice._id.toString().slice(-6).toUpperCase()}` : 'N/A');
 
+        const schoolName = tenant?.name || tenant?.schoolName || req.tenantContext?.tenantSubdomain || 'School';
         const logoHtml = tenant?.logo
             ? `<img src="${tenant.logo}" style="width: 45px; height: 45px; border-radius: 50%; object-fit: contain;" />`
-            : `<div style="width: 45px; height: 45px; border-radius: 50%; background: #5C67F2; color: white; text-align: center; line-height: 45px; font-weight: bold; font-size: 18px;">${(tenant?.subdomain || req.tenantContext?.tenantSubdomain || 'SC')[0].toUpperCase()}</div>`;
+            : `<div style="width: 45px; height: 45px; border-radius: 50%; background: #5C67F2; color: white; text-align: center; line-height: 45px; font-weight: bold; font-size: 18px;">${schoolName[0].toUpperCase()}</div>`;
 
-        const tenantAddress = [tenant?.address, tenant?.country].filter(Boolean).join(', ') || 'Garissa, Kenya';
-        const tenantPhone = tenant?.phone || tenant?.contactPhone || '+254 712 345678';
-        const tenantEmail = tenant?.contactEmail || tenant?.email;
+        const tenantAddress = [tenant?.address, tenant?.city, tenant?.country].filter(Boolean).join(', ');
+        const tenantPhone = tenant?.phone || tenant?.contactPhone || '';
+        const tenantEmail = tenant?.contactEmail || tenant?.email || '';
         const contactInfo = [tenantPhone ? `Tel: ${tenantPhone}` : null, tenantEmail ? `Email: ${tenantEmail}` : null].filter(Boolean).join(' · ');
+
+        // Academic year/term: prefer human-readable values; if the invoice only
+        // stores an ObjectId, look up the real name. Never show a raw ObjectId.
+        const looksLikeId = (v: any) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v);
+        const safeId = (v: any) => { try { return looksLikeId(v) ? new ObjectId(v) : null; } catch { return null; } };
+
+        let acadYear = [invoice?.academicYear, invoice?.academic_year, invoice?.year].find((v) => v && !looksLikeId(v)) || '';
+        let acadTerm = [invoice?.term, invoice?.semester, invoice?.termName].find((v) => v && !looksLikeId(v)) || '';
+
+        if (!acadYear) {
+            const yid = safeId(invoice?.academic_year_id ?? invoice?.academicYearId ?? invoice?.academicYear ?? invoice?.year);
+            if (yid) { const y = await db.collection('academic_years').findOne({ _id: yid }); acadYear = y?.name || y?.year || y?.title || ''; }
+        }
+        if (!acadTerm) {
+            const tid = safeId(invoice?.semester_id ?? invoice?.term_id ?? invoice?.termId ?? invoice?.term ?? invoice?.semester);
+            if (tid) { const t = await db.collection('terms').findOne({ _id: tid }); acadTerm = t?.name || t?.title || t?.term || ''; }
+        }
 
         const stubHtml = (title: string) => `
         <div style="border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; position: relative; background: white;">
@@ -1707,8 +1728,8 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
                         ${logoHtml}
                     </td>
                     <td>
-                        <h2 style="font-size: 16px; font-weight: 900; color: #5C67F2; margin: 0; text-transform: uppercase;">${tenant?.name || (req.tenantContext?.subscription?.plan ? 'Afey Dev Learning' : 'ShuleCloud Connect')}</h2>
-                        <p style="font-size: 9px; color: #64748b; margin: 1px 0 0 0;">${tenantAddress}${contactInfo ? ` · ${contactInfo}` : ''}</p>
+                        <h2 style="font-size: 16px; font-weight: 900; color: #5C67F2; margin: 0; text-transform: uppercase;">${schoolName}</h2>
+                        <p style="font-size: 9px; color: #64748b; margin: 1px 0 0 0;">${[tenantAddress, contactInfo].filter(Boolean).join(' · ')}</p>
                     </td>
                     <td style="text-align: right; vertical-align: top;">
                         <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; font-size: 9px; font-weight: bold; border-radius: 4px; text-transform: uppercase;">${title}</span>
@@ -1730,9 +1751,7 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
                         <strong>Class:</strong> ${student?.studentClass || student?.currentClass || 'N/A'}
                     </td>
                     <td style="text-align: right; vertical-align: top;">
-                        <strong>Invoice Ref:</strong> ${invoiceNo}<br>
-                        <strong>Academic Year:</strong> ${invoice?.academicYear || invoice?.academic_year_id || '2026'}<br>
-                        <strong>Term/Semester:</strong> ${invoice?.term || invoice?.semester_id || 'Term 2'}
+                        <strong>Invoice Ref:</strong> ${invoiceNo}${acadYear ? `<br><strong>Academic Year:</strong> ${acadYear}` : ''}${acadTerm ? `<br><strong>Term/Semester:</strong> ${acadTerm}` : ''}
                     </td>
                 </tr>
             </table>

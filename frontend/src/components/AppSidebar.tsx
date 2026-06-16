@@ -24,7 +24,7 @@ const NATIVE_GROUP_DASHBOARD: Record<string, string> = {
 };
 
 // Resolve where a group's parent label should navigate (its overview page).
-const groupOverviewPath = (label: string) => NATIVE_GROUP_DASHBOARD[label] || `/g/${groupSlug(label)}`;
+export const groupOverviewPath = (label: string) => NATIVE_GROUP_DASHBOARD[label] || `/g/${groupSlug(label)}`;
 
 interface NavItem {
   label: string;
@@ -267,6 +267,13 @@ export const navItems: NavItem[] = [
       { label: "Roles & Permissions", path: "/roles" },
   ] },
 ];
+
+// Every group's overview dashboard, as { label, path } — used by the staff form's
+// "Default Landing Page" picker so a user can be landed on any group dashboard.
+export const groupDashboardOptions = (): { label: string; path: string }[] =>
+  navItems
+    .filter((n) => n.children && n.label !== "Dashboard")
+    .map((n) => ({ label: `${n.label} Dashboard`, path: groupOverviewPath(n.label) }));
 
 export default function AppSidebar() {
   const location = useLocation();

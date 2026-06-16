@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { SCHOOL_ROLES, SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
+import { groupDashboardOptions } from "@/components/AppSidebar";
 
 // ── Excel column → staff field mapping ──────────────────────────────────────
 const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
@@ -550,26 +551,20 @@ export default function AddEmployee() {
                                         <select value={formData.landingPage} onChange={e => setFormData(p => ({ ...p, landingPage: e.target.value }))}
                                             className="w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:border-[#5C67F2] bg-white">
                                             <option value="">Auto (role default / dashboard)</option>
-                                            <optgroup label="General">
-                                                <option value="/dashboard">Dashboard</option>
+                                            <option value="/dashboard">Main Dashboard</option>
+                                            <optgroup label="Group Dashboards">
+                                                {groupDashboardOptions().map(o => (
+                                                    <option key={o.path} value={o.path}>{o.label}</option>
+                                                ))}
+                                            </optgroup>
+                                            <optgroup label="Direct Pages">
                                                 <option value="/students">All Students</option>
                                                 <option value="/staff">All Employees</option>
                                                 <option value="/attendance-scanner">Attendance Scanner</option>
-                                            </optgroup>
-                                            <optgroup label="Cafeteria">
                                                 <option value="/cafeteria/meal-service">Meal Service (Kitchen)</option>
                                                 <option value="/canteen/quick-sale">Quick Sale (Canteen)</option>
-                                                <option value="/canteen/transactions">Canteen Transactions</option>
-                                                <option value="/cafeteria/menu">Weekly Meal Menu</option>
-                                            </optgroup>
-                                            <optgroup label="Finance">
-                                                <option value="/fees/generate-invoice">Generate Fees Invoice</option>
                                                 <option value="/fees/collect">Collect Fees</option>
                                                 <option value="/pos-admin/new-order">POS New Order</option>
-                                            </optgroup>
-                                            <optgroup label="Academics">
-                                                <option value="/exams">Exams</option>
-                                                <option value="/reports">Reports Center</option>
                                             </optgroup>
                                         </select>
                                     </div>
