@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 
 export default function FeesDefaulters() {
@@ -55,7 +56,7 @@ export default function FeesDefaulters() {
 
     const handleExportDefaulters = () => {
         toast.info("Preparing landscape report download...");
-        window.open("/api/v1/schools/default/fees/defaulters/export", "_blank");
+        window.open(`${API_ORIGIN}/api/v1/schools/default/fees/defaulters/export`, "_blank");
     };
 
     return (

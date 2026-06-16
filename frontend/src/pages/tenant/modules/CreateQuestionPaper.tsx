@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import {
@@ -277,13 +278,13 @@ export default function CreateQuestionPaper() {
     const handleExportPDF = (paper: any) => {
         const id = paper?._id || paper?.examId;
         toast.success(`Exporting ${paper?.paperTitle || "Exam"} to print-ready PDF`);
-        setTimeout(() => { window.open(`/api/v1/exams/${id}/pdf`, "_blank"); }, 1000);
+        setTimeout(() => { window.open(`${API_ORIGIN}/api/v1/exams/${id}/pdf`, "_blank"); }, 1000);
     };
 
     const handleExportWord = (paper: any) => {
         const id = paper?._id || paper?.examId;
         toast.success(`Exporting ${paper?.paperTitle || "Exam"} to Word DOCX`);
-        setTimeout(() => { window.open(`/api/v1/exams/${id}/word`, "_blank"); }, 1000);
+        setTimeout(() => { window.open(`${API_ORIGIN}/api/v1/exams/${id}/word`, "_blank"); }, 1000);
     };
 
     // ── Print handler used by BOTH the card button and the modal button ──

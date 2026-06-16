@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 
 export default function FeesReport() {
@@ -45,7 +46,7 @@ export default function FeesReport() {
     const handleExport = async () => {
         try {
             toast.info("Preparing PDF report for download...");
-            window.open("/api/v1/schools/default/fees/report/export", "_blank");
+            window.open(`${API_ORIGIN}/api/v1/schools/default/fees/report/export`, "_blank");
         } catch {
             toast.error("Export failed");
         }

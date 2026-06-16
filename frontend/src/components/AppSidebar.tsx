@@ -64,6 +64,7 @@ export const navItems: NavItem[] = [
       { label: "Medical Records", path: "/students/medical" },
       { label: "Student Documents", path: "/students/documents" },
       { label: "Student ID Cards", path: "/students/id-cards" },
+      { label: "ID Card Studio (Navy)", path: "/students/id-studio" },
       { label: "Admission Letter", path: "/students/admission-letter" },
       { label: "Manage Login", path: "/students/login" },
       { label: "Parent Login", path: "/students/parent-login" },

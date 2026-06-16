@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 
 export default function FeesPaidSlip() {
@@ -30,12 +31,12 @@ export default function FeesPaidSlip() {
 
     const handlePrintReceipt = (receiptNo: string, id: string) => {
         toast.info(`Opening print receipt: ${receiptNo}`);
-        window.open(`/api/v1/schools/default/receipts/${receiptNo}/pdf`, "_blank");
+        window.open(`${API_ORIGIN}/api/v1/schools/default/receipts/${receiptNo}/pdf`, "_blank");
     };
 
     const handleDocxExport = (receiptNo: string) => {
         toast.info(`Downloading Word stub for receipt: ${receiptNo}`);
-        window.open(`/api/v1/schools/default/receipts/${receiptNo}/word`, "_blank");
+        window.open(`${API_ORIGIN}/api/v1/schools/default/receipts/${receiptNo}/word`, "_blank");
     };
 
     const handleEmailReceipt = async () => {
