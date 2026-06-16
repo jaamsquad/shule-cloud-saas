@@ -69,16 +69,28 @@ export async function resolveStaffPermissions(
         ...(staff?.designation ? [staff.designation] : []),
     ].filter(Boolean)));
 
-    let configured: Record<string, string[]> = {};
+    // Case/space-insensitive lookup: a role doc named "Records Clerk" matches a
+    // derived "records clerk" designation, and key "records_clerk" too.
+    const norm = (s: string) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+    let configuredFlat: string[][] = [];
     try {
-        const docs = await db.collection('roles').find({ name: { $in: roleNames } }).toArray();
-        docs.forEach((r: any) => { if (Array.isArray(r.permissions)) configured[r.name] = r.permissions; });
+        const patterns = roleNames.map(n => new RegExp(`^\\s*${String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[_ ]/g, '[_ ]')}\\s*$`, 'i'));
+        const docs = await db.collection('roles').find({ $or: [{ name: { $in: roleNames } }, { name: { $in: patterns } }, { key: { $in: roleNames.map(n => String(n).toLowerCase().replace(/[^a-z0-9]+/g, '_')) } }] }).toArray();
+        const wanted = new Set(roleNames.map(norm));
+        docs.forEach((r: any) => {
+            if (Array.isArray(r.permissions) && (wanted.has(norm(r.name || '')) || wanted.has(norm(r.key || '')))) {
+                configuredFlat.push(r.permissions);
+            }
+        });
     } catch { /* ignore */ }
 
     const set = new Set<string>();
-    for (const name of roleNames) {
-        const perms = configured[name] || (useRoleDefaults ? DEFAULT_ROLE_PERMISSIONS[name] : undefined) || [];
-        perms.forEach(p => set.add(p));
+    if (configuredFlat.length) {
+        // At least one configured role doc matched → use only configured perms.
+        configuredFlat.forEach(arr => arr.forEach(p => set.add(p)));
+    } else if (useRoleDefaults) {
+        // No DB role configured → fall back to built-in defaults (if enabled).
+        for (const name of roleNames) (DEFAULT_ROLE_PERMISSIONS[name] || []).forEach(p => set.add(p));
     }
 
     // Direct per-staff permissions (manual assignment) add on top of role permissions.
@@ -140,6 +152,22 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'students.view': ['students'],
     'students.manage': ['students'],
     'admissions.manage': ['students'],
+    // Students — page-level grants (each also reveals the Students group)
+    'students.all': ['students'],
+    'students.wallets': ['students'],
+    'students.add': ['students'],
+    'students.admissions': ['students'],
+    'students.families': ['students'],
+    'students.promote': ['students'],
+    'students.transfer': ['students'],
+    'students.discipline': ['students'],
+    'students.medical': ['students'],
+    'students.documents': ['students'],
+    'students.id_cards': ['students'],
+    'students.id_studio': ['students'],
+    'students.admission_letter': ['students'],
+    'students.manage_login': ['students'],
+    'students.parent_login': ['students'],
     // Staff & HR
     'staff.view': ['employees'],
     'hr.manage': ['employees'],

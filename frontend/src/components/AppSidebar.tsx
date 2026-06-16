@@ -26,13 +26,14 @@ const NATIVE_GROUP_DASHBOARD: Record<string, string> = {
 // Resolve where a group's parent label should navigate (its overview page).
 export const groupOverviewPath = (label: string) => NATIVE_GROUP_DASHBOARD[label] || `/g/${groupSlug(label)}`;
 
-interface NavItem {
+export interface NavChild { label: string; path: string; locked?: boolean; create?: boolean; pagePerm?: string }
+export interface NavItem {
   label: string;
   icon: React.ElementType;
   path?: string;
   locked?: boolean;
   moduleKey?: string; // maps to permission module key
-  children?: { label: string; path: string; locked?: boolean; create?: boolean }[];
+  children?: NavChild[];
 }
 
 // Child links that are "create/add" pages — hidden unless the user has the
@@ -76,21 +77,21 @@ export const navItems: NavItem[] = [
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
-      { label: "All Students", path: "/students" },
-      { label: "Student Wallets", path: "/wallet" },
-      { label: "Add New", path: "/students/new" },
-      { label: "Admissions", path: "/students/admissions" },
-      { label: "Manage Families", path: "/students/families" },
-      { label: "Promote Students", path: "/students/promote" },
-      { label: "Transfer Management", path: "/students/transfer" },
-      { label: "Discipline Records", path: "/students/discipline" },
-      { label: "Medical Records", path: "/students/medical" },
-      { label: "Student Documents", path: "/students/documents" },
-      { label: "Student ID Cards", path: "/students/id-cards" },
-      { label: "ID Card Studio (Navy)", path: "/students/id-studio" },
-      { label: "Admission Letter", path: "/students/admission-letter" },
-      { label: "Manage Login", path: "/students/login" },
-      { label: "Parent Login", path: "/students/parent-login" },
+      { label: "All Students", path: "/students", pagePerm: "students.all" },
+      { label: "Student Wallets", path: "/wallet", pagePerm: "students.wallets" },
+      { label: "Add New", path: "/students/new", pagePerm: "students.add" },
+      { label: "Admissions", path: "/students/admissions", pagePerm: "students.admissions" },
+      { label: "Manage Families", path: "/students/families", pagePerm: "students.families" },
+      { label: "Promote Students", path: "/students/promote", pagePerm: "students.promote" },
+      { label: "Transfer Management", path: "/students/transfer", pagePerm: "students.transfer" },
+      { label: "Discipline Records", path: "/students/discipline", pagePerm: "students.discipline" },
+      { label: "Medical Records", path: "/students/medical", pagePerm: "students.medical" },
+      { label: "Student Documents", path: "/students/documents", pagePerm: "students.documents" },
+      { label: "Student ID Cards", path: "/students/id-cards", pagePerm: "students.id_cards" },
+      { label: "ID Card Studio (Navy)", path: "/students/id-studio", pagePerm: "students.id_studio" },
+      { label: "Admission Letter", path: "/students/admission-letter", pagePerm: "students.admission_letter" },
+      { label: "Manage Login", path: "/students/login", pagePerm: "students.manage_login" },
+      { label: "Parent Login", path: "/students/parent-login", pagePerm: "students.parent_login" },
   ] },
   { label: "Parents", icon: UserCheck, moduleKey: "students", children: [
       { label: "All Parents", path: "/parents" },
@@ -437,9 +438,22 @@ export default function AppSidebar() {
                         className={`overflow-hidden border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} ml-[23px] mt-1 space-y-1 mb-2`}
                       >
                         {item.children.filter(child => {
-                          // Hide "create/add" child pages when the user lacks create
-                          // permission for this module (admins always pass).
                           if (perms.isAdmin) return true;
+                          const granted = perms.permissions || [];
+                          const wildcard = granted.includes("*");
+
+                          // ── Page-level permissions ──────────────────────────
+                          // If the user holds ANY of this group's child page-perms,
+                          // switch to fine-grained mode: only show pages explicitly
+                          // granted. If they hold none, the module grant shows all
+                          // children (backward compatible).
+                          if (!wildcard) {
+                            const groupPagePerms = (item.children || []).map(ch => ch.pagePerm).filter(Boolean) as string[];
+                            const userHasSomePagePerm = groupPagePerms.some(p => granted.includes(p));
+                            if (userHasSomePagePerm && child.pagePerm && !granted.includes(child.pagePerm)) return false;
+                          }
+
+                          // ── Create-page hiding ──────────────────────────────
                           if (!(child.create || CREATE_PATHS.has(child.path))) return true;
                           const mod = item.moduleKey;
                           if (!mod) return true;

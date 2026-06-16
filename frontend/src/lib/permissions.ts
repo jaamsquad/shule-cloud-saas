@@ -39,6 +39,25 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "students.manage", name: "Manage Students" },
         { code: "admissions.manage", name: "Admissions" },
     ]},
+    // Page-level grants: tick only the Students pages a user may open. Granting
+    // any of these restricts the Students menu to just the ticked pages.
+    { group: "Student Pages (fine-grained)", perms: [
+        { code: "students.all", name: "All Students" },
+        { code: "students.wallets", name: "Student Wallets" },
+        { code: "students.add", name: "Add New Student" },
+        { code: "students.admissions", name: "Admissions" },
+        { code: "students.families", name: "Manage Families" },
+        { code: "students.promote", name: "Promote Students" },
+        { code: "students.transfer", name: "Transfer Management" },
+        { code: "students.discipline", name: "Discipline Records" },
+        { code: "students.medical", name: "Medical Records" },
+        { code: "students.documents", name: "Student Documents" },
+        { code: "students.id_cards", name: "Student ID Cards" },
+        { code: "students.id_studio", name: "ID Card Studio" },
+        { code: "students.admission_letter", name: "Admission Letter" },
+        { code: "students.manage_login", name: "Manage Login" },
+        { code: "students.parent_login", name: "Parent Login" },
+    ]},
     { group: "Staff & HR", perms: [
         { code: "staff.view", name: "View Staff" },
         { code: "hr.manage", name: "Manage HR" },

@@ -4,6 +4,7 @@ import api from "@/lib/api";
 export interface RolePermissions {
     role: string;
     modules: string[];
+    permissions: string[];   // raw granted permission codes (e.g. "students.id_cards")
     crud: Record<string, string[]>;
     isAdmin: boolean;
     isTeacher: boolean;
@@ -15,13 +16,13 @@ export interface RolePermissions {
 function readJwtPerms(): Omit<RolePermissions, "refreshPermissions"> {
     try {
         const token = localStorage.getItem("auth_token");
-        if (!token) return { role: "", modules: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
+        if (!token) return { role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
 
         const payload = JSON.parse(atob(token.split(".")[1]));
         if (payload.exp && Date.now() / 1000 > payload.exp) {
             localStorage.removeItem("auth_token");
             localStorage.removeItem("user");
-            return { role: "", modules: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
+            return { role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
         }
 
         const rawRole = (payload.role || "school_admin").toLowerCase();
@@ -32,18 +33,19 @@ function readJwtPerms(): Omit<RolePermissions, "refreshPermissions"> {
             role: rawRole,
             // Show all for admin immediately; for others show nothing until DB fetch
             modules: isAdmin ? ["*"] : [],
+            permissions: isAdmin ? ["*"] : [],
             crud: {},
             isAdmin,
             isTeacher,
             loaded: isAdmin, // admins are fully loaded; others wait for API
         };
     } catch {
-        return { role: "", modules: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
+        return { role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
     }
 }
 
 const defaultCtx: RolePermissions = {
-    role: "", modules: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false,
+    role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false,
     refreshPermissions: () => {},
 };
 
@@ -90,6 +92,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
                 setPerms({
                     role,
                     modules: data.modules?.length ? data.modules : (isAdmin ? ["*"] : ["dashboard"]),
+                    permissions: Array.isArray(data.permissions) ? data.permissions : (isAdmin ? ["*"] : []),
                     crud: data.crud || {},
                     isAdmin,
                     isTeacher: role.includes("teacher"),
@@ -121,6 +124,14 @@ export function useCanAccess(moduleKey: string): boolean {
     if (!modules?.length) return false;
     if (modules.includes("*")) return true;
     return modules.includes(moduleKey);
+}
+
+/** True if the user holds a specific page-level permission code. */
+export function useHasPagePerm(pagePerm: string | undefined): boolean {
+    const { permissions, isAdmin } = usePermissions();
+    if (isAdmin) return true;
+    if (!pagePerm) return true;
+    return (permissions || []).includes("*") || (permissions || []).includes(pagePerm);
 }
 
 /** Returns CRUD capabilities for a module */

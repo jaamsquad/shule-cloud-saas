@@ -7,9 +7,21 @@ import {
     BookOpen, TrendingUp
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export default function Dashboard() {
     const navigate = useNavigate();
+
+    // Permission-aware dashboard: non-admins only see the cards/panels for the
+    // modules they're allowed to access. Each section is gated below, and its
+    // underlying query is disabled when not permitted (so no 403 noise).
+    const perms = usePermissions();
+    const can = (mod: string) => perms.isAdmin || (perms.modules || []).includes("*") || (perms.modules || []).includes(mod);
+    const canStudents = can("students");
+    const canStaff = can("employees");
+    const canFinance = can("fees") || can("accounts");
+    const canClasses = can("classes") || canStudents;
+    const canAttendance = can("attendance");
 
     const today = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
 
@@ -21,62 +33,72 @@ export default function Dashboard() {
     // ── Real data fetches ──────────────────────────────────────────────────────
     const { data: students = [], isLoading: loadingStudents } = useQuery<any[]>({
         queryKey: ["dashboard_students"],
-        queryFn: async () => (await api.get("/students")).data || [],
+        enabled: canStudents || canClasses || canFinance,
+        queryFn: async () => { try { return (await api.get("/students")).data || []; } catch { return []; } },
     });
 
     const { data: staff = [], isLoading: loadingStaff } = useQuery<any[]>({
         queryKey: ["dashboard_staff"],
-        queryFn: async () => (await api.get("/staff")).data || [],
+        enabled: canStaff,
+        queryFn: async () => { try { return (await api.get("/staff")).data || []; } catch { return []; } },
     });
 
     const { data: income = [] } = useQuery<any[]>({
         queryKey: ["dashboard_income"],
-        queryFn: async () => (await api.get("/income")).data || [],
+        enabled: canFinance,
+        queryFn: async () => { try { return (await api.get("/income")).data || []; } catch { return []; } },
     });
 
     const { data: expenses = [] } = useQuery<any[]>({
         queryKey: ["dashboard_expenses"],
-        queryFn: async () => (await api.get("/expenses")).data || [],
+        enabled: canFinance,
+        queryFn: async () => { try { return (await api.get("/expenses")).data || []; } catch { return []; } },
     });
 
     const { data: classes = [] } = useQuery<any[]>({
         queryKey: ["dashboard_classes"],
-        queryFn: async () => (await api.get("/classes")).data || [],
+        enabled: canClasses,
+        queryFn: async () => { try { return (await api.get("/classes")).data || []; } catch { return []; } },
     });
 
     const { data: feeStructures = [] } = useQuery<any[]>({
         queryKey: ["dashboard_fee_structures"],
-        queryFn: async () => (await api.get("/fee_structures")).data || [],
+        enabled: canFinance,
+        queryFn: async () => { try { return (await api.get("/fee_structures")).data || []; } catch { return []; } },
     });
 
     const { data: invoices = [] } = useQuery<any[]>({
         queryKey: ["dashboard_invoices"],
-        queryFn: async () => (await api.get("/invoices")).data || [],
+        enabled: canFinance,
+        queryFn: async () => { try { return (await api.get("/invoices")).data || []; } catch { return []; } },
     });
 
     const { data: attendanceDashboard } = useQuery<any>({
         queryKey: ["dashboard_attendance_summary", today],
+        enabled: canAttendance,
         queryFn: async () => {
-            const r = await api.get("/schools/default/attendance/dashboard");
-            return r.data?.data || null;
+            try { const r = await api.get("/schools/default/attendance/dashboard"); return r.data?.data || null; } catch { return null; }
         },
     });
 
     const { data: absentStudents = [] } = useQuery<any[]>({
         queryKey: ["dashboard_absent_students", today],
+        enabled: canAttendance,
         queryFn: async () => {
-            const r = await api.get("/schools/default/attendance/reports/students/low-attendance", {
-                params: { threshold: 50, from: today, to: today },
-            });
-            return r.data?.data || [];
+            try {
+                const r = await api.get("/schools/default/attendance/reports/students/low-attendance", {
+                    params: { threshold: 50, from: today, to: today },
+                });
+                return r.data?.data || [];
+            } catch { return []; }
         },
     });
 
     const { data: employeeAttendance = [] } = useQuery<any[]>({
         queryKey: ["dashboard_employee_attendance", today],
+        enabled: canAttendance && canStaff,
         queryFn: async () => {
-            const r = await api.get("/schools/default/attendance/employees", { params: { date: today } });
-            return r.data?.data || [];
+            try { const r = await api.get("/schools/default/attendance/employees", { params: { date: today } }); return r.data?.data || []; } catch { return []; }
         },
     });
 
@@ -236,6 +258,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
 
                 {/* Students */}
+                {canStudents && (
                 <div onClick={() => navigate("/students")}
                     className="bg-[#4e4bb2] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Total Students</h3>
@@ -255,8 +278,10 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Employees */}
+                {canStaff && (
                 <div onClick={() => navigate("/staff")}
                     className="bg-[#8b91db] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Total Employees</h3>
@@ -276,8 +301,10 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Revenue */}
+                {canFinance && (
                 <div onClick={() => navigate("/accounts/statement")}
                     className="bg-[#ff808b] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Revenue</h3>
@@ -294,8 +321,10 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Net Profit */}
+                {canFinance && (
                 <div onClick={() => navigate("/accounts/statement")}
                     className="bg-[#6b8cff] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Net Surplus / Profit</h3>
@@ -312,19 +341,31 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+                )}
+
+                {/* When a user has none of the above, show a friendly tile so the grid isn't empty. */}
+                {!canStudents && !canStaff && !canFinance && (
+                    <div className="md:col-span-2 lg:col-span-4 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-[#5C67F2]/10 text-[#5C67F2] flex items-center justify-center"><CheckCircle2 className="w-6 h-6" /></div>
+                        <div>
+                            <h3 className="font-black text-slate-800">Welcome, {userProfile?.name || "there"}</h3>
+                            <p className="text-sm text-slate-500">Use the menu to access the areas you've been given permission for.</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ── Welcome Banner ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                <div className="lg:col-span-2 bg-[#ffe7e9] rounded-2xl p-6 flex justify-between items-center shadow-sm relative overflow-hidden">
+                <div className={`${canAttendance ? "lg:col-span-2" : "lg:col-span-3"} bg-[#ffe7e9] rounded-2xl p-6 flex justify-between items-center shadow-sm relative overflow-hidden`}>
                     <div className="z-10 relative">
                         <h3 className="text-[#ff5e6c] font-bold text-lg mb-1">
                             Welcome back, {userProfile?.name || "Administrator"}
                         </h3>
                         <p className="text-gray-600 text-sm font-medium leading-relaxed">
-                            {students.length > 0
-                                ? `${students.length} students and ${staff.length} staff members registered. Fee collections and attendance registers are live.`
-                                : "Dashboard is live. Start by adding students, staff, classes and fee structures."}
+                            {canStudents && students.length > 0
+                                ? `${students.length} students${canStaff ? ` and ${staff.length} staff members` : ""} registered. Your registers are live.`
+                                : "Welcome to your dashboard. Use the menu to access your assigned areas."}
                         </p>
                     </div>
                     <div className="w-32 h-32 absolute right-8 -bottom-4 bg-white/40 rounded-full flex items-center justify-center pointer-events-none">
@@ -333,6 +374,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Quick attendance summary */}
+                {canAttendance && (
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
                     <h3 className="text-[#3a3f9e] font-bold text-sm uppercase tracking-wider mb-4">Today's Attendance</h3>
                     <div className="space-y-3">
@@ -362,6 +404,7 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
+                )}
             </div>
 
             {/* ── Main Layout ───────────────────────────────────────────────── */}
@@ -370,8 +413,10 @@ export default function Dashboard() {
                 {/* Left Column */}
                 <div className="lg:col-span-2 space-y-6">
 
-                    {/* Financial Line Chart */}
+                    {/* Financial Line Chart + Class chart card */}
+                    {(canFinance || canClasses) && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        {canFinance && (
                         <div className="mb-8">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-[#8b91db] font-black text-sm uppercase tracking-wider">
@@ -420,8 +465,10 @@ export default function Dashboard() {
                                 </div>
                             )}
                         </div>
+                        )}
 
                         {/* Class Enrolment Bar Chart */}
+                        {canClasses && (
                         <div>
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-[#6b8cff] font-black text-sm uppercase tracking-wider">Class Enrolment Sizes</h3>
@@ -461,9 +508,12 @@ export default function Dashboard() {
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
+                    )}
 
                     {/* Absent Students Today */}
+                    {canAttendance && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-[#ff5e6c] font-black text-sm uppercase tracking-wider">Today Absent Students</h3>
@@ -503,8 +553,10 @@ export default function Dashboard() {
                             </div>
                         )}
                     </div>
+                    )}
 
                     {/* Present Staff Today */}
+                    {canAttendance && canStaff && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-[#6b8cff] font-black text-sm uppercase tracking-wider">Today Present Staff</h3>
@@ -548,8 +600,10 @@ export default function Dashboard() {
                             </div>
                         )}
                     </div>
+                    )}
 
                     {/* Latest Admission */}
+                    {canStudents && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-[#8b91db] font-black text-sm uppercase tracking-wider">Latest Student Admission</h3>
@@ -581,12 +635,14 @@ export default function Dashboard() {
                             </div>
                         )}
                     </div>
+                    )}
                 </div>
 
                 {/* Right Column */}
                 <div className="space-y-6">
 
                     {/* Fee Collection Ring */}
+                    {canFinance && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
                         <h3 className="text-slate-800 font-black text-sm uppercase tracking-wider mb-4">Fee Collection This Month</h3>
                         <div className="relative w-36 h-36 mx-auto mb-6 flex items-center justify-center">
@@ -618,32 +674,43 @@ export default function Dashboard() {
                             <p className="text-[10px] text-slate-400 mt-3">Set up fee structures to see expected collection.</p>
                         )}
                     </div>
+                    )}
 
-                    {/* Quick Stats */}
+                    {/* Quick Stats — each row gated by its module */}
+                    {(canAttendance || canFinance || canClasses) && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+                        {canAttendance && (
                         <div className="p-4 flex justify-between items-center">
                             <span className="text-sm font-medium text-gray-500">Today Present Students</span>
                             <span className="text-sm font-bold text-[#6b8cff]">
                                 {attendanceDashboard ? `${attendancePercentages.studentPercent}%` : "—"}
                             </span>
                         </div>
+                        )}
+                        {canAttendance && canStaff && (
                         <div className="p-4 flex justify-between items-center">
                             <span className="text-sm font-medium text-gray-500">Today Present Employees</span>
                             <span className="text-sm font-bold text-[#ff5e6c]">
                                 {attendanceDashboard ? `${attendancePercentages.employeePercent}%` : "—"}
                             </span>
                         </div>
+                        )}
+                        {canFinance && (
                         <div className="p-4 flex justify-between items-center">
                             <span className="text-sm font-medium text-gray-500">Fee Collection Rate</span>
                             <span className="text-sm font-bold text-[#5C67F2]">
                                 {feeEstimation.totalEstimated > 0 ? `${feeEstimation.percent}%` : "—"}
                             </span>
                         </div>
+                        )}
+                        {canClasses && (
                         <div className="p-4 flex justify-between items-center">
                             <span className="text-sm font-medium text-gray-500">Total Classes</span>
                             <span className="text-sm font-bold text-slate-700">{classes.length}</span>
                         </div>
+                        )}
                     </div>
+                    )}
 
                     {/* Calendar */}
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

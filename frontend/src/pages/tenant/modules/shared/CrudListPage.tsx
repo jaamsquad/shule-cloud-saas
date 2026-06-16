@@ -8,7 +8,7 @@ import { useModuleCrud } from "@/contexts/PermissionsContext";
 export type Field = {
     key: string;
     label: string;
-    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect";
+    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect" | "classSelect" | "classMultiSelect";
     options?: string[];
     placeholder?: string;
     required?: boolean;
@@ -61,6 +61,32 @@ export default function CrudListPage({
         enabled: needsStudents,
         queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
     });
+
+    // Load real classes when a class field is present.
+    const needsClasses = fields.some((f) => f.type === "classSelect" || f.type === "classMultiSelect");
+    const { data: classRows = [] } = useQuery({
+        queryKey: ["crud_classes"],
+        enabled: needsClasses,
+        queryFn: async () => { try { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const classNames: string[] = Array.from(new Set(
+        classRows.map((c: any) => {
+            if (c.levelName) return `${c.levelName}${c.streamName && c.streamName !== "General" ? " " + c.streamName : ""}`.trim();
+            return c.name || c.className || c.studentClass || "";
+        }).filter(Boolean)
+    ));
+    // Multi-select value is stored as a comma-joined string; helpers convert.
+    const getMulti = (key: string): string[] => {
+        const v = form[key];
+        if (Array.isArray(v)) return v;
+        if (typeof v === "string" && v.trim()) return v.split(",").map((x) => x.trim()).filter(Boolean);
+        return [];
+    };
+    const toggleMulti = (key: string, name: string) => {
+        const cur = new Set(getMulti(key));
+        cur.has(name) ? cur.delete(name) : cur.add(name);
+        setForm((p) => ({ ...p, [key]: Array.from(cur).join(", ") }));
+    };
     const pickStudent = (f: Field, id: string) => {
         const s = students.find((x: any) => x._id === id);
         if (!s) { setForm((p) => ({ ...p, [f.key]: "" })); return; }
@@ -175,7 +201,32 @@ export default function CrudListPage({
                             {fields.map((f) => (
                                 <div key={f.key}>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-1">{f.label}{f.required && " *"}</label>
-                                    {f.type === "studentSelect" ? (
+                                    {f.type === "classMultiSelect" ? (
+                                        <div className="border border-slate-200 rounded-lg p-2 max-h-44 overflow-y-auto">
+                                            {classNames.length === 0 ? (
+                                                <p className="text-xs text-slate-400 px-1 py-2">No classes found</p>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {classNames.map((name) => {
+                                                        const on = getMulti(f.key).includes(name);
+                                                        return (
+                                                            <button type="button" key={name} onClick={() => toggleMulti(f.key, name)}
+                                                                className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:border-[#5C67F2]"}`}>
+                                                                {name}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            <p className="text-[10px] text-slate-400 mt-1.5">Leave none selected to target the whole school.</p>
+                                        </div>
+                                    ) : f.type === "classSelect" ? (
+                                        <select value={form[f.key] ?? ""} onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                                            className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
+                                            <option value="">Select class…</option>
+                                            {classNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                                        </select>
+                                    ) : f.type === "studentSelect" ? (
                                         <select value={(students.find((s: any) => (s.studentName || `${s.firstName || ""} ${s.lastName || ""}`.trim()) === form[f.key]) || {})._id || ""}
                                             onChange={(e) => pickStudent(f, e.target.value)}
                                             className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
