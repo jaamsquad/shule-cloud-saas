@@ -11,6 +11,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { groupSlug } from "@/lib/groupSlug";
+
+// Groups that already have a purpose-built dashboard child route — for those we
+// link the parent to that page instead of the generic overview.
+const NATIVE_GROUP_DASHBOARD: Record<string, string> = {
+  Hostel: "/hostel/dashboard",
+  Library: "/library/dashboard",
+  "Live Class & LMS": "/lms",
+  "Point of Sale": "/pos-admin/analytics",
+  Reports: "/reports",
+};
+
+// Resolve where a group's parent label should navigate (its overview page).
+const groupOverviewPath = (label: string) => NATIVE_GROUP_DASHBOARD[label] || `/g/${groupSlug(label)}`;
 
 interface NavItem {
   label: string;
@@ -334,19 +348,16 @@ export default function AppSidebar() {
                 <li key={item.label} className="relative">
                   {/* Parent Item */}
                   <div
-                    onClick={() => item.children ? toggleGroup(item.label) : null}
-                    className={`flex items-center justify-between px-3 py-3 rounded-lg cursor-pointer transition-colors ${
-                      isParentActive 
-                        ? `${activeBg} text-white shadow-sm` 
+                    className={`flex items-center justify-between px-3 py-3 rounded-lg transition-colors ${
+                      isParentActive
+                        ? `${activeBg} text-white shadow-sm`
                         : isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-50 text-gray-600"
                     }`}
                   >
-                    <Link 
-                        to={item.path || (item.children ? "#" : "#")} 
-                        className="flex items-center gap-4 flex-1"
-                        onClick={(e) => {
-                            if(item.children) e.preventDefault();
-                        }}
+                    {/* Label → navigates to the group overview (or the page for leaf items) */}
+                    <Link
+                        to={item.children ? groupOverviewPath(item.label) : (item.path || "#")}
+                        className="flex items-center gap-4 flex-1 cursor-pointer"
                     >
                       <Icon className={`w-[18px] h-[18px] ${isParentActive ? "text-white" : isDark ? "text-gray-400" : "text-gray-500"}`} strokeWidth={1.5} />
                       <span className={`text-[13px] ${isParentActive ? "font-bold" : "font-medium"}`}>
@@ -354,13 +365,18 @@ export default function AppSidebar() {
                       </span>
                     </Link>
 
-                    {/* Right side icon */}
+                    {/* Right side icon — toggles inline expansion without navigating */}
                     {item.locked ? (
                        <Lock className={`w-3 h-3 ${isParentActive ? 'text-white/70' : 'text-red-400'}`} />
                     ) : item.children ? (
-                       <span className={`${isParentActive ? 'text-white/80' : isDark ? 'text-gray-500' : 'text-gray-400'} text-lg font-light leading-none`}>
+                       <button
+                         type="button"
+                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleGroup(item.label); }}
+                         className={`px-2 -mr-1 ${isParentActive ? 'text-white/80' : isDark ? 'text-gray-500' : 'text-gray-400'} text-lg font-light leading-none cursor-pointer`}
+                         aria-label={isExpanded ? "Collapse" : "Expand"}
+                       >
                          {isExpanded ? "-" : "+"}
-                       </span>
+                       </button>
                     ) : null}
                   </div>
 

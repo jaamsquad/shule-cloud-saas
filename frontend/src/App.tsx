@@ -97,6 +97,7 @@ import AddStudent from "./pages/tenant/modules/AddStudent";
 import AdmissionLetter from "./pages/tenant/modules/AdmissionLetter";
 import StudentIdCards from "./pages/tenant/modules/StudentIdCards";
 import IdCardStudio from "./pages/tenant/modules/IdCardStudio";
+import GroupDashboard from "./pages/tenant/modules/GroupDashboard";
 import PrintBasicList from "./pages/tenant/modules/PrintBasicList";
 import ManageLogin from "./pages/tenant/modules/ManageLogin";
 import PromoteStudents from "./pages/tenant/modules/PromoteStudents";
@@ -433,6 +434,7 @@ const App = () => {
               <Route path="/students/admission-letter" element={<AdmissionLetter />} />
               <Route path="/students/id-cards" element={<StudentIdCards />} />
               <Route path="/students/id-studio" element={<IdCardStudio />} />
+              <Route path="/g/:groupKey" element={<GroupDashboard />} />
               <Route path="/students/print" element={<PrintBasicList />} />
               <Route path="/students/login" element={<ManageLogin />} />
               <Route path="/students/parent-login" element={<ManageParentLogin />} />
