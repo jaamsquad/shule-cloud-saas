@@ -1,4 +1,7 @@
-import { Db } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
+import jwt from 'jsonwebtoken';
+import { getMetaDb } from './mongodb';
+import type { Request, Response, NextFunction } from 'express';
 
 // Default role → permission map (mirrors the frontend catalog). Used when a role
 // has no explicit permissions configured in the `roles` collection yet.
@@ -47,7 +50,20 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
  * each of their roles (the primary `designation` plus any `roles[]`). A role's
  * permissions come from the `roles` collection if configured, else the defaults.
  */
-export async function resolveStaffPermissions(db: Db, staff: any): Promise<string[]> {
+export async function resolveStaffPermissions(
+    db: Db,
+    staff: any,
+    opts: { teacherFallback?: boolean; useRoleDefaults?: boolean } = {},
+): Promise<string[]> {
+    // teacherFallback: when true (default), teaching staff with no explicit
+    // permissions get the full Teacher toolkit so the TEACHING PORTAL is never
+    // empty. The ADMIN portal sidebar (my-permissions) passes false so a teacher
+    // there sees ONLY what an admin explicitly granted — zero by default.
+    // useRoleDefaults: when false, built-in DEFAULT_ROLE_PERMISSIONS are ignored —
+    // only roles explicitly configured in the DB + per-staff perms count. The
+    // admin portal passes false so a freshly-registered teacher has zero access.
+    const teacherFallback = opts.teacherFallback !== false;
+    const useRoleDefaults = opts.useRoleDefaults !== false;
     const roleNames: string[] = Array.from(new Set([
         ...(Array.isArray(staff?.roles) ? staff.roles : []),
         ...(staff?.designation ? [staff.designation] : []),
@@ -61,7 +77,7 @@ export async function resolveStaffPermissions(db: Db, staff: any): Promise<strin
 
     const set = new Set<string>();
     for (const name of roleNames) {
-        const perms = configured[name] || DEFAULT_ROLE_PERMISSIONS[name] || [];
+        const perms = configured[name] || (useRoleDefaults ? DEFAULT_ROLE_PERMISSIONS[name] : undefined) || [];
         perms.forEach(p => set.add(p));
     }
 
@@ -69,16 +85,19 @@ export async function resolveStaffPermissions(db: Db, staff: any): Promise<strin
     if (Array.isArray(staff?.permissions)) staff.permissions.forEach((p: string) => set.add(p));
     if (set.has('*')) return ['*'];
 
-    // Teaching staff always get the full teacher toolkit (every original staff-portal
-    // tab). Extra roles add their modules on top (multi-role). Legacy staff with no
-    // recognised role also fall back to the teacher view so the portal is never empty.
-    const looksTeacher = /teacher/i.test(String(staff?.designation || ''))
-        || roleNames.some(r => /teacher/i.test(r))
-        || staff?.isTeachingStaff === true
-        || (Array.isArray(staff?.subjectAssignments) && staff.subjectAssignments.length > 0)
-        || (Array.isArray(staff?.specializedSubjects) && staff.specializedSubjects.length > 0);
-    if (looksTeacher || set.size === 0) {
-        DEFAULT_ROLE_PERMISSIONS['Teacher'].forEach(p => set.add(p));
+    // Teaching-portal fallback ONLY. Teaching staff with no explicit permissions
+    // get the full teacher toolkit so their teaching portal isn't empty. This is
+    // intentionally skipped for the admin portal (teacherFallback:false) so a
+    // teacher there starts with zero access until granted.
+    if (teacherFallback) {
+        const looksTeacher = /teacher/i.test(String(staff?.designation || ''))
+            || roleNames.some(r => /teacher/i.test(r))
+            || staff?.isTeachingStaff === true
+            || (Array.isArray(staff?.subjectAssignments) && staff.subjectAssignments.length > 0)
+            || (Array.isArray(staff?.specializedSubjects) && staff.specializedSubjects.length > 0);
+        if (looksTeacher || set.size === 0) {
+            DEFAULT_ROLE_PERMISSIONS['Teacher'].forEach(p => set.add(p));
+        }
     }
 
     return Array.from(set);
@@ -213,3 +232,40 @@ export function permsToModules(perms: string[] | undefined): string[] {
     }
     return Array.from(modules);
 }
+
+// ── Shared CRUD-enforcement middleware ───────────────────────────────────────
+// Blocks create/update/delete unless the caller's role/staff CRUD matrix grants
+// the action for the module. Admins always pass; reads (GET) are never gated.
+// The token is already authenticated upstream by tenancy middleware — here we
+// only read its claims (role/staffId) to authorize the action.
+const decodeClaims = (req: Request): any => {
+    try {
+        const auth = (req.headers as any).authorization;
+        if (!auth) return {};
+        return jwt.decode(String(auth).split(' ')[1]) || {};
+    } catch { return {}; }
+};
+
+export const enforceCrud = (moduleKey: string, action: 'create' | 'update' | 'delete') =>
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const claims = decodeClaims(req);
+            const role = String(claims.role || '').toLowerCase();
+            // Admins bypass all CRUD checks.
+            if (!role || role === 'school_admin' || role === 'super_admin') return next();
+
+            const database: Db = (req as any).tenantDb || getMetaDb();
+            let staff: any = null;
+            const sid = claims.staffId || claims.sub || claims.userId;
+            if (sid) { try { staff = await database.collection('staff').findOne({ _id: new ObjectId(sid) }); } catch { /* ignore */ } }
+            if (!staff) staff = { designation: role.replace(/_/g, ' ') };
+
+            const crud = await resolveStaffCrud(database, staff);
+            const allowed = Array.isArray(crud[moduleKey]) && crud[moduleKey].includes(action);
+            if (!allowed) return res.status(403).json({ message: `Not allowed to ${action} in ${moduleKey}` });
+            next();
+        } catch {
+            // Fail closed for writes on unexpected errors.
+            res.status(403).json({ message: 'Permission check failed' });
+        }
+    };

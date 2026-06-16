@@ -18,6 +18,7 @@ export default function TripsManage() {
                 { key: "fee", label: "Fee (KES)", type: "number", placeholder: "2500" },
                 { key: "capacity", label: "Capacity", type: "number", placeholder: "100" },
                 { key: "description", label: "Description / Objectives", type: "textarea", placeholder: "Wildlife Educational Tour" },
+                { key: "targetClasses", label: "Target Classes", placeholder: "Leave blank for whole school, e.g. Grade 7, Grade 8" },
                 { key: "consentRequired", label: "Consent Required", type: "select", options: ["Yes", "No"] },
                 { key: "feeMode", label: "Fee Mode", type: "select", options: ["Optional Payment", "Add To Fee Structure"] },
             ]}

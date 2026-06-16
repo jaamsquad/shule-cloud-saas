@@ -41,6 +41,7 @@ const mongodb_2 = require("mongodb");
 const communications_service_1 = require("../services/communications.service");
 const report_card_pdf_service_1 = require("../services/report-card-pdf.service");
 const parent_student_sync_service_1 = require("../services/parent-student-sync.service");
+const permissions_1 = require("../lib/permissions");
 const router = (0, express_1.Router)();
 // ─── DB resolver (mirrors controller logic) ────────────────────────────────────
 const getRequestDb = (req) => req.tenantDb || (0, mongodb_1.getMetaDb)();
@@ -382,10 +383,10 @@ router.patch('/academics/curricula/:id', c.updateItem('curricula'));
 router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 // ─── Students ────────────────────────────────────────────────────────────────
 router.get('/students', c.getItems('students'));
-router.post('/students', c.createItem('students'));
-router.patch('/students/:id', c.updateItem('students'));
-router.delete('/students/:id', c.deleteItem('students'));
-router.post('/students/bulk', c.bulkCreate('students'));
+router.post('/students', (0, permissions_1.enforceCrud)('students', 'create'), c.createItem('students'));
+router.patch('/students/:id', (0, permissions_1.enforceCrud)('students', 'update'), c.updateItem('students'));
+router.delete('/students/:id', (0, permissions_1.enforceCrud)('students', 'delete'), c.deleteItem('students'));
+router.post('/students/bulk', (0, permissions_1.enforceCrud)('students', 'create'), c.bulkCreate('students'));
 // ─── Staff ───────────────────────────────────────────────────────────────────
 router.get('/staff', c.getItems('staff'));
 router.get('/staff/:id', async (req, res) => {
@@ -400,11 +401,11 @@ router.get('/staff/:id', async (req, res) => {
         res.status(500).json({ message: e.message });
     }
 });
-router.post('/staff', c.createItem('staff'));
-router.patch('/staff/:id', c.updateItem('staff'));
-router.put('/staff/:id', c.updateItem('staff'));
-router.delete('/staff/:id', c.deleteItem('staff'));
-router.post('/staff/bulk', c.bulkCreate('staff'));
+router.post('/staff', (0, permissions_1.enforceCrud)('employees', 'create'), c.createItem('staff'));
+router.patch('/staff/:id', (0, permissions_1.enforceCrud)('employees', 'update'), c.updateItem('staff'));
+router.put('/staff/:id', (0, permissions_1.enforceCrud)('employees', 'update'), c.updateItem('staff'));
+router.delete('/staff/:id', (0, permissions_1.enforceCrud)('employees', 'delete'), c.deleteItem('staff'));
+router.post('/staff/bulk', (0, permissions_1.enforceCrud)('employees', 'create'), c.bulkCreate('staff'));
 // ─── Tenant Profile ──────────────────────────────────────────────────────────
 router.get('/tenant_profile', c.getItems('tenant_profile'));
 // ─── Rules & Regulations ─────────────────────────────────────────────────────
@@ -423,17 +424,37 @@ router.get('/audit-trails', c.getItems('audit_trails'));
 router.get('/academics/audit_trails', c.getItems('audit_trails'));
 router.get('/academics/audit-trails', c.getItems('audit_trails'));
 // ─── Other Collections ────────────────────────────────────────────────────────
+// Collection → sidebar module key, for CRUD enforcement on the generic routes.
+// Only collections with sensitive writes are gated; others stay admin-only by
+// virtue of the module not being visible to non-admins.
+const COLLECTION_MODULE = {
+    classes: 'classes', streams: 'classes', levels: 'classes', sessions: 'classes',
+    invoices: 'fees', fee_particulars: 'fees', fee_structures: 'fees', discount_types: 'fees', fee_accounts: 'fees', transactions: 'fees',
+    chart_of_accounts: 'accounts', income: 'accounts', expenses: 'accounts',
+    enrollments: 'students', admissions: 'students', parents: 'students',
+    student_transfers: 'students', student_discipline: 'students', student_medical: 'students', student_documents: 'students',
+    homework: 'academics_content', lesson_plans: 'academics_content', schemes_of_work: 'academics_content', academic_resources: 'academics_content', academic_assignments: 'academics_content',
+    timetable_periods: 'timetable', timetables: 'timetable', timetable_slots: 'timetable', rooms: 'timetable', weekdays: 'timetable',
+    transport_zones: 'transport', buses: 'transport',
+    hostels: 'hostel', hostel_rooms: 'hostel', hostel_beds: 'hostel', hostel_allocations: 'hostel', hostel_fees: 'hostel',
+    announcements: 'communications', sms_logs: 'communications', email_logs: 'communications', whatsapp_logs: 'communications',
+    lms_courses: 'live_class', lms_lessons: 'live_class', lms_quizzes: 'live_class',
+};
 ['enrollments', 'transactions', 'invoices', 'classes', 'streams', 'sessions', 'levels', 'staff_subjects', 'chart_of_accounts', 'income', 'expenses', 'fee_particulars', 'fee_structures', 'periods', 'discount_types', 'fee_accounts', 'theme_settings', 'homework', 'weekdays', 'timetable_periods', 'rooms', 'timetables', 'timetable_slots', 'substitutions', 'constraints', 'transport_zones', 'buses', 'live_meetings', 'curriculum_frameworks', 'academic_resources', 'academic_assignments', 'lesson_plans', 'schemes_of_work', 'student_transfers', 'student_discipline', 'student_medical', 'student_documents', 'hostels', 'hostel_rooms', 'hostel_beds', 'hostel_allocations', 'hostel_attendance_records', 'hostel_fees', 'hostel_settings', 'announcements', 'sms_logs', 'email_logs', 'messages', 'message_threads', 'communication_settings', 'integration_settings', 'lms_courses', 'lms_lessons', 'lms_quizzes', 'lms_quiz_attempts', 'lms_enrollments', 'role_permissions', 'admissions', 'roles', 'stream_templates', 'grade_templates', 'curriculum_settings', 'report_card_generations', 'portal_requisitions', 'portal_clearances', 'portal_registrations', 'parents', 'notification_settings', 'communication_prefs', 'email_logs', 'whatsapp_logs', 'term_settings', 'term_breaks', 'term_holidays', 'term_activities'].forEach(col => {
+    const mk = COLLECTION_MODULE[col];
+    const cr = mk ? [(0, permissions_1.enforceCrud)(mk, 'create')] : [];
+    const up = mk ? [(0, permissions_1.enforceCrud)(mk, 'update')] : [];
+    const de = mk ? [(0, permissions_1.enforceCrud)(mk, 'delete')] : [];
     router.get(`/${col}`, c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
-    router.post(`/${col}`, c.createItem(col));
-    router.patch(`/${col}/:id`, c.updateItem(col));
-    router.delete(`/${col}/:id`, c.deleteItem(col));
+    router.post(`/${col}`, ...cr, c.createItem(col));
+    router.patch(`/${col}/:id`, ...up, c.updateItem(col));
+    router.delete(`/${col}/:id`, ...de, c.deleteItem(col));
     router.get(`/academics/${col}`, c.getItems(col));
     router.get(`/academics/${col}/:id`, c.getItem(col));
-    router.post(`/academics/${col}`, c.createItem(col));
-    router.patch(`/academics/${col}/:id`, c.updateItem(col));
-    router.delete(`/academics/${col}/:id`, c.deleteItem(col));
+    router.post(`/academics/${col}`, ...cr, c.createItem(col));
+    router.patch(`/academics/${col}/:id`, ...up, c.updateItem(col));
+    router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
 });
 // Bulk-create hostel beds (the generic CRUD has no /:col/bulk route).
 router.post('/hostel_beds/bulk', async (req, res) => {

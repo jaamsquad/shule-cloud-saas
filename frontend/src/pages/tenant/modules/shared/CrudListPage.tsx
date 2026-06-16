@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Loader2, X } from "lucide-react";
+import { Plus, Trash2, Loader2, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -40,8 +40,10 @@ export default function CrudListPage({
     const qc = useQueryClient();
     const moduleCrud = useModuleCrud(moduleKey || "__none__");
     const canCreate = !moduleKey || moduleCrud.canCreate;
+    const canUpdate = !moduleKey || moduleCrud.canUpdate;
     const canDelete = !moduleKey || moduleCrud.canDelete;
     const [open, setOpen] = useState(false);
+    const [editId, setEditId] = useState<string | null>(null);  // null = create mode
     const [form, setForm] = useState<Record<string, any>>({});
 
     const { data: rows = [], isLoading } = useQuery({
@@ -71,9 +73,10 @@ export default function CrudListPage({
         }));
     };
 
-    const create = useMutation({
-        mutationFn: async () => api.post(endpoint, form),
-        onSuccess: () => { toast.success("Saved"); setOpen(false); setForm({}); qc.invalidateQueries({ queryKey: [queryKey] }); },
+    const save = useMutation({
+        // Create when editId is null, otherwise update that record.
+        mutationFn: async () => editId ? api.patch(`${endpoint}/${editId}`, form) : api.post(endpoint, form),
+        onSuccess: () => { toast.success(editId ? "Updated" : "Saved"); setOpen(false); setForm({}); setEditId(null); qc.invalidateQueries({ queryKey: [queryKey] }); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed to save"),
     });
 
@@ -83,9 +86,20 @@ export default function CrudListPage({
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed to delete"),
     });
 
+    const openCreate = () => { setEditId(null); setForm({}); setOpen(true); };
+    const openEdit = (row: any) => {
+        setEditId(row._id);
+        const f: Record<string, any> = {};
+        fields.forEach((fl) => { if (row[fl.key] !== undefined) f[fl.key] = row[fl.key]; });
+        // keep hidden fill keys too
+        fields.forEach((fl) => { if (fl.fillClassKey && row[fl.fillClassKey] !== undefined) f[fl.fillClassKey] = row[fl.fillClassKey]; if (fl.fillIdKey && row[fl.fillIdKey] !== undefined) f[fl.fillIdKey] = row[fl.fillIdKey]; });
+        setForm(f);
+        setOpen(true);
+    };
+
     const submit = () => {
         for (const f of fields) if (f.required && !form[f.key]) { toast.error(`${f.label} is required`); return; }
-        create.mutate();
+        save.mutate();
     };
 
     return (
@@ -100,7 +114,7 @@ export default function CrudListPage({
                         </div>
                     </div>
                     {canCreate && (
-                        <button onClick={() => setOpen(true)} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
+                        <button onClick={openCreate} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
                             <Plus className="w-4 h-4" /> {addLabel}
                         </button>
                     )}
@@ -128,11 +142,18 @@ export default function CrudListPage({
                                             </td>
                                         ))}
                                         <td className="py-3 px-4">
-                                            {canDelete && (
-                                                <button onClick={() => remove.mutate(row._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
+                                            <div className="flex items-center gap-1.5 justify-end">
+                                                {canUpdate && (
+                                                    <button onClick={() => openEdit(row)} title="Edit" className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-[#5C67F2]/10 text-slate-400 hover:text-[#5C67F2] flex items-center justify-center">
+                                                        <Pencil className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                                {canDelete && (
+                                                    <button onClick={() => remove.mutate(row._id)} title="Delete" className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -144,11 +165,11 @@ export default function CrudListPage({
 
             {open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+                    <div className="absolute inset-0 bg-black/40" onClick={() => { setOpen(false); setEditId(null); }} />
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-5">
-                            <h2 className="font-black text-slate-800">{addLabel}</h2>
-                            <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500"><X className="w-4 h-4" /></button>
+                            <h2 className="font-black text-slate-800">{editId ? "Edit" : addLabel}</h2>
+                            <button onClick={() => { setOpen(false); setEditId(null); }} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500"><X className="w-4 h-4" /></button>
                         </div>
                         <div className="space-y-3">
                             {fields.map((f) => (
@@ -182,9 +203,9 @@ export default function CrudListPage({
                             ))}
                         </div>
                         <div className="flex gap-2 mt-6">
-                            <button onClick={() => setOpen(false)} className="flex-1 h-10 border border-slate-200 rounded-xl text-slate-600 font-bold text-sm">Cancel</button>
-                            <button onClick={submit} disabled={create.isPending} className="flex-1 h-10 bg-[#5C67F2] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-                                {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save
+                            <button onClick={() => { setOpen(false); setEditId(null); }} className="flex-1 h-10 border border-slate-200 rounded-xl text-slate-600 font-bold text-sm">Cancel</button>
+                            <button onClick={submit} disabled={save.isPending} className="flex-1 h-10 bg-[#5C67F2] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+                                {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {editId ? "Update" : "Save"}
                             </button>
                         </div>
                     </div>

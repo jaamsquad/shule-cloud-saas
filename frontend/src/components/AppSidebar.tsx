@@ -32,8 +32,18 @@ interface NavItem {
   path?: string;
   locked?: boolean;
   moduleKey?: string; // maps to permission module key
-  children?: { label: string; path: string; locked?: boolean }[];
+  children?: { label: string; path: string; locked?: boolean; create?: boolean }[];
 }
+
+// Child links that are "create/add" pages — hidden unless the user has the
+// parent module's create permission. Matched by path.
+const CREATE_PATHS = new Set<string>([
+  "/classes/new", "/subjects/new", "/students/new", "/parents/new",
+  "/staff/new", "/accounts/income", "/accounts/expense", "/fees/generate-invoice",
+  "/fees/generate-student-invoice", "/transport/zones/new", "/transport/buses/new",
+  "/exams/create", "/certificates/generate", "/timetable/create",
+  "/communications/announcements",
+]);
 
 export const navItems: NavItem[] = [
   { label: "Dashboard", icon: Home, path: "/dashboard", moduleKey: "dashboard" },
@@ -426,9 +436,18 @@ export default function AppSidebar() {
                         exit={{ height: 0, opacity: 0 }}
                         className={`overflow-hidden border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} ml-[23px] mt-1 space-y-1 mb-2`}
                       >
-                        {item.children.map((child, idx) => {
+                        {item.children.filter(child => {
+                          // Hide "create/add" child pages when the user lacks create
+                          // permission for this module (admins always pass).
+                          if (perms.isAdmin) return true;
+                          if (!(child.create || CREATE_PATHS.has(child.path))) return true;
+                          const mod = item.moduleKey;
+                          if (!mod) return true;
+                          const acts = (perms.crud && perms.crud[mod]) || [];
+                          return acts.includes("create");
+                        }).map((child, idx) => {
                           const isChildActive = location.pathname === child.path || (child.path.includes('#') && location.pathname === child.path.split('#')[0]);
-                          
+
                           return (
                             <li key={idx} className="relative">
                               {child.path.startsWith("http") ? (

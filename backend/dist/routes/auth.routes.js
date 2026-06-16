@@ -292,7 +292,7 @@ router.get('/my-permissions', async (req, res) => {
         if (!authHeader)
             return res.status(401).json({ message: 'No token' });
         const token = authHeader.split(' ')[1];
-        let userRole = 'school_admin';
+        let userRole = '';
         let userId = '';
         let staffId = '';
         try {
@@ -308,8 +308,16 @@ router.get('/my-permissions', async (req, res) => {
                 const designation = staff?.designation || staff?.role || 'teacher';
                 userRole = designation.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
             }
+            else {
+                // A verified token with no role claim is treated as the admin user
+                // (the main app's admin JWT). Only verified tokens reach here.
+                userRole = 'school_admin';
+            }
         }
-        catch (_) { }
+        catch (_) {
+            // Invalid/forged token → deny, never default to admin.
+            return res.status(401).json({ message: 'Invalid token' });
+        }
         // ── Full admin → return wildcard immediately ──────────────────────────
         if (userRole === 'school_admin' || userRole === 'super_admin') {
             return res.json({ role: userRole, userId, modules: ['*'], crud: {} });
@@ -334,7 +342,10 @@ router.get('/my-permissions', async (req, res) => {
         // Fall back to a synthetic staff carrying just the role name so default
         // role permissions still resolve when we can't find the staff doc.
         const staffForPerms = staff || { designation: userRole.replace(/_/g, ' ') };
-        const codes = await (0, permissions_1.resolveStaffPermissions)(db, staffForPerms);
+        // ADMIN PORTAL: strict — only explicitly granted permissions count. No
+        // teacher fallback, no built-in role defaults. A freshly registered
+        // teacher therefore sees nothing until an admin grants access.
+        const codes = await (0, permissions_1.resolveStaffPermissions)(db, staffForPerms, { teacherFallback: false, useRoleDefaults: false });
         const resolvedModules = (0, permissions_1.permsToModules)(codes);
         const crud = await (0, permissions_1.resolveStaffCrud)(db, staffForPerms);
         res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud });
@@ -1974,12 +1985,31 @@ router.post('/parent-portal/pay-invoice', authed(async (req, res, db, decoded) =
 router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
     const today = new Date().toISOString().slice(0, 10);
-    const trips = await db.collection('trips').find({
+    const student = await db.collection('students').findOne({ _id: new mongodb_2.ObjectId(sid) });
+    const childClass = String(student?.studentClass || student?.currentClass || '').trim().toLowerCase();
+    const allTrips = await db.collection('trips').find({
         feeMode: { $ne: 'Add To Fee Structure' },
     }).sort({ date: 1 }).toArray().catch(() => []);
+    // A trip belongs to this child if it has no class targeting OR the child's
+    // class is among the targeted classes. Trips the child is already a
+    // participant in are always shown.
     const parts = await db.collection('trip_participants').find({ studentId: sid }).toArray().catch(() => []);
     const byTrip = {};
     parts.forEach((p) => { byTrip[String(p.tripId)] = p; });
+    const targets = (t) => {
+        const raw = t.targetClasses ?? t.classes ?? t.studentClass ?? t.class;
+        if (Array.isArray(raw))
+            return raw.map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+        if (typeof raw === 'string' && raw.trim())
+            return raw.split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+        return [];
+    };
+    const trips = allTrips.filter((t) => {
+        if (byTrip[String(t._id)])
+            return true; // already enrolled → always show
+        const tg = targets(t);
+        return tg.length === 0 || (childClass && tg.includes(childClass)); // untargeted = whole school
+    });
     res.json(trips.map((t) => {
         const p = byTrip[String(t._id)];
         return {
