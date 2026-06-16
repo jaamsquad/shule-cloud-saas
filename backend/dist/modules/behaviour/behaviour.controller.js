@@ -184,8 +184,8 @@ class BehaviourController {
                 });
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     ratings: studentRatings
                 };
             });
@@ -248,10 +248,7 @@ class BehaviourController {
             const db = getRequestDb(req);
             const tenantQuery = getTenancyQuery(req);
             const { class_id, academic_year_id, semester_id } = req.query;
-            const students = await db.collection('students').find({
-                tenantId: tenantQuery.tenantId,
-                classId: new mongodb_2.ObjectId(class_id)
-            }).toArray();
+            const students = await getStudentsInClass(db, class_id);
             const obsList = await db.collection('student_observations').find({
                 ...tenantQuery,
                 class_id: new mongodb_2.ObjectId(class_id),
@@ -263,8 +260,8 @@ class BehaviourController {
                 const obs = obsMap.get(student._id.toString());
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     class_teacher_remark: obs?.class_teacher_remark || '',
                     counsellor_note: obs?.counsellor_note || '',
                     principal_remark: obs?.principal_remark || '',
@@ -360,10 +357,7 @@ class BehaviourController {
             const db = getRequestDb(req);
             const tenantQuery = getTenancyQuery(req);
             const { class_id, academic_year_id, semester_id, domain } = req.query;
-            const students = await db.collection('students').find({
-                tenantId: tenantQuery.tenantId,
-                classId: new mongodb_2.ObjectId(class_id)
-            }).toArray();
+            const students = await getStudentsInClass(db, class_id);
             const traits = await db.collection('behaviour_traits').find({
                 ...tenantQuery,
                 domain: domain,
@@ -416,8 +410,8 @@ class BehaviourController {
                 }
                 return {
                     student_id: student._id,
-                    student_name: `${student.firstName} ${student.lastName}`,
-                    admission_no: student.admissionNo || '',
+                    student_name: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+                    admission_no: student.registrationNo || student.admissionNo || student.admNo || '',
                     ratings: studentRatings,
                     average_rating,
                     overall_grade

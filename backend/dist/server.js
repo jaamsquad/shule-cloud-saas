@@ -5,6 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
+// Node < 19 doesn't expose Web Crypto as a global, which the MongoDB driver
+// needs (uuidV4). Polyfill it so sessions/cursors work on older Node runtimes.
+const crypto_1 = require("crypto");
+if (!globalThis.crypto)
+    globalThis.crypto = crypto_1.webcrypto;
 const app_1 = __importDefault(require("./app"));
 const mongodb_1 = require("./lib/mongodb");
 // Force port 3000 to match Vite proxy

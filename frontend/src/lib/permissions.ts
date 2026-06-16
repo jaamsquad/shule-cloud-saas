@@ -55,6 +55,28 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "canteen.transactions", name: "View Canteen Transactions" },
         { code: "canteen.settings", name: "Canteen Settings" },
     ]},
+    { group: "Sports", perms: [
+        { code: "sports.view", name: "View Sports" },
+        { code: "sports.manage", name: "Manage Sports & Enrolments" },
+        { code: "sports.attendance", name: "Sports Attendance" },
+        { code: "sports.performance", name: "Performance & Awards" },
+    ]},
+    { group: "Trips & Excursions", perms: [
+        { code: "trips.view", name: "View Trips" },
+        { code: "trips.manage", name: "Manage Trips & Participants" },
+        { code: "trips.attendance", name: "Trip Attendance" },
+    ]},
+    { group: "Front Desk", perms: [
+        { code: "frontdesk.view", name: "View Front Desk" },
+        { code: "frontdesk.visitors", name: "Visitor Management" },
+        { code: "frontdesk.signout", name: "Student Sign Out" },
+        { code: "frontdesk.appointments", name: "Appointments" },
+    ]},
+    { group: "Secretary", perms: [
+        { code: "secretary.view", name: "View Secretary Office" },
+        { code: "secretary.records", name: "Manage Student Records" },
+        { code: "secretary.meetings", name: "Meeting Management" },
+    ]},
     { group: "Communication & Reports", perms: [
         { code: "communications.send", name: "Send Communications" },
         { code: "reports.view", name: "View Reports" },
@@ -107,6 +129,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "Storekeeper": ["canteen.transactions"],
     "Store Manager": ["canteen.transactions", "canteen.settings"],
     "Inventory Officer": ["canteen.transactions"],
+    // Sports / Trips / Front Desk / Secretary
+    "Sports Coordinator": ["sports.view", "sports.manage", "sports.attendance", "sports.performance", "trips.view", "trips.manage", "trips.attendance"],
+    "Sports Coach": ["sports.view", "sports.attendance", "sports.performance"],
+    "Trips Coordinator": ["trips.view", "trips.manage", "trips.attendance"],
+    "Receptionist": ["frontdesk.view", "frontdesk.visitors", "frontdesk.signout", "frontdesk.appointments"],
+    "Front Desk Officer": ["frontdesk.view", "frontdesk.visitors", "frontdesk.signout", "frontdesk.appointments"],
+    "Secretary": ["secretary.view", "secretary.records", "secretary.meetings", "students.view", "communications.send"],
 };
 
 export const MIS_ROLE_GROUPS: { group: string; roles: string[] }[] = [
@@ -116,6 +145,8 @@ export const MIS_ROLE_GROUPS: { group: string; roles: string[] }[] = [
     { group: "HR", roles: ["HR Manager", "HR Officer"] },
     { group: "Admissions", roles: ["Registrar", "Admissions Officer"] },
     { group: "Operations", roles: ["Librarian", "Transport Officer", "Driver", "Boarding Master", "Boarding Mistress", "School Nurse", "ICT Administrator"] },
+    { group: "Sports & Trips", roles: ["Sports Coordinator", "Sports Coach", "Trips Coordinator"] },
+    { group: "Front Office", roles: ["Receptionist", "Front Desk Officer", "Secretary"] },
 ];
 
 export const MIS_ROLES = MIS_ROLE_GROUPS.flatMap(g => g.roles);

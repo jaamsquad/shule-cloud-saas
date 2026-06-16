@@ -98,6 +98,31 @@ import AdmissionLetter from "./pages/tenant/modules/AdmissionLetter";
 import StudentIdCards from "./pages/tenant/modules/StudentIdCards";
 import IdCardStudio from "./pages/tenant/modules/IdCardStudio";
 import GroupDashboard from "./pages/tenant/modules/GroupDashboard";
+// Sports module
+import SportsDashboard from "./pages/tenant/modules/sports/SportsDashboard";
+import SportsSetup from "./pages/tenant/modules/sports/SportsSetup";
+import SportsParticipants from "./pages/tenant/modules/sports/SportsParticipants";
+import SportsAttendance from "./pages/tenant/modules/sports/SportsAttendance";
+import SportsPerformance from "./pages/tenant/modules/sports/SportsPerformance";
+import SportsReports from "./pages/tenant/modules/sports/SportsReports";
+// Trips module
+import TripsDashboard from "./pages/tenant/modules/trips/TripsDashboard";
+import TripsManage from "./pages/tenant/modules/trips/TripsManage";
+import TripParticipants from "./pages/tenant/modules/trips/TripParticipants";
+import TripDocuments from "./pages/tenant/modules/trips/TripDocuments";
+import TripAttendance from "./pages/tenant/modules/trips/TripAttendance";
+import TripReports from "./pages/tenant/modules/trips/TripReports";
+// Front Desk module
+import FrontDeskDashboard from "./pages/tenant/modules/frontdesk/FrontDeskDashboard";
+import Visitors from "./pages/tenant/modules/frontdesk/Visitors";
+import StudentSignOut from "./pages/tenant/modules/frontdesk/StudentSignOut";
+import Deliveries from "./pages/tenant/modules/frontdesk/Deliveries";
+import Appointments from "./pages/tenant/modules/frontdesk/Appointments";
+import FrontDeskReports from "./pages/tenant/modules/frontdesk/FrontDeskReports";
+// Secretary module
+import SecretaryDashboard from "./pages/tenant/modules/secretary/SecretaryDashboard";
+import SecretaryMeetings from "./pages/tenant/modules/secretary/SecretaryMeetings";
+import SecretaryReports from "./pages/tenant/modules/secretary/SecretaryReports";
 import PrintBasicList from "./pages/tenant/modules/PrintBasicList";
 import ManageLogin from "./pages/tenant/modules/ManageLogin";
 import PromoteStudents from "./pages/tenant/modules/PromoteStudents";
@@ -435,6 +460,31 @@ const App = () => {
               <Route path="/students/id-cards" element={<StudentIdCards />} />
               <Route path="/students/id-studio" element={<IdCardStudio />} />
               <Route path="/g/:groupKey" element={<GroupDashboard />} />
+              {/* Sports module */}
+              <Route path="/sports" element={<SportsDashboard />} />
+              <Route path="/sports/setup" element={<SportsSetup />} />
+              <Route path="/sports/participants" element={<SportsParticipants />} />
+              <Route path="/sports/attendance" element={<SportsAttendance />} />
+              <Route path="/sports/performance" element={<SportsPerformance />} />
+              <Route path="/sports/reports" element={<SportsReports />} />
+              {/* Trips & Excursions module */}
+              <Route path="/trips" element={<TripsDashboard />} />
+              <Route path="/trips/manage" element={<TripsManage />} />
+              <Route path="/trips/participants" element={<TripParticipants />} />
+              <Route path="/trips/documents" element={<TripDocuments />} />
+              <Route path="/trips/attendance" element={<TripAttendance />} />
+              <Route path="/trips/reports" element={<TripReports />} />
+              {/* Front Desk module */}
+              <Route path="/frontdesk" element={<FrontDeskDashboard />} />
+              <Route path="/frontdesk/visitors" element={<Visitors />} />
+              <Route path="/frontdesk/signout" element={<StudentSignOut />} />
+              <Route path="/frontdesk/deliveries" element={<Deliveries />} />
+              <Route path="/frontdesk/appointments" element={<Appointments />} />
+              <Route path="/frontdesk/reports" element={<FrontDeskReports />} />
+              {/* Secretary module */}
+              <Route path="/secretary" element={<SecretaryDashboard />} />
+              <Route path="/secretary/meetings" element={<SecretaryMeetings />} />
+              <Route path="/secretary/reports" element={<SecretaryReports />} />
               <Route path="/students/print" element={<PrintBasicList />} />
               <Route path="/students/login" element={<ManageLogin />} />
               <Route path="/students/parent-login" element={<ManageParentLogin />} />

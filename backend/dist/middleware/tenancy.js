@@ -6,17 +6,35 @@ console.log('[Tenancy] Initializing multi-tenant isolation layer...');
 const tenancyMiddleware = async (req, res, next) => {
     const path = req.originalUrl || req.url;
     // Skip tenancy for public/owner/registration routes
-    const publicPrefixes = ['/api/v1/onboard', '/api/v1/owner', '/api/v1/auth/smart-login', '/api/v1/public'];
+    const publicPrefixes = ['/api/v1/onboard', '/api/v1/owner', '/api/v1/auth/smart-login', '/api/v1/public', '/api/v1/mpesa', '/api/mpesa'];
     if (publicPrefixes.some(p => path.startsWith(p))) {
         return next();
     }
     const host = (req.headers.host || '').split(':')[0];
     const xTenant = req.headers['x-tenant-subdomain'];
     let subdomain = typeof xTenant === 'string' ? xTenant.trim().toLowerCase() : null;
+    // ── Custom domain fast-path ───────────────────────────────────────────────
+    // portal.greenwoodschool.ac.ke → resolve the tenant by its custom domain and
+    // continue as if requested via the school's subdomain.
+    if (!subdomain && host && host.includes('.') && !host.endsWith('.localhost')) {
+        try {
+            const t = await (0, mongodb_1.getMetaDb)().collection('Tenant').findOne({ customDomain: host.toLowerCase() });
+            if (t?.subdomain)
+                subdomain = String(t.subdomain).toLowerCase();
+        }
+        catch { /* ignore — fall through to subdomain resolution */ }
+    }
     if (!subdomain && host) {
-        const parts = host.split('.');
-        if (parts.length > 2)
-            subdomain = parts[0].toLowerCase();
+        // Portal-prefixed hosts (students.egerton.localhost, staff.egerton.localhost,
+        // parent.egerton.localhost) carry the tenant in the SECOND label. Strip the
+        // portal prefix so we resolve the school, not the portal type.
+        const portalPrefixes = new Set(['students', 'student', 'staff', 'teacher', 'teachers', 'parent', 'parents']);
+        let labels = host.split('.');
+        if (portalPrefixes.has(labels[0]))
+            labels = labels.slice(1);
+        // labels[0] is the tenant when at least one more label (domain/localhost) follows.
+        if (labels.length > 1)
+            subdomain = labels[0].toLowerCase();
     }
     const reserved = new Set(['owner', 'api', 'www', 'admin', 'support', 'mail', 'localhost', '127', 'app']);
     // Development fallback — use first active tenant
@@ -40,7 +58,10 @@ const tenancyMiddleware = async (req, res, next) => {
     }
     try {
         const metaDb = (0, mongodb_1.getMetaDb)();
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain });
+        const esc = String(subdomain).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Case/space-insensitive — the stored subdomain may be "Egerton".
+        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } })
+            || await metaDb.collection('Tenant').findOne({ subdomain });
         if (!tenant) {
             return res.status(404).json({ message: `School "${subdomain}" not found. Check your institution's URL.` });
         }

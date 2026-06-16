@@ -50,10 +50,31 @@ const login = async (req, res) => {
         catch (_) { }
         const userName = (user.name || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)
             || staffInfo?.employeeName || user.email.split('@')[0]);
+        // ── Portal assignment ────────────────────────────────────────────────
+        // Teachers (and staff assigned to the teacher portal) are redirected to the
+        // teacher portal with an SSO token — no second login. Admin-only staff stay.
+        const portalAccess = (staffInfo?.portalAccess || 'both').toLowerCase();
+        const isTeacher = !!staffInfo && (/teacher/i.test(String(staffInfo.designation || '')) || role === 'teacher'
+            || (Array.isArray(staffInfo.roles) && staffInfo.roles.some((r) => /teacher/i.test(r)))
+            || staffInfo.isTeachingStaff === true
+            || (Array.isArray(staffInfo.subjectAssignments) && staffInfo.subjectAssignments.length > 0)
+            || (Array.isArray(staffInfo.specializedSubjects) && staffInfo.specializedSubjects.length > 0));
+        if (staffInfo && (portalAccess === 'staff' || (isTeacher && portalAccess !== 'admin'))) {
+            const sub = (subdomain || req.tenantContext?.tenantSubdomain || '').toLowerCase();
+            const staffToken = jsonwebtoken_1.default.sign({ staffId: staffInfo._id.toString(), username: staffInfo.portalUsername, role: staffInfo.role || 'teacher', name: staffInfo.employeeName || userName }, process.env.JWT_SECRET || 'shulecloud_student_secret_2024', { expiresIn: '7d' });
+            return res.json({
+                redirectPortal: 'staff',
+                subdomain: sub,
+                sso: {
+                    token: staffToken,
+                    staff: { _id: staffInfo._id.toString(), name: staffInfo.employeeName || userName, designation: staffInfo.designation, email: staffInfo.email, phone: staffInfo.phone },
+                },
+            });
+        }
         const token = jsonwebtoken_1.default.sign({ sub: user._id.toString(), email: user.email, tenantId, role, name: userName }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
         return res.json({
             access_token: token,
-            user: { id: user._id.toString(), email: user.email, name: userName, role, staffId: staffInfo?._id?.toString() || null }
+            user: { id: user._id.toString(), email: user.email, name: userName, role, staffId: staffInfo?._id?.toString() || null, portalAccess }
         });
     }
     catch (error) {

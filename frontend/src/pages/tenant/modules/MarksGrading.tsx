@@ -42,22 +42,66 @@ export default function MarksGrading() {
         }
     });
 
-    useEffect(() => {
-        if (existingConfig) {
-            if (existingConfig.grades) setGrades(existingConfig.grades);
-            if (existingConfig.failCriteria) setFailCriteria(existingConfig.failCriteria);
+    // Also read the Curriculum Settings grading scale so both screens share data.
+    // Curriculum scale shape: { grade, label, min, max, points }. We map it to the
+    // Marks-Grading shape: { grade, from, upto, status }.
+    const { data: curriculum } = useQuery({
+        queryKey: ["curriculum_settings"],
+        queryFn: async () => {
+            const r = await api.get("/curriculum_settings");
+            const arr = Array.isArray(r.data) ? r.data : [];
+            return arr[0] || null;
         }
-    }, [existingConfig]);
+    });
+
+    useEffect(() => {
+        // Prefer an explicitly saved grading_criteria; otherwise derive from the
+        // shared curriculum grading scale so the two pages stay in sync.
+        if (existingConfig?.grades?.length) {
+            setGrades(existingConfig.grades);
+            if (existingConfig.failCriteria) setFailCriteria(existingConfig.failCriteria);
+            return;
+        }
+        if (curriculum?.gradingScale?.length) {
+            const pass = Number(curriculum.passMark ?? 50);
+            setGrades(curriculum.gradingScale.map((g: any) => ({
+                grade: g.grade ?? "",
+                from: Number(g.min ?? g.from ?? 0),
+                upto: Number(g.max ?? g.upto ?? 0),
+                status: g.status ?? (Number(g.min ?? 0) >= pass ? "PASS" : "FAIL"),
+            })));
+        }
+    }, [existingConfig, curriculum]);
 
     const saveMutation = useMutation({
         mutationFn: async (payload: any) => {
+            // 1) Save the native grading_criteria record.
             if (existingConfig?._id) {
-                return api.patch(`/grading_criteria/${existingConfig._id}`, payload);
+                await api.patch(`/grading_criteria/${existingConfig._id}`, payload);
+            } else {
+                await api.post("/grading_criteria", payload);
             }
-            return api.post("/grading_criteria", payload);
+            // 2) Mirror the scale into curriculum_settings so the Curriculum
+            //    Settings → Grading Scale tab shows the same data.
+            try {
+                const scale = payload.grades.map((g: GradeTier) => ({
+                    grade: g.grade,
+                    label: g.status,
+                    min: Number(g.from) || 0,
+                    max: Number(g.upto) || 0,
+                    points: 0,
+                    color: (Number(g.from) || 0) >= Number(payload.failCriteria?.overallPercent ?? 40) ? "#10B981" : "#EF4444",
+                }));
+                if (curriculum?._id) {
+                    await api.patch(`/curriculum_settings/${curriculum._id}`, { gradingScale: scale });
+                } else {
+                    await api.post("/curriculum_settings", { curriculumId: "Custom", gradingScale: scale, passMark: Number(payload.failCriteria?.overallPercent ?? 50) });
+                }
+            } catch { /* non-fatal — keep grading_criteria as source of truth */ }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["grading_criteria"] });
+            queryClient.invalidateQueries({ queryKey: ["curriculum_settings"] });
             toast.success("Grading configuration saved successfully");
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to save configuration")

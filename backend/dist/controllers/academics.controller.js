@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getExamReport = exports.clearArchives = exports.getArchives = exports.restoreFromArchive = exports.deleteItem = exports.updateItem = exports.getItems = exports.createItem = exports.getItem = exports.bulkCreate = void 0;
 const mongodb_1 = require("../lib/mongodb");
 const mongodb_2 = require("mongodb");
+const parent_student_sync_service_1 = require("../services/parent-student-sync.service");
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
  * Returns the correct database for this request.
@@ -32,7 +33,14 @@ const bulkCreate = (collectionName) => async (req, res) => {
                 }
             }
         }
-        const result = await db.collection(collectionName).insertMany(items.map((i) => ({ ...i, createdAt: new Date() })));
+        const docs = items.map((i) => ({ ...i, createdAt: new Date() }));
+        const result = await db.collection(collectionName).insertMany(docs);
+        // Auto-create linked Parent records (Father/Mother) for imported students.
+        if (collectionName === 'students') {
+            Object.values(result.insertedIds).forEach((oid, idx) => {
+                (0, parent_student_sync_service_1.syncStudentToParents)(db, String(oid), docs[idx]).catch(() => { });
+            });
+        }
         res.status(201).json({ message: 'Bulk creation successful', count: result.insertedCount });
     }
     catch (error) {
@@ -76,6 +84,11 @@ const createItem = (collectionName) => async (req, res) => {
             }
         }
         const result = await db.collection(collectionName).insertOne(data);
+        // Keep Parents module and student father/mother fields in sync.
+        if (collectionName === 'parents')
+            (0, parent_student_sync_service_1.syncParentToStudents)(db, { ...data, _id: result.insertedId }).catch(() => { });
+        if (collectionName === 'students')
+            (0, parent_student_sync_service_1.syncStudentToParents)(db, String(result.insertedId), data).catch(() => { });
         res.status(201).json({ id: result.insertedId, ...data });
     }
     catch (error) {
@@ -145,6 +158,17 @@ const updateItem = (collectionName) => async (req, res) => {
         const result = await db.collection(collectionName).updateOne({ _id: new mongodb_2.ObjectId(id) }, { $set: data });
         if (result.matchedCount === 0)
             return res.status(404).json({ message: 'Item not found' });
+        // Two-way parent ↔ student sync on save.
+        if (collectionName === 'parents') {
+            const p = await db.collection('parents').findOne({ _id: new mongodb_2.ObjectId(id) });
+            if (p)
+                (0, parent_student_sync_service_1.syncParentToStudents)(db, p).catch(() => { });
+        }
+        if (collectionName === 'students') {
+            const s = await db.collection('students').findOne({ _id: new mongodb_2.ObjectId(id) });
+            if (s)
+                (0, parent_student_sync_service_1.syncStudentToParents)(db, id, s).catch(() => { });
+        }
         res.json({ message: 'Item updated' });
     }
     catch (error) {

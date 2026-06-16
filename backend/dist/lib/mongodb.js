@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.subdomainToDbName = exports.getDb = exports.getTenantDb = exports.getMetaDb = exports.connectDB = void 0;
+require("../crypto-polyfill"); // must run before the MongoDB driver is used
 const mongodb_1 = require("mongodb");
 // ─── Connection setup ─────────────────────────────────────────────────────────
 // We parse the base URI (without a database name) so we can connect to
@@ -37,6 +38,9 @@ const connectDB = async () => {
         try {
             await metaDb.collection('Tenant').createIndex({ subdomain: 1 }, { unique: true });
             await metaDb.collection('Tenant').createIndex({ databaseName: 1 }, { unique: true, sparse: true });
+            // One custom domain → one tenant only.
+            await metaDb.collection('Tenant').createIndex({ customDomain: 1 }, { unique: true, sparse: true });
+            await metaDb.collection('domain_audit_logs').createIndex({ tenantId: 1, createdAt: -1 });
         }
         catch (_) { }
         return metaDb;

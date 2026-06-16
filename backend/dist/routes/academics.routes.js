@@ -38,11 +38,201 @@ const c = __importStar(require("../controllers/academics.controller"));
 const crypto_1 = require("../lib/crypto");
 const mongodb_1 = require("../lib/mongodb");
 const mongodb_2 = require("mongodb");
+const communications_service_1 = require("../services/communications.service");
+const report_card_pdf_service_1 = require("../services/report-card-pdf.service");
+const parent_student_sync_service_1 = require("../services/parent-student-sync.service");
 const router = (0, express_1.Router)();
 // ─── DB resolver (mirrors controller logic) ────────────────────────────────────
 const getRequestDb = (req) => req.tenantDb || (0, mongodb_1.getMetaDb)();
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
+// ─── Card-scan attendance (student / staff) ──────────────────────────────────
+const scanDay = () => new Date().toISOString().slice(0, 10);
+// Scan a card → mark IN (first scan) or OUT (second scan) for today.
+router.post('/attendance/scan', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const code = String(req.body?.code || '').trim();
+        if (!code)
+            return res.status(400).json({ message: 'No code scanned' });
+        let person = await db.collection('students').findOne({ $or: [{ registrationNo: code }, { admNo: code }, { portalUsername: code }, { studentId: code }] });
+        let personType = 'student', name = '', role = 'Student', reg = code;
+        if (person) {
+            name = person.studentName || 'Student';
+            role = person.studentClass ? `Student · ${person.studentClass}` : 'Student';
+            reg = person.registrationNo || person.admNo || code;
+        }
+        else {
+            person = await db.collection('staff').findOne({ $or: [{ portalUsername: code }, { staffNo: code }, { employeeId: code }, { employeeNo: code }, { nationalId: code }] });
+            if (person) {
+                personType = 'staff';
+                name = person.employeeName || person.name || 'Staff';
+                role = person.designation || 'Staff';
+                reg = person.staffNo || person.employeeId || person.portalUsername || code;
+            }
+        }
+        if (!person)
+            return res.status(404).json({ message: `No student or staff found for "${code}"` });
+        const personId = String(person._id);
+        const date = scanDay();
+        const now = new Date();
+        const existing = await db.collection('scan_attendance').findOne({ date, personId });
+        if (!existing) {
+            const doc = { date, personId, personType, name, role, registrationNo: reg, photo: person.photo || person.avatar || person.studentPhoto || null, inTime: now, outTime: null, status: 'Present', createdAt: now };
+            await db.collection('scan_attendance').insertOne(doc);
+            return res.json({ action: 'in', ...doc });
+        }
+        await db.collection('scan_attendance').updateOne({ _id: existing._id }, { $set: { outTime: now, status: 'Present' } });
+        return res.json({ action: 'out', ...existing, outTime: now });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// Today's scan log.
+router.get('/attendance/scan/today', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const rows = await db.collection('scan_attendance').find({ date: scanDay() }).sort({ inTime: -1, createdAt: -1 }).toArray();
+        const present = rows.filter((r) => r.status === 'Present').length;
+        res.json({ rows, present, absent: rows.filter((r) => r.status === 'Absent').length, total: rows.length });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// Mark everyone NOT scanned today as Absent.
+router.post('/attendance/scan/finalize', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const date = scanDay();
+        const scanned = await db.collection('scan_attendance').find({ date }).toArray();
+        const ids = new Set(scanned.map((s) => s.personId));
+        const students = await db.collection('students').find({}).toArray();
+        const staff = await db.collection('staff').find({}).toArray();
+        const absents = [];
+        students.forEach((s) => { if (!ids.has(String(s._id)))
+            absents.push({ date, personId: String(s._id), personType: 'student', name: s.studentName, role: s.studentClass ? `Student · ${s.studentClass}` : 'Student', registrationNo: s.registrationNo || s.admNo, inTime: null, outTime: null, status: 'Absent', createdAt: new Date() }); });
+        staff.forEach((s) => { if (!ids.has(String(s._id)))
+            absents.push({ date, personId: String(s._id), personType: 'staff', name: s.employeeName || s.name, role: s.designation || 'Staff', inTime: null, outTime: null, status: 'Absent', createdAt: new Date() }); });
+        if (absents.length)
+            await db.collection('scan_attendance').insertMany(absents);
+        res.json({ markedAbsent: absents.length });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// Backfill: create/link Parent records from every student's father/mother fields
+// (for students added via bulk import before the auto-sync existed).
+router.post('/parents/generate-from-students', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const students = await db.collection('students').find({
+            $or: [{ fatherName: { $nin: [null, ''] } }, { motherName: { $nin: [null, ''] } }],
+        }).toArray();
+        const before = await db.collection('parents').countDocuments({});
+        for (const st of students) {
+            await (0, parent_student_sync_service_1.syncStudentToParents)(db, String(st._id), st).catch(() => { });
+        }
+        const after = await db.collection('parents').countDocuments({});
+        res.json({ studentsProcessed: students.length, parentsCreated: Math.max(0, after - before), totalParents: after });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// ─── Email result cards (PDF) to parents for an exam + class ──────────────────
+router.post('/exams/email-result-cards', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { examId, classId, className } = req.body || {};
+        if (!examId)
+            return res.status(400).json({ message: 'examId is required' });
+        const oid = (id) => { try {
+            return new mongodb_2.ObjectId(id);
+        }
+        catch {
+            return null;
+        } };
+        const exam = await db.collection('exams').findOne({ _id: oid(examId) || examId });
+        const cls = classId ? await db.collection('classes').findOne({ _id: oid(classId) || classId }) : null;
+        const clsName = className || cls?.className || '';
+        const students = await db.collection('students').find({
+            $or: [{ classId: classId }, { studentClass: clsName }, { currentClass: clsName }, { class: clsName }],
+        }).toArray();
+        const tid = req.tenantContext?.tenantId;
+        const tenant = tid ? await (0, mongodb_1.getMetaDb)().collection('Tenant').findOne({ _id: oid(tid) || tid }) : null;
+        const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
+        let sent = 0, failed = 0, skipped = 0;
+        // Process every student concurrently (bounded) so all emails go out fast.
+        const processStudent = async (st) => {
+            // Send to the PARENT's email only — prefer the linked Parents-module record.
+            let email = '';
+            const linkedParents = await db.collection('parents').find({ 'linkedStudents.studentId': String(st._id) }).toArray().catch(() => []);
+            const parent = linkedParents.find((p) => (p.linkedStudents || []).some((l) => String(l.studentId) === String(st._id) && l.isPrimary)) || linkedParents[0];
+            email = parent?.email || parent?.parentEmail || parent?.emailAddress || '';
+            if (!email)
+                email = st.parentEmail || st.fatherEmail || st.motherEmail || st.guardianEmail || '';
+            if (!email) {
+                skipped++;
+                return;
+            }
+            try {
+                const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
+                const data = { school: tenant?.name, logo: tenant?.logo, template: tenant?.reportTemplate, student: st, exam, className: clsName, marks, grading };
+                const pdf = await (0, report_card_pdf_service_1.htmlToPdf)((0, report_card_pdf_service_1.reportCardHtml)(data));
+                await (0, communications_service_1.sendEmail)(db, {
+                    to: [email],
+                    subject: `${exam?.examName || exam?.name || 'Exam'} Result Card — ${st.studentName} (${clsName})`,
+                    html: (0, report_card_pdf_service_1.reportCardEmailHtml)(data),
+                    attachments: [{ filename: `ResultCard-${(st.registrationNo || st.admNo || st.studentName || 'student').toString().replace(/[^\w-]/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
+                });
+                sent++;
+            }
+            catch {
+                failed++;
+            }
+        };
+        const CONCURRENCY = 8;
+        let cursor = 0;
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, students.length) }, async () => {
+            while (cursor < students.length) {
+                const i = cursor++;
+                await processStudent(students[i]);
+            }
+        }));
+        await (0, report_card_pdf_service_1.closeReportBrowser)().catch(() => { });
+        res.json({ total: students.length, sent, failed, skipped });
+    }
+    catch (e) {
+        await (0, report_card_pdf_service_1.closeReportBrowser)().catch(() => { });
+        res.status(500).json({ message: e.message });
+    }
+});
+// ─── Global search (employees, students, subjects, invoices) ──────────────────
+router.get('/search', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const q = String(req.query.q || '').trim();
+        if (q.length < 2)
+            return res.json([]);
+        const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        const out = [];
+        const staff = await db.collection('staff').find({ $or: [{ employeeName: rx }, { name: rx }, { email: rx }, { phone: rx }, { designation: rx }] }).limit(6).toArray().catch(() => []);
+        staff.forEach((s) => out.push({ type: 'Employee', id: String(s._id), label: s.employeeName || s.name || 'Staff', sub: [s.designation, s.email].filter(Boolean).join(' · ') }));
+        const students = await db.collection('students').find({ $or: [{ studentName: rx }, { registrationNo: rx }, { admNo: rx }] }).limit(6).toArray().catch(() => []);
+        students.forEach((s) => out.push({ type: 'Student', id: String(s._id), label: s.studentName || 'Student', sub: [s.registrationNo || s.admNo, s.studentClass].filter(Boolean).join(' · ') }));
+        const subjects = await db.collection('subjects').find({ $or: [{ name: rx }, { subjectName: rx }, { code: rx }] }).limit(6).toArray().catch(() => []);
+        subjects.forEach((s) => out.push({ type: 'Subject', id: String(s._id), label: s.name || s.subjectName || 'Subject', sub: s.code || '' }));
+        const invoices = await db.collection('invoices').find({ $or: [{ invoice_no: rx }, { studentName: rx }] }).limit(6).toArray().catch(() => []);
+        invoices.forEach((i) => out.push({ type: 'Invoice', id: String(i._id), label: i.invoice_no || 'Invoice', sub: [i.studentName, i.total_due ? `KSh ${Number(i.total_due).toLocaleString()}` : ''].filter(Boolean).join(' · ') }));
+        res.json(out);
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
 // ─── Exams / Assessments ───────────────────────────────────────────────────
 router.get('/exams', c.getItems('exams'));
 router.get('/exams/:id', c.getItem('exams'));
@@ -233,7 +423,7 @@ router.get('/audit-trails', c.getItems('audit_trails'));
 router.get('/academics/audit_trails', c.getItems('audit_trails'));
 router.get('/academics/audit-trails', c.getItems('audit_trails'));
 // ─── Other Collections ────────────────────────────────────────────────────────
-['enrollments', 'transactions', 'invoices', 'classes', 'streams', 'sessions', 'levels', 'staff_subjects', 'chart_of_accounts', 'income', 'expenses', 'fee_particulars', 'fee_structures', 'periods', 'discount_types', 'fee_accounts', 'theme_settings', 'homework', 'weekdays', 'timetable_periods', 'rooms', 'timetables', 'timetable_slots', 'substitutions', 'constraints', 'transport_zones', 'buses', 'live_meetings', 'curriculum_frameworks', 'academic_resources', 'academic_assignments', 'lesson_plans', 'schemes_of_work', 'student_transfers', 'student_discipline', 'student_medical', 'student_documents', 'hostels', 'hostel_rooms', 'hostel_beds', 'hostel_allocations', 'hostel_attendance_records', 'hostel_fees', 'hostel_settings', 'announcements', 'sms_logs', 'email_logs', 'messages', 'message_threads', 'communication_settings', 'integration_settings', 'lms_courses', 'lms_lessons', 'lms_quizzes', 'lms_quiz_attempts', 'lms_enrollments', 'role_permissions', 'admissions', 'roles', 'stream_templates', 'grade_templates', 'curriculum_settings', 'report_card_generations'].forEach(col => {
+['enrollments', 'transactions', 'invoices', 'classes', 'streams', 'sessions', 'levels', 'staff_subjects', 'chart_of_accounts', 'income', 'expenses', 'fee_particulars', 'fee_structures', 'periods', 'discount_types', 'fee_accounts', 'theme_settings', 'homework', 'weekdays', 'timetable_periods', 'rooms', 'timetables', 'timetable_slots', 'substitutions', 'constraints', 'transport_zones', 'buses', 'live_meetings', 'curriculum_frameworks', 'academic_resources', 'academic_assignments', 'lesson_plans', 'schemes_of_work', 'student_transfers', 'student_discipline', 'student_medical', 'student_documents', 'hostels', 'hostel_rooms', 'hostel_beds', 'hostel_allocations', 'hostel_attendance_records', 'hostel_fees', 'hostel_settings', 'announcements', 'sms_logs', 'email_logs', 'messages', 'message_threads', 'communication_settings', 'integration_settings', 'lms_courses', 'lms_lessons', 'lms_quizzes', 'lms_quiz_attempts', 'lms_enrollments', 'role_permissions', 'admissions', 'roles', 'stream_templates', 'grade_templates', 'curriculum_settings', 'report_card_generations', 'portal_requisitions', 'portal_clearances', 'portal_registrations', 'parents', 'notification_settings', 'communication_prefs', 'email_logs', 'whatsapp_logs', 'term_settings', 'term_breaks', 'term_holidays', 'term_activities'].forEach(col => {
     router.get(`/${col}`, c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
     router.post(`/${col}`, c.createItem(col));
@@ -244,6 +434,21 @@ router.get('/academics/audit-trails', c.getItems('audit_trails'));
     router.post(`/academics/${col}`, c.createItem(col));
     router.patch(`/academics/${col}/:id`, c.updateItem(col));
     router.delete(`/academics/${col}/:id`, c.deleteItem(col));
+});
+// Bulk-create hostel beds (the generic CRUD has no /:col/bulk route).
+router.post('/hostel_beds/bulk', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const items = Array.isArray(req.body?.items) ? req.body.items : [];
+        if (!items.length)
+            return res.status(400).json({ message: 'No beds to create' });
+        const docs = items.map((b) => ({ ...b, isOccupied: !!b.isOccupied, createdAt: new Date() }));
+        const r = await db.collection('hostel_beds').insertMany(docs);
+        res.status(201).json({ insertedCount: r.insertedCount });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
 });
 router.patch('/academics/periods/:id/set-current', async (req, res) => {
     try {
@@ -658,6 +863,52 @@ router.post('/hostel/allocate', async (req, res) => {
         const result = await db.collection('hostel_allocations').insertOne(allocation);
         await db.collection('hostel_beds').updateOne({ _id: new mongodb_2.ObjectId(bedId) }, { $set: { isOccupied: true, studentId, studentName, admissionNo: admissionNo || '', updatedAt: new Date() } });
         res.status(201).json({ id: result.insertedId, ...allocation });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// Allocate MANY students to the free beds of one room (fee comes from the room).
+router.post('/hostel/allocate/bulk', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { studentIds, roomId, notes } = req.body;
+        if (!Array.isArray(studentIds) || !studentIds.length || !roomId)
+            return res.status(400).json({ message: 'studentIds[] and roomId are required' });
+        const room = await db.collection('hostel_rooms').findOne({ _id: new mongodb_2.ObjectId(roomId) }).catch(() => null)
+            || await db.collection('hostel_rooms').findOne({ _id: roomId });
+        if (!room)
+            return res.status(404).json({ message: 'Room not found' });
+        const roomFee = Number(room.fee ?? room.hostelFee ?? room.rent ?? 0);
+        let freeBeds = await db.collection('hostel_beds').find({ roomId: String(roomId), isOccupied: { $ne: true } }).sort({ bedNumber: 1 }).toArray();
+        if (!freeBeds.length)
+            freeBeds = await db.collection('hostel_beds').find({ roomId: room._id, isOccupied: { $ne: true } }).sort({ bedNumber: 1 }).toArray();
+        let allocated = 0, skipped = 0, noBed = 0;
+        for (const studentId of studentIds) {
+            const existing = await db.collection('hostel_allocations').findOne({ studentId, status: 'Active' });
+            if (existing) {
+                skipped++;
+                continue;
+            }
+            const bed = freeBeds.shift();
+            if (!bed) {
+                noBed++;
+                continue;
+            }
+            const student = await db.collection('students').findOne({ _id: new mongodb_2.ObjectId(studentId) }).catch(() => null);
+            const allocation = {
+                studentId, studentName: student?.studentName || student?.name || '',
+                admissionNo: student?.registrationNo || student?.admNo || '', studentClass: student?.studentClass || '',
+                bedId: String(bed._id), roomId: String(room._id), roomNumber: room.roomNumber || room.name || room.number,
+                hostelId: room.hostelId, hostelName: room.hostelName || room.blockName,
+                bedNumber: bed.bedNumber, allocationDate: new Date().toISOString().split('T')[0],
+                vacateDate: null, status: 'Active', fee: roomFee, paymentStatus: 'Unpaid', notes: notes || '', createdAt: new Date(),
+            };
+            await db.collection('hostel_allocations').insertOne(allocation);
+            await db.collection('hostel_beds').updateOne({ _id: bed._id }, { $set: { isOccupied: true, studentId, studentName: allocation.studentName, updatedAt: new Date() } });
+            allocated++;
+        }
+        res.json({ allocated, skipped, noBed });
     }
     catch (e) {
         res.status(500).json({ message: e.message });

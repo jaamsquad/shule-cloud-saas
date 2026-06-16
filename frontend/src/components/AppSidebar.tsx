@@ -5,7 +5,7 @@ import {
   Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil,
   Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video,
   Copy, ClipboardList, FileText, Lock, Award, Truck, BookMarked, GraduationCap, Building2,
-  Zap, Shield, Monitor, Utensils
+  Zap, Shield, Monitor, Utensils, Trophy, MapPin, DoorOpen, ClipboardCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -61,7 +61,6 @@ export const navItems: NavItem[] = [
   { label: "Subjects", icon: BookOpen, moduleKey: "subjects", children: [
       { label: "All Subjects", path: "/subjects/all" },
       { label: "New Subject", path: "/subjects/new" },
-      { label: "Curriculum Framework", path: "/subjects/curriculum" },
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },
@@ -148,6 +147,37 @@ export const navItems: NavItem[] = [
       { label: "Quick Sale (Canteen)", path: "/canteen/quick-sale" },
       { label: "Canteen Transactions", path: "/canteen/transactions" },
       { label: "Canteen Settings", path: "/canteen/settings" },
+  ] },
+  { label: "Sports", icon: Trophy, moduleKey: "sports", children: [
+      { label: "Sports Dashboard", path: "/sports" },
+      { label: "Sports Setup", path: "/sports/setup" },
+      { label: "Participants", path: "/sports/participants" },
+      { label: "Sports Attendance", path: "/sports/attendance" },
+      { label: "Performance & Awards", path: "/sports/performance" },
+      { label: "Sports Reports", path: "/sports/reports" },
+  ] },
+  { label: "Trips & Excursions", icon: MapPin, moduleKey: "trips", children: [
+      { label: "Trips Dashboard", path: "/trips" },
+      { label: "Create / Manage Trips", path: "/trips/manage" },
+      { label: "Participants", path: "/trips/participants" },
+      { label: "Trip Documents", path: "/trips/documents" },
+      { label: "Trip Attendance", path: "/trips/attendance" },
+      { label: "Trip Reports", path: "/trips/reports" },
+  ] },
+  { label: "Front Desk", icon: DoorOpen, moduleKey: "frontdesk", children: [
+      { label: "Front Desk Dashboard", path: "/frontdesk" },
+      { label: "Visitor Management", path: "/frontdesk/visitors" },
+      { label: "Student Sign Out", path: "/frontdesk/signout" },
+      { label: "Delivery Register", path: "/frontdesk/deliveries" },
+      { label: "Appointments", path: "/frontdesk/appointments" },
+      { label: "Reception Reports", path: "/frontdesk/reports" },
+  ] },
+  { label: "Secretary", icon: ClipboardCheck, moduleKey: "secretary", children: [
+      { label: "Secretary Dashboard", path: "/secretary" },
+      { label: "Student Records", path: "/students" },
+      { label: "Communication Center", path: "/communications/announcements" },
+      { label: "Meeting Management", path: "/secretary/meetings" },
+      { label: "Secretary Reports", path: "/secretary/reports" },
   ] },
   { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
       { label: "Reports Center", path: "/reports" },

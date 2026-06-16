@@ -44,7 +44,9 @@ export const SCHOOL_ROLE_GROUPS: { group: string; roles: string[] }[] = [
     { group: "Canteen & Catering", roles: ["Canteen Manager", "Canteen Cashier", "Storekeeper", "Catering Supervisor"] },
     { group: "Store & Inventory", roles: ["Store Manager", "Inventory Officer", "Asset Manager"] },
     { group: "Maintenance Department", roles: ["Maintenance Manager", "Maintenance Officer", "Electrician", "Plumber", "Groundskeeper"] },
-    { group: "Sports Department", roles: ["Sports Director", "Sports Coordinator", "Coach", "Team Manager"] },
+    { group: "Sports Department", roles: ["Sports Director", "Sports Coordinator", "Coach", "Sports Coach", "Team Manager"] },
+    { group: "Trips & Excursions", roles: ["Trips Coordinator"] },
+    { group: "Front Office", roles: ["Receptionist", "Front Desk Officer", "Secretary"] },
     { group: "Event Management", roles: ["Events Coordinator", "Activities Coordinator"] },
     { group: "Communication & Public Relations", roles: ["Communications Officer", "Public Relations Officer", "Marketing Officer"] },
 ];

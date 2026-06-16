@@ -5,7 +5,7 @@ import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
 import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete } from '../services/mpesa.service';
-import { resolveStaffPermissions } from '../lib/permissions';
+import { resolveStaffPermissions, permsToModules } from '../lib/permissions';
 
 const router = Router();
 
@@ -313,10 +313,12 @@ router.get('/my-permissions', async (req, res) => {
 
         let userRole = 'school_admin';
         let userId = '';
+        let staffId = '';
         try {
             const secret = process.env.JWT_SECRET || 'secret';
             const decoded: any = jwt.verify(token, secret);
             userId = decoded.sub || decoded.userId || decoded.staffId || '';
+            staffId = decoded.staffId || '';
             if (decoded.role) {
                 userRole = decoded.role.toLowerCase();
             } else if (decoded.staffId) {
@@ -331,58 +333,25 @@ router.get('/my-permissions', async (req, res) => {
             return res.json({ role: userRole, userId, modules: ['*'], crud: {} });
         }
 
-        // ── Load the permissions matrix from the tenant DB ────────────────────
-        const saved = await db.collection('role_permissions').findOne({});
-        const permMatrix: Record<string, string[]> = saved?.permissions || {};
-
-        // Resolution order:
-        // 1. Exact key match (e.g. "head_teacher")
-        // 2. Name match via roles collection (e.g. "Head Teacher" → "head_teacher")
-        // 3. Slug-based fallback variants
-        let resolvedModules: string[] | null = null;
-
-        // 1. Exact match
-        if (permMatrix[userRole]) {
-            resolvedModules = permMatrix[userRole];
+        // ── Resolve the staff member's effective permission CODES, then map them
+        //    to sidebar module keys. This is the same source the role editor
+        //    writes to (the `roles` collection + per-staff `staff.permissions`),
+        //    so permissions assigned there now drive the sidebar. ──────────────
+        let staff: any = null;
+        if (staffId) {
+            try { staff = await db.collection('staff').findOne({ _id: new ObjectId(staffId) }); } catch { /* ignore */ }
         }
-
-        // 2. Look up the roles collection to find the right key
-        if (!resolvedModules) {
-            const roleDoc = await db.collection('roles').findOne({
-                $or: [
-                    { key: userRole },
-                    { name: { $regex: new RegExp(`^${userRole.replace(/_/g, '[_ ]')}$`, 'i') } },
-                ]
-            });
-            if (roleDoc?.key && permMatrix[roleDoc.key]) {
-                resolvedModules = permMatrix[roleDoc.key];
-            }
+        if (!staff && userId) {
+            try { staff = await db.collection('staff').findOne({ _id: new ObjectId(userId) }); } catch { /* ignore */ }
         }
+        // Fall back to a synthetic staff carrying just the role name so default
+        // role permissions still resolve when we can't find the staff doc.
+        const staffForPerms = staff || { designation: userRole.replace(/_/g, ' ') };
 
-        // 3. Slug partial fallback — try common role families
-        if (!resolvedModules) {
-            const familyMap: Record<string, string[]> = {
-                teacher: ['teacher', 'instructor', 'educator', 'seniour_teacher', 'class_teacher'],
-                accountant: ['accountant', 'bursar', 'finance', 'accounts'],
-                principal: ['principal', 'headmaster', 'head_teacher', 'deputy_principal'],
-                librarian: ['librarian', 'library'],
-                transport_manager: ['transport', 'driver', 'bus'],
-                hostel_warden: ['warden', 'hostel', 'dormitory'],
-            };
-            for (const [familyKey, variants] of Object.entries(familyMap)) {
-                if (variants.some(v => userRole.includes(v))) {
-                    resolvedModules = permMatrix[familyKey] || null;
-                    if (resolvedModules) break;
-                }
-            }
-        }
+        const codes = await resolveStaffPermissions(db, staffForPerms);
+        const resolvedModules = permsToModules(codes);
 
-        // 4. Absolute fallback — dashboard only
-        if (!resolvedModules) {
-            resolvedModules = ['dashboard'];
-        }
-
-        res.json({ role: userRole, userId, modules: resolvedModules, crud: saved?.crudPermissions?.[userRole] || {} });
+        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud: {} });
     } catch (e: any) {
         res.status(500).json({ message: e.message });
     }

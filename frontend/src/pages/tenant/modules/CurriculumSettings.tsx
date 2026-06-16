@@ -143,11 +143,19 @@ export default function CurriculumSettings() {
 
     // Load saved values
     useEffect(() => {
-        if (!saved) return;
+        if (!saved) {
+            // No config yet → preload the default (CBC) preset so the Grading
+            // Scale / Assessment tabs are never empty.
+            const preset = CURRICULUM_TYPES.find(c => c.id === "CBC");
+            if (preset) { setGradingScale([...preset.gradingScale]); setAssessments([...preset.assessmentTypes]); }
+            return;
+        }
         if (saved._id) setSettingsId(saved._id);
         if (saved.curriculumId) setCurriculumId(saved.curriculumId);
-        if (saved.gradingScale?.length) setGradingScale(saved.gradingScale);
-        if (saved.assessments?.length) setAssessments(saved.assessments);
+        // Fall back to the curriculum's preset scale if the saved doc has none.
+        const preset = CURRICULUM_TYPES.find(c => c.id === (saved.curriculumId || "CBC"));
+        setGradingScale(saved.gradingScale?.length ? saved.gradingScale : [...(preset?.gradingScale || [])]);
+        setAssessments(saved.assessments?.length ? saved.assessments : [...(preset?.assessmentTypes || [])]);
         if (saved.passMark !== undefined) setPassMark(saved.passMark);
         if (saved.showRanking !== undefined) setShowRanking(saved.showRanking);
         if (saved.showPercentage !== undefined) setShowPercentage(saved.showPercentage);
@@ -171,11 +179,29 @@ export default function CurriculumSettings() {
 
     // ── Save mutation ──────────────────────────────────────────────────────
     const saveMut = useMutation({
-        mutationFn: (data: any) => settingsId
-            ? api.patch(`/curriculum_settings/${settingsId}`, data)
-            : api.post("/curriculum_settings", data),
+        mutationFn: async (data: any) => {
+            const res = settingsId
+                ? await api.patch(`/curriculum_settings/${settingsId}`, data)
+                : await api.post("/curriculum_settings", data);
+            // Mirror the grading scale into grading_criteria so the Marks Grading
+            // page (Settings → Marks Grading) shares the same data.
+            try {
+                const grades = (data.gradingScale || []).map((g: any) => ({
+                    grade: g.grade,
+                    from: Number(g.min) || 0,
+                    upto: Number(g.max) || 0,
+                    status: g.label || (Number(g.min) >= Number(data.passMark ?? 50) ? "PASS" : "FAIL"),
+                }));
+                const existing = await api.get("/grading_criteria");
+                const cur = Array.isArray(existing.data) ? existing.data[0] : null;
+                if (cur?._id) await api.patch(`/grading_criteria/${cur._id}`, { grades });
+                else await api.post("/grading_criteria", { grades, type: "Global", failCriteria: { overallPercent: Number(data.passMark ?? 40), subjectPercent: 33, minSubjects: 1 } });
+            } catch { /* non-fatal */ }
+            return res;
+        },
         onSuccess: (res) => {
             qc.invalidateQueries({ queryKey: ["curriculum_settings"] });
+            qc.invalidateQueries({ queryKey: ["grading_criteria"] });
             if (!settingsId) setSettingsId(res.data?.id || res.data?._id);
             toast.success("Curriculum settings saved");
             setIsDirty(false);

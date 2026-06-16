@@ -33,6 +33,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'Storekeeper': ['canteen.transactions'],
     'Store Manager': ['canteen.transactions', 'canteen.settings'],
     'Inventory Officer': ['canteen.transactions'],
+    // Sports / Trips / Front Desk / Secretary
+    'Sports Coordinator': ['sports.view', 'sports.manage', 'sports.attendance', 'sports.performance', 'trips.view', 'trips.manage', 'trips.attendance'],
+    'Sports Coach': ['sports.view', 'sports.attendance', 'sports.performance'],
+    'Trips Coordinator': ['trips.view', 'trips.manage', 'trips.attendance'],
+    'Receptionist': ['frontdesk.view', 'frontdesk.visitors', 'frontdesk.signout', 'frontdesk.appointments'],
+    'Front Desk Officer': ['frontdesk.view', 'frontdesk.visitors', 'frontdesk.signout', 'frontdesk.appointments'],
+    'Secretary': ['secretary.view', 'secretary.records', 'secretary.meetings', 'students.view', 'communications.send'],
 };
 
 /**
@@ -75,4 +82,94 @@ export async function resolveStaffPermissions(db: Db, staff: any): Promise<strin
     }
 
     return Array.from(set);
+}
+
+// ── Permission code → sidebar module key(s) ───────────────────────────────────
+// The sidebar (AppSidebar.navItems) filters each group by a `moduleKey`. A staff
+// member's granular permission codes (e.g. "finance.payments") must be mapped to
+// these module keys so the matching sidebar groups appear. One code can unlock
+// several modules. "dashboard" is always granted by the resolver below.
+const CODE_TO_MODULES: Record<string, string[]> = {
+    // Finance → Fees + Accounts
+    'finance.view': ['fees', 'accounts'],
+    'finance.payments': ['fees'],
+    'finance.invoices': ['fees'],
+    'finance.wallet': ['fees', 'students'],
+    'finance.discounts': ['fees'],
+    'finance.reports': ['fees', 'reports'],
+    // Accounting → Accounts + Salary
+    'accounting.income': ['accounts'],
+    'accounting.expenses': ['accounts'],
+    'accounting.payroll': ['salary'],
+    'accounting.budget': ['accounts'],
+    // Academics
+    'academics.view': ['classes', 'subjects', 'timetable', 'academics_content'],
+    'exams.manage': ['exams'],
+    'results.entry': ['exams'],
+    'results.view': ['exams', 'reports'],
+    'content.manage': ['academics_content'],
+    // Attendance
+    'attendance.mark': ['attendance'],
+    'attendance.view': ['attendance', 'reports'],
+    // Students & admissions
+    'students.view': ['students'],
+    'students.manage': ['students'],
+    'admissions.manage': ['students'],
+    // Staff & HR
+    'staff.view': ['employees'],
+    'hr.manage': ['employees'],
+    'departments.manage': ['employees'],
+    // Operations
+    'library.manage': ['library'],
+    'transport.manage': ['transport'],
+    'boarding.manage': ['hostel'],
+    'health.manage': ['students'],
+    // Cafeteria
+    'cafeteria.serve': ['students'],
+    'cafeteria.menu': ['students'],
+    'cafeteria.history': ['students'],
+    'canteen.sell': ['students', 'pos'],
+    'canteen.transactions': ['students', 'pos'],
+    'canteen.settings': ['students'],
+    // Sports
+    'sports.view': ['sports'],
+    'sports.manage': ['sports'],
+    'sports.attendance': ['sports'],
+    'sports.performance': ['sports'],
+    // Trips & Excursions
+    'trips.view': ['trips'],
+    'trips.manage': ['trips'],
+    'trips.attendance': ['trips'],
+    // Front Desk / Reception
+    'frontdesk.view': ['frontdesk'],
+    'frontdesk.visitors': ['frontdesk'],
+    'frontdesk.signout': ['frontdesk'],
+    'frontdesk.appointments': ['frontdesk'],
+    // Secretary
+    'secretary.view': ['secretary'],
+    'secretary.records': ['secretary', 'students'],
+    'secretary.meetings': ['secretary'],
+    // Communication & reports
+    'communications.send': ['communications'],
+    'reports.view': ['reports'],
+    'audit.view': ['reports'],
+    // Administration
+    'settings.manage': ['settings'],
+    'roles.manage': ['settings'],
+};
+
+/**
+ * Map a list of permission codes to the set of sidebar module keys to show.
+ * "*" → wildcard (everything). "dashboard" is always included.
+ */
+export function permsToModules(perms: string[] | undefined): string[] {
+    if (!perms || perms.length === 0) return ['dashboard'];
+    if (perms.includes('*')) return ['*'];
+    const modules = new Set<string>(['dashboard']);
+    for (const code of perms) {
+        // A raw module key passed through directly (forward-compatible).
+        if (!code.includes('.')) modules.add(code);
+        (CODE_TO_MODULES[code] || []).forEach(m => modules.add(m));
+    }
+    return Array.from(modules);
 }

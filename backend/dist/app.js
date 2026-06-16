@@ -57,10 +57,40 @@ const behaviour_routes_1 = __importDefault(require("./modules/behaviour/behaviou
 const salary_routes_1 = __importDefault(require("./routes/salary.routes"));
 const pos_routes_1 = __importDefault(require("./routes/pos.routes"));
 const academics_v2_routes_1 = __importDefault(require("./routes/academics-v2.routes"));
+const communications_routes_1 = __importDefault(require("./routes/communications.routes"));
+const wallet_routes_1 = __importDefault(require("./routes/wallet.routes"));
+const domains_routes_1 = __importDefault(require("./routes/domains.routes"));
+const mpesa_routes_1 = __importDefault(require("./routes/mpesa.routes"));
+const integrations_routes_1 = __importDefault(require("./routes/integrations.routes"));
+const departments_routes_1 = __importDefault(require("./routes/departments.routes"));
+const cafeteria_routes_1 = __importDefault(require("./routes/cafeteria.routes"));
+const studentId_routes_1 = __importDefault(require("./routes/studentId.routes"));
+const modules_routes_1 = __importDefault(require("./routes/modules.routes"));
 console.log('[App] Bootstrapping institutional backend system...');
 const app = (0, express_1.default)();
 // Middleware
-app.use((0, cors_1.default)());
+// CORS — allow manwellstore.com, its subdomains (egerton.manwellstore.com,
+// students.egerton.manwellstore.com, …), and localhost for development.
+const ALLOWED_DOMAINS = ['shulecloud.com'];
+const isAllowedOrigin = (origin) => {
+    if (!origin)
+        return true; // same-origin / server-to-server / curl
+    try {
+        const host = new URL(origin).hostname.toLowerCase();
+        if (host === 'localhost' || host.endsWith('.localhost'))
+            return true;
+        return ALLOWED_DOMAINS.some(d => host === d || host.endsWith(`.${d}`));
+    }
+    catch {
+        return false;
+    }
+};
+app.use((0, cors_1.default)({
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain'],
+}));
 app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json({ limit: '10mb' }));
 // ── Public school search (no auth) — used by bare localhost login page ─────────
@@ -96,7 +126,9 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
         const { getMetaDb } = await Promise.resolve().then(() => __importStar(require('./lib/mongodb')));
         const metaDb = getMetaDb();
         const sub = req.params.subdomain.toLowerCase().trim();
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: sub });
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Case/space-insensitive match — stored subdomain may be "Egerton" etc.
+        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
         if (!tenant)
             return res.status(404).json({ message: 'School not found' });
         // Only return public, non-sensitive fields
@@ -107,6 +139,59 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
             subdomain: tenant.subdomain,
             tagline: tenant.tagline || null,
         });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// ── Public student application (no auth) — subdomain.shulecloud.com/application ─
+app.get('/api/v1/public/apply/:subdomain', async (req, res) => {
+    // Returns school branding + the classes a public applicant can choose.
+    try {
+        const { getMetaDb, getTenantDb, subdomainToDbName } = await Promise.resolve().then(() => __importStar(require('./lib/mongodb')));
+        const sub = req.params.subdomain.toLowerCase().trim();
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tenant = await getMetaDb().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant)
+            return res.status(404).json({ message: 'School not found' });
+        const db = getTenantDb(tenant.databaseName || subdomainToDbName(tenant.subdomain));
+        const classes = await db.collection('classes').find({}).project({ name: 1, levelName: 1 }).toArray().catch(() => []);
+        res.json({
+            name: tenant.instituteName || tenant.name || sub,
+            logo: tenant.logo || tenant.schoolLogo || null,
+            subdomain: tenant.subdomain,
+            tagline: tenant.tagline || null,
+            classes: classes.map((c) => c.name || c.levelName).filter(Boolean),
+        });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+app.post('/api/v1/public/apply/:subdomain', async (req, res) => {
+    try {
+        const { getMetaDb, getTenantDb, subdomainToDbName } = await Promise.resolve().then(() => __importStar(require('./lib/mongodb')));
+        const sub = req.params.subdomain.toLowerCase().trim();
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const tenant = await getMetaDb().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant)
+            return res.status(404).json({ message: 'School not found' });
+        const db = getTenantDb(tenant.databaseName || subdomainToDbName(tenant.subdomain));
+        const b = req.body || {};
+        if (!b.applicantName || !b.contactPhone)
+            return res.status(400).json({ message: 'Applicant name and contact phone are required' });
+        const appNo = `APP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const doc = {
+            applicationNo: appNo,
+            applicantName: b.applicantName, dob: b.dob || '', gender: b.gender || '',
+            classApplied: b.classApplied || '', previousSchool: b.previousSchool || '',
+            parentName: b.parentName || '', contactPhone: b.contactPhone, contactEmail: b.contactEmail || '',
+            address: b.address || '', notes: b.notes || '',
+            documentName: b.documentName || '', document: b.document || '', // base64 image/pdf
+            status: 'Pending', source: 'public', createdAt: new Date(),
+        };
+        const r = await db.collection('admissions').insertOne(doc);
+        res.status(201).json({ id: r.insertedId, applicationNo: appNo, message: 'Application submitted' });
     }
     catch (e) {
         res.status(500).json({ message: e.message });
@@ -258,6 +343,17 @@ app.use('/api/v1', behaviour_routes_1.default);
 app.use('/api/v1', salary_routes_1.default);
 app.use('/api/v1', pos_routes_1.default);
 app.use('/api/v1', academics_v2_routes_1.default);
+app.use('/api/v1', communications_routes_1.default);
+app.use('/api/v1', wallet_routes_1.default);
+app.use('/api/v1', domains_routes_1.default);
+app.use('/api/v1', mpesa_routes_1.default); // public callbacks (exempt from tenancy)
+app.use('/api', mpesa_routes_1.default); // also served at /api/mpesa/callback (configured URL)
+app.use('/api/v1', integrations_routes_1.default); // tenancy-aware M-PESA settings
+app.use('/api/v1', departments_routes_1.default); // department management
+app.use('/api/v1', cafeteria_routes_1.default); // kitchen meal service + canteen quick sale
+app.use('/api/v1', studentId_routes_1.default); // student ID card: QR + barcode + print-ready PDF
+app.use('/api', studentId_routes_1.default); // also at /api/student-id (per the spec)
+app.use('/api/v1', modules_routes_1.default); // Sports, Trips, Front Desk, Secretary modules
 app.use('/api/v1/onboard', onboard_routes_1.default);
 app.use('/api/v1/auth', auth_routes_1.default);
 app.use('/api/v1/owner/auth', owner_auth_routes_1.default);
@@ -275,3 +371,4 @@ app.use((req, res) => {
     res.status(404).json({ message: 'Endpoint not found' });
 });
 exports.default = app;
+// touch: reload env (MPESA_CALLBACK_URL)
