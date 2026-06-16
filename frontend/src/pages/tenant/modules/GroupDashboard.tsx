@@ -5,6 +5,7 @@ import { ArrowRight, Home, LayoutGrid, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { navItems } from "@/components/AppSidebar";
 import { groupSlug } from "@/lib/groupSlug";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // Short blurb per group (keyed by sidebar label) shown under the title.
 const GROUP_BLURB: Record<string, string> = {
@@ -146,6 +147,7 @@ function useGroupStats(label: string): { stats: Stat[]; loading: boolean } {
 
 export default function GroupDashboard() {
     const { groupKey } = useParams();
+    const perms = usePermissions();
     const group = useMemo(() => navItems.find((n) => n.children && groupSlug(n.label) === groupKey), [groupKey]);
     const { stats, loading } = useGroupStats(group?.label || "");
 
@@ -160,7 +162,18 @@ export default function GroupDashboard() {
     }
 
     const Icon = group.icon;
-    const children = (group.children || []).filter((c) => c.path !== "/logout" && !c.path.startsWith("http"));
+    // Same page-permission rule as the sidebar: if the user holds any of this
+    // group's child page-perms, only show the granted pages; otherwise (module
+    // grant or admin) show all.
+    const granted = perms.permissions || [];
+    const wildcard = perms.isAdmin || granted.includes("*");
+    const groupPagePerms = (group.children || []).map((ch: any) => ch.pagePerm).filter(Boolean) as string[];
+    const userHasSomePagePerm = !wildcard && groupPagePerms.some((p) => granted.includes(p));
+    const children = (group.children || []).filter((c: any) => {
+        if (c.path === "/logout" || c.path.startsWith("http")) return false;
+        if (userHasSomePagePerm && c.pagePerm && !granted.includes(c.pagePerm)) return false;
+        return true;
+    });
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
