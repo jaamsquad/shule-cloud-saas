@@ -234,16 +234,27 @@ router.post('/smart-login', async (req, res) => {
                 ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
                 : null;
 
+            // Resolve the admin-app landing page: the admin's explicit choice, else a
+            // sensible default for cafeteria/store roles, else the dashboard.
+            const ROLE_LANDING: Record<string, string> = {
+                'kitchen': '/cafeteria/meal-service', 'cook': '/cafeteria/meal-service', 'catering supervisor': '/cafeteria/meal-service', 'kitchen staff': '/cafeteria/meal-service',
+                'canteen manager': '/canteen/quick-sale', 'canteen cashier': '/canteen/quick-sale', 'canteen attendant': '/canteen/quick-sale',
+                'storekeeper': '/canteen/transactions', 'store manager': '/canteen/transactions', 'inventory officer': '/canteen/transactions',
+            };
+            const landingRoles = [...(Array.isArray(staffMatch.roles) ? staffMatch.roles : []), staffMatch.designation].filter(Boolean).map((r: string) => String(r).toLowerCase());
+            const landingPage = staffMatch.landingPage || landingRoles.map((r: string) => ROLE_LANDING[r]).find(Boolean) || '/dashboard';
+
             return res.json({
                 token, access_token: token,
                 tenantSubdomain: resolvedTenantSubdomain,
                 user_type: userType,
-                user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId, portalAccess },
+                user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId, portalAccess, landingPage },
                 portalAccess,
                 canTeacherPortal,           // admin app shows a "Teaching Portal" button when true
                 redirectPortal: goTeacherPortal ? 'staff' : null,   // only teacher-only is auto-redirected
                 staffSso,                   // present for teacher-only AND both → enables SSO into teacher portal
-                redirect: '/dashboard',
+                landingPage,
+                redirect: landingPage,
             });
         }
 

@@ -23,6 +23,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'Boarding Master': ['boarding.manage', 'attendance.view'], 'Boarding Mistress': ['boarding.manage', 'attendance.view'],
     'School Nurse': ['health.manage'],
     'ICT Administrator': ['settings.manage', 'roles.manage', 'communications.send'],
+    'Kitchen': ['cafeteria.serve', 'cafeteria.menu', 'cafeteria.history'],
+    'Kitchen Staff': ['cafeteria.serve', 'cafeteria.history'],
+    'Cook': ['cafeteria.serve', 'cafeteria.history'],
+    'Catering Supervisor': ['cafeteria.serve', 'cafeteria.menu', 'cafeteria.history', 'canteen.transactions'],
+    'Canteen Manager': ['canteen.sell', 'canteen.transactions', 'canteen.settings', 'cafeteria.history'],
+    'Canteen Cashier': ['canteen.sell', 'canteen.transactions'],
+    'Canteen Attendant': ['canteen.sell'],
+    'Storekeeper': ['canteen.transactions'],
+    'Store Manager': ['canteen.transactions', 'canteen.settings'],
+    'Inventory Officer': ['canteen.transactions'],
 };
 
 /**

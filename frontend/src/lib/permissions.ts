@@ -47,6 +47,14 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "boarding.manage", name: "Boarding" },
         { code: "health.manage", name: "Health / Clinic" },
     ]},
+    { group: "Cafeteria", perms: [
+        { code: "cafeteria.serve", name: "Serve Meals (Kitchen)" },
+        { code: "cafeteria.menu", name: "Manage Weekly Menu" },
+        { code: "cafeteria.history", name: "View Meal History" },
+        { code: "canteen.sell", name: "Canteen Quick Sale" },
+        { code: "canteen.transactions", name: "View Canteen Transactions" },
+        { code: "canteen.settings", name: "Canteen Settings" },
+    ]},
     { group: "Communication & Reports", perms: [
         { code: "communications.send", name: "Send Communications" },
         { code: "reports.view", name: "View Reports" },
@@ -88,6 +96,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "Boarding Mistress": ["boarding.manage", "attendance.view"],
     "School Nurse": ["health.manage"],
     "ICT Administrator": ["settings.manage", "roles.manage", "communications.send"],
+    // Cafeteria / store
+    "Kitchen": ["cafeteria.serve", "cafeteria.menu", "cafeteria.history"],
+    "Kitchen Staff": ["cafeteria.serve", "cafeteria.history"],
+    "Cook": ["cafeteria.serve", "cafeteria.history"],
+    "Catering Supervisor": ["cafeteria.serve", "cafeteria.menu", "cafeteria.history", "canteen.transactions"],
+    "Canteen Manager": ["canteen.sell", "canteen.transactions", "canteen.settings", "cafeteria.history"],
+    "Canteen Cashier": ["canteen.sell", "canteen.transactions"],
+    "Canteen Attendant": ["canteen.sell"],
+    "Storekeeper": ["canteen.transactions"],
+    "Store Manager": ["canteen.transactions", "canteen.settings"],
+    "Inventory Officer": ["canteen.transactions"],
 };
 
 export const MIS_ROLE_GROUPS: { group: string; roles: string[] }[] = [

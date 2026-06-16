@@ -66,7 +66,7 @@ export default function AddEmployee() {
         employeeName: "", fatherName: "", email: "", phone: "", dob: "",
         gender: "Male", designation: "", joiningDate: "", salary: "", address: "",
         specializedSubjects: [] as string[],
-        roles: [] as string[], portalAccess: "both",
+        roles: [] as string[], portalAccess: "both", landingPage: "",
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
         kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: ""
     });
@@ -111,6 +111,7 @@ export default function AddEmployee() {
             designation:         existingStaff.designation || "",
             roles:               existingStaff.roles || (existingStaff.designation ? [existingStaff.designation] : []),
             portalAccess:        existingStaff.portalAccess || "both",
+            landingPage:         existingStaff.landingPage || "",
             joiningDate:         existingStaff.joiningDate?.split("T")[0] || "",
             salary:              existingStaff.salary || "",
             address:             existingStaff.address || "",
@@ -542,6 +543,35 @@ export default function AddEmployee() {
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-2">Default Landing Page</label>
+                                        <p className="text-[11px] text-gray-400 mb-2">The page this user opens on first after login. Leave on “Auto” to use the role default (e.g. Kitchen → Meal Service).</p>
+                                        <select value={formData.landingPage} onChange={e => setFormData(p => ({ ...p, landingPage: e.target.value }))}
+                                            className="w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:border-[#5C67F2] bg-white">
+                                            <option value="">Auto (role default / dashboard)</option>
+                                            <optgroup label="General">
+                                                <option value="/dashboard">Dashboard</option>
+                                                <option value="/students">All Students</option>
+                                                <option value="/staff">All Employees</option>
+                                                <option value="/attendance-scanner">Attendance Scanner</option>
+                                            </optgroup>
+                                            <optgroup label="Cafeteria">
+                                                <option value="/cafeteria/meal-service">Meal Service (Kitchen)</option>
+                                                <option value="/canteen/quick-sale">Quick Sale (Canteen)</option>
+                                                <option value="/canteen/transactions">Canteen Transactions</option>
+                                                <option value="/cafeteria/menu">Weekly Meal Menu</option>
+                                            </optgroup>
+                                            <optgroup label="Finance">
+                                                <option value="/fees/generate-invoice">Generate Fees Invoice</option>
+                                                <option value="/fees/collect">Collect Fees</option>
+                                                <option value="/pos-admin/new-order">POS New Order</option>
+                                            </optgroup>
+                                            <optgroup label="Academics">
+                                                <option value="/exams">Exams</option>
+                                                <option value="/reports">Reports Center</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
                                 </div>
                             </div>

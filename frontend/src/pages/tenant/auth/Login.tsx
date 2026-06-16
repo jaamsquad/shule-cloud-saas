@@ -191,7 +191,7 @@ export default function Login() {
                     }
                     refreshPermissions();
                     toast.success(`Welcome back, ${user?.name || username}!`);
-                    goToDashboard("/dashboard");
+                    goToDashboard(user?.landingPage || redirect || "/dashboard");
                     return;
                 }
 

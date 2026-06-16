@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, Loader2, User, ShoppingCart, Check, X, Wallet, Coins } from "lucide-react";
+import { ScanLine, Loader2, User, ShoppingCart, Check, X, Wallet, Coins, Camera, Keyboard } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import CameraScanner from "./CameraScanner";
 
 export default function QuickSale() {
     const qc = useQueryClient();
@@ -10,6 +11,9 @@ export default function QuickSale() {
     const [student, setStudent] = useState<any>(null);
     const [cart, setCart] = useState<any[]>([]);
     const [search, setSearch] = useState("");
+    const [scanMode, setScanMode] = useState<"scanner" | "camera">("scanner");
+    const cartRef = useRef<any[]>([]);
+    cartRef.current = cart;
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceRef = useRef<any>(null);
 
@@ -23,26 +27,30 @@ export default function QuickSale() {
     const [payMode, setPayMode] = useState("wallet");
     useEffect(() => { if (settings?.mode && settings.mode !== "both") setPayMode(settings.mode); }, [settings]);
 
-    const lookup = useMutation({
-        mutationFn: async (c: string) => (await api.get(`/cafeteria/student/${encodeURIComponent(c)}`)).data,
-        onSuccess: (s) => setStudent(s),
-        onError: (e: any) => { toast.error(e.response?.data?.message || "Card not recognised"); setCode(""); setTimeout(focus, 30); },
-    });
-    const onScan = (v: string) => { setCode(v); if (debounceRef.current) clearTimeout(debounceRef.current); if (v.trim().length >= 3) debounceRef.current = setTimeout(() => lookup.mutate(v.trim()), 150); };
-
     const add = (p: any) => setCart(c => { const e = c.find(x => x._id === p._id); return e ? c.map(x => x._id === p._id ? { ...x, qty: x.qty + 1 } : x) : [...c, { ...p, qty: 1 }]; });
     const dec = (id: string) => setCart(c => c.map(x => x._id === id ? { ...x, qty: x.qty - 1 } : x).filter(x => x.qty > 0));
     const total = cart.reduce((s, i) => s + Number(i.price || 0) * i.qty, 0);
 
     const sale = useMutation({
-        mutationFn: async () => (await api.post("/canteen/sale", { code: student ? code : undefined, paymentMode: payMode, items: cart.map(i => ({ productId: i._id, name: i.name, price: Number(i.price || 0), qty: i.qty })) })).data,
-        onSuccess: (d) => {
-            toast.success(`Sale complete · KES ${total.toLocaleString()}${d.newBalance != null ? ` · Bal: KES ${d.newBalance.toLocaleString()}` : ""}`);
+        mutationFn: async (c?: string) => (await api.post("/canteen/sale", { code: c || code || undefined, paymentMode: payMode, items: cartRef.current.map((i: any) => ({ productId: i._id, name: i.name, price: Number(i.price || 0), qty: i.qty })) })).data,
+        onSuccess: (d: any) => {
+            toast.success(`Sale complete${d.newBalance != null ? ` · Wallet: KES ${d.newBalance.toLocaleString()}` : ""}`);
             qc.invalidateQueries({ queryKey: ["canteen_today"] }); qc.invalidateQueries({ queryKey: ["canteen_products"] });
             setCart([]); setStudent(null); setCode(""); setTimeout(focus, 50);
         },
         onError: (e: any) => toast.error(e.response?.data?.message || "Sale failed"),
     });
+
+    const lookup = useMutation({
+        mutationFn: async (c: string) => ({ ...(await api.get(`/cafeteria/student/${encodeURIComponent(c)}`)).data, _code: c }),
+        onSuccess: (s: any) => {
+            setStudent(s);
+            // Choose items → scan card → auto-complete the sale (fast flow).
+            if (cartRef.current.length > 0) sale.mutate(s._code);
+        },
+        onError: (e: any) => { toast.error(e.response?.data?.message || "Card not recognised"); setCode(""); setTimeout(focus, 30); },
+    });
+    const onScan = (v: string) => { setCode(v); if (debounceRef.current) clearTimeout(debounceRef.current); if (v.trim().length >= 3) debounceRef.current = setTimeout(() => lookup.mutate(v.trim()), 120); };
 
     const filtered = products.filter((p: any) => !search || (p.name || "").toLowerCase().includes(search.toLowerCase()));
     const bothMode = settings?.mode === "both";
@@ -88,8 +96,17 @@ export default function QuickSale() {
                         {/* Student scan */}
                         {!student ? (
                             <div className="mb-4">
-                                <div className="flex items-center gap-2 mb-2 text-slate-700"><ScanLine className="w-4 h-4 text-emerald-500" /><span className="text-xs font-black uppercase">Scan student</span></div>
-                                <input ref={inputRef} value={code} onChange={e => onScan(e.target.value)} placeholder="Card / admission no…" className="w-full h-10 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500" />
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2 text-slate-700"><ScanLine className="w-4 h-4 text-emerald-500" /><span className="text-xs font-black uppercase">{cart.length ? "Scan card to pay" : "Scan student"}</span></div>
+                                    <div className="bg-slate-50 border border-slate-100 rounded-lg p-0.5 flex">
+                                        <button onClick={() => setScanMode("scanner")} className={`px-2 py-1 rounded ${scanMode === "scanner" ? "bg-emerald-500 text-white" : "text-slate-400"}`}><Keyboard className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => setScanMode("camera")} className={`px-2 py-1 rounded ${scanMode === "camera" ? "bg-emerald-500 text-white" : "text-slate-400"}`}><Camera className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                </div>
+                                {scanMode === "scanner"
+                                    ? <input ref={inputRef} value={code} onChange={e => onScan(e.target.value)} placeholder="Card / admission no…" className="w-full h-10 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500" />
+                                    : <CameraScanner onScan={(c) => { setCode(c); lookup.mutate(c); }} />}
+                                {(lookup.isPending || sale.isPending) && <Loader2 className="w-4 h-4 animate-spin text-emerald-500 mx-auto mt-2" />}
                             </div>
                         ) : (
                             <div className="flex items-center gap-3 mb-4 bg-emerald-50 rounded-2xl p-3">

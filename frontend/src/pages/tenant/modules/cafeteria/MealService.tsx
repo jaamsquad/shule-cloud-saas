@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, Loader2, Camera, Check, User, Utensils, X, CheckCircle2 } from "lucide-react";
+import { ScanLine, Loader2, Camera, Check, User, Utensils, X, CheckCircle2, Keyboard } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import CameraScanner from "./CameraScanner";
 
 const MEALS = ["Breakfast", "Lunch", "Supper"];
 const time = (t: any) => (t ? new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—");
@@ -11,11 +12,10 @@ export default function MealService() {
     const qc = useQueryClient();
     const [code, setCode] = useState("");
     const [student, setStudent] = useState<any>(null);
+    const [scanMode, setScanMode] = useState<"scanner" | "camera">("scanner");
     const [mealType, setMealType] = useState("Lunch");
     const [photo, setPhoto] = useState<string>("");
     const inputRef = useRef<HTMLInputElement>(null);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const streamRef = useRef<MediaStream | null>(null);
     const debounceRef = useRef<any>(null);
 
     const focus = () => { if (!student) inputRef.current?.focus(); };
@@ -23,20 +23,6 @@ export default function MealService() {
 
     const { data: today } = useQuery({ queryKey: ["meals_today"], queryFn: async () => (await api.get("/cafeteria/meals/today")).data, refetchInterval: 30000 });
 
-    // Open the camera automatically once a student is loaded.
-    useEffect(() => {
-        let cancelled = false;
-        const start = async () => {
-            try {
-                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                if (cancelled) { s.getTracks().forEach(t => t.stop()); return; }
-                streamRef.current = s;
-                if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play().catch(() => { }); }
-            } catch { /* no camera — fall back to file upload */ }
-        };
-        if (student && !photo) start();
-        return () => { cancelled = true; streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; };
-    }, [student, photo]);
 
     const lookup = useMutation({
         mutationFn: async (c: string) => (await api.get(`/cafeteria/student/${encodeURIComponent(c)}`)).data,
@@ -50,13 +36,6 @@ export default function MealService() {
         if (v.trim().length >= 3) debounceRef.current = setTimeout(() => lookup.mutate(v.trim()), 150);
     };
 
-    const capture = () => {
-        const v = videoRef.current; if (!v) return;
-        const c = document.createElement("canvas"); c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
-        c.getContext("2d")?.drawImage(v, 0, 0, c.width, c.height);
-        setPhoto(c.toDataURL("image/jpeg", 0.6));
-        streamRef.current?.getTracks().forEach(t => t.stop());
-    };
     const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const f = e.target.files?.[0]; if (!f) return;
         const r = new FileReader(); r.onloadend = () => setPhoto(String(r.result)); r.readAsDataURL(f);
@@ -72,7 +51,7 @@ export default function MealService() {
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed to serve"),
     });
 
-    const reset = () => { setStudent(null); setCode(""); setPhoto(""); streamRef.current?.getTracks().forEach(t => t.stop()); setTimeout(focus, 50); };
+    const reset = () => { setStudent(null); setCode(""); setPhoto(""); setTimeout(focus, 50); };
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
@@ -91,12 +70,23 @@ export default function MealService() {
                     {/* Scan / student */}
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7">
                         {!student ? (
-                            <div className="text-center py-10">
-                                <ScanLine className="w-12 h-12 mx-auto text-amber-500 mb-4" />
-                                <p className="font-black text-slate-700 mb-1">Scan student card</p>
-                                <p className="text-xs text-slate-400 mb-6">Barcode / QR / RFID — or type the admission no.</p>
-                                <input ref={inputRef} value={code} onChange={e => onChange(e.target.value)} autoFocus placeholder="Waiting for scan…"
-                                    className="w-full h-12 px-5 rounded-2xl text-center text-lg font-black text-slate-800 border border-slate-200 focus:outline-none focus:border-amber-500" />
+                            <div>
+                                {/* Scanner / Camera mode toggle */}
+                                <div className="bg-slate-50 border border-slate-100 rounded-xl p-1 flex mb-5">
+                                    <button onClick={() => setScanMode("scanner")} className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center justify-center gap-1.5 ${scanMode === "scanner" ? "bg-amber-500 text-white" : "text-slate-400"}`}><Keyboard className="w-3.5 h-3.5" /> Scanner</button>
+                                    <button onClick={() => setScanMode("camera")} className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center justify-center gap-1.5 ${scanMode === "camera" ? "bg-amber-500 text-white" : "text-slate-400"}`}><Camera className="w-3.5 h-3.5" /> Camera</button>
+                                </div>
+                                {scanMode === "scanner" ? (
+                                    <div className="text-center py-6">
+                                        <ScanLine className="w-12 h-12 mx-auto text-amber-500 mb-4" />
+                                        <p className="font-black text-slate-700 mb-1">Scan student card</p>
+                                        <p className="text-xs text-slate-400 mb-6">Barcode / QR / RFID — or type the admission no.</p>
+                                        <input ref={inputRef} value={code} onChange={e => onChange(e.target.value)} autoFocus placeholder="Waiting for scan…"
+                                            className="w-full h-12 px-5 rounded-2xl text-center text-lg font-black text-slate-800 border border-slate-200 focus:outline-none focus:border-amber-500" />
+                                    </div>
+                                ) : (
+                                    <CameraScanner onScan={(c) => { setCode(c); lookup.mutate(c); }} />
+                                )}
                                 {lookup.isPending && <Loader2 className="w-5 h-5 animate-spin text-amber-500 mx-auto mt-3" />}
                             </div>
                         ) : (
@@ -114,33 +104,28 @@ export default function MealService() {
                                 <div className="grid grid-cols-3 gap-2 mb-4">
                                     {MEALS.map(m => <button key={m} onClick={() => setMealType(m)} className={`py-2.5 rounded-xl text-xs font-black uppercase ${mealType === m ? "bg-amber-500 text-white" : "bg-slate-50 text-slate-500"}`}>{m}</button>)}
                                 </div>
-                                <button onClick={() => serve.mutate()} disabled={!photo || serve.isPending}
+                                <button onClick={() => serve.mutate()} disabled={serve.isPending}
                                     className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-sm uppercase tracking-widest rounded-xl flex items-center justify-center gap-2">
                                     {serve.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Serve Meal
                                 </button>
-                                {!photo && <p className="text-[11px] text-amber-600 font-bold text-center mt-2">Take a photo of the served meal first →</p>}
                             </div>
                         )}
                     </div>
 
-                    {/* Camera / photo */}
+                    {/* Optional meal photo */}
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7 flex flex-col">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Meal Photo (evidence)</p>
-                        {!student ? (
-                            <div className="flex-1 flex items-center justify-center text-slate-300"><Camera className="w-12 h-12" /></div>
-                        ) : photo ? (
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Meal Photo <span className="text-slate-300 normal-case">(optional)</span></p>
+                        {photo ? (
                             <div className="flex-1 flex flex-col">
                                 <img src={photo} className="w-full rounded-2xl object-cover flex-1" />
-                                <button onClick={() => setPhoto("")} className="mt-3 text-xs font-black text-amber-600 uppercase">Retake</button>
+                                <button onClick={() => setPhoto("")} className="mt-3 text-xs font-black text-amber-600 uppercase">Remove</button>
                             </div>
                         ) : (
-                            <div className="flex-1 flex flex-col">
-                                <video ref={videoRef} className="w-full rounded-2xl bg-slate-900 object-cover flex-1" muted playsInline />
-                                <div className="flex gap-2 mt-3">
-                                    <button onClick={capture} className="flex-1 h-11 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase rounded-xl flex items-center justify-center gap-2"><Camera className="w-4 h-4" /> Capture</button>
-                                    <label className="h-11 px-4 border border-slate-200 rounded-xl flex items-center text-xs font-black text-slate-500 cursor-pointer">Upload<input type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" /></label>
-                                </div>
-                            </div>
+                            <label className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-300 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-amber-400 hover:text-amber-500 py-10">
+                                <Camera className="w-12 h-12" />
+                                <span className="text-xs font-black uppercase tracking-widest">Tap to add a meal photo</span>
+                                <input type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+                            </label>
                         )}
                     </div>
                 </div>
