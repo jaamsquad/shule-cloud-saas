@@ -258,12 +258,32 @@ function permsToModules(perms) {
     const modules = new Set(['dashboard']);
     for (const code of perms) {
         // A raw module key passed through directly (forward-compatible).
-        if (!code.includes('.'))
+        if (!code.includes('.')) {
             modules.add(code);
-        (CODE_TO_MODULES[code] || []).forEach(m => modules.add(m));
+            continue;
+        }
+        const mapped = CODE_TO_MODULES[code];
+        if (mapped) {
+            mapped.forEach(m => modules.add(m));
+            continue;
+        }
+        // Page-level permission convention "<moduleKey>.<page>" → reveal the
+        // module if the prefix is a known sidebar module key.
+        const prefix = code.split('.')[0];
+        if (KNOWN_MODULE_KEYS.has(prefix))
+            modules.add(prefix);
     }
     return Array.from(modules);
 }
+// Every sidebar module key — page-perms "<moduleKey>.<page>" map to these.
+const KNOWN_MODULE_KEYS = new Set([
+    'dashboard', 'settings', 'classes', 'subjects', 'students', 'employees',
+    'accounts', 'fees', 'salary', 'transport', 'attendance', 'cafeteria',
+    'sports', 'trips', 'frontdesk', 'secretary', 'reports', 'timetable',
+    'academic_system', 'academics_content', 'behaviour', 'certificates',
+    'hostel', 'library', 'pos', 'communications', 'live_class', 'question_paper',
+    'exams',
+]);
 // ── Shared CRUD-enforcement middleware ───────────────────────────────────────
 // Blocks create/update/delete unless the caller's role/staff CRUD matrix grants
 // the action for the module. Admins always pass; reads (GET) are never gated.

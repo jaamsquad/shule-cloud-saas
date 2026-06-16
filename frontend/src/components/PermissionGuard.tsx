@@ -2,6 +2,26 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Loader2 } from "lucide-react";
+import { navItems } from "@/components/AppSidebar";
+
+// Resolve the current path to its sidebar group + child page-perm (longest path match).
+function resolvePagePerm(pathname: string): { moduleKey?: string; pagePerm?: string; groupChildren: { pagePerm?: string }[] } {
+    let best: any = { moduleKey: undefined, pagePerm: undefined, groupChildren: [] };
+    let bestLen = -1;
+    for (const group of navItems) {
+        if (!group.children) continue;
+        for (const child of group.children) {
+            if (!child.path || child.path === "/logout" || child.path.startsWith("http")) continue;
+            const exact = pathname === child.path;
+            const prefix = pathname.startsWith(child.path + "/");
+            if ((exact || prefix) && child.path.length > bestLen) {
+                bestLen = child.path.length;
+                best = { moduleKey: group.moduleKey, pagePerm: (child as any).pagePerm, groupChildren: group.children };
+            }
+        }
+    }
+    return best;
+}
 
 // ─── Route → Module key mapping ──────────────────────────────────────────────
 const ROUTE_MODULE_MAP: Record<string, string> = {
@@ -114,7 +134,7 @@ interface Props {
  * Admin roles bypass all checks.
  */
 export default function PermissionGuard({ children, moduleKey }: Props) {
-    const { modules, isAdmin, loaded } = usePermissions();
+    const { modules, permissions, isAdmin, loaded } = usePermissions();
     const location = useLocation();
 
     // Admins always have access — no check needed
@@ -134,6 +154,23 @@ export default function PermissionGuard({ children, moduleKey }: Props) {
     if (!isAllowed && loaded) {
         // Permissions fully loaded and this module is NOT in the list → deny
         return <Navigate to="/access-denied" replace state={{ from: location.pathname, module: resolvedKey }} />;
+    }
+
+    // ── Page-level enforcement ───────────────────────────────────────────────
+    // If the user is in fine-grained mode for this page's group (holds at least
+    // one of the group's page-perms) but lacks THIS page's perm, deny direct nav.
+    if (loaded && isAllowed) {
+        const granted = permissions || [];
+        if (!granted.includes("*")) {
+            const { pagePerm, groupChildren } = resolvePagePerm(location.pathname);
+            if (pagePerm) {
+                const groupPagePerms = (groupChildren || []).map((c) => c.pagePerm).filter(Boolean) as string[];
+                const fineGrained = groupPagePerms.some((p) => granted.includes(p));
+                if (fineGrained && !granted.includes(pagePerm)) {
+                    return <Navigate to="/access-denied" replace state={{ from: location.pathname, page: pagePerm }} />;
+                }
+            }
+        }
     }
 
     if (!isAllowed && !loaded) {

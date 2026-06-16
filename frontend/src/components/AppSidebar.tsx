@@ -309,6 +309,42 @@ export const navItems: NavItem[] = [
   ] },
 ];
 
+// ── Auto-assign a page-level permission code to every group child ─────────────
+// pagePerm = "<moduleKey>.<page-slug>". This makes EVERY page in EVERY group
+// individually grantable in the Roles editor — no per-page hand-editing needed.
+// An explicit pagePerm on a child (e.g. Students) is preserved.
+const pageSlug = (label: string, path: string) => {
+  const base = (label || path).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/(^_|_$)/g, "");
+  return base || path.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+};
+navItems.forEach((group) => {
+  if (!group.children || !group.moduleKey) return;
+  group.children.forEach((child) => {
+    if (child.pagePerm) return;                    // keep explicit ones
+    if (child.path === "/logout" || child.path.startsWith("http")) return;
+    child.pagePerm = `${group.moduleKey}.${pageSlug(child.label, child.path)}`;
+  });
+});
+
+// All page-perms grouped by their sidebar group — drives the Roles editor's
+// fine-grained "Pages" section and the backend module mapping.
+export const PAGE_PERMISSIONS: { group: string; moduleKey: string; perms: { code: string; name: string }[] }[] =
+  navItems
+    .filter((n) => n.children && n.moduleKey && n.label !== "Dashboard")
+    .map((n) => ({
+      group: n.label,
+      moduleKey: n.moduleKey as string,
+      perms: (n.children || [])
+        .filter((c) => c.pagePerm && c.path !== "/logout" && !c.path.startsWith("http"))
+        .map((c) => ({ code: c.pagePerm as string, name: c.label })),
+    }))
+    .filter((g) => g.perms.length > 0);
+
+// Flat code → moduleKey map (used by the frontend; backend has its own copy).
+export const PAGE_PERM_TO_MODULE: Record<string, string> = Object.fromEntries(
+  PAGE_PERMISSIONS.flatMap((g) => g.perms.map((p) => [p.code, g.moduleKey]))
+);
+
 // Every group's overview dashboard, as { label, path } — used by the staff form's
 // "Default Landing Page" picker so a user can be landed on any group dashboard.
 export const groupDashboardOptions = (): { label: string; path: string }[] =>

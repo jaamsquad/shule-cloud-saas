@@ -2,10 +2,13 @@
 // Permission codes are grouped for the role editor. "*" is a wildcard that
 // grants everything (used by Super Admin / Principal).
 
+import { PAGE_PERMISSIONS } from "@/components/AppSidebar";
+
 export interface Perm { code: string; name: string }
 export interface PermGroup { group: string; perms: Perm[] }
 
-export const PERMISSION_GROUPS: PermGroup[] = [
+// High-level/module permissions (control whole modules & broad capabilities).
+const MODULE_PERMISSION_GROUPS: PermGroup[] = [
     { group: "Finance", perms: [
         { code: "finance.view", name: "View Finance" },
         { code: "finance.payments", name: "Record Payments / Receipts" },
@@ -38,25 +41,6 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "students.view", name: "View Students" },
         { code: "students.manage", name: "Manage Students" },
         { code: "admissions.manage", name: "Admissions" },
-    ]},
-    // Page-level grants: tick only the Students pages a user may open. Granting
-    // any of these restricts the Students menu to just the ticked pages.
-    { group: "Student Pages (fine-grained)", perms: [
-        { code: "students.all", name: "All Students" },
-        { code: "students.wallets", name: "Student Wallets" },
-        { code: "students.add", name: "Add New Student" },
-        { code: "students.admissions", name: "Admissions" },
-        { code: "students.families", name: "Manage Families" },
-        { code: "students.promote", name: "Promote Students" },
-        { code: "students.transfer", name: "Transfer Management" },
-        { code: "students.discipline", name: "Discipline Records" },
-        { code: "students.medical", name: "Medical Records" },
-        { code: "students.documents", name: "Student Documents" },
-        { code: "students.id_cards", name: "Student ID Cards" },
-        { code: "students.id_studio", name: "ID Card Studio" },
-        { code: "students.admission_letter", name: "Admission Letter" },
-        { code: "students.manage_login", name: "Manage Login" },
-        { code: "students.parent_login", name: "Parent Login" },
     ]},
     { group: "Staff & HR", perms: [
         { code: "staff.view", name: "View Staff" },
@@ -109,6 +93,16 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "roles.manage", name: "Manage Roles & Permissions" },
     ]},
 ];
+
+// Fine-grained per-page permission groups, auto-generated from the sidebar so
+// every page in every group is individually grantable. Labelled "<Group> — Pages".
+const PAGE_PERMISSION_GROUPS: PermGroup[] = PAGE_PERMISSIONS.map((g) => ({
+    group: `${g.group} — Pages`,
+    perms: g.perms,
+}));
+
+// The full catalog shown in the Roles editor = module-level + per-page groups.
+export const PERMISSION_GROUPS: PermGroup[] = [...MODULE_PERMISSION_GROUPS, ...PAGE_PERMISSION_GROUPS];
 
 export const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.perms.map(p => p.code));
 export const permName = (code: string) => PERMISSION_GROUPS.flatMap(g => g.perms).find(p => p.code === code)?.name || code;
