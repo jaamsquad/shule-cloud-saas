@@ -1,20 +1,34 @@
 import { Home, Search, Printer, FileText, Download, RotateCcw, Trash2, ChevronDown, Calendar, Loader2 } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
+
+const KSh = (n: any) => `KSh ${(parseFloat(n) || 0).toLocaleString()}`;
+const dval = (v: any) => (v ? new Date(v).getTime() : 0);
 
 export default function AccountStatement() {
     const { items: income, isLoading: loadingIncome } = useItems("income");
     const { items: expenses, isLoading: loadingExpenses } = useItems("expenses");
+    // Fee payments count as real income on the statement.
+    const { data: feeTxns = [] } = useQuery({ queryKey: ["acct_fee_txns"], queryFn: async () => { const r = await api.get("/transactions"); return Array.isArray(r.data) ? r.data : []; } });
 
     const isLoading = loadingIncome || loadingExpenses;
 
-    // Combine and sort by date
-    const statement = [
-        ...income.map((i: any) => ({ ...i, type: 'income' })),
-        ...expenses.map((e: any) => ({ ...e, type: 'expense' }))
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const feeIncome = feeTxns.map((t: any) => ({ date: t.date || t.createdAt, description: `Fee Payment — ${t.studentName || "Student"}`, amount: Number(t.amount || t.paidAmount || 0), type: "income" }));
 
-    const totalIncome = income.reduce((acc: number, i: any) => acc + (parseFloat(i.amount) || 0), 0);
-    const totalExpense = expenses.reduce((acc: number, e: any) => acc + (parseFloat(e.amount) || 0), 0);
+    // Build the ledger oldest→newest for a running balance, then display newest first.
+    const ledger = [
+        ...income.map((i: any) => ({ ...i, type: "income" })),
+        ...feeIncome,
+        ...expenses.map((e: any) => ({ ...e, type: "expense" })),
+    ].sort((a, b) => dval(a.date) - dval(b.date));
+
+    let running = 0;
+    const withBalance = ledger.map((r: any) => { running += r.type === "income" ? (parseFloat(r.amount) || 0) : -(parseFloat(r.amount) || 0); return { ...r, balance: running }; });
+    const statement = [...withBalance].reverse();   // newest first for display
+
+    const totalIncome = income.reduce((a: number, i: any) => a + (parseFloat(i.amount) || 0), 0) + feeIncome.reduce((a: number, i: any) => a + (parseFloat(i.amount) || 0), 0);
+    const totalExpense = expenses.reduce((a: number, e: any) => a + (parseFloat(e.amount) || 0), 0);
     const netBalance = totalIncome - totalExpense;
 
     return (
@@ -107,11 +121,11 @@ export default function AccountStatement() {
                                 ) : (
                                     statement.map((row: any, idx) => (
                                         <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors text-sm text-gray-600 font-medium">
-                                            <td className="px-6 py-4">{new Date(row.date).toLocaleDateString()}</td>
-                                            <td className="px-6 py-4">{row.description}</td>
-                                            <td className="px-6 py-4 text-rose-500">{row.type === 'expense' ? `$ ${row.amount}` : '-'}</td>
-                                            <td className="px-6 py-4 text-emerald-500">{row.type === 'income' ? `$ ${row.amount}` : '-'}</td>
-                                            <td className="px-6 py-4 font-bold">$ {row.amount}</td>
+                                            <td className="px-6 py-4">{row.date ? new Date(row.date).toLocaleDateString() : "—"}</td>
+                                            <td className="px-6 py-4">{row.description || row.category || "—"}</td>
+                                            <td className="px-6 py-4 text-rose-500">{row.type === 'expense' ? KSh(row.amount) : '-'}</td>
+                                            <td className="px-6 py-4 text-emerald-500">{row.type === 'income' ? KSh(row.amount) : '-'}</td>
+                                            <td className={`px-6 py-4 font-bold ${row.balance < 0 ? "text-rose-600" : "text-slate-800"}`}>{KSh(row.balance)}</td>
                                         </tr>
                                     ))
                                 )}
@@ -119,9 +133,9 @@ export default function AccountStatement() {
                             <tfoot>
                                 <tr className="border-t border-gray-100 font-black text-gray-800">
                                     <td colSpan={2} className="px-6 py-4">TOTALS</td>
-                                    <td className="px-6 py-4 text-rose-600">$ {totalExpense}</td>
-                                    <td className="px-6 py-4 text-emerald-600">$ {totalIncome}</td>
-                                    <td className="px-6 py-4 bg-gray-50/50">$ {netBalance}</td>
+                                    <td className="px-6 py-4 text-rose-600">{KSh(totalExpense)}</td>
+                                    <td className="px-6 py-4 text-emerald-600">{KSh(totalIncome)}</td>
+                                    <td className={`px-6 py-4 bg-gray-50/50 ${netBalance < 0 ? "text-rose-600" : ""}`}>{KSh(netBalance)}</td>
                                 </tr>
                             </tfoot>
                         </table>

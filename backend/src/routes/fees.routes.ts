@@ -1,9 +1,9 @@
 ﻿import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
-const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
+const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Build a fee-invoice email (inline-styled HTML for email clients).
 const invoiceEmailHtml = (inv: any, student: any, schoolName: string) => {
@@ -119,7 +119,7 @@ const getSchoolId = (req: Request) => {
 // GET /schools/:sid/fee-structures
 router.get('/schools/:sid/fee-structures', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { academic_year_id, semester_id, class_id } = req.query;
 
@@ -138,7 +138,7 @@ router.get('/schools/:sid/fee-structures', async (req: Request, res: Response) =
 // POST /schools/:sid/fee-structures
 router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { name, academic_year_id, semester_id, class_ids, items, discount_type, discount_value } = req.body;
@@ -182,7 +182,7 @@ router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), async (req: Re
 // GET /schools/:sid/fee-structures/:id
 router.get('/schools/:sid/fee-structures/:id', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const structure = await db.collection('fee_structures').findOne({
             $or: [{ _id: new ObjectId(req.params.id), schoolId }, { _id: new ObjectId(req.params.id) }]
@@ -205,7 +205,7 @@ router.get('/schools/:sid/fee-structures/:id', async (req: Request, res: Respons
 // PUT /schools/:sid/fee-structures/:id
 router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { name, items, discount_type, discount_value, class_ids } = req.body;
 
@@ -248,7 +248,7 @@ router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (req:
 // DELETE /schools/:sid/fee-structures/:id
 router.delete('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const id = req.params.id;
 
@@ -288,7 +288,7 @@ router.delete('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (r
 // POST /schools/:sid/fee-structures/:id/duplicate
 router.post('/schools/:sid/fee-structures/:id/duplicate', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { name, academic_year_id, semester_id } = req.body;
@@ -682,7 +682,7 @@ router.post('/schools/:sid/invoices/bulk', requireRole('ADMIN'), async (req: Req
 // GET /schools/:sid/invoices/bulk/:job_id/status
 router.get('/schools/:sid/invoices/bulk/:job_id/status', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const job = await db.collection('bulk_jobs').findOne({ _id: new ObjectId(req.params.job_id) });
         if (!job) {
             return res.status(404).json({ data: null, meta: {}, errors: [{ code: 'NOT_FOUND', message: 'Bulk job not found' }] });
@@ -696,7 +696,7 @@ router.get('/schools/:sid/invoices/bulk/:job_id/status', async (req: Request, re
 // GET /schools/:sid/fees/invoice-jobs
 router.get('/schools/:sid/fees/invoice-jobs', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const jobs = await db.collection('bulk_jobs').find({ schoolId }).sort({ createdAt: -1 }).toArray();
         res.json({ data: jobs, meta: {}, errors: [] });
@@ -708,7 +708,7 @@ router.get('/schools/:sid/fees/invoice-jobs', async (req: Request, res: Response
 // POST /schools/:sid/fees/invoice-jobs/precheck — how many target students already have an active invoice this term
 router.post('/schools/:sid/fees/invoice-jobs/precheck', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-        const metaDb = getMetaDb();
+        const metaDb = getRequestDb(req);
         const tenantDb = (req as any).tenantDb || metaDb;
         const schoolId = getSchoolId(req);
         const { class_ids, academic_year_id, semester_id } = req.body;
@@ -718,7 +718,7 @@ router.post('/schools/:sid/fees/invoice-jobs/precheck', requireRole('ADMIN'), as
         const list = Array.from(norm);
         const students = await tenantDb.collection('students').find({ $or: [{ studentClass: { $in: list } }, { currentClass: { $in: list } }] }).toArray();
         const ids = students.map((s: any) => s._id.toString());
-        const existing = ids.length ? await metaDb.collection('invoices').countDocuments({ schoolId, student_id: { $in: ids }, academic_year_id, semester_id, status: { $ne: 'VOIDED' } }) : 0;
+        const existing = ids.length ? await tenantDb.collection('invoices').countDocuments({ schoolId, student_id: { $in: ids }, academic_year_id, semester_id, status: { $ne: 'VOIDED' } }) : 0;
         res.json({ data: { totalStudents: students.length, existing } });
     } catch (e: any) { res.status(500).json({ data: null, errors: [{ message: e.message }] }); }
 });
@@ -726,7 +726,7 @@ router.post('/schools/:sid/fees/invoice-jobs/precheck', requireRole('ADMIN'), as
 // POST /schools/:sid/fees/invoice-jobs
 router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const tenantDb = (req as any).tenantDb || db;   // students & fee_structures live here
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
@@ -831,7 +831,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     }
 
                     // Check if invoice already exists for this student, period, and structure (not voided)
-                    const existing = await db.collection('invoices').findOne({
+                    const existing = await tenantDb.collection('invoices').findOne({
                         schoolId,
                         student_id: student._id.toString(),
                         academic_year_id,
@@ -842,7 +842,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     if (existing) {
                         if (mode === 'overwrite') {
                             // Void the old invoice so the new one replaces it for this term.
-                            await db.collection('invoices').updateOne({ _id: existing._id }, { $set: { status: 'VOIDED', voidedAt: new Date(), voidedReason: 'Replaced by bulk re-generation' } });
+                            await tenantDb.collection('invoices').updateOne({ _id: existing._id }, { $set: { status: 'VOIDED', voidedAt: new Date(), voidedReason: 'Replaced by bulk re-generation' } });
                         } else {
                             processed_count++;
                             const progress = Math.round((processed_count / total_count) * 100);
@@ -885,7 +885,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     }
                     
                     const total_due = Math.max(0, subtotal - discount_amount);
-                    const invoice_no = await getNextInvoiceNo(db, schoolId);
+                    const invoice_no = await getNextInvoiceNo(tenantDb, schoolId);
 
                     const invoice = {
                         _id: new ObjectId(),
@@ -911,7 +911,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                         updatedAt: new Date().toISOString()
                     };
 
-                    await db.collection('invoices').insertOne(invoice);
+                    await tenantDb.collection('invoices').insertOne(invoice);
 
                     processed_count++;
                     const progress = Math.round((processed_count / total_count) * 100);
@@ -942,7 +942,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
 // GET /schools/:sid/invoices/:id
 router.get('/schools/:sid/invoices/:id', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);   // invoices + students live in the tenant DB
         const schoolId = getSchoolId(req);
         const doc = await db.collection('invoices').findOne({ _id: new ObjectId(req.params.id), $or: [{ schoolId }, { schoolId: { $exists: false } }] });
 
@@ -985,7 +985,7 @@ router.get('/schools/:sid/invoices/:id', async (req: Request, res: Response) => 
 // POST /schools/:sid/invoices/:id/remind — send a fee reminder via SMS / Email / WhatsApp
 router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Response) => {
     try {
-        const metaDb = getMetaDb();
+        const metaDb = getRequestDb(req);
         const tenantDb = (req as any).tenantDb || metaDb;
         const channel = String(req.body?.channel || 'sms').toLowerCase();
         const invoice = await metaDb.collection('invoices').findOne({ _id: new ObjectId(req.params.id) }).catch(() => null);
@@ -1018,7 +1018,7 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
 // PUT /schools/:sid/invoices/:id
 router.put('/schools/:sid/invoices/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);   // invoices live in the tenant DB
         const schoolId = getSchoolId(req);
         if (!ObjectId.isValid(req.params.id)) {
             return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'INVALID_ID', message: 'This invoice has not been generated yet. Generate it first, then edit.' }] });
@@ -1105,7 +1105,7 @@ router.put('/schools/:sid/invoices/:id', requireRole('ADMIN'), async (req: Reque
 // GET /schools/:sid/invoices/:id/pdf
 router.get('/schools/:sid/invoices/:id/pdf', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const doc = await db.collection('invoices').findOne({ _id: new ObjectId(req.params.id), $or: [{ schoolId }, { schoolId: { $exists: false } }] });
         if (!doc) return res.status(404).send('Invoice not found');
@@ -1412,7 +1412,7 @@ router.get('/schools/:sid/invoices/:id/word', async (req: Request, res: Response
 // POST /schools/:sid/invoices/:id/send
 router.post('/schools/:sid/invoices/:id/send', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { channels } = req.body;
 
@@ -1432,7 +1432,7 @@ router.post('/schools/:sid/invoices/:id/send', requireRole('ADMIN'), async (req:
 // GET /schools/:sid/invoices/preview
 router.get('/schools/:sid/invoices/preview', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { student_id, fee_structure_id } = req.query;
 
@@ -1486,7 +1486,7 @@ const getNextReceiptNo = async (db: any, schoolId: string) => {
 // GET /schools/:sid/payments
 router.get('/schools/:sid/payments', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { student_id, invoice_id, method, from, to, collected_by, is_voided, page = 1, limit = 20 } = req.query;
 
@@ -1546,7 +1546,7 @@ router.get('/schools/:sid/payments', async (req: Request, res: Response) => {
 // POST /schools/:sid/payments
 router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { invoice_id, amount, method, reference, payment_date, remarks } = req.body;
@@ -1636,7 +1636,7 @@ router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request,
 // GET /schools/:sid/payments/:id
 router.get('/schools/:sid/payments/:id', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const payment = await db.collection('payments').findOne({ _id: new ObjectId(req.params.id), schoolId });
         if (!payment) return res.status(404).json({ data: null, meta: {}, errors: [{ code: 'NOT_FOUND', message: 'Payment transaction not found' }] });
@@ -1651,7 +1651,7 @@ router.get('/schools/:sid/payments/:id', async (req: Request, res: Response) => 
 // PUT /schools/:sid/payments/:id
 router.put('/schools/:sid/payments/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { reference, remarks } = req.body;
 
@@ -1675,7 +1675,7 @@ router.put('/schools/:sid/payments/:id', requireRole('ADMIN'), async (req: Reque
 // GET /schools/:sid/payments/:id/receipt
 router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const payment = await db.collection('payments').findOne({ _id: new ObjectId(req.params.id), schoolId });
         if (!payment) return res.status(404).send('Receipt not found');
@@ -1825,7 +1825,7 @@ router.get('/schools/:sid/payments/:id/receipt/word', async (req: Request, res: 
 // POST /schools/:sid/payments/:id/send-receipt
 router.post('/schools/:sid/payments/:id/send-receipt', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { channels } = req.body;
 
@@ -1845,7 +1845,7 @@ router.post('/schools/:sid/payments/:id/send-receipt', requireRole('ADMIN'), asy
 // GET /schools/:sid/students/:student_id/fee-summary
 router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const tenantDb = (req as any).tenantDb || db;   // students live in the tenant DB
         const schoolId = getSchoolId(req);
         const studentId = req.params.student_id;
@@ -1918,7 +1918,7 @@ router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request
 // GET /schools/:sid/receipts
 router.get('/schools/:sid/receipts', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const tenantDb = (req as any).tenantDb || db;   // students live here
         const schoolId = getSchoolId(req);
         const { student_id, invoice_id, receipt_no, from, to, method, page = 1, limit = 20 } = req.query;
@@ -2004,7 +2004,7 @@ router.get('/schools/:sid/receipts', async (req: Request, res: Response) => {
 // GET /schools/:sid/receipts/:receipt_no/pdf
 router.get('/schools/:sid/receipts/:receipt_no/pdf', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const payment = await db.collection('payments').findOne({ receipt_no: req.params.receipt_no, schoolId });
         if (!payment) return res.status(404).send('Receipt not found');
@@ -2026,7 +2026,7 @@ router.get('/schools/:sid/receipts/:receipt_no/word', async (req: Request, res: 
 // POST /schools/:sid/receipts/:receipt_no/email
 router.post('/schools/:sid/receipts/:receipt_no/email', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { email } = req.body;
 
@@ -2057,7 +2057,7 @@ router.get('/schools/:sid/receipts/export', async (req: Request, res: Response) 
 // GET /schools/:sid/fees/defaulters
 router.get('/schools/:sid/fees/defaulters', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { academic_year_id, semester_id, class_ids, min_balance = 0, min_days_overdue = 0, page = 1, limit = 50, sort_by = 'balance', sort_dir = 'DESC' } = req.query;
 
@@ -2170,7 +2170,7 @@ router.get('/schools/:sid/fees/defaulters/export', async (req: Request, res: Res
 // POST /schools/:sid/fees/defaulters/sms
 router.post('/schools/:sid/fees/defaulters/sms', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { invoice_ids, template } = req.body;
 
@@ -2195,7 +2195,7 @@ router.post('/schools/:sid/fees/defaulters/sms', requireRole('ADMIN'), async (re
 
 router.get('/schools/:sid/fees/report', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { academic_year_id, semester_id, class_ids, category, method, from, to } = req.query;
 
@@ -2293,7 +2293,7 @@ router.get('/schools/:sid/fees/report/summary', requireRole('ADMIN'), async (req
 
 router.get('/schools/:sid/fees/report/class/:class_id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const classId = req.params.class_id;
 
@@ -2325,7 +2325,7 @@ router.get('/schools/:sid/fees/report/class/:class_id', requireRole('ADMIN'), as
 // PATCH /schools/:sid/invoices/:id/void
 router.patch('/schools/:sid/invoices/:id/void', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { reason } = req.body;
@@ -2379,7 +2379,7 @@ router.patch('/schools/:sid/invoices/:id/void', requireRole('ADMIN'), async (req
 // PATCH /schools/:sid/invoices/:id/waive
 router.patch('/schools/:sid/invoices/:id/waive', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { reason } = req.body;
@@ -2429,7 +2429,7 @@ router.patch('/schools/:sid/invoices/:id/waive', requireRole('ADMIN'), async (re
 // DELETE /schools/:sid/invoices/:id (🔒 SUPERADMIN hard delete)
 router.delete('/schools/:sid/invoices/:id', requireRole('SUPERADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { reason, password } = req.body;
@@ -2477,7 +2477,7 @@ router.delete('/schools/:sid/invoices/:id', requireRole('SUPERADMIN'), async (re
 // POST /schools/:sid/invoices/bulk-void
 router.post('/schools/:sid/invoices/bulk-void', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { invoice_ids, reason } = req.body;
@@ -2523,7 +2523,7 @@ router.post('/schools/:sid/invoices/bulk-void', requireRole('ADMIN'), async (req
 // POST /schools/:sid/invoices/bulk-waive
 router.post('/schools/:sid/invoices/bulk-waive', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { invoice_ids, reason } = req.body;
@@ -2565,7 +2565,7 @@ router.post('/schools/:sid/invoices/bulk-waive', requireRole('ADMIN'), async (re
 // PATCH /schools/:sid/payments/:id/void
 router.patch('/schools/:sid/payments/:id/void', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { reason } = req.body;
@@ -2618,7 +2618,7 @@ router.patch('/schools/:sid/payments/:id/void', requireRole('ADMIN'), async (req
 // DELETE /schools/:sid/payments/:id (🔒 SUPERADMIN hard delete payment)
 router.delete('/schools/:sid/payments/:id', requireRole('SUPERADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { reason, password } = req.body;
@@ -2675,7 +2675,7 @@ router.delete('/schools/:sid/payments/:id', requireRole('SUPERADMIN'), async (re
 // GET /schools/:sid/fees/audit-log
 router.get('/schools/:sid/fees/audit-log', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { action, entity_type, from, to, page = 1, limit = 20 } = req.query;
 
@@ -2718,7 +2718,7 @@ router.get('/schools/:sid/fees/audit-log', requireRole('ADMIN'), async (req: Req
 // GET /schools/:sid/fees/dashboard
 router.get('/schools/:sid/fees/dashboard', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         
         const today = new Date().toISOString().split('T')[0];
@@ -2772,7 +2772,7 @@ router.get('/schools/:sid/fees/dashboard', async (req: Request, res: Response) =
 // GET /schools/:sid/fees/settings
 router.get('/schools/:sid/fees/settings', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         
         let settings: any = await db.collection('fees_settings').findOne({ schoolId });
@@ -2799,7 +2799,7 @@ router.get('/schools/:sid/fees/settings', async (req: Request, res: Response) =>
 // PUT /schools/:sid/fees/settings
 router.put('/schools/:sid/fees/settings', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         
         const result = await db.collection('fees_settings').findOneAndUpdate(
@@ -2817,7 +2817,7 @@ router.put('/schools/:sid/fees/settings', requireRole('ADMIN'), async (req: Requ
 // GET /schools/:sid/fees/next-invoice-no
 router.get('/schools/:sid/fees/next-invoice-no', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const next_no = await getNextInvoiceNo(db, schoolId);
         res.json({ data: { next_no }, meta: {}, errors: [] });
@@ -2829,7 +2829,7 @@ router.get('/schools/:sid/fees/next-invoice-no', async (req: Request, res: Respo
 // GET /schools/:sid/fees/next-receipt-no
 router.get('/schools/:sid/fees/next-receipt-no', async (req: Request, res: Response) => {
     try {
-    const db = getMetaDb();
+    const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const next_no = await getNextReceiptNo(db, schoolId);
         res.json({ data: { next_no }, meta: {}, errors: [] });

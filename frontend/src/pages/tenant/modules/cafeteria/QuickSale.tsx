@@ -138,7 +138,7 @@ export default function QuickSale() {
                         {!bothMode && <p className="text-[10px] font-black text-slate-400 uppercase mb-2 text-center">{payMode === "wallet" ? "Charged to student wallet" : "Included in fees"}</p>}
 
                         <div className="flex items-center justify-between mb-3"><span className="text-xs font-black text-slate-400 uppercase">Total</span><span className="text-2xl font-black text-emerald-600">KES {total.toLocaleString()}</span></div>
-                        <button onClick={() => sale.mutate()} disabled={cart.length === 0 || sale.isPending || (payMode === "wallet" && !student)}
+                        <button onClick={() => sale.mutate(student?._code || code)} disabled={cart.length === 0 || sale.isPending || (payMode === "wallet" && !student)}
                             className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-sm uppercase tracking-widest rounded-xl flex items-center justify-center gap-2">
                             {sale.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Complete Sale
                         </button>

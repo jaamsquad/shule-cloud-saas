@@ -1,27 +1,50 @@
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
+import { ensureWallet, debitWallet } from '../services/wallet.service';
 
 const router = Router();
 const getDb = (req: Request) => (req as any).tenantDb;
 const today = () => new Date().toISOString().slice(0, 10);
 
-const resolveStudent = async (db: any, code: string) =>
-    db.collection('students').findOne({ $or: [{ registrationNo: code }, { admNo: code }, { portalUsername: code }, { studentId: code }] });
+// Resolve a scanned value: admission/reg no, portal username, or a WALLET code (SCW…/WAL-…).
+const resolveStudent = async (db: any, code: string) => {
+    const c = String(code || '').trim();
+    if (!c) return null;
+    let s = await db.collection('students').findOne({ $or: [{ registrationNo: c }, { admNo: c }, { portalUsername: c }, { studentId: c }] });
+    if (s) return s;
+    if (/^(SCW|WAL-)/i.test(c)) {
+        const w = await db.collection('wallets').findOne({ code: { $regex: `^${c}$`, $options: 'i' } });
+        if (w?.studentId) { try { s = await db.collection('students').findOne({ _id: new ObjectId(w.studentId) }); } catch { /* */ } if (s) return s; }
+        // Deterministic fallback: SCW = SCW + last 6 of the student _id.
+        const suffix = c.replace(/^(SCW|WAL-)/i, '').toLowerCase();
+        if (suffix.length === 6) {
+            const all = await db.collection('students').find({}, { projection: { _id: 1 } }).toArray();
+            const hit = all.find((x: any) => String(x._id).slice(-6).toLowerCase() === suffix);
+            if (hit) s = await db.collection('students').findOne({ _id: hit._id });
+        }
+    }
+    return s;
+};
 
-const studentCard = (s: any) => ({
-    id: String(s._id), name: s.studentName || s.name,
-    admissionNo: s.registrationNo || s.admNo || '',
-    class: s.studentClass || '', boarding: s.boarding || s.residence || s.boardingStatus || 'Day Scholar',
-    photo: s.photo || s.studentPhoto || s.avatar || s.image || null,
-    walletBalance: Number(s.walletBalance || 0),
-});
+const studentCard = async (db: any, s: any) => {
+    const w = await ensureWallet(db, String(s._id)).catch(() => null);
+    return {
+        id: String(s._id), name: s.studentName || s.name,
+        admissionNo: s.registrationNo || s.admNo || '',
+        class: s.studentClass || '', boarding: s.boarding || s.residence || s.boardingStatus || 'Day Scholar',
+        photo: s.photo || s.studentPhoto || s.avatar || s.image || null,
+        walletCode: w?.code || `SCW${String(s._id).slice(-6).toUpperCase()}`,
+        walletBalance: Number(w?.balance ?? s.walletBalance ?? 0),
+    };
+};
 
 // ── Kitchen: look up a scanned student (no serve yet) ─────────────────────────
 router.get('/cafeteria/student/:code', async (req, res) => {
     try {
-        const s = await resolveStudent(getDb(req), String(req.params.code).trim());
+        const db = getDb(req);
+        const s = await resolveStudent(db, String(req.params.code).trim());
         if (!s) return res.status(404).json({ message: `No student found for "${req.params.code}"` });
-        res.json(studentCard(s));
+        res.json(await studentCard(db, s));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -42,7 +65,7 @@ router.post('/cafeteria/serve', async (req, res) => {
             mealType, date, time: new Date(), photo: photo || null, staffName: staffName || 'Kitchen Staff', createdAt: new Date(),
         };
         await db.collection('meal_services').insertOne(doc);
-        res.status(201).json({ ...doc, student: studentCard(student) });
+        res.status(201).json({ ...doc, student: await studentCard(db, student) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -95,11 +118,9 @@ router.post('/canteen/sale', async (req, res) => {
         let newBalance: number | null = null;
         if (mode === 'wallet') {
             if (!student) return res.status(400).json({ message: 'Scan a student card for wallet payment' });
-            const bal = Number(student.walletBalance || 0);
-            if (bal < total) return res.status(400).json({ message: `Insufficient wallet balance (KES ${bal.toLocaleString()})` });
-            newBalance = bal - total;
-            await db.collection('students').updateOne({ _id: student._id }, { $set: { walletBalance: newBalance } });
-            await db.collection('wallet_transactions').insertOne({ studentId: String(student._id), type: 'debit', amount: total, reason: 'Canteen purchase', balanceAfter: newBalance, createdAt: new Date() }).catch(() => { });
+            const itemList = items.map((i: any) => `${i.name}×${i.qty}`).join(', ');
+            const w = await debitWallet(db, String(student._id), total, { category: 'Canteen', description: `Canteen: ${itemList}`, reference: `CSALE-${Date.now().toString().slice(-7)}` });
+            newBalance = Number(w.balance);
         }
         // mode "fees" / "included" → no deduction, just recorded against the student
         const doc = {

@@ -122,6 +122,9 @@ export default function StudentIdCards() {
 function IdCard({ student, onUpload, isUploading, activeStyle }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string }) {
     const photo = student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto;
     const regNo = student.registrationNo || student.admNo || "—";
+    // Wallet code = SCW + last 6 of the student _id (deterministic) — scannable for canteen/wallet.
+    const walletCode = `SCW${String(student._id || "").slice(-6).toUpperCase()}`;
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(walletCode)}`;
 
     if (activeStyle === "Landscape") {
         return (
@@ -146,7 +149,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle }: { student: any,
                     </div>
                     <div className="flex items-end justify-between mt-2">
                         <div className="flex flex-col"><Barcode className="h-9 w-36 text-slate-800" /><span className="text-[8px] font-black text-slate-400 tracking-[0.2em] mt-0.5">{regNo}</span></div>
-                        <div className="bg-white border border-slate-100 p-1 rounded"><QrCode className="w-12 h-12 text-slate-900" /></div>
+                        <div className="bg-white border border-slate-100 p-1 rounded flex flex-col items-center"><img src={qrSrc} alt="wallet QR" className="w-12 h-12" /><span className="text-[6px] font-black text-slate-400 tracking-widest">{walletCode}</span></div>
                     </div>
                 </div>
             </div>
@@ -232,9 +235,9 @@ function IdCard({ student, onUpload, isUploading, activeStyle }: { student: any,
                         </div>
                     </div>
 
-                    {/* QR Code */}
-                    <div className="w-20 h-20 bg-white rounded-2xl border-2 border-slate-900 p-2 shadow-lg transform rotate-3 hover:rotate-0 transition-transform">
-                        <QrCode className="w-full h-full text-slate-900" />
+                    {/* QR Code (wallet — scannable at canteen) */}
+                    <div className="w-20 h-20 bg-white rounded-2xl border-2 border-slate-900 p-1.5 shadow-lg transform rotate-3 hover:rotate-0 transition-transform">
+                        <img src={qrSrc} alt="wallet QR" className="w-full h-full" />
                     </div>
                 </div>
             </div>
