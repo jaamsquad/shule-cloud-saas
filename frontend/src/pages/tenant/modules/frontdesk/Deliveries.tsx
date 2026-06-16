@@ -9,6 +9,7 @@ export default function Deliveries() {
             icon={<Package className="w-6 h-6" />}
             endpoint="/deliveries"
             queryKey="deliveries_list"
+            moduleKey="frontdesk"
             addLabel="Log Delivery"
             fields={[
                 { key: "item", label: "Item", required: true, placeholder: "Textbooks / Parcel" },

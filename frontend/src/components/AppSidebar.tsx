@@ -140,7 +140,7 @@ export const navItems: NavItem[] = [
       { label: "Students Attendance Report", path: "/attendance/reports/students" },
       { label: "Employees Attendance Report", path: "/attendance/reports/employees" },
   ] },
-  { label: "Cafeteria", icon: Utensils, moduleKey: "students", children: [
+  { label: "Cafeteria", icon: Utensils, moduleKey: "cafeteria", children: [
       { label: "Meal Service (Kitchen)", path: "/cafeteria/meal-service" },
       { label: "Weekly Meal Menu", path: "/cafeteria/menu" },
       { label: "Meal History", path: "/cafeteria/meal-history" },
@@ -199,7 +199,7 @@ export const navItems: NavItem[] = [
       { label: "Generate For Class", path: "/timetable/class" },
       { label: "Generate For Teacher", path: "/timetable/teacher" },
   ] },
-  { label: "Academic System", icon: BookMarked, moduleKey: "exams", children: [
+  { label: "Academic System", icon: BookMarked, moduleKey: "academic_system", children: [
       { label: "Academic Years & Terms", path: "/academic-system/years" },
       { label: "Classes & Streams", path: "/academic-system/classes" },
       { label: "Student Enrollments", path: "/academic-system/enrollments" },

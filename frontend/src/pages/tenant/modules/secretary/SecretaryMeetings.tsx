@@ -9,6 +9,7 @@ export default function SecretaryMeetings() {
             icon={<CalendarClock className="w-6 h-6" />}
             endpoint="/secretary-meetings"
             queryKey="secretary_meetings"
+            moduleKey="secretary"
             addLabel="Schedule Meeting"
             fields={[
                 { key: "title", label: "Title", required: true, placeholder: "Term 1 Staff Meeting" },

@@ -9,9 +9,10 @@ export default function SportsPerformance() {
             icon={<Award className="w-6 h-6" />}
             endpoint="/sports-performance"
             queryKey="sports_performance"
+            moduleKey="sports"
             addLabel="Add Achievement"
             fields={[
-                { key: "studentName", label: "Student", required: true },
+                { key: "studentName", label: "Student", type: "studentSelect", required: true },
                 { key: "sportName", label: "Sport", required: true, placeholder: "Athletics" },
                 { key: "achievement", label: "Achievement", required: true, placeholder: "Gold Medal / MVP" },
                 { key: "metric", label: "Metric", type: "select", options: ["Goals", "Medal", "Ranking", "Award"] },

@@ -9,6 +9,7 @@ export default function Appointments() {
             icon={<CalendarClock className="w-6 h-6" />}
             endpoint="/appointments"
             queryKey="appointments_list"
+            moduleKey="frontdesk"
             addLabel="Book Appointment"
             fields={[
                 { key: "visitorName", label: "Requested By", required: true },

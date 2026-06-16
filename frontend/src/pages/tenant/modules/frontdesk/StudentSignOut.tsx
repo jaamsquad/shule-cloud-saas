@@ -9,9 +9,10 @@ export default function StudentSignOut() {
             icon={<LogOut className="w-6 h-6" />}
             endpoint="/student-signouts"
             queryKey="student_signouts"
+            moduleKey="frontdesk"
             addLabel="Sign Out Student"
             fields={[
-                { key: "studentName", label: "Student", required: true },
+                { key: "studentName", label: "Student", type: "studentSelect", required: true, fillClassKey: "studentClass" },
                 { key: "studentClass", label: "Class" },
                 { key: "parentName", label: "Parent / Picking Person", required: true },
                 { key: "reason", label: "Reason", placeholder: "Medical / Family" },

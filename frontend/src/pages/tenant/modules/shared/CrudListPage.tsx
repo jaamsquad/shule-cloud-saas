@@ -3,14 +3,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { useModuleCrud } from "@/contexts/PermissionsContext";
 
 export type Field = {
     key: string;
     label: string;
-    type?: "text" | "number" | "date" | "select" | "textarea";
+    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect";
     options?: string[];
     placeholder?: string;
     required?: boolean;
+    // For studentSelect: also fill these form keys from the chosen student.
+    fillClassKey?: string;   // e.g. "studentClass"
+    fillIdKey?: string;      // e.g. "studentId"
 };
 
 export type Column = { key: string; label: string; render?: (row: any) => React.ReactNode };
@@ -21,7 +25,7 @@ export type Column = { key: string; label: string; render?: (row: any) => React.
  * DELETE /sports/:id.
  */
 export default function CrudListPage({
-    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New",
+    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New", moduleKey,
 }: {
     title: string;
     subtitle?: string;
@@ -31,8 +35,12 @@ export default function CrudListPage({
     fields: Field[];
     columns: Column[];
     addLabel?: string;
+    moduleKey?: string;   // gates create/delete buttons by the user's CRUD matrix
 }) {
     const qc = useQueryClient();
+    const moduleCrud = useModuleCrud(moduleKey || "__none__");
+    const canCreate = !moduleKey || moduleCrud.canCreate;
+    const canDelete = !moduleKey || moduleCrud.canDelete;
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState<Record<string, any>>({});
 
@@ -43,6 +51,25 @@ export default function CrudListPage({
             catch { return []; }
         },
     });
+
+    // Load real students only when a studentSelect field is present.
+    const needsStudents = fields.some((f) => f.type === "studentSelect");
+    const { data: students = [] } = useQuery({
+        queryKey: ["crud_students"],
+        enabled: needsStudents,
+        queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const pickStudent = (f: Field, id: string) => {
+        const s = students.find((x: any) => x._id === id);
+        if (!s) { setForm((p) => ({ ...p, [f.key]: "" })); return; }
+        const name = s.studentName || `${s.firstName || ""} ${s.lastName || ""}`.trim();
+        setForm((p) => ({
+            ...p,
+            [f.key]: name,
+            ...(f.fillClassKey ? { [f.fillClassKey]: s.studentClass || s.currentClass || "" } : {}),
+            ...(f.fillIdKey ? { [f.fillIdKey]: s._id } : {}),
+        }));
+    };
 
     const create = useMutation({
         mutationFn: async () => api.post(endpoint, form),
@@ -72,9 +99,11 @@ export default function CrudListPage({
                             {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
                         </div>
                     </div>
-                    <button onClick={() => setOpen(true)} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
-                        <Plus className="w-4 h-4" /> {addLabel}
-                    </button>
+                    {canCreate && (
+                        <button onClick={() => setOpen(true)} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
+                            <Plus className="w-4 h-4" /> {addLabel}
+                        </button>
+                    )}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -99,9 +128,11 @@ export default function CrudListPage({
                                             </td>
                                         ))}
                                         <td className="py-3 px-4">
-                                            <button onClick={() => remove.mutate(row._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                            {canDelete && (
+                                                <button onClick={() => remove.mutate(row._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -123,7 +154,18 @@ export default function CrudListPage({
                             {fields.map((f) => (
                                 <div key={f.key}>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-1">{f.label}{f.required && " *"}</label>
-                                    {f.type === "select" ? (
+                                    {f.type === "studentSelect" ? (
+                                        <select value={(students.find((s: any) => (s.studentName || `${s.firstName || ""} ${s.lastName || ""}`.trim()) === form[f.key]) || {})._id || ""}
+                                            onChange={(e) => pickStudent(f, e.target.value)}
+                                            className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
+                                            <option value="">Select student…</option>
+                                            {students.map((s: any) => {
+                                                const name = s.studentName || `${s.firstName || ""} ${s.lastName || ""}`.trim();
+                                                const adm = s.registrationNo || s.admNo || "";
+                                                return <option key={s._id} value={s._id}>{name}{adm ? ` (${adm})` : ""}</option>;
+                                            })}
+                                        </select>
+                                    ) : f.type === "select" ? (
                                         <select value={form[f.key] ?? ""} onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
                                             className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
                                             <option value="">Select…</option>

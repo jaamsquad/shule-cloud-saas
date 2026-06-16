@@ -9,6 +9,7 @@ export default function TripsManage() {
             icon={<MapPin className="w-6 h-6" />}
             endpoint="/trips"
             queryKey="trips_list"
+            moduleKey="trips"
             addLabel="Create Trip"
             fields={[
                 { key: "name", label: "Trip Name", required: true, placeholder: "Nairobi National Park Visit" },

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_ROLE_PERMISSIONS = void 0;
 exports.resolveStaffPermissions = resolveStaffPermissions;
+exports.resolveStaffCrud = resolveStaffCrud;
 exports.permsToModules = permsToModules;
 // Default role → permission map (mirrors the frontend catalog). Used when a role
 // has no explicit permissions configured in the `roles` collection yet.
@@ -89,28 +90,34 @@ async function resolveStaffPermissions(db, staff) {
 // member's granular permission codes (e.g. "finance.payments") must be mapped to
 // these module keys so the matching sidebar groups appear. One code can unlock
 // several modules. "dashboard" is always granted by the resolver below.
+// STRICT mapping: each permission code unlocks ONLY its own module(s). A module
+// appears in the sidebar only when a permission that directly governs it is held —
+// no broad "view" code reveals unrelated admin sections.
 const CODE_TO_MODULES = {
-    // Finance → Fees + Accounts
-    'finance.view': ['fees', 'accounts'],
+    // Finance → Fees only (Accounts has its own accounting.* codes)
+    'finance.view': ['fees'],
     'finance.payments': ['fees'],
     'finance.invoices': ['fees'],
-    'finance.wallet': ['fees', 'students'],
+    'finance.wallet': ['fees'],
     'finance.discounts': ['fees'],
-    'finance.reports': ['fees', 'reports'],
-    // Accounting → Accounts + Salary
+    'finance.reports': ['fees'],
+    // Accounting → Accounts; payroll → Salary
     'accounting.income': ['accounts'],
     'accounting.expenses': ['accounts'],
     'accounting.payroll': ['salary'],
     'accounting.budget': ['accounts'],
-    // Academics
-    'academics.view': ['classes', 'subjects', 'timetable', 'academics_content'],
+    // Academics — each section gated by its own code
+    'classes.view': ['classes'],
+    'subjects.view': ['subjects'],
+    'timetable.view': ['timetable'],
+    'academics.view': ['academic_system'],
     'exams.manage': ['exams'],
     'results.entry': ['exams'],
-    'results.view': ['exams', 'reports'],
+    'results.view': ['exams'],
     'content.manage': ['academics_content'],
     // Attendance
     'attendance.mark': ['attendance'],
-    'attendance.view': ['attendance', 'reports'],
+    'attendance.view': ['attendance'],
     // Students & admissions
     'students.view': ['students'],
     'students.manage': ['students'],
@@ -125,12 +132,12 @@ const CODE_TO_MODULES = {
     'boarding.manage': ['hostel'],
     'health.manage': ['students'],
     // Cafeteria
-    'cafeteria.serve': ['students'],
-    'cafeteria.menu': ['students'],
-    'cafeteria.history': ['students'],
-    'canteen.sell': ['students', 'pos'],
-    'canteen.transactions': ['students', 'pos'],
-    'canteen.settings': ['students'],
+    'cafeteria.serve': ['cafeteria'],
+    'cafeteria.menu': ['cafeteria'],
+    'cafeteria.history': ['cafeteria'],
+    'canteen.sell': ['cafeteria', 'pos'],
+    'canteen.transactions': ['cafeteria', 'pos'],
+    'canteen.settings': ['cafeteria'],
     // Sports
     'sports.view': ['sports'],
     'sports.manage': ['sports'],
@@ -157,6 +164,41 @@ const CODE_TO_MODULES = {
     'settings.manage': ['settings'],
     'roles.manage': ['settings'],
 };
+/**
+ * Resolve a staff member's effective CRUD matrix: union of crud maps from each of
+ * their roles (roles collection) plus the per-staff crud override. Shape:
+ *   { moduleKey: ['create','update','delete'] }
+ */
+async function resolveStaffCrud(db, staff) {
+    const roleNames = Array.from(new Set([
+        ...(Array.isArray(staff?.roles) ? staff.roles : []),
+        ...(staff?.designation ? [staff.designation] : []),
+    ].filter(Boolean)));
+    const merged = {};
+    const add = (map) => {
+        if (!map || typeof map !== 'object')
+            return;
+        for (const [mod, acts] of Object.entries(map)) {
+            if (!Array.isArray(acts))
+                continue;
+            merged[mod] = merged[mod] || new Set();
+            acts.forEach(a => merged[mod].add(a));
+        }
+    };
+    try {
+        // Case/space-insensitive name match so "Sports Manager" matches a derived
+        // "sports manager" designation.
+        const patterns = roleNames.map(n => new RegExp(`^\\s*${String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[_ ]/g, '[_ ]')}\\s*$`, 'i'));
+        const docs = await db.collection('roles').find({ $or: [{ name: { $in: roleNames } }, { name: { $in: patterns } }, { key: { $in: roleNames.map(n => String(n).toLowerCase().replace(/[^a-z0-9]+/g, '_')) } }] }).toArray();
+        docs.forEach((r) => add(r.crud));
+    }
+    catch { /* ignore */ }
+    add(staff?.crud); // per-staff override extends role crud
+    const out = {};
+    for (const [mod, set] of Object.entries(merged))
+        out[mod] = Array.from(set);
+    return out;
+}
 /**
  * Map a list of permission codes to the set of sidebar module keys to show.
  * "*" → wildcard (everything). "dashboard" is always included.

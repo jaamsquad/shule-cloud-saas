@@ -9,6 +9,7 @@ export default function Visitors() {
             icon={<DoorOpen className="w-6 h-6" />}
             endpoint="/visitors"
             queryKey="visitors_list"
+            moduleKey="frontdesk"
             addLabel="Sign In Visitor"
             fields={[
                 { key: "name", label: "Visitor Name", required: true },

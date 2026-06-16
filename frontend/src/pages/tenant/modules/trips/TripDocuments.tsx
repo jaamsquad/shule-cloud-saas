@@ -9,6 +9,7 @@ export default function TripDocuments() {
             icon={<FileText className="w-6 h-6" />}
             endpoint="/trip-documents"
             queryKey="trip_documents"
+            moduleKey="trips"
             addLabel="Add Document"
             fields={[
                 { key: "tripName", label: "Trip", required: true },

@@ -11,6 +11,9 @@ export default function StaffRoles() {
     const qc = useQueryClient();
     const [selected, setSelected] = useState<string>("Teacher");
     const [perms, setPerms] = useState<string[]>([]);
+    // CRUD matrix: { moduleKey: ["create","update","delete"] }. Read is implicit
+    // when the module is visible; admin grants create/update/delete explicitly.
+    const [crud, setCrud] = useState<Record<string, string[]>>({});
     const [addStaffId, setAddStaffId] = useState("");
     const [scope, setScope] = useState<"role" | "staff">("role");
     const [staffId, setStaffId] = useState("");
@@ -28,12 +31,31 @@ export default function StaffRoles() {
 
     const selectedStaff = useMemo(() => staff.find((s: any) => s._id === staffId), [staff, staffId]);
     useEffect(() => {
-        if (scope === "staff") setPerms((selectedStaff?.permissions as string[]) || []);
-        else setPerms(effectivePerms(selected));
+        if (scope === "staff") { setPerms((selectedStaff?.permissions as string[]) || []); setCrud((selectedStaff?.crud as Record<string, string[]>) || {}); }
+        else { setPerms(effectivePerms(selected)); setCrud((roleDoc?.crud as Record<string, string[]>) || {}); }
         /* eslint-disable-next-line */
     }, [scope, selected, staffId, roleDocs, staff]);
 
+    // Modules a user can act on, derived from the granted permission groups.
+    const CRUD_MODULES: { key: string; label: string }[] = [
+        { key: "students", label: "Students" }, { key: "employees", label: "Employees" },
+        { key: "classes", label: "Classes" }, { key: "subjects", label: "Subjects" },
+        { key: "fees", label: "Fees" }, { key: "accounts", label: "Accounts" },
+        { key: "exams", label: "Exams" }, { key: "attendance", label: "Attendance" },
+        { key: "sports", label: "Sports" }, { key: "trips", label: "Trips" },
+        { key: "frontdesk", label: "Front Desk" }, { key: "secretary", label: "Secretary" },
+        { key: "library", label: "Library" }, { key: "transport", label: "Transport" },
+        { key: "communications", label: "Communications" },
+    ];
+    const hasCrud = (mod: string, act: string) => isAllCrud || (crud[mod] || []).includes(act);
+    const toggleCrud = (mod: string, act: string) => setCrud(c => {
+        const cur = new Set(c[mod] || []);
+        cur.has(act) ? cur.delete(act) : cur.add(act);
+        return { ...c, [mod]: Array.from(cur) };
+    });
+
     const isAll = perms.includes("*");
+    const isAllCrud = isAll; // full-access roles get all CRUD everywhere
     const has = (c: string) => isAll || perms.includes(c);
     const toggle = (c: string) => setPerms(p => p.includes(c) ? p.filter(x => x !== c) : [...p.filter(x => x !== "*"), c]);
     const toggleAll = () => setPerms(isAll ? [] : ["*"]);
@@ -48,10 +70,10 @@ export default function StaffRoles() {
         mutationFn: async () => {
             if (scope === "staff") {
                 if (!staffId) throw new Error("Select a staff member first");
-                return api.patch(`/staff/${staffId}`, { permissions: perms });
+                return api.patch(`/staff/${staffId}`, { permissions: perms, crud });
             }
-            if (roleDoc?._id) return api.patch(`/roles/${roleDoc._id}`, { permissions: perms });
-            return api.post("/roles", { name: selected, key: slug(selected), permissions: perms });
+            if (roleDoc?._id) return api.patch(`/roles/${roleDoc._id}`, { permissions: perms, crud });
+            return api.post("/roles", { name: selected, key: slug(selected), permissions: perms, crud });
         },
         onSuccess: () => {
             toast.success(scope === "staff" ? `Permissions saved for ${selectedStaff?.employeeName || "staff"}` : `Permissions saved for ${selected}`);
@@ -170,6 +192,39 @@ export default function StaffRoles() {
                                     </div>
                                 );
                             })}
+                        </div>
+                    </div>
+
+                    {/* CRUD matrix — what this role/staff may create, update, delete per module */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                        <p className="text-xs font-black text-slate-500 uppercase mb-1">Create / Update / Delete</p>
+                        <p className="text-[11px] text-slate-400 mb-3">Viewing is allowed wherever a module is visible. Tick what this {scope === "staff" ? "staff member" : "role"} may also create, edit or delete. {isAllCrud && "Full-access roles have all actions."}</p>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead>
+                                    <tr className="text-[10px] font-black uppercase text-slate-400 tracking-wide border-b border-slate-100">
+                                        <th className="py-2 pr-3">Module</th>
+                                        <th className="py-2 px-2 text-center">Create</th>
+                                        <th className="py-2 px-2 text-center">Update</th>
+                                        <th className="py-2 px-2 text-center">Delete</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {CRUD_MODULES.map(m => (
+                                        <tr key={m.key} className="border-b border-slate-50">
+                                            <td className="py-2 pr-3 font-bold text-slate-700">{m.label}</td>
+                                            {["create", "update", "delete"].map(act => (
+                                                <td key={act} className="py-2 px-2 text-center">
+                                                    <button onClick={() => toggleCrud(m.key, act)} disabled={isAllCrud}
+                                                        className={`w-6 h-6 rounded-md border inline-flex items-center justify-center ${hasCrud(m.key, act) ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "bg-white border-slate-200 text-transparent hover:border-[#5C67F2]"} ${isAllCrud ? "opacity-60" : ""}`}>
+                                                        <Check className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 

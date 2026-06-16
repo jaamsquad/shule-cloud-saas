@@ -32,11 +32,61 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const mongodb_1 = require("mongodb");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const mongodb_2 = require("../lib/mongodb");
 const c = __importStar(require("../controllers/academics.controller"));
+const permissions_1 = require("../lib/permissions");
+// ── CRUD enforcement ─────────────────────────────────────────────────────────
+// Blocks create/update/delete unless the caller's role/staff CRUD matrix grants
+// the action for this module. Admins always pass. Read (GET) is never blocked.
+// The token is already authenticated by tenancy middleware upstream; here we only
+// read its claims (role/staffId) to authorize the action.
+const decodeClaims = (req) => {
+    try {
+        const auth = req.headers.authorization;
+        if (!auth)
+            return {};
+        return jsonwebtoken_1.default.decode(auth.split(' ')[1]) || {};
+    }
+    catch {
+        return {};
+    }
+};
+const enforceCrud = (moduleKey, action) => async (req, res, next) => {
+    try {
+        const claims = decodeClaims(req);
+        const role = String(claims.role || '').toLowerCase();
+        // Admins bypass all CRUD checks.
+        if (!role || role === 'school_admin' || role === 'super_admin')
+            return next();
+        const database = req.tenantDb || (0, mongodb_2.getMetaDb)();
+        let staff = null;
+        const sid = claims.staffId || claims.sub || claims.userId;
+        if (sid) {
+            try {
+                staff = await database.collection('staff').findOne({ _id: new mongodb_1.ObjectId(sid) });
+            }
+            catch { /* ignore */ }
+        }
+        if (!staff)
+            staff = { designation: role.replace(/_/g, ' ') };
+        const crud = await (0, permissions_1.resolveStaffCrud)(database, staff);
+        const allowed = Array.isArray(crud[moduleKey]) && crud[moduleKey].includes(action);
+        if (!allowed)
+            return res.status(403).json({ message: `Not allowed to ${action} in ${moduleKey}` });
+        next();
+    }
+    catch (e) {
+        // Fail closed for writes on unexpected errors.
+        res.status(403).json({ message: 'Permission check failed' });
+    }
+};
 // ─────────────────────────────────────────────────────────────────────────────
 // Extra MIS modules: Sports, Trips & Excursions, Front Desk, Secretary.
 // These reuse the generic CRUD controller (tenant-DB aware) for storage, and add
@@ -47,27 +97,28 @@ const router = (0, express_1.Router)();
 const db = (req) => req.tenantDb || (0, mongodb_2.getMetaDb)();
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const todayStr = () => new Date().toISOString().slice(0, 10);
-// Register full CRUD for a collection under a base path.
-const crud = (base, collection) => {
+// Register full CRUD for a collection under a base path, enforcing the module's
+// CRUD matrix on writes (reads are open to anyone who can see the module).
+const crud = (base, collection, moduleKey) => {
     router.get(`/${base}`, c.getItems(collection));
-    router.post(`/${base}`, c.createItem(collection));
-    router.patch(`/${base}/:id`, c.updateItem(collection));
-    router.delete(`/${base}/:id`, c.deleteItem(collection));
+    router.post(`/${base}`, enforceCrud(moduleKey, 'create'), c.createItem(collection));
+    router.patch(`/${base}/:id`, enforceCrud(moduleKey, 'update'), c.updateItem(collection));
+    router.delete(`/${base}/:id`, enforceCrud(moduleKey, 'delete'), c.deleteItem(collection));
 };
 // ── Collections ──────────────────────────────────────────────────────────────
-crud('sports', 'sports');
-crud('sports-enrollments', 'sports_enrollments');
-crud('sports-attendance', 'sports_attendance');
-crud('sports-performance', 'sports_performance');
-crud('trips', 'trips');
-crud('trip-participants', 'trip_participants');
-crud('trip-documents', 'trip_documents');
-crud('trip-attendance', 'trip_attendance');
-crud('visitors', 'visitors');
-crud('student-signouts', 'student_signouts');
-crud('deliveries', 'deliveries');
-crud('appointments', 'appointments');
-crud('secretary-meetings', 'secretary_meetings');
+crud('sports', 'sports', 'sports');
+crud('sports-enrollments', 'sports_enrollments', 'sports');
+crud('sports-attendance', 'sports_attendance', 'sports');
+crud('sports-performance', 'sports_performance', 'sports');
+crud('trips', 'trips', 'trips');
+crud('trip-participants', 'trip_participants', 'trips');
+crud('trip-documents', 'trip_documents', 'trips');
+crud('trip-attendance', 'trip_attendance', 'trips');
+crud('visitors', 'visitors', 'frontdesk');
+crud('student-signouts', 'student_signouts', 'frontdesk');
+crud('deliveries', 'deliveries', 'frontdesk');
+crud('appointments', 'appointments', 'frontdesk');
+crud('secretary-meetings', 'secretary_meetings', 'secretary');
 // ── Helper: post a fee invoice for a sport/trip enrolment ────────────────────
 // Mirrors the fee module's invoice shape so it shows up in Generated Invoices.
 async function createInvoice(database, opts) {

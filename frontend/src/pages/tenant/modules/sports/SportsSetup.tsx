@@ -9,6 +9,7 @@ export default function SportsSetup() {
             icon={<Trophy className="w-6 h-6" />}
             endpoint="/sports"
             queryKey="sports_list"
+            moduleKey="sports"
             addLabel="Add Sport"
             fields={[
                 { key: "name", label: "Sport Name", required: true, placeholder: "Football" },

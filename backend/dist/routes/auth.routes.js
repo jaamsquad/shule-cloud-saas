@@ -336,7 +336,8 @@ router.get('/my-permissions', async (req, res) => {
         const staffForPerms = staff || { designation: userRole.replace(/_/g, ' ') };
         const codes = await (0, permissions_1.resolveStaffPermissions)(db, staffForPerms);
         const resolvedModules = (0, permissions_1.permsToModules)(codes);
-        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud: {} });
+        const crud = await (0, permissions_1.resolveStaffCrud)(db, staffForPerms);
+        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud });
     }
     catch (e) {
         res.status(500).json({ message: e.message });
@@ -1966,6 +1967,80 @@ router.post('/parent-portal/pay-invoice', authed(async (req, res, db, decoded) =
     };
     await db.collection('student_payment_requests').insertOne(payment);
     res.status(201).json({ message: 'Payment request submitted successfully', status: 'Pending' });
+}));
+// ── Parent portal: Trips & Excursions (consent + payment) ────────────────────
+// Only OPTIONAL trips (feeMode !== 'Add To Fee Structure') are shown to parents
+// for consent; fee-structure trips are billed automatically with school fees.
+router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    const today = new Date().toISOString().slice(0, 10);
+    const trips = await db.collection('trips').find({
+        feeMode: { $ne: 'Add To Fee Structure' },
+    }).sort({ date: 1 }).toArray().catch(() => []);
+    const parts = await db.collection('trip_participants').find({ studentId: sid }).toArray().catch(() => []);
+    const byTrip = {};
+    parts.forEach((p) => { byTrip[String(p.tripId)] = p; });
+    res.json(trips.map((t) => {
+        const p = byTrip[String(t._id)];
+        return {
+            _id: String(t._id),
+            name: t.name,
+            destination: t.destination || '',
+            date: t.date || '',
+            fee: Number(t.fee || 0),
+            description: t.description || '',
+            consentRequired: t.consentRequired !== 'No',
+            deadline: t.deadline || '',
+            isPast: t.date ? t.date < today : false,
+            // This child's status for the trip.
+            consentStatus: p ? (p.status === 'declined' ? 'declined' : 'approved') : 'pending',
+            paid: !!(p && (p.paid || p.status === 'confirmed')),
+            participantId: p ? String(p._id) : null,
+            invoiceNo: p?.invoiceNo || null,
+        };
+    }));
+}));
+// Approve/decline a trip for the active child. Approving an optional trip with a
+// fee posts an invoice so the parent can pay it like any other fee.
+router.post('/parent-portal/trips/:id/consent', authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    const trip = await db.collection('trips').findOne({ _id: new mongodb_2.ObjectId(req.params.id) });
+    if (!trip)
+        return res.status(404).json({ message: 'Trip not found' });
+    const student = await db.collection('students').findOne({ _id: new mongodb_2.ObjectId(sid) });
+    const studentName = student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim();
+    const studentClass = student?.studentClass || student?.currentClass || '';
+    const decision = (req.body?.decision || 'approve').toLowerCase();
+    // Update or create this child's participant record.
+    const existing = await db.collection('trip_participants').findOne({ tripId: req.params.id, studentId: sid });
+    if (decision === 'decline') {
+        if (existing)
+            await db.collection('trip_participants').updateOne({ _id: existing._id }, { $set: { status: 'declined', updatedAt: new Date() } });
+        else
+            await db.collection('trip_participants').insertOne({ tripId: req.params.id, tripName: trip.name, studentId: sid, studentName, studentClass, status: 'declined', paid: false, createdAt: new Date() });
+        return res.json({ status: 'declined' });
+    }
+    // Approve → ensure an invoice exists for the fee (if any).
+    let invoiceNo = existing?.invoiceNo || null;
+    let invoiceId = existing?.invoiceId || null;
+    const fee = Number(trip.fee || 0);
+    if (fee > 0 && !invoiceNo) {
+        const count = await db.collection('invoices').countDocuments({});
+        invoiceNo = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
+        const inv = await db.collection('invoices').insertOne({
+            invoice_no: invoiceNo, student_id: sid, studentName, studentClass,
+            items: [{ description: `${trip.name} (Trip) — ${trip.destination || ''}`.trim(), amount: fee }],
+            total: fee, total_due: fee, balance: fee, amountPaid: 0, status: 'unpaid',
+            category: 'Trips', createdAt: new Date(), date: new Date().toISOString().slice(0, 10),
+        });
+        invoiceId = String(inv.insertedId);
+    }
+    const set = { tripId: req.params.id, tripName: trip.name, studentId: sid, studentName, studentClass, fee, invoiceNo, invoiceId, status: fee > 0 ? 'awaiting_payment' : 'confirmed', paid: fee <= 0, updatedAt: new Date() };
+    if (existing)
+        await db.collection('trip_participants').updateOne({ _id: existing._id }, { $set: set });
+    else
+        await db.collection('trip_participants').insertOne({ ...set, createdAt: new Date() });
+    res.json({ status: set.status, invoiceNo, fee });
 }));
 router.get('/tenant/profile', auth_controller_1.getTenantProfile);
 router.patch('/tenant/profile', auth_controller_1.updateTenantProfile);

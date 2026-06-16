@@ -21,7 +21,10 @@ export const PERMISSION_GROUPS: PermGroup[] = [
         { code: "accounting.budget", name: "Budgeting" },
     ]},
     { group: "Academics", perms: [
-        { code: "academics.view", name: "View Classes & Timetable" },
+        { code: "classes.view", name: "Classes" },
+        { code: "subjects.view", name: "Subjects" },
+        { code: "timetable.view", name: "Timetable" },
+        { code: "academics.view", name: "Academic System (Years/Streams)" },
         { code: "exams.manage", name: "Manage Exams" },
         { code: "results.entry", name: "Marks Entry" },
         { code: "results.view", name: "View Results" },
