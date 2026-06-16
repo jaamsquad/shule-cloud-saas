@@ -47,7 +47,8 @@ export default function StudentIdCards() {
     const setL = <K extends keyof CardLayout>(k: K, v: CardLayout[K]) => setLayout(p => ({ ...p, [k]: v }));
     const setField = (k: keyof CardLayout["fields"], v: boolean) => setLayout(p => ({ ...p, fields: { ...p.fields, [k]: v } }));
 
-    const styles = ["Landscape", "Default"];
+    const styles = ["Landscape", "Default", "Classic Navy"];
+    const isWide = (s: string) => s === "Landscape" || s === "Classic Navy";
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("studentCardStyle", s); };
 
     const [printOnlyId, setPrintOnlyId] = useState<string | null>(null);
@@ -135,7 +136,7 @@ export default function StudentIdCards() {
                         <p className="text-slate-400 font-bold animate-pulse">Synchronizing student nodes...</p>
                     </div>
                 ) : (
-                    <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeStyle === "Landscape" ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
+                    <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {students && students.length > 0 ? (
                             students.map((student: any) => (
                                 <div key={student._id} className={`flex justify-center relative group/card ${printOnlyId === student._id ? "print-target" : ""}`}>
@@ -271,12 +272,72 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout }: { stude
     const walletCode = `SCW${String(student._id || "").slice(-6).toUpperCase()}`;
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(walletCode)}`;
 
+    // Real Code-128 barcode (matches the ID Card Studio) — encodes the reg number.
+    const barSrc = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(regNo)}&scale=3&height=10&includetext=false`;
+
     // Detail rows respecting the configured field toggles.
     const rows: [string, string][] = [];
     if (layout.fields.reg) rows.push(["Reg No", regNo]);
     if (layout.fields.class) rows.push(["Class", student.studentClass || "—"]);
     if (layout.fields.gender) rows.push(["Gender", student.gender || "—"]);
     if (layout.fields.doa) rows.push(["DOA", student.admissionDate || "—"]);
+
+    // ── Classic Navy (the ID Card Studio design, rendered per-student) ────────
+    if (activeStyle === "Classic Navy") {
+        const NAVY = "#0f2548";
+        const walletQr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=${encodeURIComponent(`https://shulecloud.com/wallet/${encodeURIComponent(regNo)}`)}`;
+        return (
+            <div className="flex flex-col gap-4 group">
+                {/* FRONT */}
+                <div className="w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden relative">
+                    {layout.showPhoto && (
+                        <label className="absolute top-3 right-3 cursor-pointer z-20"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-8 h-8 bg-white/90 rounded-lg border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: NAVY }}><Camera className="w-4 h-4" /></div></label>
+                    )}
+                    {/* Header */}
+                    <div className="flex items-center gap-3 px-5 py-3">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(layout.schoolName || student.studentClass || "S")[0]}</div>
+                        <div className="flex-1">
+                            <div className="font-black text-[15px]" style={{ color: NAVY }}>{layout.schoolName || "Student Identity Card"}</div>
+                            <div className="text-[9px] font-bold tracking-wider text-slate-500">{(student.studentClass || layout.cardTitle).toUpperCase()}</div>
+                        </div>
+                        <span className="text-[10px] font-black text-white px-2.5 py-1 rounded-full" style={{ background: NAVY }}>{student.admissionDate ? String(student.admissionDate).slice(0, 4) : new Date().getFullYear()}</span>
+                    </div>
+                    {/* Navy body */}
+                    <div className="flex gap-4 px-5 py-4 text-white" style={{ background: NAVY }}>
+                        {layout.showPhoto && (
+                            <div className={`w-[100px] h-[124px] flex items-center justify-center text-[9px] font-black overflow-hidden ${layout.roundedPhoto ? "rounded-2xl" : "rounded-lg"}`} style={{ background: "#1c3a63", color: "#5b7aa8" }}>
+                                {isUploading ? <Loader2 className="w-7 h-7 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : "PHOTO"}
+                            </div>
+                        )}
+                        <div className="flex-1">
+                            <div className="text-[19px] font-black leading-tight">{student.studentName || "Student"}</div>
+                            <div className="text-[12px] mb-3" style={{ color: "#9db6da" }}>{student.studentClass || ""}{student.gender ? ` · ${student.gender}` : ""}</div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                                {rows.map(([l, v]) => (
+                                    <div key={l}><div className="text-[8px] font-bold tracking-wide uppercase" style={{ color: "#6f8db8" }}>{l}</div><div className="text-[12px] font-black">{v}</div></div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    {/* Strip: barcode + chip */}
+                    <div className="flex items-center gap-3 px-5 bg-white" style={{ height: 48 }}>
+                        {layout.showBarcode ? <img src={barSrc} alt="barcode" className="h-7" /> : <div className="flex-1" />}
+                        <span className="text-[10px] tracking-widest font-bold text-slate-500">{String(regNo).replace(/\W/g, "")}</span>
+                        <div className="ml-auto w-8 h-6 rounded" style={{ background: "linear-gradient(135deg,#e8b94a,#c8902a)" }} />
+                    </div>
+                </div>
+
+                {/* BACK */}
+                {layout.showQr && (
+                    <div className="w-[520px] h-[200px] rounded-2xl shadow-2xl flex flex-col items-center justify-center text-white" style={{ background: NAVY }}>
+                        <div className="text-[12px] font-black tracking-wider mb-3" style={{ color: "#9db6da" }}>SCAN FOR STUDENT WALLET</div>
+                        <img src={walletQr} alt="wallet QR" className="w-[100px] h-[100px] bg-white p-2 rounded-lg" />
+                        <div className="mt-3 text-[12px] tracking-widest" style={{ color: "#cbd5e1" }}>{regNo}</div>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     if (activeStyle === "Landscape") {
         return (
