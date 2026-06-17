@@ -20,6 +20,8 @@ async function bootstrap() {
         await (0, mongodb_1.connectDB)();
         app_1.default.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
+            // Build marker — confirms the freshly-built code is the one running.
+            console.log(`[BUILD] parent-portal diagnostics v2 · ${new Date().toISOString()}`);
         });
     }
     catch (error) {

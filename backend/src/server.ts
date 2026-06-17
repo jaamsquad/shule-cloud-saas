@@ -19,6 +19,8 @@ async function bootstrap() {
 
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
+            // Build marker — confirms the freshly-built code is the one running.
+            console.log(`[BUILD] parent-portal diagnostics v2 · ${new Date().toISOString()}`);
         });
     } catch (error) {
         console.error('Server bootstrap failed:', error);

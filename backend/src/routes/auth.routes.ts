@@ -860,6 +860,14 @@ const PORTAL_SECRET = process.env.JWT_SECRET || 'shulecloud_student_secret_2024'
 const authed = (
     handler: (req: Request, res: any, db: Db, decoded: any) => Promise<void>,
 ) => async (req: Request, res: any) => {
+    // Unconditional entry log — proves the request reached this handler and which
+    // tenant DB resolved. Visible in `pm2 logs` for every portal request.
+    console.log('[authed]', req.method, req.originalUrl, {
+        db: (req as any).tenantContext?.databaseName || (((req as any).tenantDb) ? 'tenantDb-set' : 'META-FALLBACK'),
+        hasAuth: !!req.headers.authorization,
+        xTenant: req.headers['x-tenant-subdomain'] || null,
+        xStudent: req.headers['x-student-id'] || null,
+    });
     try {
         const db = getInstDb(req);
         const authHeader = req.headers.authorization;
@@ -867,6 +875,7 @@ const authed = (
         const decoded: any = jwt.verify(authHeader.split(' ')[1], PORTAL_SECRET);
         await handler(req, res, db, decoded);
     } catch (e: any) {
+        console.warn('[authed] error on', req.originalUrl, '→', e?.name || '', e?.message || e);
         if (e?.name === 'JsonWebTokenError' || e?.name === 'TokenExpiredError') {
             return res.status(401).json({ message: 'Invalid or expired token' });
         }
