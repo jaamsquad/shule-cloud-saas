@@ -634,13 +634,24 @@ router.post('/parent-login', async (req, res) => {
 
 // Resolve which child the parent is currently viewing. Defaults to the first
 // child; honours ?studentId / x-student-id when it belongs to this parent.
+const isObjId = (v: any) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v);
 const parentStudentId = (req: Request, decoded: any): string => {
     const requested = (req.query.studentId as string) || (req.headers['x-student-id'] as string);
     const allowed: string[] = Array.isArray(decoded.studentIds) && decoded.studentIds.length
         ? decoded.studentIds.map(String)
-        : [String(decoded.studentId)];
-    if (requested && allowed.includes(String(requested))) return String(requested);
-    return String(decoded.studentId || allowed[0]);
+        : [String(decoded.studentId || '')];
+    // Honour the requested active child only if it's one of this parent's children.
+    if (requested && allowed.map(String).includes(String(requested))) return String(requested);
+    // Otherwise pick the first VALID id we have (token may carry junk/empty).
+    const valid = [String(decoded.studentId || ''), ...allowed].find(isObjId);
+    return valid || String(decoded.studentId || allowed[0] || '');
+};
+
+// Safely load the active child's student doc — never throws on a bad id.
+const loadParentStudent = async (db: Db, sid: string) => {
+    if (!isObjId(sid)) { console.warn('[parent] invalid studentId:', sid); return null; }
+    try { return await db.collection('students').findOne({ _id: new ObjectId(sid) }); }
+    catch { return null; }
 };
 
 router.get('/parent-portal/student', async (req, res) => {
@@ -909,8 +920,9 @@ const studentPaidTotal = async (db: Db, student: any, sid: string): Promise<numb
 
 // Fee account summary: billed (from class fee structure or invoices), paid, balance.
 const buildFeesSummary = async (db: Db, sid: string) => {
-    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const student = await loadParentStudent(db, sid);
     const cls = String(student?.studentClass || student?.currentClass || '');
+    console.log('[parent-fees]', { sid, found: !!student, class: cls });
     let term = await currentTermName(db);
     let items: { name: string; amount: number }[] = [];
     let structureTotal = 0;
@@ -1357,7 +1369,7 @@ const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 
     if (!isMpesaConfigured(cfg)) throw new Error('M-PESA payment is not set up for your school yet.');
     if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured. Contact the school administrator.');
 
-    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const student = isObjId(sid) ? await db.collection('students').findOne({ _id: new ObjectId(sid) }) : null;
     const regNo = student?.registrationNo || student?.admNo || 'Fees';
     const r = await stkPush(cfg, {
         phone, amount: Number(amount),
@@ -1979,7 +1991,7 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
 
 router.get('/parent-portal/receipts', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
-    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const student = await loadParentStudent(db, sid);
     const regNo = student?.registrationNo || student?.admNo;
     const match = { $or: [{ studentId: sid }, { student_id: sid }, ...(regNo ? [{ registrationNo: regNo }] : [])] };
     const collect = async (name: string) => { try { return await db.collection(name).find(match).toArray(); } catch { return []; } };
@@ -2050,12 +2062,14 @@ router.post('/parent-portal/pay-invoice', authed(async (req, res, db, decoded) =
 router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
     const today = new Date().toISOString().slice(0, 10);
-    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const student = await loadParentStudent(db, sid);
     const childClass = String(student?.studentClass || student?.currentClass || '').trim().toLowerCase();
 
+    const rawTripCount = await db.collection('trips').countDocuments({}).catch(() => -1);
     const allTrips = await db.collection('trips').find({
         feeMode: { $ne: 'Add To Fee Structure' },
     }).sort({ date: 1 }).toArray().catch(() => []);
+    console.log('[parent-trips] db-check', { dbName: (req as any).tenantContext?.databaseName, sid, studentFound: !!student, rawTripsInDb: rawTripCount, optionalTrips: allTrips.length });
 
     // A trip belongs to this child if it has no class targeting OR the child's
     // class is among the targeted classes. Trips the child is already a
@@ -2110,18 +2124,21 @@ router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
 // ── Parent portal: Sports (browse + enroll + pay) ────────────────────────────
 router.get('/parent-portal/sports', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
-    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const student = await loadParentStudent(db, sid);
     const childGender = String(student?.gender || '').trim().toLowerCase();
 
     const allSports = await db.collection('sports').find({}).sort({ name: 1 }).toArray().catch(() => []);
+    console.log('[parent-sports]', { sid, found: !!student, gender: childGender, totalSports: allSports.length });
     const enrolls = await db.collection('sports_enrollments').find({ studentId: sid }).toArray().catch(() => []);
     const bySport: Record<string, any> = {};
     enrolls.forEach((e: any) => { bySport[String(e.sportId)] = e; });
 
-    // Gender match: a sport for "Boys"/"Girls" shows only to that gender; "Mixed"/blank → all.
+    // Gender match: a sport for "Boys"/"Girls" shows only to that gender; "Mixed"/
+    // blank → all. If the CHILD's gender is unknown, show everything (don't hide).
     const genderOk = (s: any) => {
         const g = String(s.gender || '').toLowerCase();
         if (!g || g === 'mixed') return true;
+        if (!childGender) return true;   // unknown child gender → never hide
         if (g.startsWith('boy') || g === 'male') return childGender === 'male' || childGender === 'm' || childGender.startsWith('boy');
         if (g.startsWith('girl') || g === 'female') return childGender === 'female' || childGender === 'f' || childGender.startsWith('girl');
         return true;

@@ -288,34 +288,6 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                     )}
                 </div>
 
-                {/* Subpage Tabs Navigation */}
-                <div className="flex bg-white rounded-[1.5rem] border border-slate-100 p-2 shadow-sm gap-2 w-fit">
-                    <button 
-                        onClick={() => navigate("/transport/zones")}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${tab === "zones" || tab === "new" || tab === "edit" ? "bg-[#5C67F2] text-white" : "text-slate-500 hover:bg-slate-50"}`}
-                    >
-                        Zones List
-                    </button>
-                    <button 
-                        onClick={() => navigate("/transport/buses")}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${tab === "buses" || tab === "new-bus" || tab === "edit-bus" ? "bg-[#5C67F2] text-white" : "text-slate-500 hover:bg-slate-50"}`}
-                    >
-                        Buses List
-                    </button>
-                    <button 
-                        onClick={() => navigate("/transport/assign")}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${tab === "assign" ? "bg-[#5C67F2] text-white" : "text-slate-500 hover:bg-slate-50"}`}
-                    >
-                        Assign Students
-                    </button>
-                    <button 
-                        onClick={() => navigate("/transport/report")}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${tab === "report" ? "bg-[#5C67F2] text-white" : "text-slate-500 hover:bg-slate-50"}`}
-                    >
-                        Route Report
-                    </button>
-                </div>
-
                 {/* Main Content Area */}
                 <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden p-8 lg:p-10">
                     
