@@ -8,13 +8,16 @@ import { useModuleCrud } from "@/contexts/PermissionsContext";
 export type Field = {
     key: string;
     label: string;
-    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect" | "classSelect" | "classMultiSelect";
+    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect" | "classSelect" | "classMultiSelect" | "lookupSelect";
     options?: string[];
     placeholder?: string;
     required?: boolean;
     // For studentSelect: also fill these form keys from the chosen student.
     fillClassKey?: string;   // e.g. "studentClass"
     fillIdKey?: string;      // e.g. "studentId"
+    // For lookupSelect: load options from a REST endpoint and show `labelField`.
+    lookupEndpoint?: string;     // e.g. "/sports"
+    lookupLabel?: string;        // field to display & store, e.g. "name"
 };
 
 export type Column = { key: string; label: string; render?: (row: any) => React.ReactNode };
@@ -60,6 +63,21 @@ export default function CrudListPage({
         queryKey: ["crud_students"],
         enabled: needsStudents,
         queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+
+    // Generic lookup options for any lookupSelect field (e.g. sports, trips).
+    const lookupEndpoints = Array.from(new Set(fields.filter((f) => f.type === "lookupSelect" && f.lookupEndpoint).map((f) => f.lookupEndpoint as string)));
+    const { data: lookupData = {} } = useQuery({
+        queryKey: ["crud_lookups", ...lookupEndpoints],
+        enabled: lookupEndpoints.length > 0,
+        queryFn: async () => {
+            const out: Record<string, any[]> = {};
+            await Promise.all(lookupEndpoints.map(async (ep) => {
+                try { const r = await api.get(ep); out[ep] = Array.isArray(r.data) ? r.data : (r.data?.data ?? []); }
+                catch { out[ep] = []; }
+            }));
+            return out;
+        },
     });
 
     // Load real classes when a class field is present.
@@ -201,7 +219,16 @@ export default function CrudListPage({
                             {fields.map((f) => (
                                 <div key={f.key}>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-1">{f.label}{f.required && " *"}</label>
-                                    {f.type === "classMultiSelect" ? (
+                                    {f.type === "lookupSelect" ? (
+                                        <select value={form[f.key] ?? ""} onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                                            className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
+                                            <option value="">{f.placeholder || "Select…"}</option>
+                                            {((lookupData as Record<string, any[]>)[f.lookupEndpoint || ""] || []).map((row: any) => {
+                                                const val = row[f.lookupLabel || "name"];
+                                                return val ? <option key={row._id || val} value={val}>{val}</option> : null;
+                                            })}
+                                        </select>
+                                    ) : f.type === "classMultiSelect" ? (
                                         <div className="border border-slate-200 rounded-lg p-2 max-h-44 overflow-y-auto">
                                             {classNames.length === 0 ? (
                                                 <p className="text-xs text-slate-400 px-1 py-2">No classes found</p>

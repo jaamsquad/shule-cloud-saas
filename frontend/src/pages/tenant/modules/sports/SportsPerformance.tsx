@@ -13,7 +13,7 @@ export default function SportsPerformance() {
             addLabel="Add Achievement"
             fields={[
                 { key: "studentName", label: "Student", type: "studentSelect", required: true },
-                { key: "sportName", label: "Sport", required: true, placeholder: "Athletics" },
+                { key: "sportName", label: "Sport", type: "lookupSelect", lookupEndpoint: "/sports", lookupLabel: "name", placeholder: "Select sport…", required: true },
                 { key: "achievement", label: "Achievement", required: true, placeholder: "Gold Medal / MVP" },
                 { key: "metric", label: "Metric", type: "select", options: ["Goals", "Medal", "Ranking", "Award"] },
                 { key: "value", label: "Value", placeholder: "e.g. 12 goals / Gold / 1st" },

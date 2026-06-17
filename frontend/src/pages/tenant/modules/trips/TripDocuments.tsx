@@ -12,7 +12,7 @@ export default function TripDocuments() {
             moduleKey="trips"
             addLabel="Add Document"
             fields={[
-                { key: "tripName", label: "Trip", required: true },
+                { key: "tripName", label: "Trip", type: "lookupSelect", lookupEndpoint: "/trips", lookupLabel: "name", placeholder: "Select trip…", required: true },
                 { key: "type", label: "Document Type", type: "select", options: ["Permission Form", "Risk Assessment", "Itinerary", "Medical Form"], required: true },
                 { key: "title", label: "Title", placeholder: "e.g. Consent Form v2" },
                 { key: "url", label: "File URL / Link", placeholder: "https://…" },

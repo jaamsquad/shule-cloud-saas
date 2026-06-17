@@ -12,7 +12,7 @@ export default function TripAttendance() {
             moduleKey="trips"
             addLabel="Record Attendance"
             fields={[
-                { key: "tripName", label: "Trip", required: true },
+                { key: "tripName", label: "Trip", type: "lookupSelect", lookupEndpoint: "/trips", lookupLabel: "name", placeholder: "Select trip…", required: true },
                 { key: "date", label: "Date", type: "date", required: true },
                 { key: "studentName", label: "Student", type: "studentSelect", required: true },
                 { key: "status", label: "Status", type: "select", options: ["Present", "Absent"], required: true },

@@ -12,7 +12,7 @@ export default function SportsAttendance() {
             moduleKey="sports"
             addLabel="Record Attendance"
             fields={[
-                { key: "sportName", label: "Sport", required: true, placeholder: "Football" },
+                { key: "sportName", label: "Sport", type: "lookupSelect", lookupEndpoint: "/sports", lookupLabel: "name", placeholder: "Select sport…", required: true },
                 { key: "date", label: "Date", type: "date", required: true },
                 { key: "studentName", label: "Student", type: "studentSelect", required: true },
                 { key: "status", label: "Status", type: "select", options: ["Present", "Absent"], required: true },

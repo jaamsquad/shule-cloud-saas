@@ -20,6 +20,7 @@ export default function TripsManage() {
                 { key: "description", label: "Description / Objectives", type: "textarea", placeholder: "Wildlife Educational Tour" },
                 { key: "targetClasses", label: "Target Classes", type: "classMultiSelect" },
                 { key: "consentRequired", label: "Consent Required", type: "select", options: ["Yes", "No"] },
+                { key: "consentQuestions", label: "Consent Questions (one per line, parent answers Yes/No)", type: "textarea", placeholder: "My child may attend this trip.\nMy child has no medical condition affecting travel.\nI permit emergency medical treatment if needed." },
                 { key: "feeMode", label: "Fee Mode", type: "select", options: ["Optional Payment", "Add To Fee Structure"] },
             ]}
             columns={[

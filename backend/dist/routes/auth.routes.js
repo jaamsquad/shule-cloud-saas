@@ -905,8 +905,14 @@ const buildFeesSummary = async (db, sid) => {
     let items = [];
     let structureTotal = 0;
     try {
+        const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
         const structures = await db.collection('fee_structures').find({}).toArray();
-        const match = structures.find((s) => String(s.className || '').toLowerCase() === cls.toLowerCase());
+        const target = norm(cls);
+        const match = structures.find((s) => {
+            const names = [s.className, s.class, s.levelName, s.level].map(norm).filter(Boolean);
+            // exact or contains either way (handles "Form 1" vs "Form 1 East").
+            return names.some((n) => n === target || n.includes(target) || target.includes(n));
+        });
         if (match) {
             if (match.term)
                 term = `${match.term}${match.year ? ` ${match.year}` : ''}`;
@@ -1028,10 +1034,15 @@ const fullDay = (d) => DAY_MAP[String(d || '').toUpperCase()] || d;
 const resolveClassId = async (db, className) => {
     if (!className)
         return null;
-    const lc = String(className).toLowerCase();
+    const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const lc = norm(className);
     try {
         const classes = await db.collection('classes').find({}).toArray();
-        const m = classes.find((c) => String(c.levelName || c.name || '').toLowerCase() === lc);
+        // Try several name shapes: combined level+stream, level only, name, className.
+        const m = classes.find((c) => {
+            const combined = norm(`${c.levelName || ''}${c.streamName && c.streamName !== 'General' ? ' ' + c.streamName : ''}`);
+            return [combined, norm(c.levelName), norm(c.name), norm(c.className)].filter(Boolean).includes(lc);
+        });
         if (m)
             return String(m._id);
     }
@@ -2022,11 +2033,16 @@ router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
             consentRequired: t.consentRequired !== 'No',
             deadline: t.deadline || '',
             isPast: t.date ? t.date < today : false,
+            // Consent questions (one per line) the parent answers Yes/No to.
+            consentQuestions: String(t.consentQuestions || '').split('\n').map((q) => q.trim()).filter(Boolean),
             // This child's status for the trip.
             consentStatus: p ? (p.status === 'declined' ? 'declined' : 'approved') : 'pending',
             paid: !!(p && (p.paid || p.status === 'confirmed')),
             participantId: p ? String(p._id) : null,
             invoiceNo: p?.invoiceNo || null,
+            // Echo back any previously-submitted answers/signature.
+            answers: p?.consentAnswers || null,
+            signature: p?.signature || null,
         };
     }));
 }));
@@ -2065,7 +2081,10 @@ router.post('/parent-portal/trips/:id/consent', authed(async (req, res, db, deco
         });
         invoiceId = String(inv.insertedId);
     }
-    const set = { tripId: req.params.id, tripName: trip.name, studentId: sid, studentName, studentClass, fee, invoiceNo, invoiceId, status: fee > 0 ? 'awaiting_payment' : 'confirmed', paid: fee <= 0, updatedAt: new Date() };
+    // Digital consent: store the parent's Yes/No answers + signature (data URL).
+    const consentAnswers = req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : null;
+    const signature = typeof req.body?.signature === 'string' ? req.body.signature : null;
+    const set = { tripId: req.params.id, tripName: trip.name, studentId: sid, studentName, studentClass, fee, invoiceNo, invoiceId, status: fee > 0 ? 'awaiting_payment' : 'confirmed', paid: fee <= 0, consentAnswers, signature, consentedBy: decoded.parentName || 'Parent', consentedAt: new Date(), updatedAt: new Date() };
     if (existing)
         await db.collection('trip_participants').updateOne({ _id: existing._id }, { $set: set });
     else
