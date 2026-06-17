@@ -2064,17 +2064,22 @@ router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
     const byTrip: Record<string, any> = {};
     parts.forEach((p: any) => { byTrip[String(p.tripId)] = p; });
 
+    const normCls = (s: any) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const child = normCls(student?.studentClass || student?.currentClass);
     const targets = (t: any): string[] => {
         const raw = t.targetClasses ?? t.classes ?? t.studentClass ?? t.class;
-        if (Array.isArray(raw)) return raw.map((x: any) => String(x).trim().toLowerCase()).filter(Boolean);
-        if (typeof raw === 'string' && raw.trim()) return raw.split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+        if (Array.isArray(raw)) return raw.map(normCls).filter(Boolean);
+        if (typeof raw === 'string' && raw.trim()) return raw.split(',').map(normCls).filter(Boolean);
         return [];
     };
     const trips = allTrips.filter((t: any) => {
         if (byTrip[String(t._id)]) return true;          // already enrolled → always show
         const tg = targets(t);
-        return tg.length === 0 || (childClass && tg.includes(childClass)); // untargeted = whole school
+        if (tg.length === 0) return true;                // untargeted = whole school
+        // Tolerant class match: exact or contains either way (handles "Form 1" vs "Form 1 East").
+        return !!child && tg.some((g) => g === child || g.includes(child) || child.includes(g));
     });
+    console.log('[parent-trips]', { child: childClass, totalOptional: allTrips.length, shown: trips.length, sample: allTrips.slice(0, 3).map((t: any) => ({ name: t.name, feeMode: t.feeMode, target: t.targetClasses })) });
 
     res.json(trips.map((t: any) => {
         const p = byTrip[String(t._id)];
@@ -2100,6 +2105,81 @@ router.get('/parent-portal/trips', authed(async (req, res, db, decoded) => {
             signature: p?.signature || null,
         };
     }));
+}));
+
+// ── Parent portal: Sports (browse + enroll + pay) ────────────────────────────
+router.get('/parent-portal/sports', authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const childGender = String(student?.gender || '').trim().toLowerCase();
+
+    const allSports = await db.collection('sports').find({}).sort({ name: 1 }).toArray().catch(() => []);
+    const enrolls = await db.collection('sports_enrollments').find({ studentId: sid }).toArray().catch(() => []);
+    const bySport: Record<string, any> = {};
+    enrolls.forEach((e: any) => { bySport[String(e.sportId)] = e; });
+
+    // Gender match: a sport for "Boys"/"Girls" shows only to that gender; "Mixed"/blank → all.
+    const genderOk = (s: any) => {
+        const g = String(s.gender || '').toLowerCase();
+        if (!g || g === 'mixed') return true;
+        if (g.startsWith('boy') || g === 'male') return childGender === 'male' || childGender === 'm' || childGender.startsWith('boy');
+        if (g.startsWith('girl') || g === 'female') return childGender === 'female' || childGender === 'f' || childGender.startsWith('girl');
+        return true;
+    };
+
+    const sports = allSports.filter((s: any) => bySport[String(s._id)] || genderOk(s));
+    res.json(sports.map((s: any) => {
+        const e = bySport[String(s._id)];
+        return {
+            _id: String(s._id),
+            name: s.name,
+            coach: s.coach || '',
+            gender: s.gender || 'Mixed',
+            ageGroup: s.ageGroup || '',
+            fee: Number(s.fee || 0),
+            term: s.term || '',
+            schedule: s.schedule || '',
+            capacity: Number(s.capacity || 0),
+            status: e ? (e.status || 'awaiting_payment') : 'not_enrolled',
+            paid: !!(e && (e.status === 'confirmed')),
+            invoiceNo: e?.invoiceNo || null,
+        };
+    }));
+}));
+
+router.post('/parent-portal/sports/:id/enroll', authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    const sport = await db.collection('sports').findOne({ _id: new ObjectId(req.params.id) });
+    if (!sport) return res.status(404).json({ message: 'Sport not found' });
+
+    const existing = await db.collection('sports_enrollments').findOne({ sportId: req.params.id, studentId: sid });
+    if (existing) return res.json({ status: existing.status, invoiceNo: existing.invoiceNo });
+
+    const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
+    const studentName = student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim();
+    const studentClass = student?.studentClass || student?.currentClass || '';
+    const fee = Number(sport.fee || 0);
+
+    let invoiceNo: string | null = null, invoiceId: string | null = null;
+    if (fee > 0) {
+        const count = await db.collection('invoices').countDocuments({});
+        invoiceNo = `INV-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
+        const inv = await db.collection('invoices').insertOne({
+            invoice_no: invoiceNo, student_id: sid, studentName, studentClass,
+            items: [{ description: `${sport.name} (Sports) — ${sport.term || 'Term'}`, amount: fee }],
+            total: fee, total_due: fee, balance: fee, amountPaid: 0, status: 'unpaid',
+            category: 'Sports', createdAt: new Date(), date: new Date().toISOString().slice(0, 10),
+        });
+        invoiceId = String(inv.insertedId);
+    }
+
+    const doc = {
+        sportId: req.params.id, sportName: sport.name, studentId: sid, studentName, studentClass,
+        fee, invoiceNo, invoiceId, status: fee > 0 ? 'awaiting_payment' : 'confirmed',
+        approvalStatus: 'approved', enrolledBy: decoded.parentName || 'Parent', createdAt: new Date(),
+    };
+    await db.collection('sports_enrollments').insertOne(doc);
+    res.json({ status: doc.status, invoiceNo, fee });
 }));
 
 // Approve/decline a trip for the active child. Approving an optional trip with a

@@ -9,6 +9,7 @@ import ParentAttendance from "./pages/ParentAttendance";
 import ParentReceipts from "./pages/ParentReceipts";
 import ParentWallet from "./pages/ParentWallet";
 import ParentTrips from "./pages/ParentTrips";
+import ParentSports from "./pages/ParentSports";
 import AnnouncementsView from "../AnnouncementsView";
 import { parentApi } from "./parentApi";
 
@@ -25,6 +26,7 @@ export default function ParentApp() {
                 <Route path="/wallet" element={<ParentWallet />} />
                 <Route path="/receipts" element={<ParentReceipts />} />
                 <Route path="/trips" element={<ParentTrips />} />
+                <Route path="/sports" element={<ParentSports />} />
                 <Route path="/announcements" element={<AnnouncementsView api={parentApi} endpoint="/parent-portal/announcements" queryKey="parent_ann" />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
