@@ -900,13 +900,25 @@ const currentTermName = async (db: Db): Promise<string> => {
     return 'Current Term';
 };
 
+// Match a student id whether stored as a string or an ObjectId, across the
+// common field-name variants. Also matches by registration/admission number.
+const studentIdOrFilters = (studentId: string, student?: any): any[] => {
+    const ids: any[] = [studentId];
+    const oid = isObjId(studentId) ? new ObjectId(studentId) : null;
+    if (oid) ids.push(oid);
+    const reg = student?.registrationNo || student?.admNo || student?.studentId;
+    const ors: any[] = [
+        { studentId: { $in: ids } },
+        { student_id: { $in: ids } },
+        { student: { $in: ids } },
+    ];
+    if (reg) { ors.push({ registrationNo: reg }, { admNo: reg }); }
+    return ors;
+};
+
 const studentInvoices = async (db: Db, student: any, studentId: string) => {
     return db.collection('invoices').find({
-        $or: [
-            { studentId },
-            { student_id: studentId },
-            { registrationNo: student?.registrationNo || student?.admNo },
-        ],
+        $or: studentIdOrFilters(studentId, student),
     }).sort({ createdAt: -1 }).toArray();
 };
 
@@ -976,7 +988,10 @@ const buildFeesSummary = async (db: Db, sid: string) => {
 
 // Group exam_marks into per-exam result rows (shared by student & parent portals).
 const buildExamResults = async (db: Db, studentId: string) => {
-    const marks = await db.collection('exam_marks').find({ studentId }).toArray();
+    // Match exam marks whether studentId is stored as a string or ObjectId.
+    const ids: any[] = [studentId];
+    if (isObjId(studentId)) ids.push(new ObjectId(studentId));
+    const marks = await db.collection('exam_marks').find({ $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }] }).toArray();
     const exams = await db.collection('exams').find({}).toArray();
     const examMap: Record<string, any> = {};
     exams.forEach((e: any) => { examMap[e._id.toString()] = e; });
@@ -1984,8 +1999,10 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
     const sid = parentStudentId(req, decoded);
     let records: any[] = [];
     try {
+        const ids: any[] = [sid];
+        if (isObjId(sid)) ids.push(new ObjectId(sid));
         records = await db.collection('student_attendance').find({
-            $or: [{ studentId: sid }, { student_id: sid }],
+            $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }],
         }).sort({ date: -1 }).limit(90).toArray();
     } catch { /* ignore */ }
     const present = records.filter((r: any) => /present/i.test(r.status || '')).length;
@@ -2001,8 +2018,7 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
 router.get('/parent-portal/receipts', authed(async (req, res, db, decoded) => {
     const sid = parentStudentId(req, decoded);
     const student = await loadParentStudent(db, sid);
-    const regNo = student?.registrationNo || student?.admNo;
-    const match = { $or: [{ studentId: sid }, { student_id: sid }, ...(regNo ? [{ registrationNo: regNo }] : [])] };
+    const match = { $or: studentIdOrFilters(sid, student) };
     const collect = async (name: string) => { try { return await db.collection(name).find(match).toArray(); } catch { return []; } };
     const raw = [...(await collect('payments')), ...(await collect('student_payment_requests'))];
     const receipts = raw
