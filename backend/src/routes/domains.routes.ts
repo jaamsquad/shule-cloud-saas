@@ -1,7 +1,22 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { addDomain, removeDomain, getDomainStatus, recheckDomain, dnsInstructions, getDomainHistory } from '../services/domains.service';
+import { getMetaDb } from '../lib/mongodb';
 
 const router = Router();
+
+// Resolve the tenant id even if tenancy middleware didn't attach context (e.g.
+// the request came in on api.<root> with only the x-tenant-subdomain header).
+async function resolveTenantId(req: Request): Promise<string | null> {
+    const fromCtx = (req as any).tenantContext?.tenantId;
+    if (fromCtx) return String(fromCtx);
+    const sub = String(req.headers['x-tenant-subdomain'] || '').trim().toLowerCase();
+    if (!sub) return null;
+    try {
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const t = await getMetaDb().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        return t ? String(t._id) : null;
+    } catch { return null; }
+}
 
 // ─── Simple in-memory rate limiter ──────────────────────────────────────────────
 // Production note: behind multiple instances, back this with Redis.
@@ -23,36 +38,42 @@ const ctxOf = (req: Request) => {
     return { tenantId, user, ip };
 };
 
-const requireTenant = (req: Request, res: Response): string | null => {
-    const tenantId = (req as any).tenantContext?.tenantId;
-    if (!tenantId) { res.status(400).json({ message: 'No school context. Open this from your school portal.' }); return null; }
+const requireTenant = async (req: Request, res: Response): Promise<string | null> => {
+    const tenantId = await resolveTenantId(req);
+    if (!tenantId) {
+        console.warn('[domains] No tenant context.', {
+            path: req.originalUrl, host: req.headers.host, xTenant: req.headers['x-tenant-subdomain'],
+        });
+        res.status(400).json({ message: 'No school context. Open this from your school portal.' });
+        return null;
+    }
     return tenantId;
 };
 
 // GET status
 router.get('/domains/status', async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     try { res.json(await getDomainStatus(tenantId)); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // GET DNS instructions
 router.get('/domains/dns-instructions', async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     try { res.json(await dnsInstructions(tenantId)); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // GET connection history
 router.get('/domains/history', async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     try { res.json(await getDomainHistory(tenantId)); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // POST add domain
 router.post('/domains/add', rateLimit(10, 60_000), async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     const { domain } = req.body || {};
     if (!domain) return res.status(400).json({ message: 'A domain is required' });
     try { res.json(await addDomain(tenantId, domain, ctxOf(req))); }
@@ -61,14 +82,14 @@ router.post('/domains/add', rateLimit(10, 60_000), async (req, res) => {
 
 // POST remove domain
 router.post('/domains/remove', rateLimit(10, 60_000), async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     try { res.json(await removeDomain(tenantId, ctxOf(req))); }
     catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 // POST recheck
 router.post('/domains/recheck', rateLimit(20, 60_000), async (req, res) => {
-    const tenantId = requireTenant(req, res); if (!tenantId) return;
+    const tenantId = await requireTenant(req, res); if (!tenantId) return;
     try { res.json(await recheckDomain(tenantId, ctxOf(req))); }
     catch (e: any) { res.status(400).json({ message: e.message }); }
 });

@@ -2,7 +2,26 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const domains_service_1 = require("../services/domains.service");
+const mongodb_1 = require("../lib/mongodb");
 const router = (0, express_1.Router)();
+// Resolve the tenant id even if tenancy middleware didn't attach context (e.g.
+// the request came in on api.<root> with only the x-tenant-subdomain header).
+async function resolveTenantId(req) {
+    const fromCtx = req.tenantContext?.tenantId;
+    if (fromCtx)
+        return String(fromCtx);
+    const sub = String(req.headers['x-tenant-subdomain'] || '').trim().toLowerCase();
+    if (!sub)
+        return null;
+    try {
+        const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const t = await (0, mongodb_1.getMetaDb)().collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        return t ? String(t._id) : null;
+    }
+    catch {
+        return null;
+    }
+}
 // ─── Simple in-memory rate limiter ──────────────────────────────────────────────
 // Production note: behind multiple instances, back this with Redis.
 const buckets = new Map();
@@ -25,9 +44,12 @@ const ctxOf = (req) => {
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
     return { tenantId, user, ip };
 };
-const requireTenant = (req, res) => {
-    const tenantId = req.tenantContext?.tenantId;
+const requireTenant = async (req, res) => {
+    const tenantId = await resolveTenantId(req);
     if (!tenantId) {
+        console.warn('[domains] No tenant context.', {
+            path: req.originalUrl, host: req.headers.host, xTenant: req.headers['x-tenant-subdomain'],
+        });
         res.status(400).json({ message: 'No school context. Open this from your school portal.' });
         return null;
     }
@@ -35,7 +57,7 @@ const requireTenant = (req, res) => {
 };
 // GET status
 router.get('/domains/status', async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     try {
@@ -47,7 +69,7 @@ router.get('/domains/status', async (req, res) => {
 });
 // GET DNS instructions
 router.get('/domains/dns-instructions', async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     try {
@@ -59,7 +81,7 @@ router.get('/domains/dns-instructions', async (req, res) => {
 });
 // GET connection history
 router.get('/domains/history', async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     try {
@@ -71,7 +93,7 @@ router.get('/domains/history', async (req, res) => {
 });
 // POST add domain
 router.post('/domains/add', rateLimit(10, 60000), async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     const { domain } = req.body || {};
@@ -86,7 +108,7 @@ router.post('/domains/add', rateLimit(10, 60000), async (req, res) => {
 });
 // POST remove domain
 router.post('/domains/remove', rateLimit(10, 60000), async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     try {
@@ -98,7 +120,7 @@ router.post('/domains/remove', rateLimit(10, 60000), async (req, res) => {
 });
 // POST recheck
 router.post('/domains/recheck', rateLimit(20, 60000), async (req, res) => {
-    const tenantId = requireTenant(req, res);
+    const tenantId = await requireTenant(req, res);
     if (!tenantId)
         return;
     try {
