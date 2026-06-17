@@ -11,10 +11,14 @@ exports.deleteCustomHostname = deleteCustomHostname;
 //   CLOUDFLARE_SAAS_TARGET — CNAME target schools point their domain at
 //                            (e.g. customers.myschoolmis.com or the zone apex)
 const API_BASE = 'https://api.cloudflare.com/client/v4';
+// Accepts either the CLOUDFLARE_* names or the shorter CF_* names (whichever is set).
 const cfConfig = () => ({
-    token: process.env.CLOUDFLARE_API_TOKEN || '',
-    zoneId: process.env.CLOUDFLARE_ZONE_ID || '',
-    target: process.env.CLOUDFLARE_SAAS_TARGET || process.env.CLOUDFLARE_FALLBACK_ORIGIN || '',
+    token: process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN || '',
+    zoneId: process.env.CLOUDFLARE_ZONE_ID || process.env.CF_ZONE_ID || '',
+    target: process.env.CLOUDFLARE_SAAS_TARGET ||
+        process.env.CLOUDFLARE_FALLBACK_ORIGIN ||
+        process.env.CF_SAAS_TARGET ||
+        (process.env.SAAS_ROOT_DOMAIN ? `cname.${String(process.env.SAAS_ROOT_DOMAIN).toLowerCase()}` : ''),
 });
 exports.cfConfig = cfConfig;
 const isCloudflareConfigured = () => {
