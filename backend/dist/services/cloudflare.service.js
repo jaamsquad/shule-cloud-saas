@@ -48,7 +48,16 @@ async function cfFetch(path, init, attempt = 1) {
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || data?.success === false) {
-            const msg = data?.errors?.[0]?.message || `Cloudflare API error (HTTP ${resp.status})`;
+            const raw = data?.errors?.[0]?.message || `Cloudflare API error (HTTP ${resp.status})`;
+            const code = data?.errors?.[0]?.code;
+            // Translate Cloudflare's terse auth/permission errors into actionable text.
+            let msg = raw;
+            if (resp.status === 401 || resp.status === 403 || /authentication error/i.test(raw) || code === 9109 || code === 10000) {
+                msg = 'Cloudflare rejected the API token. Ensure CF_API_TOKEN is valid and has "SSL and Certificates: Edit" + "Zone: Read" on the shulecloud.com zone, and that the Zone ID is correct.';
+            }
+            else if (/cloudflare for saas|custom hostname|not entitled|not enabled/i.test(raw)) {
+                msg = 'Cloudflare for SaaS is not enabled on this zone. Enable it under SSL/TLS → Custom Hostnames and set a Fallback Origin.';
+            }
             const retryable = resp.status >= 500 || resp.status === 429;
             if (retryable && attempt < MAX_ATTEMPTS) {
                 await sleep(300 * 2 ** (attempt - 1));
