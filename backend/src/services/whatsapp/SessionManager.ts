@@ -172,8 +172,24 @@ class WhatsAppSessionManager extends EventEmitter {
         const tenant = await this.resolveTenant(schoolId);
         if (!tenant) throw new Error('School not found');
 
+        // Fail loudly (and clearly) if the Baileys helpers didn't resolve — this is
+        // the symptom behind "initAuthCreds is not a function" on a stale build.
+        if (typeof makeWASocket !== 'function') {
+            throw new Error('Baileys makeWASocket unavailable — reinstall @whiskeysockets/baileys on the server (npm install) and rebuild.');
+        }
+
         const auth = await useMongoAuthState(tenant.db);
-        const { version } = await fetchLatestBaileysVersion();
+
+        // The version lookup makes an outbound HTTPS call; if the host blocks egress
+        // or it times out, fall back to a known-good version instead of crashing.
+        let version: number[] | undefined;
+        try {
+            const res = await fetchLatestBaileysVersion();
+            version = res?.version;
+        } catch (e: any) {
+            logEvent(schoolId, 'version_fetch_failed', { error: e?.message });
+            version = [2, 3000, 1015901307];   // safe fallback
+        }
 
         const session: LiveSession = existing || {
             schoolId, subdomain: tenant.subdomain, db: tenant.db,

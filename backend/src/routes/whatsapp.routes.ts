@@ -85,7 +85,11 @@ router.post('/whatsapp/connect', connLimiter, async (req, res) => {
     try {
         const meta = await whatsAppManager.connect(schoolId);
         res.json({ message: 'Connecting', status: meta.status });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) {
+        // Log the full stack so the VPS logs reveal the real cause of a 500.
+        console.error('[WhatsApp] connect failed:', e?.stack || e?.message || e);
+        res.status(500).json({ message: e?.message || 'WhatsApp connect failed', error: String(e?.message || e) });
+    }
 });
 
 router.post('/whatsapp/disconnect', connLimiter, async (req, res) => {
