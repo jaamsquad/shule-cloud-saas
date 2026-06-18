@@ -155,6 +155,7 @@ export const navItems: NavItem[] = [
       { label: "Meal Service (Kitchen)", path: "/cafeteria/meal-service" },
       { label: "Weekly Meal Menu", path: "/cafeteria/menu" },
       { label: "Meal History", path: "/cafeteria/meal-history" },
+      { label: "Missed Meals", path: "/cafeteria/missed-meals" },
       { label: "Quick Sale (Canteen)", path: "/canteen/quick-sale" },
       { label: "Canteen Transactions", path: "/canteen/transactions" },
       { label: "Canteen Settings", path: "/canteen/settings" },

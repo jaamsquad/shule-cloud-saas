@@ -19,6 +19,17 @@ export default function SportsParticipants() {
         queryFn: async () => { try { const r = await api.get("/sports-enrollments"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
     });
 
+    // Look up real admission numbers for existing enrolments that didn't store one.
+    const { data: students = [] } = useQuery({
+        queryKey: ["sports_students_lookup"],
+        queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const admOf = (r: any) => {
+        if (r.admNo || r.registrationNo) return r.admNo || r.registrationNo;
+        const s = students.find((x: any) => x._id === r.studentId);
+        return s?.registrationNo || s?.admNo || "—";
+    };
+
     const approve = useMutation({
         mutationFn: async (id: string) => api.patch(`/sports-enrollments/${id}`, { approvalStatus: "approved" }),
         onSuccess: () => { toast.success("Approved"); qc.invalidateQueries({ queryKey: ["sports_enrollments"] }); },
@@ -44,7 +55,7 @@ export default function SportsParticipants() {
                                 <tr><td colSpan={7} className="py-16 text-center text-slate-400 text-xs font-bold uppercase">No participants yet</td></tr>
                             ) : rows.map((r: any) => (
                                 <tr key={r._id} className="hover:bg-slate-50/50">
-                                    <td className="py-3 px-4 text-slate-500">{r.admNo || r.studentId?.slice?.(-6) || "—"}</td>
+                                    <td className="py-3 px-4 text-slate-500">{admOf(r)}</td>
                                     <td className="py-3 px-4 font-bold text-slate-800">{r.studentName || "—"}</td>
                                     <td className="py-3 px-4">{r.sportName}</td>
                                     <td className="py-3 px-4">KSh {Number(r.fee || 0).toLocaleString()}</td>

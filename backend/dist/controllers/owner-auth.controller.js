@@ -15,16 +15,21 @@ const registerOwner = async (req, res) => {
         if (existing)
             return res.status(409).json({ message: 'Email already registered' });
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
+        // The first owner account becomes the Super Owner; later self-registrations
+        // default to 'owner'. Additional users are created from the portal with a role.
+        const count = await db.collection('OwnerUser').countDocuments({});
+        const role = count === 0 ? 'super_owner' : (req.body.role || 'owner');
         const result = await db.collection('OwnerUser').insertOne({
             name,
             email,
             passwordHash: hashedPassword,
+            role,
             status: 'active',
             isActive: true,
             createdAt: new Date(),
             updatedAt: new Date()
         });
-        const token = jsonwebtoken_1.default.sign({ sub: result.insertedId, email: email, type: 'owner' }, process.env.OWNER_JWT_SECRET || 'owner_secret', { expiresIn: '24h' });
+        const token = jsonwebtoken_1.default.sign({ sub: result.insertedId, email: email, type: 'owner', role }, process.env.OWNER_JWT_SECRET || 'owner_secret', { expiresIn: '24h' });
         return res.status(201).json({
             access_token: token,
             user: { id: result.insertedId, name, email }
@@ -43,10 +48,13 @@ const loginOwner = async (req, res) => {
         if (!user || !(await bcrypt_1.default.compare(password, user.passwordHash))) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
-        const token = jsonwebtoken_1.default.sign({ sub: user._id, email: user.email, type: 'owner' }, process.env.OWNER_JWT_SECRET || 'owner_secret', { expiresIn: '24h' });
+        if (user.isActive === false || user.status === 'suspended') {
+            return res.status(403).json({ message: 'This account has been suspended.' });
+        }
+        const token = jsonwebtoken_1.default.sign({ sub: user._id, email: user.email, type: 'owner', role: user.role || 'owner' }, process.env.OWNER_JWT_SECRET || 'owner_secret', { expiresIn: '24h' });
         return res.json({
             access_token: token,
-            user: { id: user._id, name: user.name, email: user.email }
+            user: { id: user._id, name: user.name, email: user.email, role: user.role || 'owner' }
         });
     }
     catch (error) {

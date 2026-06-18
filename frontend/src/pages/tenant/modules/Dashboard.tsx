@@ -249,7 +249,7 @@ export default function Dashboard() {
     const getBarY = (v: number) => 130 - (v / maxBarValue) * 100;
     const getBarHeight = (v: number) => (v / maxBarValue) * 100;
 
-    const fmt = (n: number) => n.toLocaleString();
+    const fmt = (n: number) => `KSh ${n.toLocaleString()}`;
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
@@ -315,7 +315,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                             <span className="text-3xl font-black tracking-tight">
-                                {finances.revenue > 0 ? `$${fmt(Math.round(finances.revenue))}` : "$0"}
+                                {finances.revenue > 0 ? fmt(Math.round(finances.revenue)) : "KSh 0"}
                             </span>
                             <span className="text-xs font-semibold opacity-90">Fee transactions</span>
                         </div>
@@ -335,7 +335,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                             <span className={`text-3xl font-black tracking-tight ${finances.profit < 0 ? "text-rose-200" : ""}`}>
-                                {finances.profit < 0 ? "-" : ""}${fmt(Math.abs(Math.round(finances.profit)))}
+                                {finances.profit < 0 ? "-" : ""}{fmt(Math.abs(Math.round(finances.profit)))}
                             </span>
                             <span className="text-xs font-semibold opacity-90">Income vs expenses</span>
                         </div>
@@ -661,12 +661,12 @@ export default function Dashboard() {
                         <div className="flex justify-between border-t border-gray-100 pt-4">
                             <div className="text-left">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Collected</p>
-                                <p className="font-black text-lg text-emerald-600">${fmt(Math.round(feeEstimation.collected))}</p>
+                                <p className="font-black text-lg text-emerald-600">{fmt(Math.round(feeEstimation.collected))}</p>
                             </div>
                             <div className="text-right">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Expected</p>
                                 <p className="font-black text-lg text-slate-800">
-                                    {feeEstimation.totalEstimated > 0 ? `$${fmt(Math.round(feeEstimation.totalEstimated))}` : "—"}
+                                    {feeEstimation.totalEstimated > 0 ? fmt(Math.round(feeEstimation.totalEstimated)) : "—"}
                                 </p>
                             </div>
                         </div>

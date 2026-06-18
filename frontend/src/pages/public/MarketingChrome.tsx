@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { GraduationCap, ArrowRight, Menu, Mail, Phone, MapPin } from "lucide-react";
+import { GraduationCap, ArrowRight, Menu, Mail, Phone, MapPin, Shield } from "lucide-react";
 
 export const BLUE = "#2563EB";
 export const NAVY = "#0B1B34";
@@ -65,8 +65,16 @@ export function MarketingFooter() {
           </div>
         ))}
       </div>
-      <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-slate-100 text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} ShuleCloud. All rights reserved.
+      <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <span>© {new Date().getFullYear()} ShuleCloud. All rights reserved.</span>
+        {/* Platform owner / super-admin entry — manages all schools on the system. */}
+        <Link
+          to="/owner/login"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-bold text-white transition-colors"
+          style={{ background: NAVY }}
+        >
+          <Shield className="w-3.5 h-3.5" /> Admin Login
+        </Link>
       </div>
     </footer>
   );

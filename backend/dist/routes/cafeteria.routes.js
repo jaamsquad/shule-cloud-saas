@@ -97,6 +97,53 @@ router.get('/cafeteria/meals/today', async (req, res) => {
         res.status(500).json({ message: e.message });
     }
 });
+// ── Kitchen: students who did NOT take a meal ─────────────────────────────────
+// Query: ?date=YYYY-MM-DD&mealType=Breakfast|Lunch|Supper|none
+//   mealType = a specific meal → students not served THAT meal that day.
+//   mealType = "none" (or "any"/blank) → students who took NO meal at all that day.
+router.get('/cafeteria/meals/missed', async (req, res) => {
+    try {
+        const db = getDb(req);
+        const date = String(req.query.date || today());
+        const mealType = String(req.query.mealType || 'none');
+        const q = String(req.query.q || '').trim();
+        // Served records for the day (optionally narrowed to one meal type).
+        const servedFilter = { date };
+        if (mealType && !['none', 'any', 'all', ''].includes(mealType.toLowerCase()))
+            servedFilter.mealType = mealType;
+        const served = await db.collection('meal_services').find(servedFilter).toArray();
+        const servedIds = new Set(served.map((r) => String(r.studentId)));
+        // All students (optionally search-filtered) minus those served.
+        const sFilter = {};
+        if (q)
+            sFilter.$or = [
+                { studentName: { $regex: q, $options: 'i' } },
+                { registrationNo: { $regex: q, $options: 'i' } },
+                { admNo: { $regex: q, $options: 'i' } },
+                { studentClass: { $regex: q, $options: 'i' } },
+            ];
+        const students = await db.collection('students').find(sFilter).sort({ studentName: 1 }).toArray();
+        const missed = students
+            .filter((s) => !servedIds.has(String(s._id)))
+            .map((s) => ({
+            _id: String(s._id),
+            studentName: s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            admissionNo: s.registrationNo || s.admNo || '',
+            studentClass: s.studentClass || s.currentClass || '',
+            boarding: s.boarding || s.residence || 'Day Scholar',
+        }));
+        res.json({
+            date, mealType,
+            totalStudents: students.length,
+            servedCount: servedIds.size,
+            missedCount: missed.length,
+            missed,
+        });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
 // ── Kitchen: meal history ─────────────────────────────────────────────────────
 router.get('/cafeteria/meals', async (req, res) => {
     try {

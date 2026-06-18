@@ -320,6 +320,7 @@ import AttendanceScanner from "./pages/tenant/modules/AttendanceScanner";
 import PublicApplication from "./pages/public/PublicApplication";
 import MealService from "./pages/tenant/modules/cafeteria/MealService";
 import MealHistory from "./pages/tenant/modules/cafeteria/MealHistory";
+import MissedMeals from "./pages/tenant/modules/cafeteria/MissedMeals";
 import QuickSale from "./pages/tenant/modules/cafeteria/QuickSale";
 import CanteenSettings from "./pages/tenant/modules/cafeteria/CanteenSettings";
 import MealMenu from "./pages/tenant/modules/cafeteria/MealMenu";
@@ -402,6 +403,7 @@ const App = () => {
 
             {/* 2. SYSTEM OWNER PORTAL */}
             <Route path="/owner" element={<OwnerLogin />} />
+            <Route path="/owner/login" element={<OwnerLogin />} />
             <Route path="/owner/register" element={<OwnerRegister />} />
 
             <Route element={<DashboardLayout />}>
@@ -553,6 +555,7 @@ const App = () => {
               <Route path="/attendance-scanner" element={<AttendanceScanner />} />
               <Route path="/cafeteria/meal-service" element={<MealService />} />
               <Route path="/cafeteria/meal-history" element={<MealHistory />} />
+              <Route path="/cafeteria/missed-meals" element={<MissedMeals />} />
               <Route path="/canteen/quick-sale" element={<QuickSale />} />
               <Route path="/canteen/settings" element={<CanteenSettings />} />
               <Route path="/cafeteria/menu" element={<MealMenu />} />

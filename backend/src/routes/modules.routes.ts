@@ -75,6 +75,11 @@ router.post('/sports/:id/enroll', async (req: Request, res: Response) => {
         if (!sport) return res.status(404).json({ message: 'Sport not found' });
 
         const { studentId, studentName, studentClass } = req.body || {};
+        // Resolve the real admission/registration number from the student record.
+        let admNo = req.body?.admNo || req.body?.registrationNo || '';
+        if (!admNo && studentId) {
+            try { const st = await database.collection('students').findOne({ _id: new ObjectId(String(studentId)) }); admNo = st?.registrationNo || st?.admNo || ''; } catch { /* ignore */ }
+        }
         const fee = num(sport.fee);
         let invoice: any = null;
         if (fee > 0) {
@@ -90,6 +95,8 @@ router.post('/sports/:id/enroll', async (req: Request, res: Response) => {
             studentId: studentId || null,
             studentName: studentName || '',
             studentClass: studentClass || '',
+            admNo: admNo || '',
+            registrationNo: admNo || '',
             fee,
             invoiceId: invoice?._id?.toString() || null,
             invoiceNo: invoice?.invoice_no || null,
