@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import {
-    sendEmail, sendWhatsApp, resolveEmails, resolvePhones, getCommSettings, dbFromReq,
+    sendEmail, sendWhatsApp, resolveEmails, resolvePhones, getCommSettings, dbFromReq, schoolIdFromReq,
 } from '../services/communications.service';
+import { whatsAppManager } from '../services/whatsapp/SessionManager';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.post('/communications/whatsapp/send', async (req, res) => {
         recipients = Array.from(new Set(recipients.filter(Boolean)));
         if (recipients.length === 0) return res.status(400).json({ message: 'No recipients with phone numbers were found' });
 
-        const results = await sendWhatsApp(db, { to: recipients, message });
+        const results = await sendWhatsApp(db, { to: recipients, message, schoolId: schoolIdFromReq(req) });
         res.json(summarize(results));
     } catch (e: any) {
         res.status(400).json({ message: e.message });
@@ -77,7 +78,7 @@ router.post('/communications/whatsapp/test', async (req, res) => {
         const db = dbFromReq(req);
         const { to } = req.body || {};
         if (!to) return res.status(400).json({ message: 'A test recipient phone number is required' });
-        const results = await sendWhatsApp(db, { to: [to], message: 'Test WhatsApp message — your gateway is configured correctly.' });
+        const results = await sendWhatsApp(db, { to: [to], message: 'Test WhatsApp message — your gateway is configured correctly.', schoolId: schoolIdFromReq(req) });
         res.json(summarize(results));
     } catch (e: any) {
         res.status(400).json({ message: e.message });
@@ -104,9 +105,17 @@ router.get('/communications/status', async (req, res) => {
             emailCounts[a] = (await resolveEmails(db, a)).length;
             phoneCounts[a] = (await resolvePhones(db, a)).length;
         }
+        // WhatsApp is "ready" when the QR session is connected (preferred) OR the
+        // Meta Cloud API is configured. The QR session needs no separate enable flag.
+        const schoolId = schoolIdFromReq(req);
+        const qrConnected = schoolId ? (await whatsAppManager.getStatus(schoolId)).status === 'connected' : false;
+        const apiConfigured = !!(s.whatsappApiKey && s.whatsappPhoneNumberId);
+        const waConfigured = qrConnected || apiConfigured;
+        const waEnabled = qrConnected || (apiConfigured && !!s.whatsappEnabled);
+
         res.json({
             email: { enabled: !!s.emailEnabled, configured: !!(s.smtpHost && s.smtpUser && s.smtpPass), counts: emailCounts },
-            whatsapp: { enabled: !!s.whatsappEnabled, configured: !!(s.whatsappApiKey && s.whatsappPhoneNumberId), counts: phoneCounts },
+            whatsapp: { enabled: waEnabled, configured: waConfigured, provider: qrConnected ? 'qr' : (apiConfigured ? 'api' : null), counts: phoneCounts },
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

@@ -115,22 +115,58 @@ export const sendEmail = async (
     return results;
 };
 
-// ─── WhatsApp (Meta Cloud API) ────────────────────────────────────────────────
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
+// Two providers:
+//   • 'qr'  → the linked WhatsApp Web (Baileys) session for this school (default)
+//   • 'api' → the Meta WhatsApp Cloud API (token + phone-number id)
+// `schoolId` is required for the QR provider (selects the school's session).
 export const sendWhatsApp = async (
     db: Db,
-    { to, message }: { to: string[]; message: string },
+    { to, message, schoolId }: { to: string[]; message: string; schoolId?: string },
 ): Promise<SendResult[]> => {
     const s = await getCommSettings(db);
-    if (!s.whatsappEnabled) throw new Error('WhatsApp is disabled in Communications → Settings.');
+
+    // Decide the provider. Prefer the explicit setting; otherwise auto-detect:
+    // a connected QR session wins, else fall back to the Meta API if configured.
+    const { whatsAppManager } = await import('./whatsapp/SessionManager');
+    const qrConnected = schoolId ? (await whatsAppManager.getStatus(schoolId)).status === 'connected' : false;
+    const apiConfigured = !!((s.whatsappApiKey || process.env.WHATSAPP_TOKEN) && (s.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_ID));
+    const provider = (s.whatsappProvider as string) || (qrConnected ? 'qr' : (apiConfigured ? 'api' : 'qr'));
+
+    const recipients = uniq(to.map(t => normalizePhone(t)));
+    const results: SendResult[] = [];
+    const log = (r: SendResult, via: string) => {
+        results.push(r);
+        db.collection('whatsapp_logs').insertOne({
+            to: r.to, message, status: r.status, error: r.error || null,
+            channel: 'whatsapp', provider: via, createdAt: new Date(),
+        }).catch(() => {});
+    };
+
+    // ── QR session (WhatsApp Web) ──────────────────────────────────────────────
+    if (provider === 'qr') {
+        if (!schoolId) throw new Error('WhatsApp session unavailable for this school.');
+        if (!qrConnected) {
+            throw new Error('WhatsApp is not connected. Open Communications → WhatsApp Integration and scan the QR code.');
+        }
+        for (const r of recipients) {
+            try {
+                const sent = await whatsAppManager.sendText(schoolId, r, message);
+                log({ to: r, status: 'sent', messageId: sent.id }, 'qr');
+            } catch (e: any) {
+                log({ to: r, status: 'failed', error: e.message }, 'qr');
+            }
+        }
+        return results;
+    }
+
+    // ── Meta Cloud API ─────────────────────────────────────────────────────────
     const token = s.whatsappApiKey || process.env.WHATSAPP_TOKEN;
     const phoneId = s.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_ID;
     if (!token || !phoneId) {
-        throw new Error('WhatsApp is not configured. Set the API key and Phone Number ID in Communications → Settings.');
+        throw new Error('WhatsApp is not configured. Either scan the QR code in WhatsApp Integration, or set the Meta API key and Phone Number ID.');
     }
-    const recipients = uniq(to.map(t => normalizePhone(t)));
-    const results: SendResult[] = [];
     for (const r of recipients) {
-        let result: SendResult;
         try {
             const resp = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
                 method: 'POST',
@@ -139,17 +175,13 @@ export const sendWhatsApp = async (
             });
             const data: any = await resp.json().catch(() => ({}));
             const ok = resp.ok && Array.isArray(data?.messages);
-            result = { to: r, status: ok ? 'sent' : 'failed', error: ok ? null : (data?.error?.message || `HTTP ${resp.status}`) };
+            log({ to: r, status: ok ? 'sent' : 'failed', error: ok ? null : (data?.error?.message || `HTTP ${resp.status}`) }, 'api');
         } catch (e: any) {
-            result = { to: r, status: 'failed', error: e.message };
+            log({ to: r, status: 'failed', error: e.message }, 'api');
         }
-        results.push(result);
-        db.collection('whatsapp_logs').insertOne({
-            to: r, message, status: result.status, error: result.error || null,
-            channel: 'whatsapp', createdAt: new Date(),
-        }).catch(() => {});
     }
     return results;
 };
 
 export const dbFromReq = (req: any): Db => req.tenantDb || getMetaDb();
+export const schoolIdFromReq = (req: any): string | undefined => req.tenantContext?.tenantId;

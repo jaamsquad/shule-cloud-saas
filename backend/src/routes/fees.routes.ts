@@ -1006,7 +1006,8 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
             await sendEmail(tenantDb, { to: [email], subject: `Fee Reminder — ${invoice.invoice_no || 'Invoice'}`, message: text, html: `<p>${text}</p>` });
         } else if (channel === 'whatsapp') {
             if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
-            await sendWhatsApp(tenantDb, { to: [phone], message: text });
+            // Pass schoolId so the scanned WhatsApp (QR) session is used when connected.
+            await sendWhatsApp(tenantDb, { to: [phone], message: text, schoolId: (req as any).tenantContext?.tenantId });
         } else { // sms
             if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
             await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: 'Queued', purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });

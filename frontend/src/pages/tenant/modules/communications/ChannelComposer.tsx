@@ -83,19 +83,21 @@ export default function ChannelComposer({ channel }: Props) {
             {notConfigured && (
                 <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm font-semibold text-amber-700">
                     <AlertTriangle className="w-4 h-4" />
-                    {isEmail ? "Email (SMTP)" : "WhatsApp"} is not configured.
-                    <Link to="/communications/settings" className="underline font-black">Open Settings →</Link>
+                    {isEmail
+                        ? <>Email (SMTP) is not configured. <Link to="/communications/settings" className="underline font-black">Open Settings →</Link></>
+                        : <>WhatsApp is not connected. <Link to="/communications/whatsapp-integration" className="underline font-black">Scan the QR code →</Link></>}
                 </div>
             )}
             {disabled && (
                 <div className="mb-5 bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                     <AlertTriangle className="w-4 h-4" /> {isEmail ? "Email" : "WhatsApp"} is configured but disabled.
-                    <Link to="/communications/settings" className="underline font-black">Enable it →</Link>
+                    <Link to={isEmail ? "/communications/settings" : "/communications/whatsapp-integration"} className="underline font-black">Enable it →</Link>
                 </div>
             )}
             {chStatus?.configured && chStatus?.enabled && (
                 <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                    <CheckCircle2 className="w-4 h-4" /> Gateway active and ready.
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isEmail ? "Gateway active and ready." : (chStatus?.provider === "qr" ? "Connected via scanned WhatsApp — ready to send." : "WhatsApp API active and ready.")}
                 </div>
             )}
 

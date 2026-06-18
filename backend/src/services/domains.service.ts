@@ -73,7 +73,7 @@ async function notify(tenant: any, action: keyof typeof MESSAGES, domain: string
             const email = tenant.email || tenant.contactEmail;
             const phone = tenant.phone || tenant.contactPhone;
             if (email) await sendEmail(tdb, { to: [email], subject: title, message: body }).catch(() => {});
-            if (phone) await sendWhatsApp(tdb, { to: [phone], message: `${title}: ${body}` }).catch(() => {});
+            if (phone) await sendWhatsApp(tdb, { to: [phone], message: `${title}: ${body}`, schoolId: String(tenant._id) }).catch(() => {});
         }
     } catch { /* notifications are best-effort */ }
 }

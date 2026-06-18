@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Home, Check, Loader2, Settings, MessageSquare, Mail, Phone } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Home, Check, Loader2, Settings, MessageSquare, Mail, QrCode, ExternalLink } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -20,6 +21,7 @@ const defaultSettings = {
     emailFromAddress: "",
     emailEnabled: false,
     // WhatsApp
+    whatsappProvider: "qr",         // "qr" (scanned session) | "api" (Meta Cloud API)
     whatsappEnabled: false,
     whatsappApiKey: "",
     whatsappPhoneNumberId: "",
@@ -36,7 +38,7 @@ export default function CommunicationsSettings() {
     const qc = useQueryClient();
     const [settings, setSettings] = useState(defaultSettings);
     const [settingsId, setSettingsId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"sms" | "email" | "whatsapp" | "push">("sms");
+    const [activeTab, setActiveTab] = useState<"sms" | "email" | "push">("sms");
     const [isDirty, setIsDirty] = useState(false);
 
     const { data: existing, isLoading } = useQuery({
@@ -77,7 +79,6 @@ export default function CommunicationsSettings() {
     const TABS = [
         { key: "sms", label: "SMS", icon: MessageSquare },
         { key: "email", label: "Email", icon: Mail },
-        { key: "whatsapp", label: "WhatsApp", icon: Phone },
         { key: "push", label: "Push Notifications", icon: Bell },
     ];
 
@@ -157,20 +158,47 @@ export default function CommunicationsSettings() {
                             </div>
                         )}
 
-                        {/* WhatsApp */}
-                        {activeTab === "whatsapp" && (
-                            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-5">
-                                <Toggle label="Enable WhatsApp Business API" field="whatsappEnabled" description="Send WhatsApp messages via Meta Business API" />
-                                <div className="grid grid-cols-1 gap-5">
-                                    <Field label="WhatsApp Business API Key / Token" field="whatsappApiKey" masked placeholder="Bearer token from Meta..." />
-                                    <Field label="Phone Number ID" field="whatsappPhoneNumberId" placeholder="From Meta Business Manager" />
-                                    <Field label="Business Account ID" field="whatsappBusinessAccountId" placeholder="WABA ID" />
-                                </div>
-                                <div className="bg-green-50 border border-green-100 rounded-2xl p-4 text-xs text-green-700 font-bold">
-                                    📱 Set up at <span className="underline">business.facebook.com</span> → WhatsApp → API Setup. Requires Meta Business verification.
-                                </div>
+                        {/* WhatsApp — now configured by scanning a QR (its own page).
+                            The Meta Cloud API remains available as an optional provider. */}
+                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-5">
+                            <div className="flex items-center gap-2">
+                                <QrCode className="w-5 h-5 text-emerald-600" />
+                                <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide">WhatsApp</h3>
                             </div>
-                        )}
+
+                            <div className="relative">
+                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Provider</div>
+                                <select value={settings.whatsappProvider} onChange={e => update("whatsappProvider", e.target.value)}
+                                    className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                    <option value="qr">QR Session — scan with your phone (recommended)</option>
+                                    <option value="api">Meta WhatsApp Cloud API — use API keys</option>
+                                </select>
+                            </div>
+
+                            {settings.whatsappProvider === "qr" ? (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between gap-4">
+                                    <p className="text-xs text-emerald-700 font-bold">
+                                        Connect your school's WhatsApp by scanning a QR code — no Meta account needed. Manage the link on the WhatsApp Integration page.
+                                    </p>
+                                    <Link to="/communications/whatsapp-integration"
+                                        className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">
+                                        <QrCode className="w-4 h-4" /> Open Integration <ExternalLink className="w-3.5 h-3.5" />
+                                    </Link>
+                                </div>
+                            ) : (
+                                <>
+                                    <Toggle label="Enable WhatsApp Business API" field="whatsappEnabled" description="Send WhatsApp messages via Meta Cloud API" />
+                                    <div className="grid grid-cols-1 gap-5">
+                                        <Field label="WhatsApp Business API Key / Token" field="whatsappApiKey" masked placeholder="Bearer token from Meta..." />
+                                        <Field label="Phone Number ID" field="whatsappPhoneNumberId" placeholder="From Meta Business Manager" />
+                                        <Field label="Business Account ID" field="whatsappBusinessAccountId" placeholder="WABA ID" />
+                                    </div>
+                                    <div className="bg-green-50 border border-green-100 rounded-2xl p-4 text-xs text-green-700 font-bold">
+                                        📱 Set up at <span className="underline">business.facebook.com</span> → WhatsApp → API Setup. Requires Meta Business verification.
+                                    </div>
+                                </>
+                            )}
+                        </div>
 
                         {/* Push */}
                         {activeTab === "push" && (
