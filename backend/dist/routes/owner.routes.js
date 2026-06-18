@@ -24,6 +24,9 @@ router.get('/contact-messages', owner_controller_1.listContactMessages);
 router.patch('/contact-messages/:id', owner_controller_1.updateContactMessage);
 router.get('/public-settings', owner_controller_1.getPublicSettings);
 router.post('/public-settings', owner_controller_1.setPublicSettings);
+// ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
+router.get('/mpesa-settings', owner_controller_1.getPlatformMpesa);
+router.post('/mpesa-settings', owner_controller_1.setPlatformMpesa);
 // ─── Owner user management (add users + assign roles) ────────────────────────
 router.get('/roles', owner_controller_1.getOwnerRoles);
 router.get('/users', owner_controller_1.listOwnerUsers);

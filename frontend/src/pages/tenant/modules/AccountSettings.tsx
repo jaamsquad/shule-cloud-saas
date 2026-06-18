@@ -37,6 +37,23 @@ export default function AccountSettings() {
         }
     });
 
+    // ── Subscription & plans ───────────────────────────────────────────────────
+    const [payPhone, setPayPhone] = useState("");
+    const { data: sub } = useQuery({
+        queryKey: ["tenant_subscription"],
+        queryFn: async () => { try { return (await api.get("/auth/tenant/subscription")).data; } catch { return { plans: [], current: null }; } },
+    });
+    const subscribe = useMutation({
+        mutationFn: async (planId: string) => api.post("/auth/tenant/subscribe", { planId, phone: payPhone }),
+        onSuccess: (res: any) => {
+            if (res.data?.activated) toast.success(res.data.message || "Subscribed");
+            else toast.info(res.data?.message || "Check your phone to complete the M-PESA payment.");
+            queryClient.invalidateQueries({ queryKey: ["tenant_subscription"] });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to subscribe"),
+    });
+    const ksh = (n: any) => `KSh ${Number(n || 0).toLocaleString()}`;
+
     // Sync tenant data into form
     useEffect(() => {
         if (tenant) {
@@ -261,13 +278,13 @@ export default function AccountSettings() {
                                 </div>
                                 <div className="flex items-center">
                                     <span className="w-28 text-blue-200">Subscription:</span>
-                                    <span className={`${isFree ? "bg-[#2dd4bf]" : "bg-amber-500"} text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1`}>
-                                        <Check className="w-3 h-3" /> {subStatus}
+                                    <span className={`${(sub?.current ? sub.current.name : subStatus)?.toString().toLowerCase().includes("free") ? "bg-[#2dd4bf]" : "bg-amber-500"} text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1`}>
+                                        <Check className="w-3 h-3" /> {sub?.current?.name || subStatus}
                                     </span>
                                 </div>
                                 <div className="flex">
                                     <span className="w-28 text-blue-200">Expiry:</span>
-                                    <span className="font-medium text-white">{isFree ? "Never" : "N/A"}</span>
+                                    <span className="font-medium text-white">{sub?.expiresAt ? new Date(sub.expiresAt).toLocaleDateString() : (isFree ? "Never" : "N/A")}</span>
                                 </div>
                             </div>
 
@@ -276,11 +293,57 @@ export default function AccountSettings() {
                                 disabled={deleteAccount.isPending}
                                 className="h-10 px-6 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-70 text-white font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors relative z-10 text-xs tracking-wide"
                             >
-                                {deleteAccount.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} 
+                                {deleteAccount.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 Delete Account
                             </button>
                         </div>
                     </div>
+                </div>
+
+                {/* ── Subscription & Plans ─────────────────────────────────── */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 md:p-8 mt-6">
+                    <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                        <h3 className="text-lg font-black text-slate-800">Subscription & Plans</h3>
+                        {sub?.current && <span className="text-xs font-bold text-emerald-600">Current plan: {sub.current.name} · {ksh(sub.current.price)}/mo</span>}
+                    </div>
+                    <p className="text-xs text-slate-400 mb-5">Choose a plan and pay securely via M-PESA. {sub?.expiresAt ? `Renews/expires ${new Date(sub.expiresAt).toLocaleDateString()}.` : ""}</p>
+
+                    {/* Payment phone */}
+                    <div className="mb-5 max-w-xs">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">M-PESA Phone (for paid plans)</label>
+                        <input value={payPhone} onChange={(e) => setPayPhone(e.target.value)} placeholder="2547XXXXXXXX" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" />
+                    </div>
+
+                    {(!sub?.plans || sub.plans.length === 0) ? (
+                        <div className="text-sm text-slate-400 py-6 text-center bg-slate-50 rounded-2xl">No plans available yet. Please check back soon.</div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {sub.plans.map((p: any) => {
+                                const isCurrent = sub.current?._id === p._id;
+                                return (
+                                    <div key={p._id} className={`rounded-2xl border p-5 flex flex-col ${isCurrent ? "border-[#5C67F2] bg-[#5C67F2]/5" : "border-slate-100"}`}>
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-black text-slate-800">{p.name}</h4>
+                                            {isCurrent && <span className="text-[9px] font-black uppercase bg-[#5C67F2] text-white px-2 py-0.5 rounded-full">Current</span>}
+                                        </div>
+                                        <p className="text-2xl font-black mt-1 text-[#5C67F2]">{p.price > 0 ? ksh(p.price) : "Free"}<span className="text-xs text-slate-400 font-bold">{p.price > 0 ? "/mo" : ""}</span></p>
+                                        <div className="text-xs text-slate-500 mt-2 space-y-1 flex-1">
+                                            <div>Up to <b>{p.maxStudents == null ? "Unlimited" : Number(p.maxStudents).toLocaleString()}</b> students</div>
+                                            <div><b>{(p.modules || []).length}</b> modules included</div>
+                                            {p.description && <p className="text-[11px] text-slate-400 pt-1">{p.description}</p>}
+                                        </div>
+                                        <button
+                                            disabled={isCurrent || subscribe.isPending}
+                                            onClick={() => subscribe.mutate(p._id)}
+                                            className={`mt-4 h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${isCurrent ? "bg-slate-100 text-slate-400 cursor-default" : "bg-[#5C67F2] text-white hover:bg-[#4a54c4]"}`}>
+                                            {subscribe.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                            {isCurrent ? "Active" : p.price > 0 ? "Subscribe & Pay" : "Choose Plan"}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -57,7 +57,7 @@ export const createPlan = async (req: Request, res: Response) => {
     if (!claims) return res.status(401).json({ message: 'Unauthorized' });
     try {
         const db = getDb();
-        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
         if (!name) return res.status(400).json({ message: 'Plan name is required' });
         const doc = {
             name: String(name).trim(),
@@ -65,6 +65,8 @@ export const createPlan = async (req: Request, res: Response) => {
             limits: { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) },
             modules: Array.isArray(modules) ? modules : [],
             description: description || '',
+            durationDays: Number(durationDays) > 0 ? Number(durationDays) : 30,   // billing period length
+            graceDays: Number(graceDays) >= 0 ? Number(graceDays) : 0,            // post-expiry grace
             isActive: isActive !== false,
             createdAt: new Date(), updatedAt: new Date(),
         };
@@ -78,13 +80,15 @@ export const updatePlan = async (req: Request, res: Response) => {
     if (!claims) return res.status(401).json({ message: 'Unauthorized' });
     try {
         const db = getDb();
-        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
         const set: any = { updatedAt: new Date() };
         if (name !== undefined) set.name = String(name).trim();
         if (price !== undefined) set.price = Number(price) || 0;
         if (maxStudents !== undefined) set.limits = { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) };
         if (modules !== undefined) set.modules = Array.isArray(modules) ? modules : [];
         if (description !== undefined) set.description = description;
+        if (durationDays !== undefined) set.durationDays = Number(durationDays) > 0 ? Number(durationDays) : 30;
+        if (graceDays !== undefined) set.graceDays = Number(graceDays) >= 0 ? Number(graceDays) : 0;
         if (isActive !== undefined) set.isActive = !!isActive;
         const r = await db.collection('Plan').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
         if (!r.matchedCount) return res.status(404).json({ message: 'Plan not found' });
@@ -448,5 +452,45 @@ export const setPublicSettings = async (req: Request, res: Response) => {
             { upsert: true },
         );
         return res.json({ ok: true, registrationEnabled: !!registrationEnabled });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Platform M-PESA (Daraja) settings — owner-level, for subscription billing ─
+const MPESA_FIELDS = ['env', 'consumerKey', 'consumerSecret', 'shortcode', 'passkey', 'txType', 'initiator', 'securityCredential', 'callbackBase', 'enabled'];
+
+export const getPlatformMpesa = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const s: any = (await getDb().collection('mpesa_settings').findOne({})) || {};
+        // Mask secrets in the response.
+        return res.json({
+            env: s.env || 'sandbox',
+            consumerKey: s.consumerKey || '',
+            consumerSecret: s.consumerSecret ? '••••••••' : '',
+            shortcode: s.shortcode || '',
+            passkey: s.passkey ? '••••••••' : '',
+            txType: s.txType || 'CustomerPayBillOnline',
+            initiator: s.initiator || '',
+            callbackBase: s.callbackBase || process.env.MPESA_CALLBACK_URL || '',
+            enabled: s.enabled !== false,
+            configured: !!(s.consumerKey && s.consumerSecret && s.shortcode && s.passkey),
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const setPlatformMpesa = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const body = req.body || {};
+        const set: any = { updatedAt: new Date() };
+        MPESA_FIELDS.forEach((f) => {
+            const v = body[f];
+            // Don't overwrite a stored secret with the masked placeholder.
+            if (v === undefined || v === '••••••••') return;
+            set[f] = f === 'enabled' ? !!v : v;
+        });
+        await getDb().collection('mpesa_settings').updateOne({}, { $set: set }, { upsert: true });
+        return res.json({ ok: true });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };

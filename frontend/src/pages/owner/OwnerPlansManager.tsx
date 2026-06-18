@@ -15,8 +15,8 @@ const MODULES = [
     "secretary", "certificates", "live_class", "academic_content",
 ];
 
-type PlanForm = { name: string; price: number; maxStudents: string; modules: string[]; description: string; isActive: boolean };
-const blank: PlanForm = { name: "", price: 0, maxStudents: "", modules: [], description: "", isActive: true };
+type PlanForm = { name: string; price: number; maxStudents: string; modules: string[]; description: string; isActive: boolean; durationDays: number; graceDays: number };
+const blank: PlanForm = { name: "", price: 0, maxStudents: "", modules: [], description: "", isActive: true, durationDays: 30, graceDays: 0 };
 
 export default function OwnerPlansManager() {
     const qc = useQueryClient();
@@ -51,6 +51,8 @@ export default function OwnerPlansManager() {
             maxStudents: p.limits?.maxStudents == null ? "" : String(p.limits.maxStudents),
             modules: Array.isArray(p.modules) ? p.modules : [], description: p.description || "",
             isActive: p.isActive !== false,
+            durationDays: Number(p.durationDays) > 0 ? Number(p.durationDays) : 30,
+            graceDays: Number(p.graceDays) >= 0 ? Number(p.graceDays) : 0,
         });
         setOpen(true);
     };
@@ -105,6 +107,10 @@ export default function OwnerPlansManager() {
                                 <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Price / month (KES)</label><input type="number" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
                             </div>
                             <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Max Students <span className="text-slate-400 font-normal">(blank = unlimited)</span></label><input type="number" value={form.maxStudents} onChange={(e) => setForm((f) => ({ ...f, maxStudents: e.target.value }))} placeholder="e.g. 500" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Duration (days)</label><input type="number" value={form.durationDays} onChange={(e) => setForm((f) => ({ ...f, durationDays: Number(e.target.value) }))} placeholder="30" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                                <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Grace Period (days)</label><input type="number" value={form.graceDays} onChange={(e) => setForm((f) => ({ ...f, graceDays: Number(e.target.value) }))} placeholder="0" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                            </div>
                             <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Description</label><input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-600 mb-1">Included Modules ({form.modules.length})</label>

@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   GraduationCap, Users, CalendarCheck, Wallet, Briefcase, Boxes, BookOpen,
   Building2, Bus, HeartPulse, ShieldAlert, MessageSquare, LayoutDashboard,
-  Landmark, ScrollText, Search, FileBarChart, ArrowRight, Lock,
+  Landmark, ScrollText, Search, FileBarChart, ArrowRight, Lock, Pencil, Check, X, ArrowRight as Arrow,
 } from "lucide-react";
 
 type Report = { label: string; path?: string };
@@ -92,13 +92,40 @@ const CATEGORIES: Category[] = [
   ]},
 ];
 
+// Quick-launch KPI cards — the most-used live reports, openable from the top.
+const KPI_CARDS = [
+  { label: "Report Cards", path: "/reports/report-cards", icon: GraduationCap, color: "#2563EB" },
+  { label: "Fee Collection", path: "/reports/fee-collection", icon: Wallet, color: "#10B981" },
+  { label: "Students Info", path: "/reports/students-info", icon: Users, color: "#7C3AED" },
+  { label: "Attendance", path: "/reports/attendance/monthly-students", icon: CalendarCheck, color: "#0EA5E9" },
+  { label: "Accounts", path: "/reports/accounts", icon: Landmark, color: "#F59E0B" },
+  { label: "Customised", path: "/reports/custom", icon: LayoutDashboard, color: "#EC4899" },
+];
+
+const COLOR_SWATCHES = ["#2563EB", "#7C3AED", "#0EA5E9", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#14B8A6", "#F97316", "#EF4444", "#06B6D4", "#475569", "#0F172A", "#DC2626"];
+
+type Override = { name?: string; color?: string };
+const loadOverrides = (): Record<string, Override> => {
+  try { return JSON.parse(localStorage.getItem("reportCategoryOverrides") || "{}"); } catch { return {}; }
+};
+
 export default function ReportsCenter() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const q = search.toLowerCase();
 
+  // Admin customization: rename categories + choose their colour (persisted).
+  const [editMode, setEditMode] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, Override>>(loadOverrides);
+  useEffect(() => { localStorage.setItem("reportCategoryOverrides", JSON.stringify(overrides)); }, [overrides]);
+  const nameOf = (key: string) => overrides[key]?.name || key;
+  const colorOf = (key: string, fallback: string) => overrides[key]?.color || fallback;
+  const setName = (key: string, name: string) => setOverrides(o => ({ ...o, [key]: { ...o[key], name } }));
+  const setColor = (key: string, color: string) => setOverrides(o => ({ ...o, [key]: { ...o[key], color } }));
+
   const cats = CATEGORIES.map(c => ({
     ...c,
-    reports: c.reports.filter(r => !q || r.label.toLowerCase().includes(q) || c.key.toLowerCase().includes(q)),
+    reports: c.reports.filter(r => !q || r.label.toLowerCase().includes(q) || nameOf(c.key).toLowerCase().includes(q)),
   })).filter(c => c.reports.length);
 
   const total = CATEGORIES.reduce((n, c) => n + c.reports.length, 0);
@@ -116,11 +143,29 @@ export default function ReportsCenter() {
               <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{total} reports · {live} live across 15 modules</p>
             </div>
           </div>
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search any report…"
-              className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#2563EB] shadow-sm" />
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="relative flex-1 md:w-80">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search any report…"
+                className="w-full h-11 pl-11 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#2563EB] shadow-sm" />
+            </div>
+            <button onClick={() => setEditMode(v => !v)}
+              className={`h-11 px-4 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm ${editMode ? "bg-emerald-500 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+              {editMode ? <><Check className="w-4 h-4" /> Done</> : <><Pencil className="w-4 h-4" /> Customize</>}
+            </button>
           </div>
+        </div>
+
+        {/* KPI quick-launch cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+          {KPI_CARDS.map(k => (
+            <button key={k.label} onClick={() => navigate(k.path)}
+              className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-left hover:shadow-md hover:border-slate-200 transition-all group">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white mb-2" style={{ background: k.color }}><k.icon className="w-4.5 h-4.5" /></div>
+              <div className="text-sm font-black text-slate-800 leading-tight">{k.label}</div>
+              <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mt-1 group-hover:text-slate-600">Open report <Arrow className="w-3 h-3" /></div>
+            </button>
+          ))}
         </div>
 
         {/* Categories */}
@@ -128,10 +173,25 @@ export default function ReportsCenter() {
           {cats.map(c => (
             <div key={c.key} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-50">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: c.color }}><c.icon className="w-4.5 h-4.5" /></div>
-                <h2 className="font-black text-slate-800 text-sm">{c.key}</h2>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: colorOf(c.key, c.color) }}><c.icon className="w-4.5 h-4.5" /></div>
+                {editMode ? (
+                  <input value={nameOf(c.key)} onChange={e => setName(c.key, e.target.value)}
+                    className="font-black text-slate-800 text-sm border border-slate-200 rounded-lg px-2 h-8 flex-1 min-w-0 focus:outline-none focus:border-[#2563EB]" />
+                ) : (
+                  <h2 className="font-black text-slate-800 text-sm">{nameOf(c.key)}</h2>
+                )}
                 <span className="ml-auto text-[10px] font-black text-slate-300">{c.reports.length}</span>
               </div>
+              {editMode && (
+                <div className="px-5 py-2.5 bg-slate-50/60 border-b border-slate-50 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Colour</span>
+                  {COLOR_SWATCHES.map(sw => (
+                    <button key={sw} onClick={() => setColor(c.key, sw)}
+                      className={`w-5 h-5 rounded-full border-2 ${colorOf(c.key, c.color) === sw ? "border-slate-800" : "border-white"}`} style={{ background: sw }} />
+                  ))}
+                  {overrides[c.key] && <button onClick={() => setOverrides(o => { const n = { ...o }; delete n[c.key]; return n; })} className="ml-1 text-[10px] font-bold text-slate-400 hover:text-rose-500 flex items-center gap-0.5"><X className="w-3 h-3" /> reset</button>}
+                </div>
+              )}
               <div className="divide-y divide-slate-50">
                 {c.reports.map(r => r.path ? (
                   <Link key={r.label} to={r.path} className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#2563EB] transition-colors group">

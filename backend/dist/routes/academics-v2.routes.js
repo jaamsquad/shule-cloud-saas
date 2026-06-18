@@ -291,7 +291,14 @@ router.get('/v2/enrollments', async (req, res) => {
         if (req.query.status)
             query.status = req.query.status.toString();
         const enrollments = await db.collection('student_enrollments').find(query).sort({ enrollmentDate: -1 }).toArray();
-        res.json(enrollments);
+        // Enrich with each student's REAL current class from the students collection.
+        const students = await db.collection('students').find({}).toArray().catch(() => []);
+        const byId = {};
+        students.forEach((s) => { byId[String(s._id)] = s; });
+        res.json(enrollments.map((e) => {
+            const s = byId[String(e.studentId)];
+            return { ...e, currentClass: s?.studentClass || s?.currentClass || e.fullClassName || e.className || '' };
+        }));
     }
     catch (e) {
         res.status(500).json({ message: e.message });
@@ -338,6 +345,11 @@ router.post('/v2/enrollments', async (req, res) => {
             enrollmentDate: now(), createdAt: now(),
         };
         const result = await db.collection('student_enrollments').insertOne(enrollment);
+        // Sync the student's current class so All Students reflects the enrolment.
+        try {
+            await db.collection('students').updateOne({ _id: toOid(studentId) }, { $set: { studentClass: enrollment.fullClassName || cls?.name || '', currentClass: enrollment.fullClassName || cls?.name || '', classId, streamId, streamName: stream?.name || '', academicYear: year?.year || '', updatedAt: now() } });
+        }
+        catch { /* ignore */ }
         await auditLog(db, 'CREATE_ENROLLMENT', 'student_enrollments', result.insertedId.toString(), 'system', null, enrollment);
         res.status(201).json({ id: result.insertedId, ...enrollment });
     }
@@ -462,6 +474,26 @@ router.post('/v2/promotions', async (req, res) => {
                 createdAt: now(),
             };
             await db.collection('student_enrollments').insertOne(newEnrollment);
+            // 3. Sync the student's CURRENT class on the students collection so the
+            //    All Students page (and everything that reads studentClass) reflects
+            //    the promotion immediately. Historical enrollments stay intact above.
+            const newClassLabel = newEnrollment.fullClassName || `${toClass?.name || ''} ${toStream?.name || ''}`.trim() || toClass?.name || '';
+            const sid = enrollment.studentId;
+            try {
+                const filter = /^[a-f0-9]{24}$/i.test(String(sid)) ? { _id: new (require('mongodb').ObjectId)(String(sid)) } : { _id: sid };
+                await db.collection('students').updateOne(filter, {
+                    $set: {
+                        studentClass: newClassLabel,
+                        currentClass: newClassLabel,
+                        classId: toClassId,
+                        streamId: toStreamId,
+                        streamName: toStream?.name || '',
+                        academicYear: toYear?.year || '',
+                        updatedAt: now(),
+                    },
+                });
+            }
+            catch { /* ignore a bad id, continue promoting others */ }
             promoted++;
         }
         await auditLog(db, 'BULK_PROMOTION', 'student_enrollments', 'bulk', 'system', { from: fromClassId, fromStream: fromStreamId }, { to: toClassId, toStream: toStreamId, count: promoted });

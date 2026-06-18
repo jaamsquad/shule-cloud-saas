@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mail, Loader2, Check, Power } from "lucide-react";
+import { Mail, Loader2, Check, Power, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -30,6 +31,23 @@ export default function OwnerMessages() {
 
     const regOn = settings?.registrationEnabled !== false;
 
+    // ── Platform M-PESA (Daraja) for subscription billing ──────────────────────
+    const { data: mpesa } = useQuery({
+        queryKey: ["owner_mpesa"],
+        queryFn: async () => { try { return (await api.get("/owner/mpesa-settings")).data; } catch { return {}; } },
+    });
+    const [mp, setMp] = useState<any>({ env: "sandbox", consumerKey: "", consumerSecret: "", shortcode: "", passkey: "", txType: "CustomerPayBillOnline", callbackBase: "", enabled: true });
+    useEffect(() => { if (mpesa) setMp((p: any) => ({ ...p, ...mpesa })); }, [mpesa]);
+    const saveMpesa = useMutation({
+        mutationFn: async () => api.post("/owner/mpesa-settings", mp),
+        onSuccess: () => { toast.success("Platform M-PESA saved"); qc.invalidateQueries({ queryKey: ["owner_mpesa"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+    const mpField = (k: string, label: string, type = "text") => (
+        <div><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
+            <input type={type} value={mp[k] ?? ""} onChange={(e) => setMp((p: any) => ({ ...p, [k]: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+    );
+
     return (
         <div className="space-y-5">
             {/* Public registration toggle */}
@@ -43,6 +61,35 @@ export default function OwnerMessages() {
                     {toggleReg.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                     {regOn ? "Enabled" : "Disabled"}
                 </button>
+            </div>
+
+            {/* Platform M-PESA (Daraja) — collects subscription payments via STK */}
+            <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Smartphone className="w-4 h-4" style={{ color: PRIMARY }} /> Platform M-PESA (Subscription Billing)</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Your Daraja credentials. Schools pay for plans via STK push to this paybill. {mpesa?.configured ? "" : "Not configured yet."}</p>
+                    </div>
+                    <button onClick={() => saveMpesa.mutate()} disabled={saveMpesa.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveMpesa.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Environment</label>
+                        <select value={mp.env} onChange={(e) => setMp((p: any) => ({ ...p, env: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+                            <option value="sandbox">Sandbox</option><option value="production">Production</option>
+                        </select>
+                    </div>
+                    {mpField("shortcode", "Shortcode / Paybill")}
+                    {mpField("consumerKey", "Consumer Key")}
+                    {mpField("consumerSecret", "Consumer Secret", "password")}
+                    {mpField("passkey", "Passkey", "password")}
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Transaction Type</label>
+                        <select value={mp.txType} onChange={(e) => setMp((p: any) => ({ ...p, txType: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
+                            <option value="CustomerPayBillOnline">PayBill</option><option value="CustomerBuyGoodsOnline">Buy Goods (Till)</option>
+                        </select>
+                    </div>
+                    <div className="col-span-2">{mpField("callbackBase", "Callback Base URL (e.g. https://api.shulecloud.com/api/v1)")}</div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3">Production STK endpoint: <code>https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest</code> (used automatically when Environment = Production).</p>
             </div>
 
             {/* Contact messages */}

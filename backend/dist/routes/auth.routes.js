@@ -2225,4 +2225,77 @@ router.get('/tenant/profile', auth_controller_1.getTenantProfile);
 router.patch('/tenant/profile', auth_controller_1.updateTenantProfile);
 router.patch('/tenant/user/:id', auth_controller_1.updateUser);
 router.delete('/tenant/user/:id', auth_controller_1.deleteUser);
+// ─── Tenant subscription: list plans + current plan, and subscribe/pay ───────
+// The school admin browses available plans and pays (M-PESA) right from Account
+// Settings. Plans live in the meta DB; the tenant's subscription is in meta too.
+router.get('/tenant/subscription', async (req, res) => {
+    try {
+        const tid = req.tenantContext?.tenantId;
+        if (!tid)
+            return res.status(400).json({ message: 'No school context' });
+        const meta = (0, mongodb_1.getMetaDb)();
+        const plans = await meta.collection('Plan').find({ isActive: { $ne: false } }).sort({ price: 1 }).toArray();
+        const sub = await meta.collection('TenantSubscription').findOne({ tenantId: new mongodb_2.ObjectId(tid) });
+        const current = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId }) : null;
+        res.json({
+            plans: plans.map((p) => ({ _id: String(p._id), name: p.name, price: Number(p.price || 0), maxStudents: p.limits?.maxStudents ?? null, modules: p.modules || [], description: p.description || '' })),
+            current: current ? { _id: String(current._id), name: current.name, price: Number(current.price || 0) } : null,
+            status: sub?.status || 'none',
+            expiresAt: sub?.expiresAt || sub?.currentPeriodEnd || null,
+        });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+// Subscribe to a plan. Free plans (price 0) activate immediately; paid plans
+// trigger an M-PESA STK push and activate on successful callback.
+router.post('/tenant/subscribe', async (req, res) => {
+    try {
+        const tid = req.tenantContext?.tenantId;
+        if (!tid)
+            return res.status(400).json({ message: 'No school context' });
+        const meta = (0, mongodb_1.getMetaDb)();
+        const { planId, phone } = req.body || {};
+        const plan = await meta.collection('Plan').findOne({ _id: new mongodb_2.ObjectId(planId) });
+        if (!plan)
+            return res.status(404).json({ message: 'Plan not found' });
+        const tenantId = new mongodb_2.ObjectId(tid);
+        const price = Number(plan.price || 0);
+        // Plan duration + grace from the plan config (defaults: 30 days / 0 grace).
+        const durationDays = Number(plan.durationDays) > 0 ? Number(plan.durationDays) : 30;
+        const graceDays = Number(plan.graceDays) >= 0 ? Number(plan.graceDays) : 0;
+        // Free plan → activate now.
+        if (price <= 0) {
+            const expiresAt = new Date(Date.now() + durationDays * 86400000);
+            const graceUntil = new Date(expiresAt.getTime() + graceDays * 86400000);
+            await meta.collection('TenantSubscription').updateOne({ tenantId }, { $set: { tenantId, planId: plan._id, planName: plan.name, amount: 0, status: 'active', expiresAt, graceUntil, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+            await meta.collection('Tenant').updateOne({ _id: tenantId }, { $set: { planId: plan._id, plan: plan.name, enabledModules: plan.modules || [], status: 'active', updatedAt: new Date() } });
+            return res.json({ activated: true, message: `Subscribed to ${plan.name}.` });
+        }
+        // Paid plan → M-PESA STK push to the PLATFORM owner's paybill (meta DB
+        // config), so subscription revenue is collected by ShuleCloud — not the
+        // school's own Daraja. Owner sets this in the Owner Portal → Settings.
+        const cfg = await (0, mpesa_service_1.resolveMpesaConfig)(meta);
+        if (!(0, mpesa_service_1.isMpesaConfigured)(cfg))
+            return res.status(400).json({ message: 'Subscription payments are not available yet — the platform M-PESA is not configured. Please contact ShuleCloud.' });
+        if (!phone)
+            return res.status(400).json({ message: 'Phone number is required for payment' });
+        const r = await (0, mpesa_service_1.stkPush)(cfg, {
+            phone, amount: price, accountRef: `PLAN-${plan.name}`.slice(0, 12),
+            description: `ShuleCloud ${plan.name} subscription`,
+            callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+        });
+        await meta.collection('subscription_payments').insertOne({
+            tenantId, planId: plan._id, planName: plan.name, amount: price, phone,
+            checkoutRequestId: r.checkoutRequestId, status: 'pending', createdAt: new Date(),
+        });
+        // Record the intended plan as pending; the M-PESA callback finalizes it.
+        await meta.collection('TenantSubscription').updateOne({ tenantId }, { $set: { tenantId, pendingPlanId: plan._id, pendingPlanName: plan.name, lastCheckoutRequestId: r.checkoutRequestId, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date(), status: 'none' } }, { upsert: true });
+        res.json({ activated: false, checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN to complete the subscription.' });
+    }
+    catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
 exports.default = router;

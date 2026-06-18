@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setPublicSettings = exports.getPublicSettings = exports.updateContactMessage = exports.listContactMessages = exports.submitContactMessage = exports.impersonateSchool = exports.setSchoolModules = exports.setSchoolStatus = exports.assignSchoolPlan = exports.getSchoolDetail = exports.deleteOwnerUser = exports.updateOwnerUser = exports.createOwnerUser = exports.listOwnerUsers = exports.getOwnerRoles = exports.getSchoolsSummary = exports.getOwnerRevenue = exports.getOwnerStats = exports.getRevenueReport = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = exports.getTenants = exports.OWNER_ROLES = void 0;
+exports.setPlatformMpesa = exports.getPlatformMpesa = exports.setPublicSettings = exports.getPublicSettings = exports.updateContactMessage = exports.listContactMessages = exports.submitContactMessage = exports.impersonateSchool = exports.setSchoolModules = exports.setSchoolStatus = exports.assignSchoolPlan = exports.getSchoolDetail = exports.deleteOwnerUser = exports.updateOwnerUser = exports.createOwnerUser = exports.listOwnerUsers = exports.getOwnerRoles = exports.getSchoolsSummary = exports.getOwnerRevenue = exports.getOwnerStats = exports.getRevenueReport = exports.deletePlan = exports.updatePlan = exports.createPlan = exports.getPlans = exports.getTenants = exports.OWNER_ROLES = void 0;
 const mongodb_1 = require("mongodb");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -65,7 +65,7 @@ const createPlan = async (req, res) => {
         return res.status(401).json({ message: 'Unauthorized' });
     try {
         const db = (0, mongodb_2.getDb)();
-        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
         if (!name)
             return res.status(400).json({ message: 'Plan name is required' });
         const doc = {
@@ -74,6 +74,8 @@ const createPlan = async (req, res) => {
             limits: { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) },
             modules: Array.isArray(modules) ? modules : [],
             description: description || '',
+            durationDays: Number(durationDays) > 0 ? Number(durationDays) : 30, // billing period length
+            graceDays: Number(graceDays) >= 0 ? Number(graceDays) : 0, // post-expiry grace
             isActive: isActive !== false,
             createdAt: new Date(), updatedAt: new Date(),
         };
@@ -91,7 +93,7 @@ const updatePlan = async (req, res) => {
         return res.status(401).json({ message: 'Unauthorized' });
     try {
         const db = (0, mongodb_2.getDb)();
-        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
         const set = { updatedAt: new Date() };
         if (name !== undefined)
             set.name = String(name).trim();
@@ -103,6 +105,10 @@ const updatePlan = async (req, res) => {
             set.modules = Array.isArray(modules) ? modules : [];
         if (description !== undefined)
             set.description = description;
+        if (durationDays !== undefined)
+            set.durationDays = Number(durationDays) > 0 ? Number(durationDays) : 30;
+        if (graceDays !== undefined)
+            set.graceDays = Number(graceDays) >= 0 ? Number(graceDays) : 0;
         if (isActive !== undefined)
             set.isActive = !!isActive;
         const r = await db.collection('Plan').updateOne({ _id: new mongodb_1.ObjectId(req.params.id) }, { $set: set });
@@ -550,3 +556,51 @@ const setPublicSettings = async (req, res) => {
     }
 };
 exports.setPublicSettings = setPublicSettings;
+// ─── Platform M-PESA (Daraja) settings — owner-level, for subscription billing ─
+const MPESA_FIELDS = ['env', 'consumerKey', 'consumerSecret', 'shortcode', 'passkey', 'txType', 'initiator', 'securityCredential', 'callbackBase', 'enabled'];
+const getPlatformMpesa = async (req, res) => {
+    if (!ownerClaims(req))
+        return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const s = (await (0, mongodb_2.getDb)().collection('mpesa_settings').findOne({})) || {};
+        // Mask secrets in the response.
+        return res.json({
+            env: s.env || 'sandbox',
+            consumerKey: s.consumerKey || '',
+            consumerSecret: s.consumerSecret ? '••••••••' : '',
+            shortcode: s.shortcode || '',
+            passkey: s.passkey ? '••••••••' : '',
+            txType: s.txType || 'CustomerPayBillOnline',
+            initiator: s.initiator || '',
+            callbackBase: s.callbackBase || process.env.MPESA_CALLBACK_URL || '',
+            enabled: s.enabled !== false,
+            configured: !!(s.consumerKey && s.consumerSecret && s.shortcode && s.passkey),
+        });
+    }
+    catch (e) {
+        return res.status(500).json({ message: e.message });
+    }
+};
+exports.getPlatformMpesa = getPlatformMpesa;
+const setPlatformMpesa = async (req, res) => {
+    const claims = ownerClaims(req);
+    if (!claims)
+        return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const body = req.body || {};
+        const set = { updatedAt: new Date() };
+        MPESA_FIELDS.forEach((f) => {
+            const v = body[f];
+            // Don't overwrite a stored secret with the masked placeholder.
+            if (v === undefined || v === '••••••••')
+                return;
+            set[f] = f === 'enabled' ? !!v : v;
+        });
+        await (0, mongodb_2.getDb)().collection('mpesa_settings').updateOne({}, { $set: set }, { upsert: true });
+        return res.json({ ok: true });
+    }
+    catch (e) {
+        return res.status(500).json({ message: e.message });
+    }
+};
+exports.setPlatformMpesa = setPlatformMpesa;

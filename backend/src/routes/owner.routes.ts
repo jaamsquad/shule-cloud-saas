@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -27,6 +27,10 @@ router.get('/contact-messages', listContactMessages);
 router.patch('/contact-messages/:id', updateContactMessage);
 router.get('/public-settings', getPublicSettings);
 router.post('/public-settings', setPublicSettings);
+
+// ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
+router.get('/mpesa-settings', getPlatformMpesa);
+router.post('/mpesa-settings', setPlatformMpesa);
 
 // ─── Owner user management (add users + assign roles) ────────────────────────
 router.get('/roles', getOwnerRoles);
