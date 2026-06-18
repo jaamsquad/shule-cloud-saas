@@ -52,6 +52,7 @@ import OwnerSettings from "./pages/owner/Settings";
 import OwnerRegister from "./pages/owner/Register";
 import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
+import ManageSchool from "./pages/owner/ManageSchool";
 
 // Onboarding
 import OnboardingWizard from "./pages/OnboardingWizard";
@@ -411,6 +412,7 @@ const App = () => {
                 tenant DashboardLayout (which would bounce owners to /login). */}
             <Route element={<OwnerGuard />}>
               <Route path="/owner/dashboard" element={<OwnerDashboard />} />
+              <Route path="/owner/schools/:id" element={<ManageSchool />} />
               <Route path="/owner/tenants" element={<OwnerTenants />} />
               <Route path="/owner/plans" element={<OwnerPlans />} />
               <Route path="/owner/audit" element={<OwnerAudit />} />

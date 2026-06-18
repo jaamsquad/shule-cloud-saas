@@ -40,7 +40,8 @@ async function uploadDocument(req, res) {
             rawText: ""
         };
         await db.collection('ocr_jobs').insertOne(initialJobRecord);
-        // Add job to BullMQ / Redis / Memory Queue
+        // Add job to BullMQ / Redis / Memory Queue. Pass the tenant DB name so the
+        // worker writes results back to the SAME database the job was created in.
         await ocrQueue_1.ocrQueueInstance.addJob({
             jobId,
             buffer,
@@ -48,7 +49,8 @@ async function uploadDocument(req, res) {
             subjectId,
             chapterId,
             classId,
-            ocrMode: ocrMode || "DEEP_OCR"
+            ocrMode: ocrMode || "DEEP_OCR",
+            tenantDbName: req.tenantContext?.databaseName || req.tenantDb?.databaseName || null,
         });
         return res.status(202).json({
             jobId,

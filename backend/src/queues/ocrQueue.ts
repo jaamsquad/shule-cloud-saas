@@ -4,7 +4,7 @@
  * Includes robust enterprise memory queue simulation if Redis is not running in the current environment.
  */
 
-import { getMetaDb } from "../lib/mongodb";
+import { getMetaDb, getTenantDb } from "../lib/mongodb";
 import { ocrEngineInstance } from "../modules/OCR/ocrEngine";
 import { pdfParserInstance } from "../modules/questionImport/pdfParser";
 import { questionSplitterInstance } from "../modules/questionImport/questionSplitter";
@@ -39,7 +39,7 @@ export class NodeOCRQueue {
         }
     }
 
-    public async addJob(jobData: { jobId: string; buffer: Buffer; filename: string; subjectId?: string; chapterId?: string; classId?: string; ocrMode?: string }) {
+    public async addJob(jobData: { jobId: string; buffer: Buffer; filename: string; subjectId?: string; chapterId?: string; classId?: string; ocrMode?: string; tenantDbName?: string | null }) {
         if (this.isRedisAvailable && this.bullQueue) {
             await this.bullQueue.add("process-ocr", jobData);
         } else {
@@ -50,9 +50,10 @@ export class NodeOCRQueue {
         }
     }
 
-    private async processJobLogic(data: { jobId: string; buffer: Buffer; filename: string; subjectId?: string; chapterId?: string; classId?: string; ocrMode?: string }) {
+    private async processJobLogic(data: { jobId: string; buffer: Buffer; filename: string; subjectId?: string; chapterId?: string; classId?: string; ocrMode?: string; tenantDbName?: string | null }) {
+        // Use the SAME database the job was created in (tenant DB), not meta.
+        const db = data.tenantDbName ? getTenantDb(data.tenantDbName) : getMetaDb();
         try {
-            const db = getMetaDb();
             const { jobId, buffer, filename, subjectId, chapterId, classId } = data;
 
             // Update status to processing
@@ -104,7 +105,6 @@ export class NodeOCRQueue {
         } catch (error: any) {
             console.error(`[NodeOCRQueue] Job processing failed for ${data.jobId}:`, error);
             try {
-                const db = getMetaDb();
                 await db.collection('ocr_jobs').updateOne({ jobId: data.jobId }, { $set: { status: "Failed", error: error.message, updatedAt: new Date() } });
             } catch (e) {}
         }

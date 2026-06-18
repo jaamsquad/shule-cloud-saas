@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { GraduationCap, Eye, EyeOff, User, Lock, Mail, ArrowRight, ShieldCheck, Globe, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -6,6 +6,15 @@ import api from "@/lib/api";
 
 export default function Register() {
   const navigate = useNavigate();
+
+  // If the platform owner has disabled public registration, redirect to landing.
+  useEffect(() => {
+    let active = true;
+    api.get("/onboard/public-settings")
+      .then((r) => { if (active && r.data?.registrationEnabled === false) { toast.info("Registration is currently closed. Please contact us."); navigate("/", { replace: true }); } })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [navigate]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

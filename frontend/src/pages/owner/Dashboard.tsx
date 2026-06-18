@@ -16,9 +16,11 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import OwnerAnalytics from "./OwnerAnalytics";
 import OwnerUsers from "./OwnerUsers";
+import OwnerPlansManager from "./OwnerPlansManager";
+import OwnerMessages from "./OwnerMessages";
 
 export default function OwnerDashboard() {
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users">("analytics");
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -105,7 +107,7 @@ export default function OwnerDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-border">
-          {(["analytics", "tenants", "plans", "billing", "users"] as const).map(t => (
+          {(["analytics", "tenants", "plans", "billing", "users", "messages"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -120,6 +122,8 @@ export default function OwnerDashboard() {
         {tab === "analytics" && <OwnerAnalytics />}
 
         {tab === "users" && <OwnerUsers />}
+
+        {tab === "messages" && <OwnerMessages />}
 
         {tab === "tenants" && (
           <Card className="shadow-card">
@@ -154,7 +158,7 @@ export default function OwnerDashboard() {
                         <TableCell className="font-medium text-sm">{t.name}</TableCell>
                         <TableCell>
                           <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-primary font-mono">
-                            {t.domains?.[0]?.domain || 'N/A'}.shulecloud.co.ke
+                            {(t.subdomain || t.domains?.[0]?.domain || t.name?.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'school')}.shulecloud.com
                           </code>
                         </TableCell>
                         <TableCell><Badge variant="secondary" className="text-xs">{t.subscription?.plan?.name || "No Plan"}</Badge></TableCell>
@@ -168,8 +172,8 @@ export default function OwnerDashboard() {
                           {new Date(t.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="w-4 h-4" />
+                          <Button variant="outline" size="sm" className="h-8 text-xs font-bold" onClick={() => navigate(`/owner/schools/${t._id || t.id}`)}>
+                            Manage School
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -181,42 +185,7 @@ export default function OwnerDashboard() {
           </Card>
         )}
 
-        {tab === "plans" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {plansLoading ? (
-              <div className="col-span-3 text-center py-10 text-muted-foreground animate-pulse">Loading plans...</div>
-            ) : plans.length === 0 ? (
-              <div className="col-span-3 text-center py-10 text-muted-foreground">No plans configured yet.</div>
-            ) : (
-              plans.map((p: any) => (
-                <Card key={p.id} className="shadow-card">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-heading">{p.name}</CardTitle>
-                    <p className="text-2xl font-bold text-primary">
-                      KES {Number(p.priceMonthly || p.price || 0).toLocaleString()}/mo
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Status</span>
-                      <Badge className={p.isActive !== false ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}>
-                        {p.isActive !== false ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Max Students</span>
-                      <span className="font-medium">{p.limits?.maxStudents?.toLocaleString() || "Unlimited"}</span>
-                    </div>
-                    {p.description && (
-                      <p className="text-xs text-muted-foreground pt-2">{p.description}</p>
-                    )}
-                    <Button variant="outline" size="sm" className="w-full mt-2">Edit Plan</Button>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
+        {tab === "plans" && <OwnerPlansManager />}
 
         {tab === "billing" && (
           <Card className="shadow-card">

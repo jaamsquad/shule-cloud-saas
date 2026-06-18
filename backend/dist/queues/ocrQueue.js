@@ -83,8 +83,9 @@ class NodeOCRQueue {
         }
     }
     async processJobLogic(data) {
+        // Use the SAME database the job was created in (tenant DB), not meta.
+        const db = data.tenantDbName ? (0, mongodb_1.getTenantDb)(data.tenantDbName) : (0, mongodb_1.getMetaDb)();
         try {
-            const db = (0, mongodb_1.getMetaDb)();
             const { jobId, buffer, filename, subjectId, chapterId, classId } = data;
             // Update status to processing
             await db.collection('ocr_jobs').updateOne({ jobId }, { $set: { status: "Processing", progress: 25, updatedAt: new Date() } });
@@ -131,7 +132,6 @@ class NodeOCRQueue {
         catch (error) {
             console.error(`[NodeOCRQueue] Job processing failed for ${data.jobId}:`, error);
             try {
-                const db = (0, mongodb_1.getMetaDb)();
                 await db.collection('ocr_jobs').updateOne({ jobId: data.jobId }, { $set: { status: "Failed", error: error.message, updatedAt: new Date() } });
             }
             catch (e) { }

@@ -24,25 +24,84 @@ export class NodeOCREngine {
     }
 
     /**
-     * Extracts text from scanned PDFs or image buffers.
-     * Converts PDF pages to images using sharp/pdfjs-dist, runs OCR, and merges text.
+     * Extracts REAL text from the uploaded document:
+     *   • PDF  → pdf-parse (embedded text). If a PDF has no text layer (scanned),
+     *            falls back to rendering pages and running tesseract OCR.
+     *   • DOCX → mammoth.
+     *   • Image (png/jpg) → tesseract OCR.
+     * The simulated sample is only used as an absolute last resort and is clearly
+     * flagged so it's never mistaken for real extraction.
      */
     public async extractTextFromBuffer(buffer: Buffer, filename: string): Promise<{ text: string; pages: number }> {
+        const name = (filename || '').toLowerCase();
         try {
-            if (this.isTesseractReady && filename.match(/\.(png|jpe?g)$/i)) {
-                const tesseract = (await import("tesseract.js")).default;
-                const result = await tesseract.recognize(buffer, "eng", { logger: m => console.log(m) });
-                return {
-                    text: cleanExtractedText(result.data.text),
-                    pages: 1
-                };
+            // ── PDF ──────────────────────────────────────────────────────────
+            if (name.endsWith('.pdf') || (buffer && buffer.slice(0, 5).toString() === '%PDF-')) {
+                const pdfParse = (await import('pdf-parse')).default as any;
+                const data = await pdfParse(buffer);
+                const text = cleanExtractedText(data.text || '');
+                if (text.replace(/\s/g, '').length > 40) {
+                    return { text, pages: data.numpages || 1 };
+                }
+                // No usable text layer → scanned PDF → OCR the rendered pages.
+                console.log('[NodeOCREngine] PDF has no text layer — running image OCR fallback.');
+                const ocr = await this.ocrScannedPdf(buffer);
+                if (ocr && ocr.text.replace(/\s/g, '').length > 20) return ocr;
             }
-            
-            // If PDF or Tesseract unavailable, use robust high-fidelity simulated OCR extraction
+
+            // ── DOCX ─────────────────────────────────────────────────────────
+            if (name.endsWith('.docx') || name.endsWith('.doc')) {
+                const mammoth = await import('mammoth');
+                const result = await mammoth.extractRawText({ buffer });
+                return { text: cleanExtractedText(result.value || ''), pages: 1 };
+            }
+
+            // ── Image ────────────────────────────────────────────────────────
+            if (name.match(/\.(png|jpe?g|webp|bmp|tiff?)$/i) || (buffer && (buffer[0] === 0x89 || buffer[0] === 0xFF))) {
+                const tesseract = (await import('tesseract.js')).default;
+                const result = await tesseract.recognize(buffer, 'eng');
+                return { text: cleanExtractedText(result.data.text || ''), pages: 1 };
+            }
+
+            // ── Plain text fallback ──────────────────────────────────────────
+            const asText = buffer?.toString('utf8') || '';
+            if (asText.replace(/\s/g, '').length > 40) return { text: cleanExtractedText(asText), pages: 1 };
+
+            console.warn('[NodeOCREngine] Unrecognized/empty document — using sample fallback.');
             return this.executeSimulatedOCR(filename);
         } catch (error: any) {
-            console.error(`[NodeOCREngine] OCR processing failed (${error.message}). Executing fallback engine.`);
+            console.error(`[NodeOCREngine] Extraction failed (${error.message}). Using sample fallback.`);
             return this.executeSimulatedOCR(filename);
+        }
+    }
+
+    // Render PDF pages to PNG and OCR them (for scanned PDFs with no text layer).
+    private async ocrScannedPdf(buffer: Buffer): Promise<{ text: string; pages: number } | null> {
+        try {
+            const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => import('pdfjs-dist'));
+            const tesseract = (await import('tesseract.js')).default;
+            // "canvas" is an optional native dependency — load it dynamically so the
+            // build doesn't require its types and missing it degrades gracefully.
+            let createCanvas: any = null;
+            try { createCanvas = (eval('require'))('canvas').createCanvas; } catch { /* not installed */ }
+            if (!createCanvas) { console.warn('[NodeOCREngine] "canvas" not available — cannot OCR scanned PDF. (Install: npm i canvas)'); return null; }
+            const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+            let text = '';
+            const maxPages = Math.min(doc.numPages, 15);
+            for (let i = 1; i <= maxPages; i++) {
+                const page = await doc.getPage(i);
+                const viewport = page.getViewport({ scale: 2 });
+                const canvas = createCanvas(viewport.width, viewport.height);
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx as any, viewport }).promise;
+                const png = canvas.toBuffer('image/png');
+                const result = await tesseract.recognize(png, 'eng');
+                text += '\n' + (result.data.text || '');
+            }
+            return { text: cleanExtractedText(text), pages: doc.numPages };
+        } catch (e: any) {
+            console.warn('[NodeOCREngine] Scanned-PDF OCR failed:', e.message);
+            return null;
         }
     }
 

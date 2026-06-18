@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { getDb } from '../lib/mongodb';
+import { getDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 
 // ─── Owner roles & permissions ───────────────────────────────────────────────
 // Roles available to owner-portal users and what each can do.
@@ -44,11 +44,62 @@ export const getTenants = async (req: Request, res: Response) => {
 export const getPlans = async (req: Request, res: Response) => {
     try {
         const db = getDb();
-        const plans = await db.collection('Plan').find({}).toArray();
+        const plans = await db.collection('Plan').find({}).sort({ price: 1 }).toArray();
         return res.json(plans);
     } catch (error) {
         return res.status(500).json({ message: 'Failed to fetch plans' });
     }
+};
+
+// Create a plan (with module list + max-students limit).
+export const createPlan = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        if (!name) return res.status(400).json({ message: 'Plan name is required' });
+        const doc = {
+            name: String(name).trim(),
+            price: Number(price) || 0,
+            limits: { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) },
+            modules: Array.isArray(modules) ? modules : [],
+            description: description || '',
+            isActive: isActive !== false,
+            createdAt: new Date(), updatedAt: new Date(),
+        };
+        const r = await db.collection('Plan').insertOne(doc);
+        return res.status(201).json({ _id: String(r.insertedId), ...doc });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const updatePlan = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const { name, price, maxStudents, modules, description, isActive } = req.body || {};
+        const set: any = { updatedAt: new Date() };
+        if (name !== undefined) set.name = String(name).trim();
+        if (price !== undefined) set.price = Number(price) || 0;
+        if (maxStudents !== undefined) set.limits = { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) };
+        if (modules !== undefined) set.modules = Array.isArray(modules) ? modules : [];
+        if (description !== undefined) set.description = description;
+        if (isActive !== undefined) set.isActive = !!isActive;
+        const r = await db.collection('Plan').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
+        if (!r.matchedCount) return res.status(404).json({ message: 'Plan not found' });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const deletePlan = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        await db.collection('Plan').deleteOne({ _id: new ObjectId(req.params.id) });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
 export const getRevenueReport = async (req: Request, res: Response) => {
@@ -229,5 +280,173 @@ export const deleteOwnerUser = async (req: Request, res: Response) => {
         }
         await db.collection('OwnerUser').deleteOne({ _id: new ObjectId(req.params.id) });
         return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── School (tenant) management ──────────────────────────────────────────────
+const tenantDbOf = (t: any) => t.databaseName || subdomainToDbName(t.subdomain || String(t._id));
+
+// Full detail for one school: plan, status, counts, modules, DB usage.
+export const getSchoolDetail = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const meta = getDb();
+        const t = await meta.collection('Tenant').findOne({ _id: new ObjectId(req.params.id) });
+        if (!t) return res.status(404).json({ message: 'School not found' });
+
+        const sub = await meta.collection('TenantSubscription').findOne({ tenantId: t._id });
+        const plan = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId })
+            : (t.planId ? await meta.collection('Plan').findOne({ _id: t.planId }) : null);
+        const plans = await meta.collection('Plan').find({}).toArray();
+
+        // Counts + DB usage from the tenant's own database.
+        let students = 0, staff = 0, dbSizeMB = 0, collections = 0;
+        try {
+            const tdb = getTenantDb(tenantDbOf(t));
+            students = await tdb.collection('students').countDocuments({}).catch(() => 0);
+            staff = await tdb.collection('staff').countDocuments({}).catch(() => 0);
+            const stats: any = await tdb.command({ dbStats: 1, scale: 1 }).catch(() => null);
+            if (stats) { dbSizeMB = Math.round(((stats.dataSize || 0) + (stats.indexSize || 0)) / (1024 * 1024) * 100) / 100; collections = stats.collections || 0; }
+        } catch { /* ignore */ }
+
+        const rawStatus = (t.status || sub?.status || 'active').toLowerCase();
+        const status = /suspend|inactive|disabled/.test(rawStatus) ? 'suspended' : /trial/.test(rawStatus) ? 'trial' : 'active';
+
+        return res.json({
+            _id: String(t._id),
+            name: t.name || t.schoolName || t.subdomain,
+            subdomain: t.subdomain || '',
+            email: t.email || t.contactEmail || '',
+            phone: t.phone || t.contactPhone || '',
+            status,
+            plan: plan ? { _id: String(plan._id), name: plan.name, price: plan.price, maxStudents: plan.limits?.maxStudents ?? null, modules: plan.modules || [] } : null,
+            allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: p.price })),
+            // Per-school module overrides (falls back to plan modules if unset).
+            enabledModules: Array.isArray(t.enabledModules) ? t.enabledModules : (plan?.modules || []),
+            counts: { students, staff },
+            dbUsage: { sizeMB: dbSizeMB, collections, dbName: tenantDbOf(t) },
+            createdAt: t.createdAt,
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Assign / change a school's plan.
+export const assignSchoolPlan = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const meta = getDb();
+        const { planId } = req.body || {};
+        const tid = new ObjectId(req.params.id);
+        const plan = planId ? await meta.collection('Plan').findOne({ _id: new ObjectId(planId) }) : null;
+        await meta.collection('TenantSubscription').updateOne(
+            { tenantId: tid },
+            { $set: { tenantId: tid, planId: plan?._id || null, planName: plan?.name || null, amount: plan?.price || 0, status: 'active', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+            { upsert: true },
+        );
+        await meta.collection('Tenant').updateOne({ _id: tid }, { $set: { planId: plan?._id || null, plan: plan?.name || null, enabledModules: plan?.modules || [], updatedAt: new Date() } });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Activate / suspend a school account.
+export const setSchoolStatus = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const status = String(req.body?.status || '').toLowerCase();
+        if (!['active', 'suspended', 'trial'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
+        await getDb().collection('Tenant').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { status, updatedAt: new Date() } });
+        return res.json({ ok: true, status });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Toggle which modules a school can access (overrides the plan).
+export const setSchoolModules = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const modules = Array.isArray(req.body?.modules) ? req.body.modules : [];
+        await getDb().collection('Tenant').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { enabledModules: modules, updatedAt: new Date() } });
+        return res.json({ ok: true, modules });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Impersonate: mint a tenant admin token so the owner can log in as the school admin.
+export const impersonateSchool = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const meta = getDb();
+        const t = await meta.collection('Tenant').findOne({ _id: new ObjectId(req.params.id) });
+        if (!t) return res.status(404).json({ message: 'School not found' });
+        // Find this school's primary admin user (meta User registry).
+        const admin = await meta.collection('User').findOne({ tenantId: t._id })
+            || await meta.collection('User').findOne({ tenantId: String(t._id) });
+        const secret = process.env.JWT_SECRET || 'secret';
+        const token = jwt.sign(
+            {
+                sub: admin?._id?.toString() || String(t._id),
+                email: admin?.email || t.email || '',
+                role: 'school_admin',
+                tenantId: String(t._id),
+                tenantSubdomain: t.subdomain,
+                name: admin?.name || t.name,
+                impersonated: true,
+            },
+            secret, { expiresIn: '2h' },
+        );
+        return res.json({ access_token: token, subdomain: t.subdomain, name: t.name });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Contact messages (from the public /contact page) ────────────────────────
+// Public: anyone can submit. Stored in the meta DB for the owner to review.
+export const submitContactMessage = async (req: Request, res: Response) => {
+    try {
+        const db = getDb();
+        const { name, school, email, phone, message } = req.body || {};
+        if (!name || !email || !message) return res.status(400).json({ message: 'Name, email and message are required' });
+        await db.collection('contact_messages').insertOne({
+            name, school: school || '', email, phone: phone || '', message,
+            status: 'new', createdAt: new Date(),
+        });
+        return res.status(201).json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const listContactMessages = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const rows = await db.collection('contact_messages').find({}).sort({ createdAt: -1 }).limit(200).toArray();
+        return res.json(rows.map((r: any) => ({ ...r, _id: String(r._id) })));
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const updateContactMessage = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const { status } = req.body || {};
+        await db.collection('contact_messages').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { status: status || 'read', updatedAt: new Date() } });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Register toggle (owner can enable/disable public self-registration) ──────
+export const getPublicSettings = async (_req: Request, res: Response) => {
+    try {
+        const s = await getDb().collection('platform_settings').findOne({ key: 'public' });
+        return res.json({ registrationEnabled: s?.registrationEnabled !== false });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const setPublicSettings = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { registrationEnabled } = req.body || {};
+        await getDb().collection('platform_settings').updateOne(
+            { key: 'public' },
+            { $set: { key: 'public', registrationEnabled: !!registrationEnabled, updatedAt: new Date() } },
+            { upsert: true },
+        );
+        return res.json({ ok: true, registrationEnabled: !!registrationEnabled });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };

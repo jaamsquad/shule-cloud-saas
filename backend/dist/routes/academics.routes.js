@@ -45,6 +45,45 @@ const permissions_1 = require("../lib/permissions");
 const router = (0, express_1.Router)();
 // ─── DB resolver (mirrors controller logic) ────────────────────────────────────
 const getRequestDb = (req) => req.tenantDb || (0, mongodb_1.getMetaDb)();
+// ─── Plan student-limit enforcement ──────────────────────────────────────────
+// Blocks adding students beyond the tenant's plan maxStudents. Reads the plan via
+// the tenant's subscription in the meta DB. No plan / null limit → unlimited.
+const enforcePlanLimit = async (req, res, next) => {
+    try {
+        const tid = req.tenantContext?.tenantId;
+        if (!tid)
+            return next();
+        const meta = (0, mongodb_1.getMetaDb)();
+        const oid = (() => { try {
+            return new (require('mongodb').ObjectId)(tid);
+        }
+        catch {
+            return null;
+        } })();
+        if (!oid)
+            return next();
+        const sub = await meta.collection('TenantSubscription').findOne({ tenantId: oid });
+        let plan = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId }) : null;
+        if (!plan) {
+            const t = await meta.collection('Tenant').findOne({ _id: oid });
+            if (t?.planId)
+                plan = await meta.collection('Plan').findOne({ _id: t.planId });
+        }
+        const max = plan?.limits?.maxStudents;
+        if (max == null || Number(max) <= 0)
+            return next(); // unlimited
+        // Count how many are being added (single vs bulk).
+        const adding = Array.isArray(req.body) ? req.body.length : (Array.isArray(req.body?.students) ? req.body.students.length : 1);
+        const current = await getRequestDb(req).collection('students').countDocuments({});
+        if (current + adding > Number(max)) {
+            return res.status(403).json({ message: `Your "${plan.name}" plan allows up to ${max} students. You have ${current}. Upgrade the plan to add more.` });
+        }
+        next();
+    }
+    catch {
+        next(); /* fail-open: never block on an unexpected error */
+    }
+};
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
 // ─── Card-scan attendance (student / staff) ──────────────────────────────────
@@ -383,10 +422,10 @@ router.patch('/academics/curricula/:id', c.updateItem('curricula'));
 router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 // ─── Students ────────────────────────────────────────────────────────────────
 router.get('/students', c.getItems('students'));
-router.post('/students', (0, permissions_1.enforceCrud)('students', 'create'), c.createItem('students'));
+router.post('/students', (0, permissions_1.enforceCrud)('students', 'create'), enforcePlanLimit, c.createItem('students'));
 router.patch('/students/:id', (0, permissions_1.enforceCrud)('students', 'update'), c.updateItem('students'));
 router.delete('/students/:id', (0, permissions_1.enforceCrud)('students', 'delete'), c.deleteItem('students'));
-router.post('/students/bulk', (0, permissions_1.enforceCrud)('students', 'create'), c.bulkCreate('students'));
+router.post('/students/bulk', (0, permissions_1.enforceCrud)('students', 'create'), enforcePlanLimit, c.bulkCreate('students'));
 // ─── Staff ───────────────────────────────────────────────────────────────────
 router.get('/staff', c.getItems('staff'));
 router.get('/staff/:id', async (req, res) => {

@@ -14,6 +14,31 @@ const router = Router();
 const getRequestDb = (req: Request): Db =>
     (req as any).tenantDb || getMetaDb();
 
+// ─── Plan student-limit enforcement ──────────────────────────────────────────
+// Blocks adding students beyond the tenant's plan maxStudents. Reads the plan via
+// the tenant's subscription in the meta DB. No plan / null limit → unlimited.
+const enforcePlanLimit = async (req: Request, res: any, next: any) => {
+    try {
+        const tid = (req as any).tenantContext?.tenantId;
+        if (!tid) return next();
+        const meta = getMetaDb();
+        const oid = (() => { try { return new (require('mongodb').ObjectId)(tid); } catch { return null; } })();
+        if (!oid) return next();
+        const sub = await meta.collection('TenantSubscription').findOne({ tenantId: oid });
+        let plan: any = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId }) : null;
+        if (!plan) { const t = await meta.collection('Tenant').findOne({ _id: oid }); if (t?.planId) plan = await meta.collection('Plan').findOne({ _id: t.planId }); }
+        const max = plan?.limits?.maxStudents;
+        if (max == null || Number(max) <= 0) return next();   // unlimited
+        // Count how many are being added (single vs bulk).
+        const adding = Array.isArray(req.body) ? req.body.length : (Array.isArray(req.body?.students) ? req.body.students.length : 1);
+        const current = await getRequestDb(req).collection('students').countDocuments({});
+        if (current + adding > Number(max)) {
+            return res.status(403).json({ message: `Your "${plan.name}" plan allows up to ${max} students. You have ${current}. Upgrade the plan to add more.` });
+        }
+        next();
+    } catch { next(); /* fail-open: never block on an unexpected error */ }
+};
+
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
 
@@ -354,10 +379,10 @@ router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 
 // ─── Students ────────────────────────────────────────────────────────────────
 router.get('/students',              c.getItems('students'));
-router.post('/students',             enforceCrud('students', 'create'), c.createItem('students'));
+router.post('/students',             enforceCrud('students', 'create'), enforcePlanLimit, c.createItem('students'));
 router.patch('/students/:id',        enforceCrud('students', 'update'), c.updateItem('students'));
 router.delete('/students/:id',       enforceCrud('students', 'delete'), c.deleteItem('students'));
-router.post('/students/bulk',        enforceCrud('students', 'create'), c.bulkCreate('students'));
+router.post('/students/bulk',        enforceCrud('students', 'create'), enforcePlanLimit, c.bulkCreate('students'));
 
 // ─── Staff ───────────────────────────────────────────────────────────────────
 router.get('/staff',                 c.getItems('staff'));

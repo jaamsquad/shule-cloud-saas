@@ -116,6 +116,25 @@ export class QuestionSplitterEngine {
             questions.push(currentQuestion);
         }
 
+        // Fallback: if no numbered questions were detected but there IS real text,
+        // split on blank lines / sentences so the import is never empty.
+        if (questions.length === 0 && text.replace(/\s/g, '').length > 40) {
+            const chunks = text
+                .split(/\n\s*\n+/)
+                .map(c => c.replace(/\s+/g, ' ').trim())
+                .filter(c => c.length > 15);
+            chunks.slice(0, 100).forEach((c, i) => {
+                const marksMatch = c.match(this.marksPattern);
+                questions.push({
+                    questionNumber: String(i + 1),
+                    section: "General",
+                    questionText: c.replace(this.marksPattern, '').trim(),
+                    marks: marksMatch ? parseInt(marksMatch[1], 10) : 5,
+                    subQuestions: [], options: [], instructions: "", rawText: c,
+                });
+            });
+        }
+
         return questions;
     }
 }
