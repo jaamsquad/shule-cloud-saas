@@ -66,6 +66,7 @@ const departments_routes_1 = __importDefault(require("./routes/departments.route
 const cafeteria_routes_1 = __importDefault(require("./routes/cafeteria.routes"));
 const studentId_routes_1 = __importDefault(require("./routes/studentId.routes"));
 const modules_routes_1 = __importDefault(require("./routes/modules.routes"));
+const whatsapp_routes_1 = __importDefault(require("./routes/whatsapp.routes"));
 console.log('[App] Bootstrapping institutional backend system...');
 const app = (0, express_1.default)();
 // Middleware
@@ -354,6 +355,7 @@ app.use('/api/v1', cafeteria_routes_1.default); // kitchen meal service + cantee
 app.use('/api/v1', studentId_routes_1.default); // student ID card: QR + barcode + print-ready PDF
 app.use('/api', studentId_routes_1.default); // also at /api/student-id (per the spec)
 app.use('/api/v1', modules_routes_1.default); // Sports, Trips, Front Desk, Secretary modules
+app.use('/api/v1', whatsapp_routes_1.default); // WhatsApp QR session management (Baileys)
 app.use('/api/v1/onboard', onboard_routes_1.default);
 app.use('/api/v1/auth', auth_routes_1.default);
 app.use('/api/v1/owner/auth', owner_auth_routes_1.default);

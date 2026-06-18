@@ -150,6 +150,7 @@ import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
 import CommunicationsSettings from "./pages/tenant/modules/communications/CommunicationsSettings";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
+import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppIntegration";
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
 import CommunicationPreferences from "./pages/tenant/modules/communications/CommunicationPreferences";
 import IntegrationsPage from "./pages/tenant/modules/integrations/IntegrationsPage";
@@ -662,6 +663,7 @@ const App = () => {
               <Route path="/communications/notifications" element={<ReportNotificationSettings />} />
               <Route path="/communications/preferences" element={<CommunicationPreferences />} />
               <Route path="/communications/settings" element={<CommunicationsSettings />} />
+              <Route path="/communications/whatsapp-integration" element={<WhatsAppIntegration />} />
 
               {/* Integrations */}
               <Route path="/integrations" element={<IntegrationsPage />} />

@@ -270,6 +270,7 @@ export const navItems: NavItem[] = [
       { label: "Bulk SMS", path: "/communications/sms" },
       { label: "Email Broadcast", path: "/communications/email" },
       { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },
+      { label: "WhatsApp Integration", path: "/communications/whatsapp-integration" },
       { label: "Report Notifications", path: "/communications/notifications" },
       { label: "Communication Settings", path: "/communications/preferences" },
       { label: "Gateway Settings", path: "/communications/settings" },
