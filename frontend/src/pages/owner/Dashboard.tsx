@@ -18,9 +18,10 @@ import OwnerAnalytics from "./OwnerAnalytics";
 import OwnerUsers from "./OwnerUsers";
 import OwnerPlansManager from "./OwnerPlansManager";
 import OwnerMessages from "./OwnerMessages";
+import OwnerSettings from "./OwnerSettings";
 
 export default function OwnerDashboard() {
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages">("analytics");
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -107,7 +108,7 @@ export default function OwnerDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-border">
-          {(["analytics", "tenants", "plans", "billing", "users", "messages"] as const).map(t => (
+          {(["analytics", "tenants", "plans", "billing", "users", "messages", "settings"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -124,6 +125,8 @@ export default function OwnerDashboard() {
         {tab === "users" && <OwnerUsers />}
 
         {tab === "messages" && <OwnerMessages />}
+
+        {tab === "settings" && <OwnerSettings />}
 
         {tab === "tenants" && (
           <Card className="shadow-card">

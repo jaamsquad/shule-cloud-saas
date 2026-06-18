@@ -104,8 +104,8 @@ export default function EnrollmentPage() {
                                     <tr key={e._id} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="py-3 px-4 font-black text-slate-800">{e.studentName}</td>
                                         <td className="py-3 px-4 font-bold text-slate-600">{e.academicYear}</td>
-                                        <td className="py-3 px-4 font-bold text-slate-700">{e.className}</td>
-                                        <td className="py-3 px-4"><span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-[9px] font-black uppercase">{e.fullClassName || `${e.className} ${e.streamName}`}</span></td>
+                                        <td className="py-3 px-4 font-bold text-slate-700">{e.currentClass || e.className}</td>
+                                        <td className="py-3 px-4"><span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-[9px] font-black uppercase">{e.currentClass || e.fullClassName || `${e.className} ${e.streamName}`}</span></td>
                                         <td className="py-3 px-4 font-bold text-slate-500">{e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString("en-GB") : "—"}</td>
                                         <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase ${e.status === "active" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>{e.status}</span></td>
                                         <td className="py-3 px-4">

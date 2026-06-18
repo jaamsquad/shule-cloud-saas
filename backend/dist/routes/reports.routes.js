@@ -502,36 +502,68 @@ router.get('/reports/attendance/monthly-staff', async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-// 6. GET /api/v1/reports/fee-collection
+// 6. GET /api/v1/reports/fee-collection — REAL fee payments + invoice totals.
 router.get('/reports/fee-collection', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const { start_date, end_date, class_id, payment_mode, status } = req.query;
-        const query = {};
-        if (start_date && end_date) {
-            query.paymentDate = { $gte: start_date, $lte: end_date };
+        // Pull real payments from the `payments` collection (recorded by Collect
+        // Fees). Some schools also have `transactions` — merge both.
+        const collect = async (name) => { try {
+            return await db.collection(name).find({}).toArray();
         }
+        catch {
+            return [];
+        } };
+        const rawPayments = [...(await collect('payments')), ...(await collect('transactions'))]
+            .filter((p) => !p.is_voided && (p.status ? String(p.status).toLowerCase() !== 'rejected' : true));
+        // Index students for name/adm/class enrichment.
+        const students = await collect('students');
+        const byId = {};
+        students.forEach((s) => { byId[String(s._id)] = s; });
+        const findStudent = (p) => byId[String(p.student_id || p.studentId || '')] || students.find((s) => (s.registrationNo || s.admNo) && (s.registrationNo === (p.registrationNo || p.admNo) || s.admNo === (p.registrationNo || p.admNo)));
+        let data = rawPayments.map((p) => {
+            const s = findStudent(p);
+            const amount = Number(p.amount ?? p.amount_paid ?? p.paid_amount ?? 0);
+            const date = p.payment_date || p.paymentDate || (p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : '') || p.date || '';
+            return {
+                _id: String(p._id),
+                receiptNo: p.receipt_no || p.receiptNo || p.reference || `RCPT-${String(p._id).slice(-6).toUpperCase()}`,
+                studentName: p.studentName || s?.studentName || `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || '—',
+                admNo: p.registrationNo || p.admNo || s?.registrationNo || s?.admNo || '—',
+                className: p.studentClass || s?.studentClass || s?.currentClass || '—',
+                amount,
+                paymentMode: p.method || p.paymentMode || p.payment_mode || p.mode || 'Cash',
+                paymentDate: date,
+                status: p.status || 'Completed',
+            };
+        });
+        // Apply filters.
+        if (start_date && end_date)
+            data = data.filter((t) => t.paymentDate >= start_date && t.paymentDate <= end_date);
         if (payment_mode)
-            query.paymentMode = payment_mode;
+            data = data.filter((t) => String(t.paymentMode).toLowerCase() === String(payment_mode).toLowerCase());
         if (status)
-            query.status = status;
-        const transactions = await db.collection('transactions').find(query).toArray();
-        // Fallback sample data if empty
-        const data = transactions.length > 0 ? transactions : [
-            { _id: new mongodb_2.ObjectId(), receiptNo: "REC-1001", studentName: "Fatuma Waridi", admNo: "BS001", className: "Grade 8 Stream 1", amount: 15000, paymentMode: "Bank Transfer", paymentDate: "2026-05-10", status: "Completed", recordedBy: "Bursar" },
-            { _id: new mongodb_2.ObjectId(), receiptNo: "REC-1002", studentName: "John Doe", admNo: "BS002", className: "Grade 8 Stream 1", amount: 12500, paymentMode: "M-Pesa", paymentDate: "2026-05-12", status: "Completed", recordedBy: "Bursar" },
-            { _id: new mongodb_2.ObjectId(), receiptNo: "REC-1003", studentName: "Alice Smith", admNo: "BS003", className: "Grade 7 Stream 2", amount: 8000, paymentMode: "Cash", paymentDate: "2026-05-14", status: "Completed", recordedBy: "Bursar" }
-        ];
-        const totalExpected = 1500000;
+            data = data.filter((t) => String(t.status).toLowerCase() === String(status).toLowerCase());
+        if (class_id)
+            data = data.filter((t) => String(t.className).toLowerCase().includes(String(class_id).toLowerCase()));
+        data.sort((a, b) => String(b.paymentDate).localeCompare(String(a.paymentDate)));
+        // Real expected/collected/outstanding from invoices.
+        const invoices = await collect('invoices');
+        const totalBilled = invoices.reduce((s, i) => s + Number(i.total_due ?? i.total ?? i.amount ?? 0), 0);
         const totalCollected = data.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-        const totalOutstanding = totalExpected - totalCollected;
+        const totalOutstanding = invoices.reduce((s, i) => {
+            const t = Number(i.total_due ?? i.total ?? i.amount ?? 0);
+            const paid = Number(i.paid_amount ?? i.amountPaid ?? i.amount_paid ?? 0);
+            return s + Math.max(0, Number(i.balance ?? (t - paid)));
+        }, 0);
         res.json({
             summary: {
-                totalExpected,
+                totalExpected: totalBilled || totalCollected + totalOutstanding,
                 totalCollected,
-                totalOutstanding
+                totalOutstanding,
             },
-            data
+            data,
         });
     }
     catch (error) {

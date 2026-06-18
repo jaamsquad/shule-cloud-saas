@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   GraduationCap, Users, CalendarCheck, Wallet, Briefcase, Boxes, BookOpen,
   Building2, Bus, HeartPulse, ShieldAlert, MessageSquare, LayoutDashboard,
-  Landmark, ScrollText, Search, FileBarChart, ArrowRight, Lock, Pencil, Check, X, ArrowRight as Arrow,
+  Landmark, ScrollText, Search, FileBarChart, ArrowRight, Lock, Pencil, Check, X,
 } from "lucide-react";
 
 type Report = { label: string; path?: string };
@@ -92,16 +92,6 @@ const CATEGORIES: Category[] = [
   ]},
 ];
 
-// Quick-launch KPI cards — the most-used live reports, openable from the top.
-const KPI_CARDS = [
-  { label: "Report Cards", path: "/reports/report-cards", icon: GraduationCap, color: "#2563EB" },
-  { label: "Fee Collection", path: "/reports/fee-collection", icon: Wallet, color: "#10B981" },
-  { label: "Students Info", path: "/reports/students-info", icon: Users, color: "#7C3AED" },
-  { label: "Attendance", path: "/reports/attendance/monthly-students", icon: CalendarCheck, color: "#0EA5E9" },
-  { label: "Accounts", path: "/reports/accounts", icon: Landmark, color: "#F59E0B" },
-  { label: "Customised", path: "/reports/custom", icon: LayoutDashboard, color: "#EC4899" },
-];
-
 const COLOR_SWATCHES = ["#2563EB", "#7C3AED", "#0EA5E9", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#14B8A6", "#F97316", "#EF4444", "#06B6D4", "#475569", "#0F172A", "#DC2626"];
 
 type Override = { name?: string; color?: string };
@@ -154,18 +144,6 @@ export default function ReportsCenter() {
               {editMode ? <><Check className="w-4 h-4" /> Done</> : <><Pencil className="w-4 h-4" /> Customize</>}
             </button>
           </div>
-        </div>
-
-        {/* KPI quick-launch cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-          {KPI_CARDS.map(k => (
-            <button key={k.label} onClick={() => navigate(k.path)}
-              className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-left hover:shadow-md hover:border-slate-200 transition-all group">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white mb-2" style={{ background: k.color }}><k.icon className="w-4.5 h-4.5" /></div>
-              <div className="text-sm font-black text-slate-800 leading-tight">{k.label}</div>
-              <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mt-1 group-hover:text-slate-600">Open report <Arrow className="w-3 h-3" /></div>
-            </button>
-          ))}
         </div>
 
         {/* Categories */}

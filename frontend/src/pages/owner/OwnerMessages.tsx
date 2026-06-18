@@ -1,7 +1,5 @@
-import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mail, Loader2, Check, Power, Smartphone } from "lucide-react";
-import { toast } from "sonner";
+import { Mail, Loader2, Check } from "lucide-react";
 import api from "@/lib/api";
 
 const PRIMARY = "#534AB7";
@@ -14,115 +12,42 @@ export default function OwnerMessages() {
         queryKey: ["owner_contact_messages"],
         queryFn: async () => { try { const r = await api.get("/owner/contact-messages"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
     });
-    const { data: settings } = useQuery({
-        queryKey: ["owner_public_settings"],
-        queryFn: async () => { try { return (await api.get("/owner/public-settings")).data; } catch { return { registrationEnabled: true }; } },
-    });
 
     const markRead = useMutation({
         mutationFn: async (id: string) => api.patch(`/owner/contact-messages/${id}`, { status: "read" }),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["owner_contact_messages"] }),
     });
-    const toggleReg = useMutation({
-        mutationFn: async (enabled: boolean) => api.post("/owner/public-settings", { registrationEnabled: enabled }),
-        onSuccess: () => { toast.success("Saved"); qc.invalidateQueries({ queryKey: ["owner_public_settings"] }); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
-    });
-
-    const regOn = settings?.registrationEnabled !== false;
-
-    // ── Platform M-PESA (Daraja) for subscription billing ──────────────────────
-    const { data: mpesa } = useQuery({
-        queryKey: ["owner_mpesa"],
-        queryFn: async () => { try { return (await api.get("/owner/mpesa-settings")).data; } catch { return {}; } },
-    });
-    const [mp, setMp] = useState<any>({ env: "sandbox", consumerKey: "", consumerSecret: "", shortcode: "", passkey: "", txType: "CustomerPayBillOnline", callbackBase: "", enabled: true });
-    useEffect(() => { if (mpesa) setMp((p: any) => ({ ...p, ...mpesa })); }, [mpesa]);
-    const saveMpesa = useMutation({
-        mutationFn: async () => api.post("/owner/mpesa-settings", mp),
-        onSuccess: () => { toast.success("Platform M-PESA saved"); qc.invalidateQueries({ queryKey: ["owner_mpesa"] }); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
-    });
-    const mpField = (k: string, label: string, type = "text") => (
-        <div><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
-            <input type={type} value={mp[k] ?? ""} onChange={(e) => setMp((p: any) => ({ ...p, [k]: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
-    );
 
     return (
         <div className="space-y-5">
-            {/* Public registration toggle */}
-            <div className="bg-white rounded-xl p-5 flex items-center justify-between" style={{ border: "0.5px solid #e5e7eb" }}>
-                <div>
-                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Power className="w-4 h-4" style={{ color: PRIMARY }} /> Public School Registration</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">When off, the public Sign-Up / Register page redirects visitors to the landing page.</p>
-                </div>
-                <button onClick={() => toggleReg.mutate(!regOn)} disabled={toggleReg.isPending}
-                    className={`h-9 px-4 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 ${regOn ? "bg-emerald-500" : "bg-slate-400"}`}>
-                    {toggleReg.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                    {regOn ? "Enabled" : "Disabled"}
-                </button>
-            </div>
-
-            {/* Platform M-PESA (Daraja) — collects subscription payments via STK */}
-            <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Smartphone className="w-4 h-4" style={{ color: PRIMARY }} /> Platform M-PESA (Subscription Billing)</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">Your Daraja credentials. Schools pay for plans via STK push to this paybill. {mpesa?.configured ? "" : "Not configured yet."}</p>
-                    </div>
-                    <button onClick={() => saveMpesa.mutate()} disabled={saveMpesa.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveMpesa.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Environment</label>
-                        <select value={mp.env} onChange={(e) => setMp((p: any) => ({ ...p, env: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-                            <option value="sandbox">Sandbox</option><option value="production">Production</option>
-                        </select>
-                    </div>
-                    {mpField("shortcode", "Shortcode / Paybill")}
-                    {mpField("consumerKey", "Consumer Key")}
-                    {mpField("consumerSecret", "Consumer Secret", "password")}
-                    {mpField("passkey", "Passkey", "password")}
-                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Transaction Type</label>
-                        <select value={mp.txType} onChange={(e) => setMp((p: any) => ({ ...p, txType: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }}>
-                            <option value="CustomerPayBillOnline">PayBill</option><option value="CustomerBuyGoodsOnline">Buy Goods (Till)</option>
-                        </select>
-                    </div>
-                    <div className="col-span-2">{mpField("callbackBase", "Callback Base URL (e.g. https://api.shulecloud.com/api/v1)")}</div>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-3">Production STK endpoint: <code>https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest</code> (used automatically when Environment = Production).</p>
-            </div>
-
-            {/* Contact messages */}
-            <div>
-                <h3 className="text-sm font-black text-slate-800 mb-3 flex items-center gap-2"><Mail className="w-4 h-4" style={{ color: PRIMARY }} /> Contact Messages ({messages.length})</h3>
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-14 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
-                ) : messages.length === 0 ? (
-                    <div className="bg-white rounded-xl p-10 text-center text-slate-400 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>No messages yet</div>
-                ) : (
-                    <div className="space-y-3">
-                        {messages.map((m: any) => (
-                            <div key={m._id} className={`bg-white rounded-xl p-4 ${m.status === "new" ? "ring-1 ring-[#534AB7]/20" : ""}`} style={{ border: "0.5px solid #e5e7eb" }}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-bold text-slate-800 text-sm">{m.name}</span>
-                                            {m.school && <span className="text-[11px] text-slate-400">· {m.school}</span>}
-                                            {m.status === "new" && <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-[#534AB7]/10 text-[#534AB7]">New</span>}
-                                        </div>
-                                        <div className="text-[11px] text-slate-500 mt-0.5">{m.email}{m.phone ? ` · ${m.phone}` : ""} · {when(m.createdAt)}</div>
-                                        <p className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">{m.message}</p>
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Mail className="w-4 h-4" style={{ color: PRIMARY }} /> Contact Messages ({messages.length})</h3>
+            {isLoading ? (
+                <div className="flex items-center justify-center py-14 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : messages.length === 0 ? (
+                <div className="bg-white rounded-xl p-10 text-center text-slate-400 text-sm" style={{ border: "0.5px solid #e5e7eb" }}>No messages yet</div>
+            ) : (
+                <div className="space-y-3">
+                    {messages.map((m: any) => (
+                        <div key={m._id} className={`bg-white rounded-xl p-4 ${m.status === "new" ? "ring-1 ring-[#534AB7]/20" : ""}`} style={{ border: "0.5px solid #e5e7eb" }}>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-slate-800 text-sm">{m.name}</span>
+                                        {m.school && <span className="text-[11px] text-slate-400">· {m.school}</span>}
+                                        {m.status === "new" && <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-[#534AB7]/10 text-[#534AB7]">New</span>}
                                     </div>
-                                    <div className="flex flex-col gap-1.5 shrink-0">
-                                        <a href={`mailto:${m.email}`} className="h-8 px-3 rounded-lg text-xs font-bold text-white flex items-center" style={{ background: PRIMARY }}>Reply</a>
-                                        {m.status === "new" && <button onClick={() => markRead.mutate(m._id)} className="h-8 px-3 rounded-lg text-xs font-bold text-slate-600 flex items-center gap-1" style={{ border: "0.5px solid #e5e7eb" }}><Check className="w-3.5 h-3.5" /> Read</button>}
-                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-0.5">{m.email}{m.phone ? ` · ${m.phone}` : ""} · {when(m.createdAt)}</div>
+                                    <p className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">{m.message}</p>
+                                </div>
+                                <div className="flex flex-col gap-1.5 shrink-0">
+                                    <a href={`mailto:${m.email}`} className="h-8 px-3 rounded-lg text-xs font-bold text-white flex items-center" style={{ background: PRIMARY }}>Reply</a>
+                                    {m.status === "new" && <button onClick={() => markRead.mutate(m._id)} className="h-8 px-3 rounded-lg text-xs font-bold text-slate-600 flex items-center gap-1" style={{ border: "0.5px solid #e5e7eb" }}><Check className="w-3.5 h-3.5" /> Read</button>}
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
