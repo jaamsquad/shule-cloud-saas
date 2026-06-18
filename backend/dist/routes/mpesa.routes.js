@@ -44,11 +44,13 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
     }
 });
 // ─── C2B validation (accept all by default) ────────────────────────────────────
-router.post('/mpesa/c2b/validation', (_req, res) => {
+// Served at both /mpesa/c2b/validation and /pesa/c2b/validation (Safaricom URL).
+router.post(['/mpesa/c2b/validation', '/pesa/c2b/validation'], (_req, res) => {
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
 });
 // ─── C2B confirmation ──────────────────────────────────────────────────────────
-router.post('/mpesa/c2b/confirmation', async (req, res) => {
+// Served at both /mpesa/c2b/confirmation and /pesa/c2b/confirmation.
+router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, res) => {
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     try {
         const p = req.body || {};

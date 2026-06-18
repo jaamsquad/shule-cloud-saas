@@ -24,7 +24,7 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
     const path = req.originalUrl || req.url;
 
     // Skip tenancy for public/owner/registration routes
-    const publicPrefixes = ['/api/v1/onboard', '/api/v1/owner', '/api/v1/auth/smart-login', '/api/v1/public', '/api/v1/mpesa', '/api/mpesa'];
+    const publicPrefixes = ['/api/v1/onboard', '/api/v1/owner', '/api/v1/auth/smart-login', '/api/v1/public', '/api/v1/mpesa', '/api/mpesa', '/api/v1/pesa', '/api/pesa'];
     if (publicPrefixes.some(p => path.startsWith(p))) {
         return next();
     }
