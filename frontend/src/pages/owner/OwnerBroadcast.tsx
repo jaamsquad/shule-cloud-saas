@@ -16,8 +16,14 @@ export default function OwnerBroadcast() {
     const sendEmail = useMutation({
         mutationFn: async () => api.post("/owner/broadcast", { to, subject, message: emailMsg }),
         onSuccess: (res: any) => { toast.success(`Sent to ${res.data?.sent || 0} recipient(s) from ${res.data?.from || ""}`); setTo(""); setSubject(""); setEmailMsg(""); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to send email", { duration: 8000 }),
     });
+    const submitEmail = () => {
+        if (!to.trim()) { toast.error("Add at least one recipient"); return; }
+        if (!subject.trim()) { toast.error("Add a subject"); return; }
+        if (!emailMsg.trim()) { toast.error("Add a message"); return; }
+        sendEmail.mutate();
+    };
 
     // School notification
     const [tenantId, setTenantId] = useState("");
@@ -50,7 +56,7 @@ export default function OwnerBroadcast() {
                     <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Recipients (comma-separated)</label><input value={to} onChange={(e) => setTo(e.target.value)} placeholder="a@school.ac.ke, b@school.ac.ke" className={input} style={border} /></div>
                     <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Subject</label><input value={subject} onChange={(e) => setSubject(e.target.value)} className={input} style={border} /></div>
                     <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Message</label><textarea value={emailMsg} onChange={(e) => setEmailMsg(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm min-h-[140px]" style={border} /></div>
-                    <button onClick={() => sendEmail.mutate()} disabled={sendEmail.isPending} className="h-10 px-5 text-white rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50" style={{ background: PRIMARY }}>{sendEmail.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send Email</button>
+                    <button onClick={submitEmail} disabled={sendEmail.isPending} className="h-10 px-5 text-white rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-50" style={{ background: PRIMARY }}>{sendEmail.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send Email</button>
                 </div>
             ) : (
                 <div className="bg-white rounded-xl p-5 space-y-3" style={border}>

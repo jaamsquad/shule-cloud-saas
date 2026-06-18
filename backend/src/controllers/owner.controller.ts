@@ -581,18 +581,45 @@ export const sendBroadcast = async (req: Request, res: Response) => {
         const s: any = (await getDb().collection('platform_email_settings').findOne({ key: 'smtp' })) || {};
         if (!s.host || !s.user || !s.pass) return res.status(400).json({ message: 'Company email (SMTP) is not configured. Ask the Super Owner to set it in Settings.' });
 
+        const port = Number(s.port) || 587;
         const nodemailer = (await import('nodemailer')).default;
-        const transporter = nodemailer.createTransport({ host: s.host, port: Number(s.port) || 587, secure: !!s.secure, auth: { user: s.user, pass: s.pass } });
+        const transporter = nodemailer.createTransport({
+            host: s.host,
+            port,
+            // Implicit TLS on 465, STARTTLS otherwise — derive from port when `secure` is unset.
+            secure: s.secure !== undefined ? !!s.secure : port === 465,
+            auth: { user: s.user, pass: s.pass },
+            connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,
+        });
 
-        // From = the logged-in owner's username @ company domain.
+        // Desired From = the logged-in owner's username @ company domain.
         const domain = s.domain || 'shulecloud.com';
         const localPart = String(claims.email || claims.name || 'noreply').split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '');
-        const fromAddr = `"${s.fromName || claims.name || 'ShuleCloud'}" <${localPart}@${domain}>`;
+        const desiredAddr = `${localPart}@${domain}`;
+        const displayName = s.fromName || claims.name || 'ShuleCloud';
 
-        await transporter.sendMail({ from: fromAddr, to: recipients.join(','), subject, html: String(message).replace(/\n/g, '<br>') });
-        await getDb().collection('owner_broadcasts').insertOne({ ownerId: String(claims.sub), from: fromAddr, to: recipients, subject, message, sentAt: new Date() });
+        // Many SMTP providers only allow sending FROM the authenticated mailbox.
+        // If the desired address isn't the SMTP user, send as the SMTP user and set
+        // Reply-To to the desired address so replies still reach the owner.
+        const authMatches = String(s.user).toLowerCase() === desiredAddr.toLowerCase();
+        const fromAddr = authMatches ? `"${displayName}" <${desiredAddr}>` : `"${displayName}" <${s.user}>`;
+        const replyTo  = authMatches ? undefined : desiredAddr;
+
+        // Surface bad host/port/credentials as a clear 400 instead of a cryptic 500.
+        try {
+            await transporter.verify();
+        } catch (ve: any) {
+            return res.status(400).json({ message: `Cannot connect to the mail server (${s.host}:${port}). Check the SMTP host, port and credentials. ${ve.message || ''}`.trim() });
+        }
+
+        await transporter.sendMail({ from: fromAddr, replyTo, to: recipients.join(','), subject, html: String(message).replace(/\n/g, '<br>') });
+        await getDb().collection('owner_broadcasts').insertOne({ ownerId: String(claims.sub), from: fromAddr, replyTo: replyTo || null, to: recipients, subject, message, sentAt: new Date() });
         return res.json({ ok: true, sent: recipients.length, from: fromAddr });
-    } catch (e: any) { return res.status(500).json({ message: `Email send failed: ${e.message}` }); }
+    } catch (e: any) {
+        // Provider rejections (e.g. "From not allowed", auth) carry a useful message/code.
+        const detail = e?.response || e?.message || 'Unknown error';
+        return res.status(502).json({ message: `Email send failed: ${detail}` });
+    }
 };
 
 // ─── Owner → school notifications (top-bar banner for school admins) ──────────
