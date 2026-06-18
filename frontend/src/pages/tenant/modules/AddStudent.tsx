@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Home, Settings, Plus, RotateCcw, Check, Download, Loader2, Upload, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
@@ -23,8 +23,16 @@ export default function AddStudent() {
         dob: "",
         gender: "Male",
         avatar: "",
-        transportZone: ""
+        transportZone: "",
+        boarding: ""   // Boarder | Day Scholar
     });
+
+    // School profile drives the residence options (boarding / day / mixed).
+    const { data: schoolProfile } = useQuery({
+        queryKey: ["tenant_profile_global"],
+        queryFn: async () => (await api.get("/auth/tenant/profile")).data,
+    });
+    const schoolType = schoolProfile?.schoolType || "Mixed"; // Boarding | Day | Mixed
     const [showParents, setShowParents] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -54,6 +62,13 @@ export default function AddStudent() {
         enabled: !!enroll.classId,
     });
     const activeYear = v2Years.find((y: any) => y.isActive) || v2Years[0];
+
+    // For single-type schools the residence is fixed; for mixed schools the admin picks.
+    useEffect(() => {
+        if (formData.boarding) return;
+        if (schoolType === "Boarding") setFormData(p => ({ ...p, boarding: "Boarder" }));
+        else if (schoolType === "Day") setFormData(p => ({ ...p, boarding: "Day Scholar" }));
+    }, [schoolType]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -379,6 +394,24 @@ export default function AddStudent() {
                                 <SelectField label="Orphan Student" placeholder="Select" options={['Yes', 'No']} />
                                 
                                 <SelectField name="gender" value={formData.gender} onChange={handleChange} label="Gender" placeholder="Gender" options={['Male', 'Female', 'Other']} />
+                                {/* Residence — boarder vs day scholar (driven by School Type in profile) */}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[10px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">
+                                        Residence{schoolType === "Mixed" ? "*" : ""}
+                                    </div>
+                                    <select
+                                        name="boarding" value={formData.boarding} onChange={handleChange}
+                                        disabled={schoolType !== "Mixed"}
+                                        className="w-full h-12 px-5 border border-gray-300 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 bg-white appearance-none cursor-pointer text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                                    >
+                                        <option value="" disabled>Select residence</option>
+                                        <option value="Boarder">Boarder</option>
+                                        <option value="Day Scholar">Day Scholar</option>
+                                    </select>
+                                    {schoolType !== "Mixed" && (
+                                        <p className="text-[9px] text-slate-400 mt-1 ml-6 font-bold">Fixed by school type ({schoolType}). Change it in General Settings → Institute Profile.</p>
+                                    )}
+                                </div>
                                 <InputField label="Cast" placeholder="Cast" />
                                 <SelectField label="OSC" placeholder="Select" options={['Yes', 'No']} />
                                 
@@ -457,8 +490,10 @@ export default function AddStudent() {
                             <button 
                                 type="button" 
                                 onClick={() => setFormData({
-                                    studentName: "", registrationNo: "", studentClass: "", 
-                                    admissionDate: "2026-05-15", discount: "0", phone: "", dob: "", gender: "Male"
+                                    studentName: "", registrationNo: "", studentClass: "",
+                                    admissionDate: "2026-05-15", discount: "0", phone: "", dob: "", gender: "Male",
+                                    avatar: "", transportZone: "",
+                                    boarding: schoolType === "Boarding" ? "Boarder" : schoolType === "Day" ? "Day Scholar" : ""
                                 })}
                                 className="h-12 px-8 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors"
                             >

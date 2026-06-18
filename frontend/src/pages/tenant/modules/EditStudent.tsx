@@ -42,6 +42,7 @@ export default function EditStudent() {
         phone: "",
         dob: "",
         gender: "Male",
+        boarding: "",
         birthFormId: "",
         orphan: "",
         cast: "",
@@ -86,6 +87,7 @@ export default function EditStudent() {
                 phone: student.phone || "",
                 dob: student.dob || "",
                 gender: student.gender || "Male",
+                boarding: student.boarding || "",
                 birthFormId: student.birthFormId || "",
                 orphan: student.orphan || "",
                 cast: student.cast || "",
@@ -260,6 +262,7 @@ export default function EditStudent() {
                                 <InputField name="birthFormId" value={formData.birthFormId} onChange={handleChange} label="Birth Form ID / NIC" placeholder="Birth Form ID" />
                                 <SelectField name="orphan" value={formData.orphan} onChange={handleChange} label="Orphan Student" placeholder="Select" options={['Yes', 'No']} />
                                 <SelectField name="gender" value={formData.gender} onChange={handleChange} label="Gender" placeholder="Gender" options={['Male', 'Female', 'Other']} />
+                                <SelectField name="boarding" value={formData.boarding} onChange={handleChange} label="Residence" placeholder="Select residence" options={['Boarder', 'Day Scholar']} />
                                 <InputField name="cast" value={formData.cast} onChange={handleChange} label="Cast" placeholder="Cast" />
                                 <SelectField name="osc" value={formData.osc} onChange={handleChange} label="OSC" placeholder="Select" options={['Yes', 'No']} />
                                 <InputField name="identificationMark" value={formData.identificationMark} onChange={handleChange} label="Identification Mark" placeholder="Any Identification Mark?" />

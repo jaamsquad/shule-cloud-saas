@@ -582,12 +582,16 @@ export const sendBroadcast = async (req: Request, res: Response) => {
         if (!s.host || !s.user || !s.pass) return res.status(400).json({ message: 'Company email (SMTP) is not configured. Ask the Super Owner to set it in Settings.' });
 
         const port = Number(s.port) || 587;
+        // The port — not a saved flag — decides the encryption mode. 465 is implicit
+        // TLS; 587/25 use STARTTLS (plain connect, then upgrade). Honouring a wrong
+        // `secure=true` on 587 causes "ssl3_get_record: wrong version number".
+        const secure = port === 465;
         const nodemailer = (await import('nodemailer')).default;
         const transporter = nodemailer.createTransport({
             host: s.host,
             port,
-            // Implicit TLS on 465, STARTTLS otherwise — derive from port when `secure` is unset.
-            secure: s.secure !== undefined ? !!s.secure : port === 465,
+            secure,
+            requireTLS: !secure,          // force STARTTLS upgrade on 587/25
             auth: { user: s.user, pass: s.pass },
             connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 20000,
         });
@@ -609,7 +613,12 @@ export const sendBroadcast = async (req: Request, res: Response) => {
         try {
             await transporter.verify();
         } catch (ve: any) {
-            return res.status(400).json({ message: `Cannot connect to the mail server (${s.host}:${port}). Check the SMTP host, port and credentials. ${ve.message || ''}`.trim() });
+            const raw = String(ve?.message || '');
+            // The classic STARTTLS-vs-SSL mismatch — give an actionable hint.
+            const tlsHint = /wrong version number|ssl3_get_record|routines/i.test(raw)
+                ? ` This usually means a TLS/port mismatch — use port 587 (STARTTLS) or 465 (SSL).`
+                : '';
+            return res.status(400).json({ message: `Cannot connect to the mail server (${s.host}:${port}). Check the SMTP host, port and credentials.${tlsHint} ${raw}`.trim() });
         }
 
         await transporter.sendMail({ from: fromAddr, replyTo, to: recipients.join(','), subject, html: String(message).replace(/\n/g, '<br>') });

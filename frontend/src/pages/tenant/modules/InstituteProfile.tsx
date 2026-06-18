@@ -24,7 +24,9 @@ export default function InstituteProfile() {
         address: "",
         country: "Kenya",
         logo: "",
-        email: ""
+        email: "",
+        schoolType: "Day",            // Boarding | Day | Mixed
+        genderComposition: "Mixed"    // Mixed | Boys | Girls
     });
 
     useEffect(() => {
@@ -37,7 +39,9 @@ export default function InstituteProfile() {
                 address: profileData.address || "",
                 country: profileData.country || "Kenya",
                 logo: profileData.logo || "",
-                email: profileData.email || ""
+                email: profileData.email || "",
+                schoolType: profileData.schoolType || "Day",
+                genderComposition: profileData.genderComposition || "Mixed"
             });
         }
     }, [profileData]);
@@ -218,6 +222,32 @@ export default function InstituteProfile() {
                                 <ChevronDown className="w-5 h-5 text-slate-300 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
                         </div>
+
+                        {/* School (Boarding) Type */}
+                        <ProfileSelect
+                            label="School Type"
+                            value={formData.schoolType}
+                            onChange={(v: string) => setFormData({ ...formData, schoolType: v })}
+                            options={[
+                                { value: "Boarding", label: "Boarding School" },
+                                { value: "Day", label: "Day School" },
+                                { value: "Mixed", label: "Mixed (Boarding & Day)" },
+                            ]}
+                            hint="Controls whether students can be marked as boarders or day scholars."
+                        />
+
+                        {/* Gender Composition */}
+                        <ProfileSelect
+                            label="Gender Composition"
+                            value={formData.genderComposition}
+                            onChange={(v: string) => setFormData({ ...formData, genderComposition: v })}
+                            options={[
+                                { value: "Mixed", label: "Mixed (Boys & Girls)" },
+                                { value: "Boys", label: "Boys Only" },
+                                { value: "Girls", label: "Girls Only" },
+                            ]}
+                            hint="Used as the default when admitting students."
+                        />
                     </div>
 
                     <div className="flex justify-center mt-12">
@@ -266,6 +296,8 @@ export default function InstituteProfile() {
                                     <InfoItem icon={Globe} label="Website" value={formData.website} />
                                     <InfoItem icon={MapPin} label="Address" value={formData.address} />
                                     <InfoItem icon={Globe} label="Country" value={formData.country} />
+                                    <InfoItem icon={Globe} label="School Type" value={{ Boarding: "Boarding School", Day: "Day School", Mixed: "Mixed (Boarding & Day)" }[formData.schoolType] || formData.schoolType} />
+                                    <InfoItem icon={Globe} label="Gender" value={{ Mixed: "Mixed (Boys & Girls)", Boys: "Boys Only", Girls: "Girls Only" }[formData.genderComposition] || formData.genderComposition} />
                                 </div>
                             </div>
                         </div>
@@ -289,6 +321,27 @@ function ProfileInput({ label, value, onChange, placeholder, required }: any) {
                 placeholder={placeholder}
                 className="w-full h-16 px-8 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold placeholder:text-slate-200 transition-all bg-white"
             />
+        </div>
+    );
+}
+
+function ProfileSelect({ label, value, onChange, options, hint }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; hint?: string }) {
+    return (
+        <div className="relative">
+            <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">
+                {label}
+            </div>
+            <div className="relative">
+                <select
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-full h-16 pl-8 pr-12 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold bg-white appearance-none cursor-pointer transition-all"
+                >
+                    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <ChevronDown className="w-5 h-5 text-slate-300 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            {hint && <p className="text-[10px] text-slate-400 mt-2 ml-6 font-bold">{hint}</p>}
         </div>
     );
 }
