@@ -689,20 +689,49 @@ router.get('/v2/report-card/:enrollmentId', async (req, res) => {
         const student = await db.collection('students').findOne({ _id: toOid(enrollment.studentId) });
 
         // ── Fetch ALL subjects assigned to this student's class/stream ──────────
-        // Try multiple matching strategies so subjects always appear even if IDs differ
+        // Subjects live in `v2_subjects` (classId = a v2_classes _id, stored as a
+        // string). A subject with no classId is treated as school-wide. We also
+        // fall back to the legacy `subjects` collection so older data still shows.
         const className  = enrollment.className  || '';
         const streamName = enrollment.streamName || '';
-        const fullClass  = enrollment.fullClassName || `${className} ${streamName}`.trim();
         const levelName  = className; // "Grade 4", "Form 2", etc.
+        const escapeRe   = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        const allSubjects = await db.collection('subjects').find({
+        const classIdStr = enrollment.classId ? enrollment.classId.toString() : '';
+
+        // Primary source: v2_subjects assigned to this class (or school-wide).
+        const v2Subjects = await db.collection('v2_subjects').find({
+            deletedAt: { $exists: false },
+            $or: [
+                { classId: classIdStr },
+                { classId: null },
+                { classId: { $exists: false } },
+            ],
+        }).toArray();
+
+        // Fallback source: legacy `subjects` collection. These are commonly created
+        // school-wide (just name + code, no class field) via the Subjects page, so we
+        // match by class/level when present AND include any subject with no class link.
+        const legacySubjects = await db.collection('subjects').find({
             $or: [
                 { classId:   enrollment.classId },
-                { className: { $regex: new RegExp(`^${className.trim()}$`, 'i') } },
-                { levelName: { $regex: new RegExp(`^${levelName.trim()}$`, 'i') } },
-                { levelName: { $regex: new RegExp(className.trim(), 'i') } },
-            ]
+                { className: { $regex: new RegExp(`^${escapeRe(className.trim())}$`, 'i') } },
+                { levelName: { $regex: new RegExp(`^${escapeRe(levelName.trim())}$`, 'i') } },
+                { levelName: { $regex: new RegExp(escapeRe(className.trim()), 'i') } },
+                // School-wide subjects (no class linkage of any kind)
+                { classId: { $exists: false }, className: { $exists: false }, levelName: { $exists: false } },
+            ],
         }).toArray();
+
+        // Merge both sources, de-duplicating by subject name (case-insensitive).
+        const allSubjects: any[] = [];
+        const seenNames = new Set<string>();
+        [...v2Subjects, ...legacySubjects].forEach((sub: any) => {
+            const nm = (sub.name || sub.subjectName || '').trim().toLowerCase();
+            if (!nm || seenNames.has(nm)) return;
+            seenNames.add(nm);
+            allSubjects.push(sub);
+        });
 
         // ── Fetch marks for this enrollment ────────────────────────────────────
         const marksQuery: any = { enrollmentId };

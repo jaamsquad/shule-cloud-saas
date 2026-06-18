@@ -194,8 +194,8 @@ export default function ThemeLanguage() {
                             </div>
                             <div className="w-full border border-gray-200 rounded-3xl p-6 flex gap-4 bg-gray-50 flex-wrap items-center">
                                 {activeColors.map((color, i) => (
-                                    <div 
-                                        key={i} 
+                                    <div
+                                        key={i}
                                         onClick={() => setSettings({...settings, activeItemBackground: color})}
                                         className={`rounded cursor-pointer relative transition-all ${settings.activeItemBackground === color ? 'w-8 h-8 border-2 border-[#5C67F2] p-0.5 bg-white' : 'w-6 h-6 hover:opacity-80'}`}
                                     >
@@ -211,6 +211,19 @@ export default function ThemeLanguage() {
                                         )}
                                     </div>
                                 ))}
+                                {/* Any colour — custom picker. Stored as bg-[#hex] (Tailwind arbitrary value). */}
+                                <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer overflow-hidden relative" title="Choose any colour">
+                                    <input type="color"
+                                        value={(settings.activeItemBackground.match(/#([0-9a-fA-F]{6})/) || [, "5C67F2"])[1] ? `#${(settings.activeItemBackground.match(/#([0-9a-fA-F]{6})/) || [, "5C67F2"])[1]}` : "#5C67F2"}
+                                        onChange={(e) => setSettings({ ...settings, activeItemBackground: `bg-[${e.target.value}]` })}
+                                        className="w-10 h-10 cursor-pointer" />
+                                </label>
+                                {settings.activeItemBackground.startsWith("bg-[#") && (
+                                    <div className="w-8 h-8 rounded border-2 border-[#5C67F2] p-0.5 bg-white relative">
+                                        <div className="w-full h-full rounded" style={{ background: settings.activeItemBackground.slice(4, -1) }} />
+                                        <div className="absolute -top-2 -right-2 w-4 h-4 bg-[#5C67F2] rounded-full flex items-center justify-center text-white z-10"><Check className="w-2.5 h-2.5" /></div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

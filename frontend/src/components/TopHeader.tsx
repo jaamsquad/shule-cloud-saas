@@ -5,7 +5,7 @@ import {
     LayoutGrid, User, Users, BookOpen, FileText, X
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { navItems } from "./AppSidebar";
 
@@ -40,6 +40,22 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [dismissedBanner, setDismissedBanner] = useState<string[]>(() => { try { return JSON.parse(sessionStorage.getItem("dismissedBanners") || "[]"); } catch { return []; } });
+
+    const qc = useQueryClient();
+    const { data: notifications = [] } = useQuery({
+        queryKey: ["tenant_notifications"],
+        refetchInterval: 60000,
+        queryFn: async () => { try { const r = await api.get("/notifications"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const unread = notifications.filter((n: any) => !n.read).length;
+    // Banner = platform notices not yet dismissed this session.
+    const banners = notifications.filter((n: any) => n.type === "platform" && !dismissedBanner.includes(String(n._id)));
+    const dismissBanner = async (id: string) => {
+        const next = [...dismissedBanner, id]; setDismissedBanner(next); sessionStorage.setItem("dismissedBanners", JSON.stringify(next));
+        try { await api.patch(`/notifications/${id}/dismiss`); qc.invalidateQueries({ queryKey: ["tenant_notifications"] }); } catch { /* ignore */ }
+    };
 
     // Sidebar-tab matches (client-side).
     const pageMatches = q.length >= 1
@@ -108,7 +124,19 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
         }
     };
 
+    const bannerColor = (lvl: string) => lvl === "warning" ? "bg-amber-500" : lvl === "success" ? "bg-emerald-500" : "bg-[#5C67F2]";
+
     return (
+        <>
+        {/* Platform notification banners (from the system owner) — dismissible */}
+        {banners.map((n: any) => (
+            <div key={n._id} className={`${bannerColor(n.level)} text-white px-4 py-2.5 flex items-center gap-3 text-sm`}>
+                <Bell className="w-4 h-4 flex-shrink-0" />
+                <span className="font-bold">{n.title}</span>
+                <span className="opacity-90 truncate flex-1">{n.message}</span>
+                <button onClick={() => dismissBanner(String(n._id))} className="opacity-80 hover:opacity-100 flex-shrink-0"><X className="w-4 h-4" /></button>
+            </div>
+        ))}
         <header className={`h-16 ${headerBg} border-b ${borderClass} flex items-center px-3 sm:px-6 sticky top-0 z-50 shadow-sm transition-colors duration-300`}>
             {/* Logo Area */}
             <div className="flex items-center gap-2 sm:gap-3 w-auto sm:w-64 flex-shrink-0">
@@ -203,9 +231,31 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                     <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
                         <MessageSquare className="w-6 h-6" strokeWidth={1.5} />
                     </button>
-                    <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
-                        <Bell className="w-6 h-6" strokeWidth={1.5} />
-                    </button>
+                    <div className="relative">
+                        <button onClick={() => setNotifOpen(o => !o)} className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
+                            <Bell className="w-6 h-6" strokeWidth={1.5} />
+                            {unread > 0 && <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">{unread}</span>}
+                        </button>
+                        {notifOpen && (
+                            <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-slate-50 flex items-center justify-between">
+                                    <span className="font-black text-slate-800 text-sm">Notifications</span>
+                                    {notifications.length > 0 && <button onClick={async () => { try { await api.patch("/notifications/read-all"); qc.invalidateQueries({ queryKey: ["tenant_notifications"] }); } catch {} }} className="text-[11px] font-bold text-[#5C67F2]">Mark all read</button>}
+                                </div>
+                                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                                    {notifications.length === 0 ? (
+                                        <div className="px-4 py-8 text-center text-slate-400 text-xs font-bold">No notifications</div>
+                                    ) : notifications.map((n: any) => (
+                                        <div key={n._id} className={`px-4 py-3 ${!n.read ? "bg-[#5C67F2]/5" : ""}`}>
+                                            <div className="font-bold text-slate-800 text-sm">{n.title || "Notice"}</div>
+                                            <div className="text-xs text-slate-500 mt-0.5">{n.message}</div>
+                                            <div className="text-[10px] text-slate-400 mt-1">{n.from || "School"} · {n.createdAt ? new Date(n.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Institute Profile Dropdown Container */}
                     <div className="relative">
@@ -277,5 +327,6 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                 </div>
             </div>
         </header>
+        </>
     );
 }

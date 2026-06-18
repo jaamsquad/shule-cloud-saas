@@ -1,21 +1,25 @@
 import { useState } from "react";
-import { Home, Plus, Search, Trash2, Edit, Wallet, Loader2 } from "lucide-react";
+import { Home, Plus, Search, Trash2, Edit, Wallet, Loader2, Check } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 
 export default function ChartOfAccount() {
-    const { items, isLoading, createItem, isCreating, deleteItem } = useItems("chart_of_accounts");
+    const { items, isLoading, createItem, isCreating, deleteItem, updateItem } = useItems("chart_of_accounts");
     const [name, setName] = useState("");
     const [type, setType] = useState("");
+    const [editId, setEditId] = useState<string | null>(null);
+    const [search, setSearch] = useState("");
 
     const handleSave = () => {
         if (!name || !type) return;
-        createItem({ name, type }, {
-            onSuccess: () => {
-                setName("");
-                setType("");
-            }
-        });
+        if (editId) {
+            updateItem({ id: editId, name, type }, { onSuccess: () => { setName(""); setType(""); setEditId(null); } });
+        } else {
+            createItem({ name, type }, { onSuccess: () => { setName(""); setType(""); } });
+        }
     };
+    const startEdit = (it: any) => { setEditId(it._id); setName(it.name); setType(it.type); };
+
+    const filtered = items.filter((it: any) => !search || (it.name || "").toLowerCase().includes(search.toLowerCase()) || (it.type || "").toLowerCase().includes(search.toLowerCase()));
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center">
@@ -61,8 +65,9 @@ export default function ChartOfAccount() {
                             disabled={isCreating || !name || !type}
                             className="h-11 px-8 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save Head
+                            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : editId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />} {editId ? "Update Head" : "Save Head"}
                         </button>
+                        {editId && <button onClick={() => { setEditId(null); setName(""); setType(""); }} className="h-11 px-4 text-slate-500 font-bold text-sm">Cancel</button>}
                     </div>
                 </div>
 
@@ -80,7 +85,7 @@ export default function ChartOfAccount() {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-600 font-medium">Search:</span>
-                            <input type="text" className="h-9 px-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2]" />
+                            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 px-4 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2]" />
                         </div>
                     </div>
 
@@ -100,14 +105,14 @@ export default function ChartOfAccount() {
                                             <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#5C67F2]" />
                                         </td>
                                     </tr>
-                                ) : items.length === 0 ? (
+                                ) : filtered.length === 0 ? (
                                     <tr>
                                         <td colSpan={3} className="px-6 py-10 text-center text-gray-400 text-sm italic">
                                             No data available in table
                                         </td>
                                     </tr>
                                 ) : (
-                                    items.map((item: any) => (
+                                    filtered.map((item: any) => (
                                         <tr key={item._id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                                             <td className="px-6 py-4 text-sm text-gray-700 font-medium">{item.name}</td>
                                             <td className="px-6 py-4 text-sm">
@@ -119,7 +124,7 @@ export default function ChartOfAccount() {
                                             </td>
                                             <td className="px-6 py-4 text-sm">
                                                 <div className="flex gap-2">
-                                                    <button className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors">
+                                                    <button onClick={() => startEdit(item)} className="p-2 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors">
                                                         <Edit className="w-4 h-4" />
                                                     </button>
                                                     <button 
@@ -138,7 +143,7 @@ export default function ChartOfAccount() {
                     </div>
 
                     <div className="mt-6 flex justify-between items-center text-sm text-gray-500 font-medium">
-                        <p>Showing {items.length} entries</p>
+                        <p>Showing {filtered.length} entries</p>
                         <div className="flex gap-4">
                             <button className="text-gray-400">Previous</button>
                             <button className="text-gray-400">Next</button>

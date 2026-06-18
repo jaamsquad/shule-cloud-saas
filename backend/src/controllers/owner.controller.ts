@@ -9,10 +9,11 @@ import { getDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 export const OWNER_ROLES = ['super_owner', 'owner', 'support', 'finance', 'sales', 'viewer'] as const;
 const ROLE_PERMS: Record<string, string[]> = {
     super_owner: ['*'],
-    owner: ['schools.manage', 'plans.manage', 'billing.view', 'users.manage', 'analytics.view'],
-    finance: ['billing.view', 'billing.manage', 'analytics.view'],
-    support: ['schools.manage', 'analytics.view'],
-    sales: ['schools.manage', 'plans.view', 'analytics.view'],
+    // schools.manage = EDIT tenants; schools.view = read-only. plans.manage = create/edit plans.
+    owner: ['schools.view', 'schools.manage', 'plans.manage', 'billing.view', 'users.manage', 'analytics.view', 'reminders', 'broadcast'],
+    finance: ['billing.view', 'billing.manage', 'analytics.view', 'schools.view', 'reminders', 'broadcast'],
+    support: ['schools.view', 'analytics.view', 'reminders', 'broadcast'],
+    sales: ['schools.view', 'plans.view', 'analytics.view', 'reminders', 'broadcast'],
     viewer: ['analytics.view'],
 };
 
@@ -27,6 +28,19 @@ const ownerClaims = (req: Request): any => {
 const canManageUsers = (claims: any) => {
     const role = String(claims?.role || '').toLowerCase();
     return role === 'super_owner' || ROLE_PERMS[role]?.includes('users.manage');
+};
+// Generic permission check for a specific capability code.
+const hasPerm = (claims: any, code: string) => {
+    const role = String(claims?.role || '').toLowerCase();
+    const perms = ROLE_PERMS[role] || [];
+    return role === 'super_owner' || perms.includes('*') || perms.includes(code);
+};
+// Guard helper: returns claims if allowed, else writes 401/403 and returns null.
+const guard = (req: Request, res: Response, code?: string): any => {
+    const claims = ownerClaims(req);
+    if (!claims) { res.status(401).json({ message: 'Unauthorized' }); return null; }
+    if (code && !hasPerm(claims, code)) { res.status(403).json({ message: 'Your role does not allow this action.' }); return null; }
+    return claims;
 };
 
 export const getTenants = async (req: Request, res: Response) => {
@@ -53,8 +67,7 @@ export const getPlans = async (req: Request, res: Response) => {
 
 // Create a plan (with module list + max-students limit).
 export const createPlan = async (req: Request, res: Response) => {
-    const claims = ownerClaims(req);
-    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'plans.manage')) return;
     try {
         const db = getDb();
         const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
@@ -76,8 +89,7 @@ export const createPlan = async (req: Request, res: Response) => {
 };
 
 export const updatePlan = async (req: Request, res: Response) => {
-    const claims = ownerClaims(req);
-    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'plans.manage')) return;
     try {
         const db = getDb();
         const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
@@ -97,8 +109,7 @@ export const updatePlan = async (req: Request, res: Response) => {
 };
 
 export const deletePlan = async (req: Request, res: Response) => {
-    const claims = ownerClaims(req);
-    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'plans.manage')) return;
     try {
         const db = getDb();
         await db.collection('Plan').deleteOne({ _id: new ObjectId(req.params.id) });
@@ -336,7 +347,7 @@ export const getSchoolDetail = async (req: Request, res: Response) => {
 
 // Assign / change a school's plan.
 export const assignSchoolPlan = async (req: Request, res: Response) => {
-    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'schools.manage')) return;
     try {
         const meta = getDb();
         const { planId } = req.body || {};
@@ -354,7 +365,7 @@ export const assignSchoolPlan = async (req: Request, res: Response) => {
 
 // Activate / suspend a school account.
 export const setSchoolStatus = async (req: Request, res: Response) => {
-    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'schools.manage')) return;
     try {
         const status = String(req.body?.status || '').toLowerCase();
         if (!['active', 'suspended', 'trial'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
@@ -365,7 +376,7 @@ export const setSchoolStatus = async (req: Request, res: Response) => {
 
 // Toggle which modules a school can access (overrides the plan).
 export const setSchoolModules = async (req: Request, res: Response) => {
-    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'schools.manage')) return;
     try {
         const modules = Array.isArray(req.body?.modules) ? req.body.modules : [];
         await getDb().collection('Tenant').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { enabledModules: modules, updatedAt: new Date() } });
@@ -375,7 +386,7 @@ export const setSchoolModules = async (req: Request, res: Response) => {
 
 // Impersonate: mint a tenant admin token so the owner can log in as the school admin.
 export const impersonateSchool = async (req: Request, res: Response) => {
-    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    if (!guard(req, res, 'schools.manage')) return;
     try {
         const meta = getDb();
         const t = await meta.collection('Tenant').findOne({ _id: new ObjectId(req.params.id) });
@@ -492,5 +503,138 @@ export const setPlatformMpesa = async (req: Request, res: Response) => {
         });
         await getDb().collection('mpesa_settings').updateOne({}, { $set: set }, { upsert: true });
         return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Personal reminders (per owner user) ─────────────────────────────────────
+export const listReminders = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    try {
+        const rows = await getDb().collection('owner_reminders').find({ ownerId: String(claims.sub) }).sort({ dueAt: 1, createdAt: -1 }).toArray();
+        return res.json(rows.map((r: any) => ({ ...r, _id: String(r._id) })));
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+export const createReminder = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    try {
+        const { title, note, dueAt } = req.body || {};
+        if (!title) return res.status(400).json({ message: 'Title is required' });
+        const doc = { ownerId: String(claims.sub), title, note: note || '', dueAt: dueAt || null, done: false, createdAt: new Date() };
+        const r = await getDb().collection('owner_reminders').insertOne(doc);
+        return res.status(201).json({ _id: String(r.insertedId), ...doc });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+export const updateReminder = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    try {
+        const set: any = { updatedAt: new Date() };
+        ['title', 'note', 'dueAt', 'done'].forEach((k) => { if (req.body?.[k] !== undefined) set[k] = req.body[k]; });
+        await getDb().collection('owner_reminders').updateOne({ _id: new ObjectId(req.params.id), ownerId: String(claims.sub) }, { $set: set });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+export const deleteReminder = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    try {
+        await getDb().collection('owner_reminders').deleteOne({ _id: new ObjectId(req.params.id), ownerId: String(claims.sub) });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Company email (SMTP) settings — super_owner only ─────────────────────────
+export const getCompanyEmail = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    if (String(claims.role).toLowerCase() !== 'super_owner') return res.status(403).json({ message: 'Only the Super Owner can view email settings.' });
+    try {
+        const s: any = (await getDb().collection('platform_email_settings').findOne({ key: 'smtp' })) || {};
+        return res.json({
+            host: s.host || '', port: s.port || 587, secure: !!s.secure,
+            user: s.user || '', pass: s.pass ? '••••••••' : '',
+            fromName: s.fromName || 'ShuleCloud', domain: s.domain || 'shulecloud.com',
+            configured: !!(s.host && s.user && s.pass),
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+export const setCompanyEmail = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    if (String(claims.role).toLowerCase() !== 'super_owner') return res.status(403).json({ message: 'Only the Super Owner can change email settings.' });
+    try {
+        const b = req.body || {};
+        const set: any = { key: 'smtp', updatedAt: new Date() };
+        ['host', 'fromName', 'domain', 'user'].forEach((k) => { if (b[k] !== undefined) set[k] = b[k]; });
+        if (b.port !== undefined) set.port = Number(b.port) || 587;
+        if (b.secure !== undefined) set.secure = !!b.secure;
+        if (b.pass !== undefined && b.pass !== '••••••••') set.pass = b.pass;
+        await getDb().collection('platform_email_settings').updateOne({ key: 'smtp' }, { $set: set }, { upsert: true });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Personal email broadcast — sends from <user>@<companyDomain> via SMTP ─────
+export const sendBroadcast = async (req: Request, res: Response) => {
+    const claims = guard(req, res, 'broadcast'); if (!claims) return;
+    try {
+        const { to, subject, message } = req.body || {};
+        const recipients: string[] = Array.isArray(to) ? to : String(to || '').split(/[,;\s]+/).filter(Boolean);
+        if (!recipients.length || !subject || !message) return res.status(400).json({ message: 'Recipients, subject and message are required' });
+
+        const s: any = (await getDb().collection('platform_email_settings').findOne({ key: 'smtp' })) || {};
+        if (!s.host || !s.user || !s.pass) return res.status(400).json({ message: 'Company email (SMTP) is not configured. Ask the Super Owner to set it in Settings.' });
+
+        const nodemailer = (await import('nodemailer')).default;
+        const transporter = nodemailer.createTransport({ host: s.host, port: Number(s.port) || 587, secure: !!s.secure, auth: { user: s.user, pass: s.pass } });
+
+        // From = the logged-in owner's username @ company domain.
+        const domain = s.domain || 'shulecloud.com';
+        const localPart = String(claims.email || claims.name || 'noreply').split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        const fromAddr = `"${s.fromName || claims.name || 'ShuleCloud'}" <${localPart}@${domain}>`;
+
+        await transporter.sendMail({ from: fromAddr, to: recipients.join(','), subject, html: String(message).replace(/\n/g, '<br>') });
+        await getDb().collection('owner_broadcasts').insertOne({ ownerId: String(claims.sub), from: fromAddr, to: recipients, subject, message, sentAt: new Date() });
+        return res.json({ ok: true, sent: recipients.length, from: fromAddr });
+    } catch (e: any) { return res.status(500).json({ message: `Email send failed: ${e.message}` }); }
+};
+
+// ─── Owner → school notifications (top-bar banner for school admins) ──────────
+// super_owner and support can broadcast a notification to one school or all.
+export const sendTenantNotification = async (req: Request, res: Response) => {
+    const claims = guard(req, res); if (!claims) return;
+    const role = String(claims.role || '').toLowerCase();
+    if (!['super_owner', 'support', 'owner'].includes(role)) return res.status(403).json({ message: 'Your role cannot send notifications.' });
+    try {
+        const meta = getDb();
+        const { title, message, level, tenantId } = req.body || {};
+        if (!message) return res.status(400).json({ message: 'Message is required' });
+        const doc = {
+            type: 'platform', title: title || 'Platform Notice', message,
+            level: level || 'info',           // info | warning | success
+            audience: 'Admins', from: claims.name || 'ShuleCloud',
+            read: false, dismissed: false, createdAt: new Date(),
+        };
+
+        // Targets: one tenant, or all tenants.
+        const tenants = tenantId
+            ? [await meta.collection('Tenant').findOne({ _id: new ObjectId(tenantId) })].filter(Boolean)
+            : await meta.collection('Tenant').find({}).toArray();
+
+        let delivered = 0;
+        for (const t of tenants as any[]) {
+            try {
+                const dbName = t.databaseName || subdomainToDbName(t.subdomain || String(t._id));
+                await getTenantDb(dbName).collection('notifications').insertOne({ ...doc, tenantId: String(t._id) });
+                delivered++;
+            } catch { /* skip a bad tenant */ }
+        }
+        // Keep a copy in meta for the owner's own audit/history.
+        await meta.collection('platform_notifications').insertOne({ ...doc, tenantId: tenantId || 'all', delivered });
+        return res.json({ ok: true, delivered });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const listPlatformNotifications = async (req: Request, res: Response) => {
+    if (!guard(req, res)) return;
+    try {
+        const rows = await getDb().collection('platform_notifications').find({}).sort({ createdAt: -1 }).limit(100).toArray();
+        return res.json(rows.map((r: any) => ({ ...r, _id: String(r._id) })));
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };

@@ -42,6 +42,26 @@ const enforcePlanLimit = async (req: Request, res: any, next: any) => {
 // ─── Health ────────────────────────────────────────────────────────────────
 router.get('/health', (_req, res) => res.json({ status: 'ok', module: 'academics' }));
 
+// ─── Tenant notifications (platform notices shown in the school top bar) ─────
+router.get('/notifications', async (req, res) => {
+    try {
+        const rows = await getRequestDb(req).collection('notifications')
+            .find({ dismissed: { $ne: true } }).sort({ createdAt: -1 }).limit(50).toArray();
+        res.json(rows.map((r: any) => ({ ...r, _id: String(r._id) })));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.patch('/notifications/:id/dismiss', async (req, res) => {
+    try {
+        let _id: any; try { _id = new ObjectId(req.params.id); } catch { _id = req.params.id; }
+        await getRequestDb(req).collection('notifications').updateOne({ _id }, { $set: { dismissed: true, dismissedAt: new Date() } });
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.patch('/notifications/read-all', async (req, res) => {
+    try { await getRequestDb(req).collection('notifications').updateMany({ read: { $ne: true } }, { $set: { read: true } }); res.json({ ok: true }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Card-scan attendance (student / staff) ──────────────────────────────────
 const scanDay = () => new Date().toISOString().slice(0, 10);
 

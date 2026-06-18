@@ -87,6 +87,19 @@ export default function Login() {
     // School not found = on a subdomain, fetch completed, no data returned
     const schoolNotFound = !!activeSubdomain && schoolFetched && !schoolInfo && !schoolLoading;
 
+    // ── Owner impersonation: a one-time token passed in the URL ──────────────
+    useEffect(() => {
+        const imp = searchParams.get("impersonate_token");
+        if (imp) {
+            localStorage.setItem("auth_token", imp);
+            try {
+                const p = JSON.parse(atob(imp.split(".")[1]));
+                localStorage.setItem("user", JSON.stringify({ email: p.email, name: p.name, role: p.role, tenantId: p.tenantId, impersonated: true }));
+            } catch { /* ignore */ }
+            navigate("/dashboard", { replace: true });
+        }
+    }, [searchParams, navigate]);
+
     // ── Redirect if already authenticated ───────────────────────────────────
     useEffect(() => {
         const token = localStorage.getItem("auth_token");

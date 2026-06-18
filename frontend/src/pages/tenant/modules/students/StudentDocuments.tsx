@@ -86,7 +86,21 @@ export default function StudentDocuments() {
                                             <button onClick={() => saveMut.mutate({ ...d, isVerified: !d.isVerified })} className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${d.isVerified ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-300 hover:bg-emerald-100"}`}><Check className="w-3.5 h-3.5" /></button>
                                         </td>
                                         <td className="py-3 px-4">
-                                            {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] font-black text-[#5C67F2] hover:underline uppercase"><ExternalLink className="w-3 h-3" />Open</a> : <span className="text-slate-300 text-[9px] font-bold">No link</span>}
+                                            {d.url ? (
+                                                <button onClick={() => {
+                                                    if (d.url.startsWith("data:")) {
+                                                        // Open uploaded file (base64) in a new tab via a blob URL.
+                                                        try {
+                                                            const [meta, b64] = d.url.split(",");
+                                                            const mime = (meta.match(/data:(.*);base64/) || [, "application/octet-stream"])[1];
+                                                            const bin = atob(b64); const arr = new Uint8Array(bin.length);
+                                                            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                                                            const url = URL.createObjectURL(new Blob([arr], { type: mime }));
+                                                            window.open(url, "_blank"); setTimeout(() => URL.revokeObjectURL(url), 60000);
+                                                        } catch { window.open(d.url, "_blank"); }
+                                                    } else { window.open(d.url, "_blank"); }
+                                                }} className="flex items-center gap-1 text-[10px] font-black text-[#5C67F2] hover:underline uppercase"><ExternalLink className="w-3 h-3" />View</button>
+                                            ) : <span className="text-slate-300 text-[9px] font-bold">No file</span>}
                                         </td>
                                         <td className="py-3 px-4">
                                             <div className="flex gap-1.5">
@@ -131,12 +145,38 @@ export default function StudentDocuments() {
                                         <input type="date" value={form.uploadDate} onChange={e => setForm({ ...form, uploadDate: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                     </div>
                                 </div>
-                                {[{ label: "Document Title", field: "title" }, { label: "URL / Link (Google Drive, etc.)", field: "url" }, { label: "Description / Notes", field: "description" }].map(f => (
-                                    <div key={f.field} className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{f.label}</div>
-                                        <input type="text" value={(form as any)[f.field]} onChange={e => setForm({ ...form, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                                    </div>
-                                ))}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Document Title</div>
+                                    <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                </div>
+
+                                {/* Upload a file (PDF / DOCX / image) — stored & viewable */}
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Upload File (PDF, DOCX, Image)</div>
+                                    <label className="w-full min-h-[44px] px-4 py-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-3 cursor-pointer hover:border-[#5C67F2]">
+                                        <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden" onChange={async (e) => {
+                                            const f = e.target.files?.[0]; if (!f) return;
+                                            if (f.size > 6 * 1024 * 1024) { toast.error("File too large (max 6MB). Use a link instead."); return; }
+                                            const r = new FileReader();
+                                            r.onloadend = () => setForm(p => ({ ...p, url: String(r.result), title: p.title || f.name, fileName: f.name } as any));
+                                            r.readAsDataURL(f);
+                                        }} />
+                                        {(form as any).fileName || (form.url && form.url.startsWith("data:")) ? (
+                                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-2"><FileText className="w-4 h-4" /> {(form as any).fileName || "File attached"} · click to replace</span>
+                                        ) : (
+                                            <span className="text-xs font-bold text-slate-400 flex items-center gap-2"><Plus className="w-4 h-4" /> Click to choose a file</span>
+                                        )}
+                                    </label>
+                                </div>
+
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Or paste a URL / Link</div>
+                                    <input type="text" value={form.url.startsWith("data:") ? "" : form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://drive.google.com/…" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                </div>
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Description / Notes</div>
+                                    <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                </div>
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" checked={form.isVerified} onChange={e => setForm({ ...form, isVerified: e.target.checked })} className="w-4 h-4 accent-[#5C67F2]" />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Document Verified</span>

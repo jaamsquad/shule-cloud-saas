@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -31,6 +31,23 @@ router.post('/public-settings', setPublicSettings);
 // ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
 router.get('/mpesa-settings', getPlatformMpesa);
 router.post('/mpesa-settings', setPlatformMpesa);
+
+// ─── Personal reminders ──────────────────────────────────────────────────────
+router.get('/reminders', listReminders);
+router.post('/reminders', createReminder);
+router.patch('/reminders/:id', updateReminder);
+router.delete('/reminders/:id', deleteReminder);
+
+// ─── Company email (SMTP) — super_owner only ─────────────────────────────────
+router.get('/company-email', getCompanyEmail);
+router.post('/company-email', setCompanyEmail);
+
+// ─── Personal email broadcast ────────────────────────────────────────────────
+router.post('/broadcast', sendBroadcast);
+
+// ─── Owner → school notifications ────────────────────────────────────────────
+router.post('/notify', sendTenantNotification);
+router.get('/notifications-sent', listPlatformNotifications);
 
 // ─── Owner user management (add users + assign roles) ────────────────────────
 router.get('/roles', getOwnerRoles);

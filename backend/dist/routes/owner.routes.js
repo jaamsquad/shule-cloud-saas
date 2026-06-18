@@ -27,6 +27,19 @@ router.post('/public-settings', owner_controller_1.setPublicSettings);
 // ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
 router.get('/mpesa-settings', owner_controller_1.getPlatformMpesa);
 router.post('/mpesa-settings', owner_controller_1.setPlatformMpesa);
+// ─── Personal reminders ──────────────────────────────────────────────────────
+router.get('/reminders', owner_controller_1.listReminders);
+router.post('/reminders', owner_controller_1.createReminder);
+router.patch('/reminders/:id', owner_controller_1.updateReminder);
+router.delete('/reminders/:id', owner_controller_1.deleteReminder);
+// ─── Company email (SMTP) — super_owner only ─────────────────────────────────
+router.get('/company-email', owner_controller_1.getCompanyEmail);
+router.post('/company-email', owner_controller_1.setCompanyEmail);
+// ─── Personal email broadcast ────────────────────────────────────────────────
+router.post('/broadcast', owner_controller_1.sendBroadcast);
+// ─── Owner → school notifications ────────────────────────────────────────────
+router.post('/notify', owner_controller_1.sendTenantNotification);
+router.get('/notifications-sent', owner_controller_1.listPlatformNotifications);
 // ─── Owner user management (add users + assign roles) ────────────────────────
 router.get('/roles', owner_controller_1.getOwnerRoles);
 router.get('/users', owner_controller_1.listOwnerUsers);

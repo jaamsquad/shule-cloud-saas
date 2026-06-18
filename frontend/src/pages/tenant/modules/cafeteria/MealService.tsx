@@ -42,7 +42,13 @@ export default function MealService() {
     };
 
     const serve = useMutation({
-        mutationFn: async () => (await api.post("/cafeteria/serve", { code, mealType, photo })).data,
+        // Serve the LOADED student by a stable identifier (not the scan box, which
+        // may have been cleared) — reg/adm number or wallet code or id.
+        mutationFn: async () => {
+            const ref = student?.registrationNo || student?.admNo || student?.walletCode || student?._id || code;
+            if (!ref) throw { response: { data: { message: "No student loaded. Scan a card first." } } };
+            return (await api.post("/cafeteria/serve", { code: ref, mealType, photo })).data;
+        },
         onSuccess: (d) => {
             toast.success(`${d.studentName} served ${mealType}`);
             qc.invalidateQueries({ queryKey: ["meals_today"] });

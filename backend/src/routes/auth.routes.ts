@@ -335,9 +335,28 @@ router.get('/my-permissions', async (req, res) => {
             return res.status(401).json({ message: 'Invalid token' });
         }
 
-        // ── Full admin → return wildcard immediately ──────────────────────────
+        // The platform owner can restrict which modules a school may use. Read the
+        // tenant's enabledModules from the meta-DB registry; if set, it caps what
+        // ANYONE at this school sees (including admins). Empty/unset = all allowed.
+        const tid = (req as any).tenantContext?.tenantId;
+        let enabledModules: string[] | null = null;
+        try {
+            if (tid) {
+                const t = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(tid) });
+                if (Array.isArray(t?.enabledModules) && t.enabledModules.length) enabledModules = t.enabledModules.map(String);
+            }
+        } catch { /* ignore */ }
+        // Modules always available regardless of plan restriction.
+        const ALWAYS = ['dashboard', 'settings', 'students', 'employees', 'classes', 'subjects'];
+        const capModules = (mods: string[]): string[] => {
+            if (!enabledModules) return mods;
+            if (mods.includes('*')) return Array.from(new Set([...ALWAYS, ...enabledModules]));
+            return mods.filter(m => ALWAYS.includes(m) || enabledModules!.includes(m));
+        };
+
+        // ── Full admin → wildcard, but capped by the school's enabled modules ──
         if (userRole === 'school_admin' || userRole === 'super_admin') {
-            return res.json({ role: userRole, userId, modules: ['*'], crud: {} });
+            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {} });
         }
 
         // ── Resolve the staff member's effective permission CODES, then map them
@@ -359,7 +378,7 @@ router.get('/my-permissions', async (req, res) => {
         // teacher fallback, no built-in role defaults. A freshly registered
         // teacher therefore sees nothing until an admin grants access.
         const codes = await resolveStaffPermissions(db, staffForPerms, { teacherFallback: false, useRoleDefaults: false });
-        const resolvedModules = permsToModules(codes);
+        const resolvedModules = capModules(permsToModules(codes));
         const crud = await resolveStaffCrud(db, staffForPerms);
 
         res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud });

@@ -19,9 +19,20 @@ import OwnerUsers from "./OwnerUsers";
 import OwnerPlansManager from "./OwnerPlansManager";
 import OwnerMessages from "./OwnerMessages";
 import OwnerSettings from "./OwnerSettings";
+import OwnerReminders from "./OwnerReminders";
+import OwnerBroadcast from "./OwnerBroadcast";
+
+// Owner role from JWT → drives which tabs/actions are visible.
+const ownerRole = (): string => {
+  try { const t = localStorage.getItem("owner_token"); if (!t) return "super_owner"; return String(JSON.parse(atob(t.split(".")[1])).role || "").toLowerCase(); } catch { return ""; }
+};
 
 export default function OwnerDashboard() {
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings">("analytics");
+  const role = ownerRole();
+  const isSuper = role === "super_owner";
+  const canUsers = isSuper || role === "owner";
+  const canPlans = isSuper || role === "owner" || role === "sales";
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -106,9 +117,15 @@ export default function OwnerDashboard() {
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-border">
-          {(["analytics", "tenants", "plans", "billing", "users", "messages", "settings"] as const).map(t => (
+        {/* Tabs — filtered by the owner user's role */}
+        <div className="flex gap-1 border-b border-border flex-wrap">
+          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "messages", "settings"] as const)
+            .filter(t => {
+              if (t === "users" && !canUsers) return false;
+              if (t === "plans" && !canPlans) return false;
+              return true;
+            })
+            .map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -125,6 +142,10 @@ export default function OwnerDashboard() {
         {tab === "users" && <OwnerUsers />}
 
         {tab === "messages" && <OwnerMessages />}
+
+        {tab === "reminders" && <OwnerReminders />}
+
+        {tab === "communicate" && <OwnerBroadcast />}
 
         {tab === "settings" && <OwnerSettings />}
 

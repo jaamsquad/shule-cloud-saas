@@ -57,13 +57,14 @@ export default function ManageSchool() {
         onSuccess: (res: any) => {
             const { access_token, subdomain } = res.data || {};
             if (!access_token) return toast.error("Could not impersonate");
-            // Open the school's app on its subdomain, pre-authenticated.
-            localStorage.setItem("auth_token", access_token);
+            // Open the school's app on ITS subdomain. localStorage is per-origin,
+            // so we pass the token in the URL — the tenant app reads & stores it.
             const host = window.location.hostname;
             const root = host.endsWith(".localhost") || host === "localhost" ? "localhost" : host.split(".").slice(-2).join(".");
             const port = window.location.port ? `:${window.location.port}` : "";
-            window.open(`${window.location.protocol}//${subdomain}.${root}${port}/dashboard`, "_blank");
-            toast.success(`Opened ${subdomain} as admin (impersonating)`);
+            const url = `${window.location.protocol}//${subdomain}.${root}${port}/login?impersonate_token=${encodeURIComponent(access_token)}`;
+            window.open(url, "_blank");
+            toast.success(`Opening ${subdomain} as admin…`);
         },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });

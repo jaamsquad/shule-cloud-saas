@@ -318,9 +318,31 @@ router.get('/my-permissions', async (req, res) => {
             // Invalid/forged token → deny, never default to admin.
             return res.status(401).json({ message: 'Invalid token' });
         }
-        // ── Full admin → return wildcard immediately ──────────────────────────
+        // The platform owner can restrict which modules a school may use. Read the
+        // tenant's enabledModules from the meta-DB registry; if set, it caps what
+        // ANYONE at this school sees (including admins). Empty/unset = all allowed.
+        const tid = req.tenantContext?.tenantId;
+        let enabledModules = null;
+        try {
+            if (tid) {
+                const t = await (0, mongodb_1.getMetaDb)().collection('Tenant').findOne({ _id: new mongodb_2.ObjectId(tid) });
+                if (Array.isArray(t?.enabledModules) && t.enabledModules.length)
+                    enabledModules = t.enabledModules.map(String);
+            }
+        }
+        catch { /* ignore */ }
+        // Modules always available regardless of plan restriction.
+        const ALWAYS = ['dashboard', 'settings', 'students', 'employees', 'classes', 'subjects'];
+        const capModules = (mods) => {
+            if (!enabledModules)
+                return mods;
+            if (mods.includes('*'))
+                return Array.from(new Set([...ALWAYS, ...enabledModules]));
+            return mods.filter(m => ALWAYS.includes(m) || enabledModules.includes(m));
+        };
+        // ── Full admin → wildcard, but capped by the school's enabled modules ──
         if (userRole === 'school_admin' || userRole === 'super_admin') {
-            return res.json({ role: userRole, userId, modules: ['*'], crud: {} });
+            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {} });
         }
         // ── Resolve the staff member's effective permission CODES, then map them
         //    to sidebar module keys. This is the same source the role editor
@@ -346,7 +368,7 @@ router.get('/my-permissions', async (req, res) => {
         // teacher fallback, no built-in role defaults. A freshly registered
         // teacher therefore sees nothing until an admin grants access.
         const codes = await (0, permissions_1.resolveStaffPermissions)(db, staffForPerms, { teacherFallback: false, useRoleDefaults: false });
-        const resolvedModules = (0, permissions_1.permsToModules)(codes);
+        const resolvedModules = capModules((0, permissions_1.permsToModules)(codes));
         const crud = await (0, permissions_1.resolveStaffCrud)(db, staffForPerms);
         res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud });
     }
