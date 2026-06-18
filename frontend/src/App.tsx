@@ -51,6 +51,7 @@ import OwnerAnnouncements from "./pages/owner/Announcements";
 import OwnerSettings from "./pages/owner/Settings";
 import OwnerRegister from "./pages/owner/Register";
 import OwnerBilling from "./pages/owner/Billing";
+import OwnerGuard from "./pages/owner/OwnerGuard";
 
 // Onboarding
 import OnboardingWizard from "./pages/OnboardingWizard";
@@ -406,7 +407,9 @@ const App = () => {
             <Route path="/owner/login" element={<OwnerLogin />} />
             <Route path="/owner/register" element={<OwnerRegister />} />
 
-            <Route element={<DashboardLayout />}>
+            {/* Owner pages render their own header — guard by owner_token, NOT the
+                tenant DashboardLayout (which would bounce owners to /login). */}
+            <Route element={<OwnerGuard />}>
               <Route path="/owner/dashboard" element={<OwnerDashboard />} />
               <Route path="/owner/tenants" element={<OwnerTenants />} />
               <Route path="/owner/plans" element={<OwnerPlans />} />
