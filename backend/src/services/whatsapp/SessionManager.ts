@@ -367,12 +367,39 @@ class WhatsAppSessionManager extends EventEmitter {
 
     /** Send a text message (foundation for broadcasts / reminders / results). */
     async sendText(schoolId: string, toPhone: string, text: string): Promise<{ id?: string }> {
-        const s = this.sessions.get(schoolId);
-        if (!s || s.status !== 'connected' || !s.sock) throw new Error('WhatsApp is not connected for this school');
+        let s = this.sessions.get(schoolId);
+
+        // After a backend restart the in-memory socket is gone but the saved creds
+        // remain. If the stored status says 'connected', silently re-establish the
+        // socket from those creds and wait briefly for it to come online.
+        if (!s || s.status !== 'connected' || !s.sock) {
+            const stored = await this.getStatus(schoolId);
+            if (stored.status === 'connected' && !this.isLive(schoolId)) {
+                await this.connect(schoolId).catch(() => {});
+                await this.waitForConnected(schoolId, 12_000);
+                s = this.sessions.get(schoolId);
+            }
+        }
+
+        if (!s || s.status !== 'connected' || !s.sock) {
+            throw new Error('WhatsApp is not connected. Open Communications → WhatsApp Integration and scan the QR code.');
+        }
         const jid = toPhone.includes('@') ? toPhone : `${toPhone.replace(/[^\d]/g, '')}@s.whatsapp.net`;
         const sent = await s.sock.sendMessage(jid, { text });
         this.emitTo(schoolId, 'message_sent', { to: jid, text });
         return { id: sent?.key?.id };
+    }
+
+    /** Resolve once the school's socket reports 'open' (or timeout). */
+    private waitForConnected(schoolId: string, timeoutMs: number): Promise<boolean> {
+        if (this.sessions.get(schoolId)?.status === 'connected') return Promise.resolve(true);
+        return new Promise((resolve) => {
+            const done = (val: boolean) => { cleanup(); resolve(val); };
+            const onConn = () => done(true);
+            const timer = setTimeout(() => done(this.sessions.get(schoolId)?.status === 'connected'), timeoutMs);
+            const cleanup = () => { clearTimeout(timer); this.off(`${schoolId}:connected`, onConn); };
+            this.once(`${schoolId}:connected`, onConn);
+        });
     }
 
     // ── Background maintenance ────────────────────────────────────────────────
