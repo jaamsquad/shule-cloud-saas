@@ -18,7 +18,7 @@ import * as baileys from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../../lib/mongodb';
 import { useMongoAuthState, MongoAuthState } from './mongoAuthStore';
-import { logEvent } from './logger';
+import { logEvent, makeSilentLogger } from './logger';
 
 // makeWASocket is the DEFAULT export; the rest are NAMED exports.
 const makeWASocket = (baileys as any).default || (baileys as any).makeWASocket;
@@ -201,11 +201,13 @@ class WhatsAppSessionManager extends EventEmitter {
         this.sessions.set(schoolId, session);
         this.setStatus(session, 'connecting');
 
+        const waLogger = makeSilentLogger();
         const sock = makeWASocket({
             version,
+            logger: waLogger,                 // silence Baileys' internal pino logs
             auth: {
                 creds: auth.state.creds,
-                keys: makeCacheableSignalKeyStore(auth.state.keys, console as any),
+                keys: makeCacheableSignalKeyStore(auth.state.keys, waLogger),
             },
             printQRInTerminal: false,
             browser: ['ShuleCloud', 'Chrome', '1.0.0'],
