@@ -14,13 +14,14 @@
  */
 import { EventEmitter } from 'events';
 import { Db } from 'mongodb';
-import baileys from '@whiskeysockets/baileys';
+import * as baileys from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../../lib/mongodb';
 import { useMongoAuthState, MongoAuthState } from './mongoAuthStore';
 import { logEvent } from './logger';
 
-const makeWASocket = (baileys as any).default;
+// makeWASocket is the DEFAULT export; the rest are NAMED exports.
+const makeWASocket = (baileys as any).default || (baileys as any).makeWASocket;
 const { DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = baileys as any;
 
 const QR_TTL_MS = 20_000;             // WhatsApp QR validity window (~20s)

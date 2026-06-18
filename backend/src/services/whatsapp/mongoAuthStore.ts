@@ -9,10 +9,11 @@
  *   { _id: "creds" | "<keyType>-<id>", data: <encrypted-json>, updatedAt }
  */
 import { Db } from 'mongodb';
-import baileys from '@whiskeysockets/baileys';
+import * as baileys from '@whiskeysockets/baileys';
 import type { AuthenticationState, SignalDataTypeMap } from '@whiskeysockets/baileys';
 import { encrypt, decrypt } from '../../lib/crypto';
 
+// These helpers are NAMED exports of Baileys (not on the default export).
 const { initAuthCreds, BufferJSON, proto } = baileys as any;
 
 const COLL = 'whatsapp_auth';
