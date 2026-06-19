@@ -354,9 +354,14 @@ router.get('/my-permissions', async (req, res) => {
             return mods.filter(m => ALWAYS.includes(m) || enabledModules!.includes(m));
         };
 
+        // planModules tells the UI which modules the school's PLAN allows (null =
+        // unrestricted). The sidebar uses it to LOCK out-of-plan modules instead of
+        // hiding them. ALWAYS modules are implicitly included.
+        const planModules = enabledModules ? Array.from(new Set([...ALWAYS, ...enabledModules])) : null;
+
         // ── Full admin → wildcard, but capped by the school's enabled modules ──
         if (userRole === 'school_admin' || userRole === 'super_admin') {
-            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {} });
+            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {}, planModules });
         }
 
         // ── Resolve the staff member's effective permission CODES, then map them
@@ -381,7 +386,7 @@ router.get('/my-permissions', async (req, res) => {
         const resolvedModules = capModules(permsToModules(codes));
         const crud = await resolveStaffCrud(db, staffForPerms);
 
-        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud });
+        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud, planModules });
     } catch (e: any) {
         res.status(500).json({ message: e.message });
     }

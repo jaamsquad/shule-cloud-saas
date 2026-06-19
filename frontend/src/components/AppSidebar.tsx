@@ -9,7 +9,11 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import api from "@/lib/api";
+
+// Shown when a school clicks a module their plan doesn't include.
+const PLAN_LOCK_MSG = "This module is not included in your plan, contact for more @ 0726151104";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { groupSlug } from "@/lib/groupSlug";
 
@@ -359,11 +363,24 @@ export default function AppSidebar() {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const perms = usePermissions();
 
+  // A module is "plan-locked" when the school's PLAN doesn't include it.
+  // planModules === null means unrestricted (all modules allowed by the plan).
+  const isPlanLocked = (moduleKey?: string): boolean => {
+    if (!moduleKey) return false;
+    const plan = perms.planModules;
+    if (!plan) return false;                 // no plan restriction → nothing locked
+    return !plan.includes(moduleKey);        // module not in the plan → locked
+  };
+
   // Filter nav items by DB-fetched permissions for this role.
   // Every sidebar item MUST have a moduleKey to be shown to non-admins.
   // Dashboard is the only exception — always visible when authenticated.
+  // Plan-locked modules are KEPT (shown with a lock) rather than hidden.
   const visibleNavItems = navItems.filter(item => {
-    // Admin → show everything
+    // Plan-locked modules stay visible (rendered locked) for everyone.
+    if (isPlanLocked(item.moduleKey)) return true;
+
+    // Admin → show everything else
     if (perms.isAdmin) return true;
 
     // Still fetching from DB → only show Dashboard to avoid incorrect flash
@@ -424,11 +441,32 @@ export default function AppSidebar() {
             {visibleNavItems.map(item => {
               const Icon = item.icon;
               const isExpanded = expandedGroups.includes(item.label);
-              
+              const planLocked = isPlanLocked(item.moduleKey);
+
               // Determine if active
-              const isParentActive = item.children 
+              const isParentActive = item.children
                 ? item.children.some(c => location.pathname === c.path || location.pathname.startsWith(c.path))
                 : location.pathname === item.path;
+
+              // ── Plan-locked module — visible but inert; click shows the message ──
+              if (planLocked) {
+                return (
+                  <li key={item.label} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => toast.message(PLAN_LOCK_MSG, { duration: 6000 })}
+                      title={PLAN_LOCK_MSG}
+                      className={`w-full flex items-center justify-between px-3 py-3 rounded-lg transition-colors cursor-not-allowed ${isDark ? "hover:bg-gray-800/50 text-gray-600" : "hover:bg-gray-50 text-gray-400"}`}
+                    >
+                      <span className="flex items-center gap-4 flex-1 text-left">
+                        <Icon className="w-[18px] h-[18px] opacity-50" strokeWidth={1.5} />
+                        <span className="text-[13px] font-medium opacity-70">{item.label}</span>
+                      </span>
+                      <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                    </button>
+                  </li>
+                );
+              }
 
               return (
                 <li key={item.label} className="relative">

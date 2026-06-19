@@ -6,6 +6,7 @@ export interface RolePermissions {
     modules: string[];
     permissions: string[];   // raw granted permission codes (e.g. "students.id_cards")
     crud: Record<string, string[]>;
+    planModules: string[] | null;  // modules the school's PLAN allows (null = all)
     isAdmin: boolean;
     isTeacher: boolean;
     loaded: boolean;
@@ -16,7 +17,7 @@ export interface RolePermissions {
 function readJwtPerms(): Omit<RolePermissions, "refreshPermissions"> {
     try {
         const token = localStorage.getItem("auth_token");
-        if (!token) return { role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false };
+        if (!token) return { role: "", modules: [], permissions: [], crud: {}, planModules: null, isAdmin: false, isTeacher: false, loaded: false };
 
         const payload = JSON.parse(atob(token.split(".")[1]));
         if (payload.exp && Date.now() / 1000 > payload.exp) {
@@ -35,6 +36,7 @@ function readJwtPerms(): Omit<RolePermissions, "refreshPermissions"> {
             modules: isAdmin ? ["*"] : [],
             permissions: isAdmin ? ["*"] : [],
             crud: {},
+            planModules: null,
             isAdmin,
             isTeacher,
             loaded: isAdmin, // admins are fully loaded; others wait for API
@@ -45,7 +47,7 @@ function readJwtPerms(): Omit<RolePermissions, "refreshPermissions"> {
 }
 
 const defaultCtx: RolePermissions = {
-    role: "", modules: [], permissions: [], crud: {}, isAdmin: false, isTeacher: false, loaded: false,
+    role: "", modules: [], permissions: [], crud: {}, planModules: null, isAdmin: false, isTeacher: false, loaded: false,
     refreshPermissions: () => {},
 };
 
@@ -94,6 +96,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
                     modules: data.modules?.length ? data.modules : (isAdmin ? ["*"] : ["dashboard"]),
                     permissions: Array.isArray(data.permissions) ? data.permissions : (isAdmin ? ["*"] : []),
                     crud: data.crud || {},
+                    planModules: Array.isArray(data.planModules) ? data.planModules : null,
                     isAdmin,
                     isTeacher: role.includes("teacher"),
                     loaded: true,
