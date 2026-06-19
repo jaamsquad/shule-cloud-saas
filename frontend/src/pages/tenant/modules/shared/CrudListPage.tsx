@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Loader2, X, Pencil } from "lucide-react";
+import { Plus, Trash2, Loader2, X, Pencil, Upload } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -8,7 +8,7 @@ import { useModuleCrud } from "@/contexts/PermissionsContext";
 export type Field = {
     key: string;
     label: string;
-    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect" | "classSelect" | "classMultiSelect" | "lookupSelect";
+    type?: "text" | "number" | "date" | "select" | "textarea" | "studentSelect" | "classSelect" | "classMultiSelect" | "lookupSelect" | "file";
     options?: string[];
     placeholder?: string;
     required?: boolean;
@@ -18,6 +18,9 @@ export type Field = {
     // For lookupSelect: load options from a REST endpoint and show `labelField`.
     lookupEndpoint?: string;     // e.g. "/sports"
     lookupLabel?: string;        // field to display & store, e.g. "name"
+    // For file: accepted types + which extra form key receives the file name.
+    accept?: string;             // e.g. ".pdf,.doc,.docx,image/*"
+    fileNameKey?: string;        // e.g. "fileName"
 };
 
 export type Column = { key: string; label: string; render?: (row: any) => React.ReactNode };
@@ -270,6 +273,28 @@ export default function CrudListPage({
                                             <option value="">Select…</option>
                                             {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
                                         </select>
+                                    ) : f.type === "file" ? (
+                                        <div>
+                                            <label className="flex items-center gap-3 h-11 px-3 border border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-[#5C67F2] text-sm">
+                                                <Upload className="w-4 h-4 text-slate-400" />
+                                                <span className="text-slate-500 truncate">{form[f.fileNameKey || `${f.key}Name`] || form[f.key]?.startsWith?.("data:") && "File attached" || "Choose a file (PDF, DOCX, image)"}</span>
+                                                <input type="file" accept={f.accept || ".pdf,.doc,.docx,image/*"} className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0]; if (!file) return;
+                                                        if (file.size > 8 * 1024 * 1024) { toast.error("File must be under 8MB"); return; }
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => setForm((p) => ({ ...p, [f.key]: String(reader.result), [f.fileNameKey || `${f.key}Name`]: file.name }));
+                                                        reader.readAsDataURL(file);
+                                                    }} />
+                                            </label>
+                                            {form[f.key] && (
+                                                <button type="button" onClick={() => setForm((p) => ({ ...p, [f.key]: "", [f.fileNameKey || `${f.key}Name`]: "" }))}
+                                                    className="mt-1 text-[11px] font-bold text-rose-500">Remove file</button>
+                                            )}
+                                            <p className="text-[10px] text-slate-400 mt-1">Or paste a link instead:</p>
+                                            <input type="text" value={form[f.key]?.startsWith?.("data:") ? "" : (form[f.key] ?? "")} onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                                                placeholder="https://…" className="w-full h-9 px-3 mt-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" />
+                                        </div>
                                     ) : f.type === "textarea" ? (
                                         <textarea value={form[f.key] ?? ""} onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder}
                                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2] min-h-[72px]" />
