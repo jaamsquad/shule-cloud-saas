@@ -74,7 +74,7 @@ api.interceptors.response.use(
         if (status === 401) {
             if (isOwnerContext()) {
                 localStorage.removeItem('owner_token');
-                if (!window.location.pathname.startsWith('/owner/register') && window.location.pathname !== '/owner') {
+                if (window.location.pathname !== '/owner' && window.location.pathname !== '/owner/login') {
                     window.location.href = '/owner';
                 }
             } else {

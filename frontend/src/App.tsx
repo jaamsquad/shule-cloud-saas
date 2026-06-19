@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { resolvePortal } from "@/lib/portal";
 
@@ -50,7 +50,6 @@ import OwnerPlans from "./pages/owner/Plans";
 import OwnerAudit from "./pages/owner/Audit";
 import OwnerAnnouncements from "./pages/owner/Announcements";
 import OwnerSettings from "./pages/owner/Settings";
-import OwnerRegister from "./pages/owner/Register";
 import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import ManageSchool from "./pages/owner/ManageSchool";
@@ -408,7 +407,8 @@ const App = () => {
             {/* 2. SYSTEM OWNER PORTAL */}
             <Route path="/owner" element={<OwnerLogin />} />
             <Route path="/owner/login" element={<OwnerLogin />} />
-            <Route path="/owner/register" element={<OwnerRegister />} />
+            {/* Owner registration is disabled — accounts are created from the portal. */}
+            <Route path="/owner/register" element={<Navigate to="/owner/login" replace />} />
 
             {/* Owner pages render their own header — guard by owner_token, NOT the
                 tenant DashboardLayout (which would bounce owners to /login). */}
