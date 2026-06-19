@@ -272,6 +272,8 @@ import InvoiceDetail from "./pages/tenant/modules/InvoiceDetail";
 import FeesReport from "./pages/tenant/modules/FeesReport";
 import DeleteFees from "./pages/tenant/modules/DeleteFees";
 import TransportManagement from "./pages/tenant/modules/TransportManagement";
+import BusPickup from "./pages/tenant/modules/transport/BusPickup";
+import TransportSettings from "./pages/tenant/modules/transport/TransportSettings";
 
 import InstituteProfile from "./pages/tenant/modules/InstituteProfile";
 import AccountsForFees from "./pages/tenant/modules/AccountsForFees";
@@ -729,6 +731,8 @@ const App = () => {
               <Route path="/transport/buses/new" element={<TransportManagement tab="new-bus" />} />
               <Route path="/transport/buses/edit/:id" element={<TransportManagement tab="edit-bus" />} />
               <Route path="/transport/assign" element={<TransportManagement tab="assign" />} />
+              <Route path="/transport/pickup" element={<BusPickup />} />
+              <Route path="/transport/settings" element={<TransportSettings />} />
               <Route path="/transport/report" element={<TransportManagement tab="report" />} />
               
               <Route path="/finance" element={<Finance />} />

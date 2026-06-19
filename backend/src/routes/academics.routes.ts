@@ -460,7 +460,7 @@ const COLLECTION_MODULE: Record<string, string> = {
     lms_courses: 'live_class', lms_lessons: 'live_class', lms_quizzes: 'live_class',
 };
 
-['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs','term_settings','term_breaks','term_holidays','term_activities'].forEach(col => {
+['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','transport_settings','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs','term_settings','term_breaks','term_holidays','term_activities'].forEach(col => {
     const mk = COLLECTION_MODULE[col];
     const cr = mk ? [enforceCrud(mk, 'create')] : [];
     const up = mk ? [enforceCrud(mk, 'update')] : [];
@@ -1065,6 +1065,58 @@ router.patch('/students/:id/parent-credentials', async (req, res) => {
         if (parentCredentialsGenerated !== undefined) update.parentCredentialsGenerated = parentCredentialsGenerated;
         await db.collection('students').updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
         res.json({ message: 'Parent portal credentials updated' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Transport: bus pickup / drop with optional parent notification ───────────
+router.post('/transport/pickup', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { studentId, studentName, type, busName } = req.body || {};   // type: 'pickup' | 'drop'
+        if (!studentId) return res.status(400).json({ message: 'studentId is required' });
+
+        const student = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) }).catch(() => null);
+        const name = studentName || student?.studentName || 'Student';
+        const at = new Date();
+
+        // Record the event.
+        await db.collection('transport_pickups').insertOne({
+            studentId: String(studentId), studentName: name, studentClass: student?.currentClass || student?.studentClass || '',
+            type: type === 'drop' ? 'drop' : 'pickup', busName: busName || '', at, createdAt: at,
+        });
+
+        // Notify the parent on the channels enabled in transport_settings.
+        const settings: any = (await db.collection('transport_settings').findOne({})) || {};
+        const verb = type === 'drop' ? 'dropped off' : 'picked up';
+        const timeStr = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const msg = `${name} has been ${verb} by the school bus${busName ? ` (${busName})` : ''} at ${timeStr}.`;
+        const email = student?.parentEmail || student?.fatherEmail || student?.motherEmail || '';
+        const phone = student?.parentPhone || student?.fatherPhone || student?.motherPhone || student?.phone || '';
+
+        const sent: string[] = [];
+        try {
+            if (settings.notifyEmail && email) { await sendEmail(db, { to: [email], subject: `Transport update — ${name}`, message: msg }); sent.push('email'); }
+            if (settings.notifyWhatsapp && phone) {
+                const { sendWhatsApp } = await import('../services/communications.service');
+                await sendWhatsApp(db, { to: [phone], message: msg, schoolId: (req as any).tenantContext?.tenantId });
+                sent.push('whatsapp');
+            }
+            if (settings.notifySms && phone) {
+                await db.collection('sms_logs').insertOne({ to: phone, message: msg, status: 'Queued', purpose: 'transport', createdAt: at });
+                sent.push('sms');
+            }
+        } catch (e: any) { /* notification best-effort */ }
+
+        res.json({ message: `Marked ${verb}`, notified: sent });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.get('/transport/pickups', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const rows = await db.collection('transport_pickups').find({ at: { $gte: today } }).sort({ at: -1 }).limit(200).toArray();
+        res.json(rows);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

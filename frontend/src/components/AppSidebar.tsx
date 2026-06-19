@@ -145,7 +145,9 @@ export const navItems: NavItem[] = [
       { label: "Buses", path: "/transport/buses" },
       { label: "New Bus", path: "/transport/buses/new" },
       { label: "Assign Student", path: "/transport/assign" },
-      { label: "Report", path: "/transport/report" }
+      { label: "Bus Pickup & Drop", path: "/transport/pickup" },
+      { label: "Report", path: "/transport/report" },
+      { label: "Settings", path: "/transport/settings" }
   ] },
   { label: "Attendance", icon: UserCheck, moduleKey: "attendance", children: [
       { label: "Card Scanner", path: "/attendance-scanner" },
