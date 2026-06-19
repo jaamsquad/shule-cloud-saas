@@ -224,11 +224,16 @@ class WhatsAppSessionManager extends EventEmitter {
             if (m?.type === 'notify') {
                 for (const msg of m.messages || []) {
                     const fromMe = msg?.key?.fromMe;
-                    this.emitTo(schoolId, fromMe ? 'message_sent' : 'message_received', {
-                        id: msg?.key?.id, from: msg?.key?.remoteJid,
-                        text: msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || '',
-                    });
+                    const remoteJid: string = msg?.key?.remoteJid || '';
+                    const text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || '';
+                    this.emitTo(schoolId, fromMe ? 'message_sent' : 'message_received', { id: msg?.key?.id, from: remoteJid, text });
                     session.lastSeen = new Date();
+
+                    // Drive the chatbot for inbound 1:1 messages (ignore our own
+                    // messages and group chats). Fire-and-forget; never throws.
+                    if (!fromMe && text && remoteJid.endsWith('@s.whatsapp.net')) {
+                        this.runChatbot(schoolId, remoteJid, text);
+                    }
                 }
             }
         });
@@ -402,6 +407,23 @@ class WhatsAppSessionManager extends EventEmitter {
             const cleanup = () => { clearTimeout(timer); this.off(`${schoolId}:connected`, onConn); };
             this.once(`${schoolId}:connected`, onConn);
         });
+    }
+
+    /**
+     * Feed an inbound message to the chatbot and reply on the same session.
+     * Best-effort: chatbot failures are logged, never thrown into the WA stream.
+     */
+    private async runChatbot(schoolId: string, remoteJid: string, text: string): Promise<void> {
+        try {
+            // The platform session never runs the parent chatbot.
+            if (schoolId === 'platform') return;
+            const { handleIncomingMessage } = await import('./chatbot.service');
+            const phone = remoteJid.split('@')[0];
+            const reply = await handleIncomingMessage(schoolId, phone, text);
+            if (reply) await this.sendText(schoolId, remoteJid, reply);
+        } catch (e: any) {
+            logEvent(schoolId, 'chatbot_error', { error: e?.message });
+        }
     }
 
     // ── Background maintenance ────────────────────────────────────────────────
