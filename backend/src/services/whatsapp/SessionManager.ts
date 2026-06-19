@@ -416,13 +416,15 @@ class WhatsAppSessionManager extends EventEmitter {
     private async runChatbot(schoolId: string, remoteJid: string, text: string): Promise<void> {
         try {
             // The platform session never runs the parent chatbot.
-            if (schoolId === 'platform') return;
-            const { handleIncomingMessage } = await import('./chatbot.service');
+            if (schoolId === 'platform') { logEvent(schoolId, 'chatbot_skip_platform'); return; }
             const phone = remoteJid.split('@')[0];
+            logEvent(schoolId, 'chatbot_in', { phone, text: text.slice(0, 60) });
+            const { handleIncomingMessage } = await import('./chatbot.service');
             const reply = await handleIncomingMessage(schoolId, phone, text);
+            logEvent(schoolId, 'chatbot_reply', { phone, hasReply: !!reply, len: reply?.length || 0 });
             if (reply) await this.sendText(schoolId, remoteJid, reply);
         } catch (e: any) {
-            logEvent(schoolId, 'chatbot_error', { error: e?.message });
+            logEvent(schoolId, 'chatbot_error', { error: e?.message, stack: String(e?.stack || '').split('\n').slice(0, 3).join(' | ') });
         }
     }
 
