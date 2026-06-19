@@ -22,6 +22,7 @@ import OwnerSettings from "./OwnerSettings";
 import OwnerReminders from "./OwnerReminders";
 import OwnerBroadcast from "./OwnerBroadcast";
 import OwnerWhatsApp from "./OwnerWhatsApp";
+import OwnerProfile from "./OwnerProfile";
 
 // Owner role from JWT → drives which tabs/actions are visible.
 const ownerRole = (): string => {
@@ -33,7 +34,7 @@ export default function OwnerDashboard() {
   const isSuper = role === "super_owner";
   const canUsers = isSuper || role === "owner";
   const canPlans = isSuper || role === "owner" || role === "sales";
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate" | "whatsapp">("analytics");
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate" | "whatsapp" | "profile">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -121,7 +122,7 @@ export default function OwnerDashboard() {
 
         {/* Tabs — filtered by the owner user's role */}
         <div className="flex gap-1 border-b border-border flex-wrap">
-          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "whatsapp", "messages", "settings"] as const)
+          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "whatsapp", "messages", "settings", "profile"] as const)
             .filter(t => {
               if (t === "users" && !canUsers) return false;
               if (t === "plans" && !canPlans) return false;
@@ -153,6 +154,8 @@ export default function OwnerDashboard() {
         {tab === "whatsapp" && <OwnerWhatsApp />}
 
         {tab === "settings" && <OwnerSettings />}
+
+        {tab === "profile" && <OwnerProfile />}
 
         {tab === "tenants" && (
           <Card className="shadow-card">
@@ -190,7 +193,7 @@ export default function OwnerDashboard() {
                             {(t.subdomain || t.domains?.[0]?.domain || t.name?.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'school')}.shulecloud.com
                           </code>
                         </TableCell>
-                        <TableCell><Badge variant="secondary" className="text-xs">{t.subscription?.plan?.name || "No Plan"}</Badge></TableCell>
+                        <TableCell><Badge variant="secondary" className="text-xs">{t.planName || t.subscription?.plan?.name || "No Plan"}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             {t.status === 'active' ? <CheckCircle className="w-3.5 h-3.5 text-success" /> : <XCircle className="w-3.5 h-3.5 text-destructive" />}

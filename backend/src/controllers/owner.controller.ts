@@ -47,9 +47,31 @@ export const getTenants = async (req: Request, res: Response) => {
     try {
         const db = getDb();
         const tenants = await db.collection('Tenant').find({}).toArray();
-        
-        // Enhance tenants with counts if needed, but for now just return them
-        return res.json(tenants);
+
+        // Join each tenant's current plan (from its subscription, then from the
+        // Tenant doc itself) so the dashboard can show the plan name + status.
+        const [subs, plans] = await Promise.all([
+            db.collection('TenantSubscription').find({}).toArray().catch(() => []),
+            db.collection('Plan').find({}).toArray().catch(() => []),
+        ]);
+        const planById = new Map(plans.map((p: any) => [String(p._id), p]));
+        const subByTenant = new Map(subs.map((s: any) => [String(s.tenantId), s]));
+
+        const enriched = tenants.map((t: any) => {
+            const sub = subByTenant.get(String(t._id));
+            const plan =
+                (sub?.planId && planById.get(String(sub.planId))) ||
+                (t.planId && planById.get(String(t.planId))) ||
+                (t.plan ? { name: t.plan } : null) ||
+                (sub?.planName ? { name: sub.planName } : null);
+            return {
+                ...t,
+                subscription: sub ? { ...sub, plan: plan || null } : (plan ? { plan } : null),
+                planName: plan?.name || null,
+            };
+        });
+
+        return res.json(enriched);
     } catch (error) {
         return res.status(500).json({ message: 'Failed to fetch tenants' });
     }
@@ -381,6 +403,127 @@ export const assignSchoolPlan = async (req: Request, res: Response) => {
         );
         await meta.collection('Tenant').updateOne({ _id: tid }, { $set: { planId: plan?._id || null, plan: plan?.name || null, enabledModules: plan?.modules || [], updatedAt: new Date() } });
         return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Send a direct message to a school's contact (email and/or WhatsApp).
+// Email uses the Company SMTP; WhatsApp uses the platform session.
+export const messageSchool = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.view')) return;
+    try {
+        const meta = getDb();
+        const t = await meta.collection('Tenant').findOne({ _id: new ObjectId(req.params.id) });
+        if (!t) return res.status(404).json({ message: 'School not found' });
+
+        const { channel, subject, message } = req.body || {};
+        if (!message) return res.status(400).json({ message: 'Message is required' });
+        const email = t.email || t.contactEmail || '';
+        const phone = t.phone || t.contactPhone || '';
+
+        const { notifyOwner } = await import('../services/ownerNotify.service');
+        const wantEmail = channel === 'email' || channel === 'both' || !channel;
+        const wantWa = channel === 'whatsapp' || channel === 'both' || !channel;
+
+        const html = `<div style="font-family:Arial,sans-serif;color:#1f2937">${String(message).replace(/\n/g, '<br>')}</div>`;
+        const result = await notifyOwner(
+            { email: wantEmail ? email : undefined, phone: wantWa ? phone : undefined },
+            subject || 'Message from ShuleCloud',
+            html,
+            String(message),
+        );
+
+        // Also drop an in-app notification into the school's own DB.
+        try {
+            const tdb = getTenantDb(t.databaseName || subdomainToDbName(t.subdomain || String(t._id)));
+            await tdb.collection('notifications').insertOne({
+                type: 'platform', title: subject || 'Message from ShuleCloud', message,
+                audience: 'Admins', level: 'info', read: false, dismissed: false, createdAt: new Date(),
+            });
+        } catch { /* best-effort */ }
+
+        if (!result.email && !result.whatsapp) {
+            return res.status(400).json({ message: `Could not deliver. ${result.errors.join('; ') || 'No contact on file.'}` });
+        }
+        return res.json({ ok: true, delivery: result });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Owner profile ───────────────────────────────────────────────────────────
+export const getOwnerProfile = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const u = await getDb().collection('OwnerUser').findOne({ _id: new ObjectId(String(claims.sub)) }, { projection: { passwordHash: 0, otpHash: 0 } });
+        if (!u) return res.status(404).json({ message: 'Profile not found' });
+        return res.json({
+            id: String(u._id), name: u.name || '', email: u.email, phone: u.phone || '',
+            role: u.role || 'viewer', avatar: u.avatar || '', bio: u.bio || '',
+            isSuperOwner: String(u.role).toLowerCase() === 'super_owner',
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const updateOwnerProfile = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const me = await db.collection('OwnerUser').findOne({ _id: new ObjectId(String(claims.sub)) });
+        if (!me) return res.status(404).json({ message: 'Profile not found' });
+
+        const b = req.body || {};
+        const set: any = { updatedAt: new Date() };
+        ['name', 'phone', 'avatar', 'bio'].forEach((k) => { if (b[k] !== undefined) set[k] = b[k]; });
+
+        // Only a super_owner may change their own email.
+        if (b.email !== undefined && b.email !== me.email) {
+            if (String(me.role).toLowerCase() !== 'super_owner') {
+                return res.status(403).json({ message: 'Only a Super Owner can change their email address.' });
+            }
+            const taken = await db.collection('OwnerUser').findOne({ email: b.email, _id: { $ne: me._id } });
+            if (taken) return res.status(409).json({ message: 'That email is already in use.' });
+            set.email = b.email;
+        }
+        await db.collection('OwnerUser').updateOne({ _id: me._id }, { $set: set });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── Owner-to-owner messaging ────────────────────────────────────────────────
+export const listOwnerContacts = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const users = await getDb().collection('OwnerUser')
+            .find({ _id: { $ne: new ObjectId(String(claims.sub)) } }, { projection: { name: 1, email: 1, phone: 1, role: 1, avatar: 1 } })
+            .toArray();
+        return res.json(users.map((u: any) => ({ id: String(u._id), name: u.name, email: u.email, phone: u.phone || '', role: u.role, avatar: u.avatar || '' })));
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const sendOwnerToOwner = async (req: Request, res: Response) => {
+    const claims = ownerClaims(req);
+    if (!claims) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const { toUserId, subject, message } = req.body || {};
+        if (!toUserId || !message) return res.status(400).json({ message: 'Recipient and message are required' });
+        const target = await db.collection('OwnerUser').findOne({ _id: new ObjectId(String(toUserId)) });
+        if (!target?.email) return res.status(404).json({ message: 'Recipient has no email on file' });
+
+        const fromName = claims.name || claims.email || 'A ShuleCloud admin';
+        const { notifyOwner } = await import('../services/ownerNotify.service');
+        const html = `<div style="font-family:Arial,sans-serif;color:#1f2937"><p style="color:#6b7280;font-size:12px">From: ${fromName}</p>${String(message).replace(/\n/g, '<br>')}</div>`;
+        const result = await notifyOwner({ email: target.email, phone: target.phone }, subject || `Message from ${fromName}`, html, `From ${fromName}:\n${message}`);
+
+        // Log it for an in-portal inbox later.
+        await db.collection('owner_messages').insertOne({
+            fromId: String(claims.sub), fromName, toId: String(target._id), toEmail: target.email,
+            subject: subject || '', message, delivery: result, sentAt: new Date(),
+        }).catch(() => {});
+
+        if (!result.email && !result.whatsapp) return res.status(400).json({ message: `Could not deliver. ${result.errors.join('; ')}` });
+        return res.json({ ok: true, delivery: result });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 

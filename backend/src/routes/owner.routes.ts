@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -21,6 +21,13 @@ router.post('/schools/:id/plan', assignSchoolPlan);
 router.post('/schools/:id/status', setSchoolStatus);
 router.post('/schools/:id/modules', setSchoolModules);
 router.post('/schools/:id/impersonate', impersonateSchool);
+router.post('/schools/:id/message', messageSchool);
+
+// ─── Owner profile + owner-to-owner messaging ────────────────────────────────
+router.get('/profile', getOwnerProfile);
+router.patch('/profile', updateOwnerProfile);
+router.get('/contacts', listOwnerContacts);
+router.post('/message-user', sendOwnerToOwner);
 
 // ─── Contact messages + platform settings ────────────────────────────────────
 router.get('/contact-messages', listContactMessages);
