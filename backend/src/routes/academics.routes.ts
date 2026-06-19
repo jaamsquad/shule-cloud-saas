@@ -14,6 +14,36 @@ const router = Router();
 const getRequestDb = (req: Request): Db =>
     (req as any).tenantDb || getMetaDb();
 
+// ─── Transport zone access ────────────────────────────────────────────────────
+// A Driver / Bus Attendant may only touch the zones they're assigned to (where
+// they are the zone's driver or coDriver). Admins, Transport Managers and
+// Coordinators get unrestricted access (null = all zones).
+const isRestrictedTransportRole = (s: any): boolean => {
+    const text = `${s?.designation || ''} ${(Array.isArray(s?.roles) ? s.roles.join(' ') : '')}`.toLowerCase();
+    if (/transport manager|transport coordinator|admin|principal|head/.test(text)) return false;
+    return /driver|bus attendant|co.?driver/.test(text);
+};
+const accessibleZones = async (req: Request, db: Db): Promise<string[] | null> => {
+    try {
+        const auth = req.headers.authorization;
+        if (!auth?.startsWith('Bearer ')) return null;
+        const decoded: any = require('jsonwebtoken').verify(auth.split(' ')[1], process.env.JWT_SECRET || 'secret');
+        // School admins (no staffId) are unrestricted.
+        const role = String(decoded.role || '').toLowerCase();
+        if (role === 'school_admin' || role === 'super_admin') return null;
+        const staffId = decoded.staffId;
+        if (!staffId) return null;
+        const staff = await db.collection('staff').findOne({ _id: new ObjectId(String(staffId)) }).catch(() => null);
+        if (!staff || !isRestrictedTransportRole(staff)) return null;
+
+        const name = staff.studentName || staff.name || staff.employeeName || `${staff.firstName || ''} ${staff.lastName || ''}`.trim();
+        const zones = await db.collection('transport_zones')
+            .find({ $or: [{ driver: name }, { coDriver: name }, { driverId: String(staffId) }, { coDriverId: String(staffId) }] })
+            .toArray().catch(() => []);
+        return zones.map((z: any) => z.name).filter(Boolean);
+    } catch { return null; }
+};
+
 // ─── Plan student-limit enforcement ──────────────────────────────────────────
 // Blocks adding students beyond the tenant's plan maxStudents. Reads the plan via
 // the tenant's subscription in the meta DB. No plan / null limit → unlimited.
@@ -1076,6 +1106,14 @@ router.post('/transport/pickup', async (req, res) => {
         if (!studentId) return res.status(400).json({ message: 'studentId is required' });
 
         const student = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) }).catch(() => null);
+
+        // Zone restriction: a Driver / Bus Attendant may only mark students in
+        // their assigned zones.
+        const zones = await accessibleZones(req, db);
+        if (zones !== null && !zones.includes(student?.transportZone)) {
+            return res.status(403).json({ message: "This student is not in a zone you're assigned to." });
+        }
+
         const name = studentName || student?.studentName || 'Student';
         const at = new Date();
 
@@ -1117,8 +1155,27 @@ router.get('/transport/pickups', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const today = new Date(); today.setHours(0, 0, 0, 0);
-        const rows = await db.collection('transport_pickups').find({ at: { $gte: today } }).sort({ at: -1 }).limit(200).toArray();
+        const q: any = { at: { $gte: today } };
+        const zones = await accessibleZones(req, db);
+        if (zones !== null) q.busName = { $in: zones };   // drivers see only their zones' events
+        const rows = await db.collection('transport_pickups').find(q).sort({ at: -1 }).limit(200).toArray();
         res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Students the current user may handle on the bus. Admins → all students on
+// transport; a Driver / Bus Attendant → only students in their assigned zones.
+// Also returns `zones` (null = unrestricted) so the UI can hide the zone filter.
+router.get('/transport/my-students', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const zones = await accessibleZones(req, db);
+        const q: any = { transportZone: { $exists: true, $ne: '' } };
+        if (zones !== null) q.transportZone = { $in: zones };
+        const students = await db.collection('students').find(q)
+            .project({ studentName: 1, registrationNo: 1, admNo: 1, transportZone: 1, currentClass: 1, studentClass: 1 })
+            .toArray();
+        res.json({ zones, students });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
