@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Shield, Building2, CreditCard, Users, Activity,
-  Plus, MoreVertical, CheckCircle, XCircle, Clock, LogOut, GraduationCap
+  MoreVertical, CheckCircle, XCircle, Clock, LogOut, GraduationCap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,9 +159,8 @@ export default function OwnerDashboard() {
 
         {tab === "tenants" && (
           <Card className="shadow-card">
-            <CardHeader className="flex-row items-center justify-between pb-3">
+            <CardHeader className="pb-3">
               <CardTitle className="text-base font-heading">Tenant Schools</CardTitle>
-              <Button size="sm"><Plus className="w-4 h-4 mr-1.5" /> Add Tenant</Button>
             </CardHeader>
             <CardContent className="p-0">
               <Table>

@@ -22,6 +22,8 @@ const MODULES: { key: string; label: string }[] = [
     { key: "cafeteria", label: "Cafeteria" }, { key: "sports", label: "Sports" }, { key: "trips", label: "Trips" },
     { key: "frontdesk", label: "Front Desk" }, { key: "secretary", label: "Secretary" }, { key: "certificates", label: "Certificates" },
     { key: "reports", label: "Reports" },
+    { key: "academic_system", label: "Academic System" }, { key: "academics_content", label: "Academic Content" },
+    { key: "behaviour", label: "Behaviour & Skills" }, { key: "question_paper", label: "Question Paper" },
 ];
 
 export default function ManageSchool() {

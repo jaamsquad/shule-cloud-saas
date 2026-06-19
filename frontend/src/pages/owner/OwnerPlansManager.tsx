@@ -8,12 +8,23 @@ const PRIMARY = "#534AB7";
 const ksh = (n: any) => `KES ${Number(n || 0).toLocaleString()}`;
 
 // Modules a plan can include (matches sidebar module keys).
+// Must mirror the sidebar `moduleKey` values in AppSidebar.tsx — otherwise a
+// locked module can never be enabled by any plan. Excludes the ALWAYS-available
+// keys (dashboard, settings, students, employees, classes, subjects) which are
+// never plan-restricted.
 const MODULES = [
-    "students", "classes", "subjects", "employees", "fees", "accounts", "salary",
-    "attendance", "timetable", "exams", "reports", "communications", "transport",
-    "hostel", "library", "cafeteria", "pos", "sports", "trips", "frontdesk",
-    "secretary", "certificates", "live_class", "academic_content",
+    "fees", "accounts", "salary", "attendance", "timetable", "exams", "reports",
+    "communications", "transport", "hostel", "library", "cafeteria", "pos",
+    "sports", "trips", "frontdesk", "secretary", "certificates", "live_class",
+    "academic_system", "academics_content", "behaviour", "question_paper",
 ];
+
+const MODULE_LABEL: Record<string, string> = {
+    live_class: "Live Class & LMS", pos: "Point of Sale", frontdesk: "Front Desk",
+    academic_system: "Academic System", academics_content: "Academic Content",
+    behaviour: "Behaviour & Skills", question_paper: "Question Paper",
+};
+const moduleLabel = (m: string) => MODULE_LABEL[m] || m.charAt(0).toUpperCase() + m.slice(1);
 
 type PlanForm = { name: string; price: number; maxStudents: string; modules: string[]; description: string; isActive: boolean; durationDays: number; graceDays: number };
 const blank: PlanForm = { name: "", price: 0, maxStudents: "", modules: [], description: "", isActive: true, durationDays: 30, graceDays: 0 };
@@ -117,7 +128,7 @@ export default function OwnerPlansManager() {
                                 <div className="flex flex-wrap gap-1.5 p-2 rounded-lg max-h-44 overflow-y-auto" style={{ border: "0.5px solid #e5e7eb" }}>
                                     {MODULES.map((m) => {
                                         const on = form.modules.includes(m);
-                                        return <button type="button" key={m} onClick={() => toggleModule(m)} className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${on ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={on ? { background: PRIMARY, borderColor: PRIMARY } : {}}>{on && <Check className="w-3 h-3 inline mr-0.5" />}{m}</button>;
+                                        return <button type="button" key={m} onClick={() => toggleModule(m)} className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${on ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={on ? { background: PRIMARY, borderColor: PRIMARY } : {}}>{on && <Check className="w-3 h-3 inline mr-0.5" />}{moduleLabel(m)}</button>;
                                     })}
                                 </div>
                             </div>
