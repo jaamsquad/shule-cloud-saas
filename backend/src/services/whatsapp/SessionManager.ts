@@ -61,6 +61,7 @@ interface LiveSession {
     profileName: string | null;
     connectedAt: Date | null;
     lastSeen?: Date | null;
+    decryptFails?: number;
 }
 
 class WhatsAppSessionManager extends EventEmitter {
@@ -226,8 +227,18 @@ class WhatsAppSessionManager extends EventEmitter {
                     const fromMe = msg?.key?.fromMe;
                     const remoteJid: string = msg?.key?.remoteJid || '';
                     const text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || '';
+
+                    // A message we received but couldn't decrypt arrives with no
+                    // `message` body. Count these — a burst means corrupted Signal
+                    // keys, so we self-heal by clearing creds and re-linking.
+                    if (!fromMe && remoteJid.endsWith('@s.whatsapp.net') && !msg?.message) {
+                        this.noteDecryptFailure(schoolId);
+                        continue;
+                    }
+
                     this.emitTo(schoolId, fromMe ? 'message_sent' : 'message_received', { id: msg?.key?.id, from: remoteJid, text });
                     session.lastSeen = new Date();
+                    if (text) session.decryptFails = 0;   // a readable message → keys are healthy
 
                     // Drive the chatbot for inbound 1:1 messages (ignore our own
                     // messages and group chats). Fire-and-forget; never throws.
@@ -413,6 +424,24 @@ class WhatsAppSessionManager extends EventEmitter {
      * Feed an inbound message to the chatbot and reply on the same session.
      * Best-effort: chatbot failures are logged, never thrown into the WA stream.
      */
+    /**
+     * Track undecryptable inbound messages. A short burst usually means the
+     * Signal session is corrupted (often after re-linking the same number). We
+     * surface it loudly; recovery is a re-scan (delete + connect). We avoid
+     * auto-wiping creds here to not unlink a session that's merely catching up on
+     * a few old offline messages.
+     */
+    private decryptWarned = new Map<string, number>();
+    private noteDecryptFailure(schoolId: string): void {
+        const s = this.sessions.get(schoolId);
+        if (s) s.decryptFails = (s.decryptFails || 0) + 1;
+        const n = (s?.decryptFails || 0);
+        // Warn once per 10 failures so logs stay readable.
+        if (n === 1 || n % 10 === 0) {
+            logEvent(schoolId, 'decrypt_failure', { count: n, hint: 'If new messages also fail, delete the WhatsApp session and re-scan the QR.' });
+        }
+    }
+
     private async runChatbot(schoolId: string, remoteJid: string, text: string): Promise<void> {
         try {
             // The platform session never runs the parent chatbot.
