@@ -73,15 +73,11 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("storage", onStorage);
     }, [refreshPermissions]);
 
-    // Fetch DB-saved permissions for non-admin roles
+    // Fetch DB-saved permissions for ALL roles. Admins also need this call to
+    // learn the school's planModules (so out-of-plan modules can be locked).
     useEffect(() => {
         const jwtState = readJwtPerms();
-
-        // No token or already admin — nothing to fetch from DB
-        if (!jwtState.role || jwtState.isAdmin) {
-            setPerms(prev => ({ ...prev, loaded: true }));
-            return;
-        }
+        if (!jwtState.role) { setPerms(prev => ({ ...prev, loaded: true })); return; }
 
         const token = localStorage.getItem("auth_token");
         if (!token) return;
@@ -93,8 +89,10 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
                 const isAdmin = role === "school_admin" || role === "super_admin";
                 setPerms({
                     role,
-                    modules: data.modules?.length ? data.modules : (isAdmin ? ["*"] : ["dashboard"]),
-                    permissions: Array.isArray(data.permissions) ? data.permissions : (isAdmin ? ["*"] : []),
+                    // Admins keep full access ("*"); the sidebar locks out-of-plan
+                    // modules separately via planModules.
+                    modules: isAdmin ? ["*"] : (data.modules?.length ? data.modules : ["dashboard"]),
+                    permissions: isAdmin ? ["*"] : (Array.isArray(data.permissions) ? data.permissions : []),
                     crud: data.crud || {},
                     planModules: Array.isArray(data.planModules) ? data.planModules : null,
                     isAdmin,

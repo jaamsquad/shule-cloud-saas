@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Shield, Building2, CreditCard, Users, Activity,
-  Plus, MoreVertical, CheckCircle, XCircle, Clock, LogOut
+  Plus, MoreVertical, CheckCircle, XCircle, Clock, LogOut, GraduationCap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import OwnerMessages from "./OwnerMessages";
 import OwnerSettings from "./OwnerSettings";
 import OwnerReminders from "./OwnerReminders";
 import OwnerBroadcast from "./OwnerBroadcast";
+import OwnerWhatsApp from "./OwnerWhatsApp";
 
 // Owner role from JWT → drives which tabs/actions are visible.
 const ownerRole = (): string => {
@@ -32,7 +33,7 @@ export default function OwnerDashboard() {
   const isSuper = role === "super_owner";
   const canUsers = isSuper || role === "owner";
   const canPlans = isSuper || role === "owner" || role === "sales";
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate">("analytics");
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate" | "whatsapp">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -71,15 +72,16 @@ export default function OwnerDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Owner Header */}
-      <header className="h-14 bg-foreground border-b border-border flex items-center px-6 justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-            <Shield className="w-4 h-4 text-primary-foreground" />
+      {/* Owner Header — white, logo + "Administration Portal" only */}
+      <header className="h-16 bg-white border-b border-slate-100 flex items-center px-6 justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: "#534AB7" }}>
+            <GraduationCap className="w-5 h-5" />
           </div>
-          <span className="font-heading font-bold text-primary-foreground text-sm">ShuleCloud Owner Portal</span>
+          <span className="text-xl font-black text-slate-900">Shule<span style={{ color: "#534AB7" }}>Cloud</span></span>
+          <span className="ml-3 pl-3 border-l border-slate-200 text-sm font-semibold text-slate-500">Administration Portal</span>
         </div>
-        <button onClick={handleLogout} className="text-muted-foreground hover:text-primary-foreground transition-colors" title="Logout">
+        <button onClick={handleLogout} className="text-slate-400 hover:text-slate-700 transition-colors" title="Logout">
           <LogOut className="w-4 h-4" />
         </button>
       </header>
@@ -119,10 +121,11 @@ export default function OwnerDashboard() {
 
         {/* Tabs — filtered by the owner user's role */}
         <div className="flex gap-1 border-b border-border flex-wrap">
-          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "messages", "settings"] as const)
+          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "whatsapp", "messages", "settings"] as const)
             .filter(t => {
               if (t === "users" && !canUsers) return false;
               if (t === "plans" && !canPlans) return false;
+              if (t === "whatsapp" && !isSuper) return false;
               return true;
             })
             .map(t => (
@@ -146,6 +149,8 @@ export default function OwnerDashboard() {
         {tab === "reminders" && <OwnerReminders />}
 
         {tab === "communicate" && <OwnerBroadcast />}
+
+        {tab === "whatsapp" && <OwnerWhatsApp />}
 
         {tab === "settings" && <OwnerSettings />}
 

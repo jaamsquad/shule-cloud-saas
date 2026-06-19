@@ -31,11 +31,16 @@ async function resolveSchoolId(token?: string, subdomain?: string): Promise<{ sc
             if (decoded?.tenantId) return { schoolId: String(decoded.tenantId), role: decoded.role || 'user' };
         } catch { /* fall through to subdomain */ }
     }
-    // Owner/super-admin overview uses the owner token + an explicit subdomain.
+    // Owner/super-admin overview uses the owner token. With subdomain 'platform'
+    // (or none) the owner watches the platform session; with a school subdomain
+    // they watch that school's session.
     if (token) {
         try {
             const owner: any = jwt.verify(token, process.env.OWNER_JWT_SECRET || 'owner_secret');
-            if (owner && subdomain) {
+            if (owner) {
+                if (!subdomain || subdomain.toLowerCase() === 'platform') {
+                    return { schoolId: 'platform', role: `owner:${owner.role || 'owner'}` };
+                }
                 const t = await getMetaDb().collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
                 if (t) return { schoolId: t._id.toString(), role: `owner:${owner.role || 'owner'}` };
             }

@@ -250,17 +250,26 @@ export const createOwnerUser = async (req: Request, res: Response) => {
     if (!canManageUsers(claims)) return res.status(403).json({ message: 'You are not allowed to add users.' });
     try {
         const db = getDb();
-        const { name, email, password, role } = req.body || {};
+        const { name, email, password, role, phone } = req.body || {};
         if (!name || !email || !password) return res.status(400).json({ message: 'Name, email and password are required' });
         if (!OWNER_ROLES.includes((role || 'viewer') as any)) return res.status(400).json({ message: 'Invalid role' });
         const existing = await db.collection('OwnerUser').findOne({ email });
         if (existing) return res.status(409).json({ message: 'Email already registered' });
         const passwordHash = await bcrypt.hash(password, 10);
         const r = await db.collection('OwnerUser').insertOne({
-            name, email, passwordHash, role: role || 'viewer', status: 'active', isActive: true,
+            name, email, phone: phone || '', passwordHash, role: role || 'viewer', status: 'active', isActive: true,
+            mustChangePassword: true,   // forced to set their own password on first login
             createdBy: claims.email || claims.sub, createdAt: new Date(), updatedAt: new Date(),
         });
-        return res.status(201).json({ _id: String(r.insertedId), name, email, role: role || 'viewer', status: 'active' });
+
+        // Email + WhatsApp the new user their credentials + login link (best-effort).
+        let delivery: any = null;
+        try {
+            const { sendOwnerCredentials } = await import('../services/ownerNotify.service');
+            delivery = await sendOwnerCredentials({ email, phone, name }, password);
+        } catch (e: any) { delivery = { email: false, whatsapp: false, errors: [e.message] }; }
+
+        return res.status(201).json({ _id: String(r.insertedId), name, email, role: role || 'viewer', status: 'active', delivery });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
@@ -274,10 +283,22 @@ export const updateOwnerUser = async (req: Request, res: Response) => {
         const set: any = { updatedAt: new Date() };
         if (role) { if (!OWNER_ROLES.includes(role)) return res.status(400).json({ message: 'Invalid role' }); set.role = role; }
         if (status) { set.status = status; set.isActive = status !== 'suspended'; }
-        if (password) set.passwordHash = await bcrypt.hash(password, 10);
+        if (password) { set.passwordHash = await bcrypt.hash(password, 10); set.mustChangePassword = true; }
         const r = await db.collection('OwnerUser').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
         if (!r.matchedCount) return res.status(404).json({ message: 'User not found' });
-        return res.json({ ok: true });
+
+        // A super-owner password reset re-sends the new credentials to the user.
+        let delivery: any = null;
+        if (password) {
+            try {
+                const target = await db.collection('OwnerUser').findOne({ _id: new ObjectId(req.params.id) });
+                if (target?.email) {
+                    const { sendOwnerCredentials } = await import('../services/ownerNotify.service');
+                    delivery = await sendOwnerCredentials({ email: target.email, phone: target.phone, name: target.name }, password);
+                }
+            } catch (e: any) { delivery = { email: false, whatsapp: false, errors: [e.message] }; }
+        }
+        return res.json({ ok: true, delivery });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 

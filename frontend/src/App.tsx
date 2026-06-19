@@ -43,6 +43,7 @@ import AcceptInvite from "./pages/tenant/auth/AcceptInvite";
 
 // Owner Portal
 import OwnerLogin from "./pages/owner/Login";
+import OwnerChangePassword from "./pages/owner/ChangePassword";
 import OwnerDashboard from "./pages/owner/Dashboard";
 import OwnerTenants from "./pages/owner/Tenants";
 import OwnerPlans from "./pages/owner/Plans";
@@ -412,6 +413,7 @@ const App = () => {
             {/* Owner pages render their own header — guard by owner_token, NOT the
                 tenant DashboardLayout (which would bounce owners to /login). */}
             <Route element={<OwnerGuard />}>
+              <Route path="/owner/change-password" element={<OwnerChangePassword />} />
               <Route path="/owner/dashboard" element={<OwnerDashboard />} />
               <Route path="/owner/schools/:id" element={<ManageSchool />} />
               <Route path="/owner/tenants" element={<OwnerTenants />} />

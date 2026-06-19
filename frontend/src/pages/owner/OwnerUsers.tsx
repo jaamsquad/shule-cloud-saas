@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, Loader2, X, Shield } from "lucide-react";
+import { UserPlus, Trash2, Loader2, X, Shield, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -13,7 +13,7 @@ const ROLES = ["owner", "support", "finance", "sales", "viewer"];
 export default function OwnerUsers() {
     const qc = useQueryClient();
     const [open, setOpen] = useState(false);
-    const [form, setForm] = useState({ name: "", email: "", password: "", role: "viewer" });
+    const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", role: "viewer" });
 
     const { data: users = [], isLoading } = useQuery({
         queryKey: ["owner_users"],
@@ -22,12 +22,22 @@ export default function OwnerUsers() {
 
     const create = useMutation({
         mutationFn: async () => api.post("/owner/users", form),
-        onSuccess: () => { toast.success("User added"); setOpen(false); setForm({ name: "", email: "", password: "", role: "viewer" }); qc.invalidateQueries({ queryKey: ["owner_users"] }); },
+        onSuccess: (res: any) => {
+            const d = res?.data?.delivery;
+            const via = d ? [d.email && "email", d.whatsapp && "WhatsApp"].filter(Boolean).join(" & ") : "";
+            toast.success(via ? `User added — credentials sent via ${via}` : "User added");
+            setOpen(false); setForm({ name: "", email: "", phone: "", password: "", role: "viewer" }); qc.invalidateQueries({ queryKey: ["owner_users"] });
+        },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
     const update = useMutation({
         mutationFn: async ({ id, body }: { id: string; body: any }) => api.patch(`/owner/users/${id}`, body),
-        onSuccess: () => { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["owner_users"] }); },
+        onSuccess: (res: any) => {
+            const d = res?.data?.delivery;
+            const via = d ? [d.email && "email", d.whatsapp && "WhatsApp"].filter(Boolean).join(" & ") : "";
+            toast.success(via ? `Password reset — sent via ${via}` : "Updated");
+            qc.invalidateQueries({ queryKey: ["owner_users"] });
+        },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
     const remove = useMutation({
@@ -79,11 +89,23 @@ export default function OwnerUsers() {
                                     </button>
                                 </td>
                                 <td className="py-3 px-4">
-                                    {u.role !== "super_owner" && (
-                                        <button onClick={() => { if (confirm("Remove this user?")) remove.mutate(u._id); }} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            title="Reset password"
+                                            onClick={() => {
+                                                const pw = prompt(`Set a new temporary password for ${u.name}. They'll be asked to change it at next login.`);
+                                                if (pw && pw.length >= 6) update.mutate({ id: u._id, body: { password: pw } });
+                                                else if (pw) toast.error("Password must be at least 6 characters");
+                                            }}
+                                            className="w-7 h-7 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-400 hover:text-indigo-600 flex items-center justify-center">
+                                            <KeyRound className="w-3.5 h-3.5" />
                                         </button>
-                                    )}
+                                        {u.role !== "super_owner" && (
+                                            <button onClick={() => { if (confirm("Remove this user?")) remove.mutate(u._id); }} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center">
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -100,7 +122,7 @@ export default function OwnerUsers() {
                             <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500"><X className="w-4 h-4" /></button>
                         </div>
                         <div className="space-y-3">
-                            {[["name", "Full Name"], ["email", "Email"], ["password", "Temporary Password"]].map(([k, label]) => (
+                            {[["name", "Full Name"], ["email", "Email"], ["phone", "WhatsApp Phone (e.g. 0726151104)"], ["password", "Temporary Password"]].map(([k, label]) => (
                                 <div key={k}>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
                                     <input type={k === "password" ? "password" : k === "email" ? "email" : "text"} value={(form as any)[k]}

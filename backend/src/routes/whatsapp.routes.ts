@@ -168,4 +168,49 @@ router.delete('/whatsapp/admin/:schoolId/session', async (req, res) => {
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ── Platform (owner/company) WhatsApp session — key 'platform' in the meta DB ──
+// Powers owner login OTPs, owner broadcasts, and new-user credential delivery.
+const PLATFORM = 'platform';
+router.get('/whatsapp/platform/status', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try {
+        const s = await whatsAppManager.getStatus(PLATFORM);
+        res.json({ connected: s.status === 'connected', status: s.status, phoneNumber: s.phoneNumber, profileName: s.profileName, lastSeen: s.lastSeen, connectedAt: s.connectedAt });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.get('/whatsapp/platform/qr', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try {
+        const { qr, expiresAt, status } = await whatsAppManager.getQR(PLATFORM);
+        if (status === 'connected') return res.json({ qr: null, connected: true, status });
+        const dataUrl = qr ? await QRCode.toDataURL(qr, { margin: 1, width: 320 }) : null;
+        res.json({ qr: dataUrl, raw: qr, expiresAt, status, connected: false });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/whatsapp/platform/connect', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try { const meta = await whatsAppManager.connect(PLATFORM); res.json({ message: 'Connecting', status: meta.status }); }
+    catch (e: any) { console.error('[WhatsApp] platform connect failed:', e?.stack || e); res.status(500).json({ message: e?.message || 'Connect failed' }); }
+});
+
+router.post('/whatsapp/platform/disconnect', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try { await whatsAppManager.disconnect(PLATFORM); res.json({ message: 'Disconnected' }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.delete('/whatsapp/platform/session', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try { await whatsAppManager.deleteSession(PLATFORM); res.json({ message: 'Session deleted' }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.get('/whatsapp/platform/info', async (req, res) => {
+    if (!requireSuperOwner(req, res)) return;
+    try { res.json(await whatsAppManager.getInfo(PLATFORM)); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 export default router;

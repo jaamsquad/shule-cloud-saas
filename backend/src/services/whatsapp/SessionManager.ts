@@ -66,8 +66,10 @@ interface LiveSession {
 class WhatsAppSessionManager extends EventEmitter {
     private sessions = new Map<string, LiveSession>();
 
-    /** Resolve a school's tenant DB + subdomain from the meta registry. */
+    /** Resolve a school's tenant DB + subdomain from the meta registry.
+     *  The reserved id 'platform' is the OWNER/company session → stored in meta DB. */
     private async resolveTenant(schoolId: string): Promise<{ db: Db; subdomain: string } | null> {
+        if (schoolId === 'platform') return { db: getMetaDb(), subdomain: 'platform' };
         try {
             const { ObjectId } = await import('mongodb');
             const meta = getMetaDb();
