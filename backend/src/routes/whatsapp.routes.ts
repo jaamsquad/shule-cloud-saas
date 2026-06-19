@@ -124,18 +124,6 @@ router.post('/whatsapp/send', rateLimit(60, 60_000), async (req, res) => {
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
-// ── Chatbot simulator — run the bot for a message WITHOUT sending over WhatsApp.
-// Lets admins test menus/identification from the dashboard. { from, text } → reply.
-router.post('/whatsapp/chatbot/simulate', rateLimit(60, 60_000), async (req, res) => {
-    const schoolId = requireSchool(req, res); if (!schoolId) return;
-    try {
-        const { from, text } = req.body || {};
-        if (!from || !text) return res.status(400).json({ message: 'from (phone) and text are required' });
-        const { handleIncomingMessage } = await import('../services/whatsapp/chatbot.service');
-        const reply = await handleIncomingMessage(schoolId, String(from), String(text));
-        res.json({ reply: reply || '(no reply)' });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
 
 // ── Super-owner admin overview ────────────────────────────────────────────────
 function requireSuperOwner(req: Request, res: Response): boolean {

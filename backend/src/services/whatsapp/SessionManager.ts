@@ -250,15 +250,11 @@ class WhatsAppSessionManager extends EventEmitter {
                         continue;
                     }
 
+                    // WhatsApp is send-only; we still surface inbound events (for
+                    // the dashboard) but do NOT auto-reply to them.
                     this.emitTo(schoolId, fromMe ? 'message_sent' : 'message_received', { id: msg?.key?.id, from: remoteJid, text });
                     session.lastSeen = new Date();
                     if (text) session.decryptFails = 0;   // a readable message → keys are healthy
-
-                    // Drive the chatbot for inbound 1:1 messages (ignore our own
-                    // messages and group chats). Fire-and-forget; never throws.
-                    if (!fromMe && text && remoteJid.endsWith('@s.whatsapp.net')) {
-                        this.runChatbot(schoolId, remoteJid, text);
-                    }
                 }
             }
         });
@@ -435,10 +431,6 @@ class WhatsAppSessionManager extends EventEmitter {
     }
 
     /**
-     * Feed an inbound message to the chatbot and reply on the same session.
-     * Best-effort: chatbot failures are logged, never thrown into the WA stream.
-     */
-    /**
      * Track undecryptable inbound messages. A short burst usually means the
      * Signal session is corrupted (often after re-linking the same number). We
      * surface it loudly; recovery is a re-scan (delete + connect). We avoid
@@ -453,21 +445,6 @@ class WhatsAppSessionManager extends EventEmitter {
         // Warn once per 10 failures so logs stay readable.
         if (n === 1 || n % 10 === 0) {
             logEvent(schoolId, 'decrypt_failure', { count: n, hint: 'If new messages also fail, delete the WhatsApp session and re-scan the QR.' });
-        }
-    }
-
-    private async runChatbot(schoolId: string, remoteJid: string, text: string): Promise<void> {
-        try {
-            // The platform session never runs the parent chatbot.
-            if (schoolId === 'platform') { logEvent(schoolId, 'chatbot_skip_platform'); return; }
-            const phone = remoteJid.split('@')[0];
-            logEvent(schoolId, 'chatbot_in', { phone, text: text.slice(0, 60) });
-            const { handleIncomingMessage } = await import('./chatbot.service');
-            const reply = await handleIncomingMessage(schoolId, phone, text);
-            logEvent(schoolId, 'chatbot_reply', { phone, hasReply: !!reply, len: reply?.length || 0 });
-            if (reply) await this.sendText(schoolId, remoteJid, reply);
-        } catch (e: any) {
-            logEvent(schoolId, 'chatbot_error', { error: e?.message, stack: String(e?.stack || '').split('\n').slice(0, 3).join(' | ') });
         }
     }
 
