@@ -1088,7 +1088,9 @@ router.post('/transport/pickup', async (req, res) => {
         // Notify the parent on the channels enabled in transport_settings.
         const settings: any = (await db.collection('transport_settings').findOne({})) || {};
         const verb = type === 'drop' ? 'dropped off' : 'picked up';
-        const timeStr = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        // Always format in Kenyan time (Africa/Nairobi), not the server's timezone,
+        // so parents see the correct local time even when the VPS runs in UTC.
+        const timeStr = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' });
         const msg = `${name} has been ${verb} by the school bus${busName ? ` (${busName})` : ''} at ${timeStr}.`;
         const email = student?.parentEmail || student?.fatherEmail || student?.motherEmail || '';
         const phone = student?.parentPhone || student?.fatherPhone || student?.motherPhone || student?.phone || '';
