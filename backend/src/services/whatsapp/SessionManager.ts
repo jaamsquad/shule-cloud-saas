@@ -62,6 +62,16 @@ interface LiveSession {
     connectedAt: Date | null;
     lastSeen?: Date | null;
     decryptFails?: number;
+    retryCache: SimpleCache;
+}
+
+/** Minimal in-memory CacheStore for Baileys' msgRetryCounterCache. */
+class SimpleCache {
+    private m = new Map<string, any>();
+    get<T>(k: string): T | undefined { return this.m.get(k); }
+    set(k: string, v: any) { this.m.set(k, v); }
+    del(k: string) { this.m.delete(k); }
+    flushAll() { this.m.clear(); }
 }
 
 class WhatsAppSessionManager extends EventEmitter {
@@ -198,7 +208,7 @@ class WhatsAppSessionManager extends EventEmitter {
             schoolId, subdomain: tenant.subdomain, db: tenant.db,
             sock: null, auth, status: 'connecting', qr: null, qrExpiresAt: null,
             reconnectAttempts: 0, connecting: false, phoneNumber: null,
-            profileName: null, connectedAt: null,
+            profileName: null, connectedAt: null, retryCache: new SimpleCache(),
         };
         session.db = tenant.db; session.auth = auth; session.connecting = true;
         this.sessions.set(schoolId, session);
@@ -214,8 +224,12 @@ class WhatsAppSessionManager extends EventEmitter {
             },
             printQRInTerminal: false,
             browser: ['ShuleCloud', 'Chrome', '1.0.0'],
-            markOnlineOnConnect: false,
+            markOnlineOnConnect: true,        // present as online so the phone delivers messages live
             syncFullHistory: false,
+            // Required by Baileys' retry/decrypt path — its absence is the usual
+            // cause of "unexpected error in 'init queries'" and undelivered msgs.
+            getMessage: async () => undefined,
+            msgRetryCounterCache: session.retryCache,
         });
         session.sock = sock;
 
