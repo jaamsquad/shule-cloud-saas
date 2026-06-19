@@ -1,30 +1,18 @@
-import { UserCheck } from "lucide-react";
-import CrudListPage from "../shared/CrudListPage";
+import RosterAttendance from "../shared/RosterAttendance";
 
 export default function SportsAttendance() {
     return (
-        <CrudListPage
+        <RosterAttendance
             title="Sports Attendance"
-            subtitle="Coach records attendance per session — used for discipline & reports"
-            icon={<UserCheck className="w-6 h-6" />}
-            endpoint="/sports-attendance"
-            queryKey="sports_attendance"
+            subtitle="Session register — pick a sport to load its participants, then mark each present/absent"
+            activityLabel="Sport"
+            activityEndpoint="/sports"
+            activityNameField="name"
+            participantsEndpoint="/sports-enrollments"
+            participantActivityField="sportName"
+            attendanceEndpoint="/sports-attendance"
+            attendanceActivityKey="sportName"
             moduleKey="sports"
-            addLabel="Record Attendance"
-            fields={[
-                { key: "sportName", label: "Sport", type: "lookupSelect", lookupEndpoint: "/sports", lookupLabel: "name", placeholder: "Select sport…", required: true },
-                { key: "date", label: "Date", type: "date", required: true },
-                { key: "studentName", label: "Student", type: "studentSelect", required: true },
-                { key: "status", label: "Status", type: "select", options: ["Present", "Absent"], required: true },
-                { key: "remark", label: "Remark", placeholder: "Optional" },
-            ]}
-            columns={[
-                { key: "date", label: "Date" },
-                { key: "sportName", label: "Sport" },
-                { key: "studentName", label: "Student" },
-                { key: "status", label: "Status", render: (r) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${r.status === "Present" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{r.status}</span> },
-                { key: "remark", label: "Remark" },
-            ]}
         />
     );
 }
