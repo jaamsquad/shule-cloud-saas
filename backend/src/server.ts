@@ -11,6 +11,10 @@ import app from './app';
 import { connectDB } from './lib/mongodb';
 import { attachWhatsAppSocket } from './services/whatsapp/socket';
 import { whatsAppManager } from './services/whatsapp/SessionManager';
+import { installSignalLogFilter } from './services/whatsapp/logger';
+
+// Quieten libsignal's direct console noise (huge SessionEntry dumps on key rotation).
+installSignalLogFilter();
 
 // Force port 3000 to match Vite proxy
 const PORT = 3000;
