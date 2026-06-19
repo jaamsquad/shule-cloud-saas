@@ -70,7 +70,6 @@ export function mainMenuText(schoolName = 'ShuleCloud'): string {
         '7. Canteen Balance',
         '8. School Announcements',
         '9. Talk to School Office',
-        '10. Ask AI',
         '',
         'Reply with the number only.',
     ].join('\n');

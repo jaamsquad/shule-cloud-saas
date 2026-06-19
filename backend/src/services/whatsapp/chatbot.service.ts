@@ -12,7 +12,6 @@ import { ObjectId } from 'mongodb';
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../../lib/mongodb';
 import * as state from './chatState.service';
 import * as menu from './menu.service';
-import { askAI } from './ai.service';
 import { logEvent } from './logger';
 
 const GREETINGS = new Set(['hi', 'hello', 'menu', 'start', 'hey']);
@@ -82,12 +81,6 @@ export async function handleIncomingMessage(schoolId: string, fromPhone: string,
         return menu.mainMenuText(school.name);
     }
 
-    // ── AI free-text mode ─────────────────────────────────────────────────────
-    if (session.currentMenu === 'ai') {
-        const answer = await askAI(text);
-        return `${answer}\n\nReply 0 to go back to the menu.`;
-    }
-
     // ── Fee-balance sub-menu (1. Pay Now / 2. Back) ───────────────────────────
     if (session.currentMenu === 'fees') {
         if (text === '1') return 'To pay, reply 9 to ask the office to send you an M-PESA prompt, or pay via the parent portal.\n\nReply 0 to go back to the menu.';
@@ -111,7 +104,6 @@ async function startConversation(db: Db, schoolId: string, fromPhone: string, sc
             '',
             "We couldn't match your number to a student record. You can still:",
             '9. Talk to School Office',
-            '10. Ask AI',
             '',
             'Reply with the number only.',
         ].join('\n');
@@ -166,9 +158,6 @@ async function handleMainSelection(
         case 7: { const g = needStudent(); if (g) return g; return menu.optCanteenBalance(db, studentRef!); }
         case 8: return menu.optAnnouncements(db);
         case 9: return menu.optTalkToOffice(db, studentRef, fromPhone);
-        case 10:
-            await state.patchSession(db, fromPhone, { currentMenu: 'ai' });
-            return 'Ask AI — type your question.\n\nReply 0 to go back to the menu.';
         default:
             return menu.INVALID_MSG;
     }

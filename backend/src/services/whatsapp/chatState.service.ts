@@ -11,7 +11,7 @@ import { Db } from 'mongodb';
 const COLL = 'whatsapp_chat_sessions';
 const SESSION_TTL_MS = 30 * 60 * 1000;   // reset after 30 minutes of inactivity
 
-export type Menu = 'root' | 'main' | 'pick_student' | 'fees' | 'statement' | 'ai';
+export type Menu = 'root' | 'main' | 'pick_student' | 'fees' | 'statement';
 
 export interface ChatSession {
     phoneNumber: string;
