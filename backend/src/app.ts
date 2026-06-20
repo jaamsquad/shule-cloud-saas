@@ -32,6 +32,7 @@ import whatsappRoutes from './routes/whatsapp.routes';
 import nemisRoutes from './modules/nemis/nemis.routes';
 import computedReportRoutes from './modules/reports/computed.routes';
 import tscRoutes from './modules/tsc/tsc.routes';
+import expenseRoutes from './modules/expense/expense.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -291,6 +292,7 @@ app.use('/api/v1', whatsappRoutes);       // WhatsApp QR session management (Bai
 app.use('/api/v1', nemisRoutes);          // NEMIS Assistant (validate / export / import / transfers)
 app.use('/api/v1', computedReportRoutes); // Computed reports (exam analysis, finance statements, trends)
 app.use('/api/v1', tscRoutes);            // Teacher Service Commission (TSC) management
+app.use('/api/v1', expenseRoutes);        // Expense Management
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);

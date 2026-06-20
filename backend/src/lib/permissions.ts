@@ -136,6 +136,10 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'accounting.expenses': ['accounts'],
     'accounting.payroll': ['salary'],
     'accounting.budget': ['accounts'],
+    // Expense Management
+    'expenses.view': ['expenses'],
+    'expenses.manage': ['expenses'],
+    'expenses.approve': ['expenses'],
     // Academics — each section gated by its own code
     'classes.view': ['classes'],
     'subjects.view': ['subjects'],

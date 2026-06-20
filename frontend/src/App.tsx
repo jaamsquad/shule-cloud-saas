@@ -219,6 +219,9 @@ import EmployeesAttendanceReport from "./pages/tenant/modules/attendance/Employe
 import StudentsReportCard from "./pages/tenant/modules/reports/StudentsReportCard";
 import ReportsCenter from "./pages/tenant/modules/reports/ReportsCenter";
 import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
+import ExpenseLayout from "./pages/tenant/modules/expense/ExpenseLayout";
+import ExpenseDashboard from "./pages/tenant/modules/expense/ExpenseDashboard";
+import { ExpensesPage, CategoriesPage, SuppliersPage, RequestsPage, OrdersPage, PaymentsPage, RecurringPage, BudgetsPage, ApprovalsPage, ReportsPage as ExpReportsPage, SettingsPage as ExpSettingsPage } from "./pages/tenant/modules/expense/ExpensePages";
 import TscLayout from "./pages/tenant/modules/tsc/TscLayout";
 import TscDashboard from "./pages/tenant/modules/tsc/TscDashboard";
 import TscTeachers from "./pages/tenant/modules/tsc/TscTeachers";
@@ -781,6 +784,22 @@ const App = () => {
 
               {/* Reports Module */}
               <Route path="/reports" element={<ReportsCenter />} />
+
+              {/* Expense Management */}
+              <Route path="/expense" element={<ExpenseLayout />}>
+                <Route index element={<ExpenseDashboard />} />
+                <Route path="list" element={<ExpensesPage />} />
+                <Route path="categories" element={<CategoriesPage />} />
+                <Route path="budgets" element={<BudgetsPage />} />
+                <Route path="requests" element={<RequestsPage />} />
+                <Route path="orders" element={<OrdersPage />} />
+                <Route path="suppliers" element={<SuppliersPage />} />
+                <Route path="payments" element={<PaymentsPage />} />
+                <Route path="recurring" element={<RecurringPage />} />
+                <Route path="approvals" element={<ApprovalsPage />} />
+                <Route path="reports" element={<ExpReportsPage />} />
+                <Route path="settings" element={<ExpSettingsPage />} />
+              </Route>
 
               {/* Teacher Service Commission */}
               <Route path="/tsc/teachers/:id" element={<TscTeacherProfile />} />
