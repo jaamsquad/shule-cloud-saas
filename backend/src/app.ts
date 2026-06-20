@@ -35,6 +35,7 @@ import tscRoutes from './modules/tsc/tsc.routes';
 import expenseRoutes from './modules/expense/expense.routes';
 import cbcRoutes from './modules/cbc/cbc.routes';
 import procurementRoutes from './modules/procurement/procurement.routes';
+import accountingRoutes from './modules/accounting/accounting.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -297,6 +298,7 @@ app.use('/api/v1', tscRoutes);            // Teacher Service Commission (TSC) ma
 app.use('/api/v1', expenseRoutes);        // Expense Management
 app.use('/api/v1', cbcRoutes);            // CBC Assessment
 app.use('/api/v1', procurementRoutes);    // Procurement (shares suppliers/PR/PO with Expense)
+app.use('/api/v1', accountingRoutes);     // Accounting / General Ledger
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);

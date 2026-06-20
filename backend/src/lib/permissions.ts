@@ -148,6 +148,11 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'procurement.view': ['procurement'],
     'procurement.manage': ['procurement'],
     'procurement.approve': ['procurement'],
+    // Accounting / General Ledger (full GL module)
+    'accounting.ledger': ['accounting'],
+    'accounting.journals': ['accounting'],
+    'accounting.statements': ['accounting'],
+    'accounting.manage': ['accounting'],
     // Academics — each section gated by its own code
     'classes.view': ['classes'],
     'subjects.view': ['subjects'],

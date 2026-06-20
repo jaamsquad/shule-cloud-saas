@@ -222,6 +222,8 @@ import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
 import ExpenseLayout from "./pages/tenant/modules/expense/ExpenseLayout";
 import ExpenseDashboard from "./pages/tenant/modules/expense/ExpenseDashboard";
 import { ExpensesPage, CategoriesPage, SuppliersPage, RequestsPage, OrdersPage, PaymentsPage, RecurringPage, BudgetsPage, ApprovalsPage, ReportsPage as ExpReportsPage, SettingsPage as ExpSettingsPage } from "./pages/tenant/modules/expense/ExpensePages";
+import AcctLayout from "./pages/tenant/modules/accounting/AcctLayout";
+import { AcctDashboard, CoaPage, JournalsPage, LedgerPage, TrialBalancePage, IncomeStatementPage, BalanceSheetPage, CashFlowPage, ReceivablesPage, PayablesPage, BudgetingPage, ReconciliationPage, PeriodsPage, SettingsPage as AcctSettings } from "./pages/tenant/modules/accounting/AcctPages";
 import ProcLayout from "./pages/tenant/modules/procurement/ProcLayout";
 import { ProcDashboard, RequestsPage as ProcRequests, OrdersPage as ProcOrders, SuppliersPage as ProcSuppliers, QuotationsPage, GrnPage, MatchingPage, ContractsPage, TendersPage, ReportsPage as ProcReports, SettingsPage as ProcSettings } from "./pages/tenant/modules/procurement/ProcPages";
 import CbcLayout from "./pages/tenant/modules/cbc/CbcLayout";
@@ -803,6 +805,24 @@ const App = () => {
                 <Route path="approvals" element={<ApprovalsPage />} />
                 <Route path="reports" element={<ExpReportsPage />} />
                 <Route path="settings" element={<ExpSettingsPage />} />
+              </Route>
+
+              {/* Accounting / General Ledger */}
+              <Route path="/accounting" element={<AcctLayout />}>
+                <Route index element={<AcctDashboard />} />
+                <Route path="coa" element={<CoaPage />} />
+                <Route path="journals" element={<JournalsPage />} />
+                <Route path="ledger" element={<LedgerPage />} />
+                <Route path="trial-balance" element={<TrialBalancePage />} />
+                <Route path="income-statement" element={<IncomeStatementPage />} />
+                <Route path="balance-sheet" element={<BalanceSheetPage />} />
+                <Route path="cash-flow" element={<CashFlowPage />} />
+                <Route path="receivables" element={<ReceivablesPage />} />
+                <Route path="payables" element={<PayablesPage />} />
+                <Route path="budgeting" element={<BudgetingPage />} />
+                <Route path="reconciliation" element={<ReconciliationPage />} />
+                <Route path="periods" element={<PeriodsPage />} />
+                <Route path="settings" element={<AcctSettings />} />
               </Route>
 
               {/* Procurement */}
