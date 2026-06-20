@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, FileText, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import api from "@/lib/api";
 import { nemis, toCSV, downloadFile } from "./nemisApi";
 
 export default function NemisExport() {
@@ -8,6 +10,16 @@ export default function NemisExport() {
     const [year, setYear] = useState("");
     const [busy, setBusy] = useState("");
     const [last, setLast] = useState<{ count: number; incomplete: number } | null>(null);
+
+    // Build the class list from students' actual classes (matches how grade is read).
+    const { data: students = [] } = useQuery({
+        queryKey: ["nemis_export_students"],
+        queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const classes = useMemo(
+        () => Array.from(new Set(students.map((s: any) => s.currentClass || s.studentClass || s.grade).filter(Boolean))).sort() as string[],
+        [students],
+    );
 
     const fetchData = async () => {
         const params = new URLSearchParams();
@@ -48,7 +60,12 @@ export default function NemisExport() {
                 <h3 className="text-sm font-black text-slate-700 mb-1">Export Students for NEMIS</h3>
                 <p className="text-xs text-slate-400 mb-4">Exports follow the official NEMIS field order. Validation runs automatically before download.</p>
                 <div className="grid grid-cols-2 gap-3 mb-5">
-                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Grade (optional)</label><input value={grade} onChange={e => setGrade(e.target.value)} placeholder="e.g. Grade 4" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#0F766E]" /></div>
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Class / Grade (optional)</label>
+                        <select value={grade} onChange={e => setGrade(e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#0F766E]">
+                            <option value="">All classes</option>
+                            {classes.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
                     <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Admission Year (optional)</label><input value={year} onChange={e => setYear(e.target.value)} placeholder="e.g. 2026" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#0F766E]" /></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
