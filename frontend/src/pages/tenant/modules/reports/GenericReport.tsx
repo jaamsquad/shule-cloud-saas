@@ -33,6 +33,54 @@ export const REPORT_REGISTRY: Record<string, Cfg> = {
   "outstanding-balances": { title: "Outstanding Balances", collection: "invoices", columns: [{ key: "studentName", label: "Student" }, { key: "invoice_no", label: "Invoice" }, { key: "total_due", label: "Due", type: "money" }, { key: "status", label: "Status" }] },
   "audit-trail":        { title: "Audit Trail", collection: "audit_logs", columns: [{ key: "action", label: "Action" }, { key: "collection", label: "Entity" }, { key: "userId", label: "User" }, { key: "createdAt", label: "When", type: "date" }] },
   "login-history":      { title: "Login History", collection: "login_logs", columns: [{ key: "userName", label: "User" }, { key: "role", label: "Role" }, { key: "ip", label: "IP" }, { key: "createdAt", label: "When", type: "date" }] },
+
+  // ── Students ──────────────────────────────────────────────────────────────
+  "admissions":         { title: "Admissions Report", collection: "admissions", columns: [{ key: "applicationNo", label: "App No" }, { key: "applicantName", label: "Applicant" }, { key: "classApplied", label: "Class" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Date", type: "date" }] },
+  "transfers":          { title: "Transfers Report", collection: "student_transfers", columns: [{ key: "studentName", label: "Student" }, { key: "fromClass", label: "From" }, { key: "toSchool", label: "To School" }, { key: "reason", label: "Reason" }, { key: "date", label: "Date", type: "date" }] },
+  "enrollment":         { title: "Enrollment Report", collection: "student_enrollments", columns: [{ key: "studentName", label: "Student" }, { key: "className", label: "Class" }, { key: "streamName", label: "Stream" }, { key: "academicYear", label: "Year" }, { key: "status", label: "Status" }] },
+
+  // ── Attendance ────────────────────────────────────────────────────────────
+  "daily-attendance":   { title: "Daily Attendance Register", collection: "attendance", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
+  "absentees":          { title: "Absentee Report", collection: "attendance", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
+
+  // ── Finance ───────────────────────────────────────────────────────────────
+  "income-expense":     { title: "Income & Expense", collection: "transactions", columns: [{ key: "date", label: "Date", type: "date" }, { key: "type", label: "Type" }, { key: "category", label: "Category" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", type: "money" }] },
+  "mpesa-recon":        { title: "M-PESA Reconciliation", collection: "mpesa_c2b_payments", columns: [{ key: "TransID", label: "Receipt" }, { key: "BillRefNumber", label: "Account" }, { key: "MSISDN", label: "Phone" }, { key: "TransAmount", label: "Amount", type: "money" }, { key: "receivedAt", label: "Received", type: "date" }] },
+
+  // ── HR & Payroll ──────────────────────────────────────────────────────────
+  "payroll-summary":    { title: "Payroll Summary", collection: "salary_payments", columns: [{ key: "staffName", label: "Staff" }, { key: "month", label: "Month" }, { key: "gross", label: "Gross", type: "money" }, { key: "deductions", label: "Deductions", type: "money" }, { key: "net", label: "Net", type: "money" }] },
+
+  // ── Inventory & Assets ────────────────────────────────────────────────────
+  "pos-sales":          { title: "POS Sales Report", collection: "pos_orders", columns: [{ key: "orderNo", label: "Order" }, { key: "customerName", label: "Customer" }, { key: "total", label: "Total", type: "money" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Date", type: "date" }] },
+  "purchase-report":    { title: "Purchase Report", collection: "purchases", columns: [{ key: "supplier", label: "Supplier" }, { key: "item", label: "Item" }, { key: "quantity", label: "Qty" }, { key: "cost", label: "Cost", type: "money" }, { key: "date", label: "Date", type: "date" }] },
+
+  // ── Library ───────────────────────────────────────────────────────────────
+  "member-activity":    { title: "Member Activity", collection: "library_members", columns: [{ key: "name", label: "Member" }, { key: "memberType", label: "Type" }, { key: "booksIssued", label: "Books Issued" }, { key: "joinedAt", label: "Joined", type: "date" }] },
+
+  // ── Hostel ────────────────────────────────────────────────────────────────
+  "hostel-occupancy":   { title: "Hostel Occupancy", collection: "hostel_allocations", columns: [{ key: "studentName", label: "Student" }, { key: "hostelName", label: "Hostel" }, { key: "roomName", label: "Room" }, { key: "bedNo", label: "Bed" }] },
+  "hostel-allocations": { title: "Hostel Allocations", collection: "hostel_allocations", columns: [{ key: "studentName", label: "Student" }, { key: "hostelName", label: "Hostel" }, { key: "roomName", label: "Room" }, { key: "allocatedAt", label: "Allocated", type: "date" }] },
+  "hostel-fees":        { title: "Hostel Fees", collection: "hostel_fees", columns: [{ key: "studentName", label: "Student" }, { key: "hostelName", label: "Hostel" }, { key: "amount", label: "Amount", type: "money" }, { key: "status", label: "Status" }] },
+  "hostel-attendance":  { title: "Hostel Attendance", collection: "hostel_attendance_records", columns: [{ key: "studentName", label: "Student" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
+
+  // ── Transport ─────────────────────────────────────────────────────────────
+  "transport-routes":   { title: "Route & Driver Report", collection: "transport_zones", columns: [{ key: "name", label: "Zone / Route" }, { key: "driver", label: "Driver" }, { key: "coDriver", label: "Co-Driver" }, { key: "busNo", label: "Bus" }, { key: "fee", label: "Fee", type: "money" }] },
+  "zone-assignments":   { title: "Zone Assignments", collection: "students", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "transportZone", label: "Zone" }] },
+  "bus-roster":         { title: "Bus Roster", collection: "buses", columns: [{ key: "plateNo", label: "Plate" }, { key: "model", label: "Model" }, { key: "capacity", label: "Capacity" }, { key: "driver", label: "Driver" }] },
+
+  // ── Health ────────────────────────────────────────────────────────────────
+  "medical-records":    { title: "Medical Records", collection: "student_medical", columns: [{ key: "studentName", label: "Student" }, { key: "condition", label: "Condition" }, { key: "bloodGroup", label: "Blood Group" }, { key: "date", label: "Date", type: "date" }] },
+
+  // ── Discipline ────────────────────────────────────────────────────────────
+  "discipline-records": { title: "Discipline Records", collection: "student_discipline", columns: [{ key: "studentName", label: "Student" }, { key: "incident", label: "Incident" }, { key: "severity", label: "Severity" }, { key: "action", label: "Action" }, { key: "date", label: "Date", type: "date" }] },
+  "behaviour-trends":   { title: "Behaviour Trends", collection: "student_discipline", columns: [{ key: "studentName", label: "Student" }, { key: "incident", label: "Incident" }, { key: "date", label: "Date", type: "date" }] },
+
+  // ── Communication ─────────────────────────────────────────────────────────
+  "delivery-report":    { title: "Delivery Report", collection: "whatsapp_logs", columns: [{ key: "to", label: "Recipient" }, { key: "message", label: "Message" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Sent", type: "date" }] },
+
+  // ── Audit & Security ──────────────────────────────────────────────────────
+  "permission-matrix":  { title: "Permission Matrix", collection: "roles", columns: [{ key: "name", label: "Role" }, { key: "description", label: "Description" }] },
+  "data-change-log":    { title: "Data Change Log", collection: "audit_logs", columns: [{ key: "action", label: "Action" }, { key: "collection", label: "Entity" }, { key: "documentId", label: "Record" }, { key: "userId", label: "User" }, { key: "changedAt", label: "When", type: "date" }] },
 };
 
 const fmtDate = (v: any) => {

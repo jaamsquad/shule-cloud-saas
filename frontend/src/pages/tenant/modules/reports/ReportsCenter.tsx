@@ -30,7 +30,7 @@ const CATEGORIES: Category[] = [
     { label: "Students Monthly Attendance", path: "/reports/attendance/monthly-students" },
     { label: "Staff Monthly Attendance", path: "/reports/attendance/monthly-staff" },
     { label: "Class-wise Attendance", path: "/attendance/reports/class-wise" },
-    { label: "Daily Attendance Register" }, { label: "Absentee Report" },
+    { label: "Daily Attendance Register", path: "/reports/view/daily-attendance" }, { label: "Absentee Report", path: "/reports/view/absentees" },
     { label: "Attendance % Summary" },
   ]},
   { key: "Finance", icon: Wallet, color: "#10B981", reports: [
@@ -38,8 +38,8 @@ const CATEGORIES: Category[] = [
     { label: "Accounts Report", path: "/reports/accounts" },
     { label: "Fees Defaulters", path: "/fees/defaulters" },
     { label: "Fees Report", path: "/fees/report" },
-    { label: "Income & Expense" }, { label: "Balance Sheet" },
-    { label: "Trial Balance" }, { label: "M-PESA Reconciliation" },
+    { label: "Income & Expense", path: "/reports/view/income-expense" }, { label: "Balance Sheet" },
+    { label: "Trial Balance" }, { label: "M-PESA Reconciliation", path: "/reports/view/mpesa-recon" },
     { label: "Outstanding Balances", path: "/reports/view/outstanding-balances" },
   ]},
   { key: "HR & Payroll", icon: Briefcase, color: "#F59E0B", reports: [
@@ -48,13 +48,13 @@ const CATEGORIES: Category[] = [
     { label: "Leave Report", path: "/reports/view/leave-report" }, { label: "Contracts Expiry", path: "/reports/view/contracts-expiry" }, { label: "Staff by Department", path: "/reports/view/staff-by-dept" },
   ]},
   { key: "Inventory & Assets", icon: Boxes, color: "#EC4899", reports: [
-    { label: "POS Sales Report", path: "/pos-admin/store-analytics" },
+    { label: "POS Sales Report", path: "/reports/view/pos-sales" },
     { label: "Stock Levels", path: "/reports/view/stock-levels" }, { label: "Asset Register", path: "/reports/view/asset-register" },
-    { label: "Low-Stock Alerts", path: "/reports/view/low-stock" }, { label: "Purchase Report" },
+    { label: "Low-Stock Alerts", path: "/reports/view/low-stock" }, { label: "Purchase Report", path: "/reports/view/purchase-report" },
   ]},
   { key: "Library", icon: BookOpen, color: "#8B5CF6", reports: [
     { label: "Book Catalog", path: "/reports/view/book-catalog" }, { label: "Issued Books", path: "/reports/view/issued-books" },
-    { label: "Overdue Books", path: "/reports/view/overdue-books" }, { label: "Member Activity" },
+    { label: "Overdue Books", path: "/reports/view/overdue-books" }, { label: "Member Activity", path: "/reports/view/member-activity" },
   ]},
   { key: "Hostel", icon: Building2, color: "#14B8A6", reports: [
     { label: "Occupancy Report", path: "/hostel/dashboard" },
@@ -75,7 +75,7 @@ const CATEGORIES: Category[] = [
   ]},
   { key: "Communication", icon: MessageSquare, color: "#06B6D4", reports: [
     { label: "SMS Logs", path: "/reports/view/sms-logs" }, { label: "Email Logs", path: "/reports/view/email-logs" },
-    { label: "Announcements", path: "/reports/view/announcements" }, { label: "Delivery Report" },
+    { label: "Announcements", path: "/reports/view/announcements" }, { label: "Delivery Report", path: "/reports/view/delivery-report" },
   ]},
   { key: "Management", icon: LayoutDashboard, color: "#2563EB", reports: [
     { label: "Customised Reports", path: "/reports/custom" },
@@ -88,7 +88,7 @@ const CATEGORIES: Category[] = [
   ]},
   { key: "Audit & Security", icon: ScrollText, color: "#0F172A", reports: [
     { label: "Audit Trail", path: "/reports/view/audit-trail" }, { label: "Login History", path: "/reports/view/login-history" },
-    { label: "Data Change Log" }, { label: "Permission Matrix", path: "/roles/matrix" },
+    { label: "Data Change Log", path: "/reports/view/data-change-log" }, { label: "Permission Matrix", path: "/roles/matrix" },
   ]},
 ];
 
