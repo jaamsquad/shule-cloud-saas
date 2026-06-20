@@ -218,6 +218,16 @@ import StudentsAttendanceReport from "./pages/tenant/modules/attendance/Students
 import EmployeesAttendanceReport from "./pages/tenant/modules/attendance/EmployeesAttendanceReport";
 import StudentsReportCard from "./pages/tenant/modules/reports/StudentsReportCard";
 import ReportsCenter from "./pages/tenant/modules/reports/ReportsCenter";
+import NemisLayout from "./pages/tenant/modules/nemis/NemisLayout";
+import NemisDashboard from "./pages/tenant/modules/nemis/NemisDashboard";
+import NemisValidation from "./pages/tenant/modules/nemis/NemisValidation";
+import NemisMissing from "./pages/tenant/modules/nemis/NemisMissing";
+import NemisExport from "./pages/tenant/modules/nemis/NemisExport";
+import NemisImport from "./pages/tenant/modules/nemis/NemisImport";
+import NemisTransfers from "./pages/tenant/modules/nemis/NemisTransfers";
+import NemisDataEntry from "./pages/tenant/modules/nemis/NemisDataEntry";
+import NemisHistory from "./pages/tenant/modules/nemis/NemisHistory";
+import NemisSettings from "./pages/tenant/modules/nemis/NemisSettings";
 import GenericReport from "./pages/tenant/modules/reports/GenericReport";
 import StudentsInfoReport from "./pages/tenant/modules/reports/StudentsInfoReport";
 import ParentsInfoReport from "./pages/tenant/modules/reports/ParentsInfoReport";
@@ -762,6 +772,19 @@ const App = () => {
 
               {/* Reports Module */}
               <Route path="/reports" element={<ReportsCenter />} />
+
+              {/* NEMIS Assistant */}
+              <Route path="/nemis" element={<NemisLayout />}>
+                <Route index element={<NemisDashboard />} />
+                <Route path="validation" element={<NemisValidation />} />
+                <Route path="missing" element={<NemisMissing />} />
+                <Route path="export" element={<NemisExport />} />
+                <Route path="import" element={<NemisImport />} />
+                <Route path="transfers" element={<NemisTransfers />} />
+                <Route path="data-entry" element={<NemisDataEntry />} />
+                <Route path="history" element={<NemisHistory />} />
+                <Route path="settings" element={<NemisSettings />} />
+              </Route>
               <Route path="/reports/view/:key" element={<GenericReport />} />
               <Route path="/reports/report-cards" element={<StudentsReportCard />} />
               <Route path="/reports/students-info" element={<StudentsInfoReport />} />

@@ -5,7 +5,7 @@ import {
   Wallet, Banknote, CreditCard, UserCheck, Calendar, Pencil,
   Eye, ShoppingCart, MessageCircle, MessageSquare, Mail, Video,
   Copy, ClipboardList, FileText, Lock, Award, Truck, BookMarked, GraduationCap, Building2,
-  Zap, Shield, Monitor, Utensils, Trophy, MapPin, DoorOpen, ClipboardCheck
+  Zap, Shield, Monitor, Utensils, Trophy, MapPin, DoorOpen, ClipboardCheck, Landmark
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -209,7 +209,18 @@ export const navItems: NavItem[] = [
       { label: "Accounts Report", path: "/reports/accounts" },
       { label: "Customised Reports", path: "/reports/custom" },
   ] },
-  { label: "Timetable", icon: Calendar, moduleKey: "timetable", children: [ 
+  { label: "NEMIS Assistant", icon: Landmark, moduleKey: "nemis", children: [
+      { label: "Dashboard", path: "/nemis" },
+      { label: "Student Validation", path: "/nemis/validation" },
+      { label: "Missing Information", path: "/nemis/missing" },
+      { label: "Export Data", path: "/nemis/export" },
+      { label: "Import Updates", path: "/nemis/import" },
+      { label: "Transfer Management", path: "/nemis/transfers" },
+      { label: "Data Entry Assistant", path: "/nemis/data-entry" },
+      { label: "Sync History", path: "/nemis/history" },
+      { label: "Settings", path: "/nemis/settings" },
+  ] },
+  { label: "Timetable", icon: Calendar, moduleKey: "timetable", children: [
       { label: "Weekdays", path: "/timetable/weekdays" },
       { label: "Time Periods", path: "/timetable/periods" },
       { label: "Class Rooms", path: "/timetable/rooms" },

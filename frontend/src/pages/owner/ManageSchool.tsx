@@ -25,6 +25,7 @@ const MODULES: { key: string; label: string }[] = [
     { key: "academic_system", label: "Academic System" }, { key: "academics_content", label: "Academic Content" },
     { key: "behaviour", label: "Behaviour & Skills" }, { key: "question_paper", label: "Question Paper" },
     { key: "integrations", label: "Integrations" }, { key: "custom_domain", label: "Custom Domain & Branding" },
+    { key: "nemis", label: "NEMIS Assistant" },
 ];
 
 export default function ManageSchool() {

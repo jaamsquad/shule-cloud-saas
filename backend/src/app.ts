@@ -29,6 +29,7 @@ import cafeteriaRoutes from './routes/cafeteria.routes';
 import studentIdRoutes from './routes/studentId.routes';
 import modulesRoutes from './routes/modules.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
+import nemisRoutes from './modules/nemis/nemis.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -285,6 +286,7 @@ app.use('/api/v1', studentIdRoutes);      // student ID card: QR + barcode + pri
 app.use('/api', studentIdRoutes);         // also at /api/student-id (per the spec)
 app.use('/api/v1', modulesRoutes);        // Sports, Trips, Front Desk, Secretary modules
 app.use('/api/v1', whatsappRoutes);       // WhatsApp QR session management (Baileys)
+app.use('/api/v1', nemisRoutes);          // NEMIS Assistant (validate / export / import / transfers)
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);
