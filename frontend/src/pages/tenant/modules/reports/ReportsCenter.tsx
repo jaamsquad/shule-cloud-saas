@@ -14,9 +14,9 @@ const CATEGORIES: Category[] = [
     { label: "Students Report Cards", path: "/reports/report-cards" },
     { label: "Student Progress Report", path: "/reports/student-progress" },
     { label: "Exam Analysis", path: "/exams" },
-    { label: "Subject Performance" }, { label: "Class Performance" },
-    { label: "Grade Distribution" }, { label: "Mark Sheets" },
-    { label: "CBC Competency Report" }, { label: "Mean Score Trends" },
+    { label: "Subject Performance", path: "/reports/computed/subject-performance" }, { label: "Class Performance", path: "/reports/computed/class-performance" },
+    { label: "Grade Distribution", path: "/reports/computed/grade-distribution" }, { label: "Mark Sheets", path: "/reports/computed/mark-sheets" },
+    { label: "CBC Competency Report", path: "/reports/computed/cbc-competency" }, { label: "Mean Score Trends", path: "/reports/computed/mean-score-trends" },
   ]},
   { key: "Students", icon: Users, color: "#7C3AED", reports: [
     { label: "Students Info Report", path: "/reports/students-info" },
@@ -31,15 +31,15 @@ const CATEGORIES: Category[] = [
     { label: "Staff Monthly Attendance", path: "/reports/attendance/monthly-staff" },
     { label: "Class-wise Attendance", path: "/attendance/reports/class-wise" },
     { label: "Daily Attendance Register", path: "/reports/view/daily-attendance" }, { label: "Absentee Report", path: "/reports/view/absentees" },
-    { label: "Attendance % Summary" },
+    { label: "Attendance % Summary", path: "/reports/computed/attendance-summary" },
   ]},
   { key: "Finance", icon: Wallet, color: "#10B981", reports: [
     { label: "Fee Collection Report", path: "/reports/fee-collection" },
     { label: "Accounts Report", path: "/reports/accounts" },
     { label: "Fees Defaulters", path: "/fees/defaulters" },
     { label: "Fees Report", path: "/fees/report" },
-    { label: "Income & Expense", path: "/reports/view/income-expense" }, { label: "Balance Sheet" },
-    { label: "Trial Balance" }, { label: "M-PESA Reconciliation", path: "/reports/view/mpesa-recon" },
+    { label: "Income & Expense", path: "/reports/view/income-expense" }, { label: "Balance Sheet", path: "/reports/computed/balance-sheet" },
+    { label: "Trial Balance", path: "/reports/computed/trial-balance" }, { label: "M-PESA Reconciliation", path: "/reports/view/mpesa-recon" },
     { label: "Outstanding Balances", path: "/reports/view/outstanding-balances" },
   ]},
   { key: "HR & Payroll", icon: Briefcase, color: "#F59E0B", reports: [
@@ -80,11 +80,11 @@ const CATEGORIES: Category[] = [
   { key: "Management", icon: LayoutDashboard, color: "#2563EB", reports: [
     { label: "Customised Reports", path: "/reports/custom" },
     { label: "Executive Dashboard", path: "/dashboard" },
-    { label: "Enrollment Trends" }, { label: "Revenue Overview" },
+    { label: "Enrollment Trends", path: "/reports/computed/enrollment-trends" }, { label: "Revenue Overview", path: "/reports/computed/revenue-overview" },
   ]},
   { key: "Compliance & Government", icon: Landmark, color: "#475569", reports: [
-    { label: "NEMIS Export" }, { label: "KNEC Registration" },
-    { label: "Statutory Returns" }, { label: "Ministry Data Submission" },
+    { label: "NEMIS Export", path: "/reports/computed/nemis-export" }, { label: "KNEC Registration", path: "/reports/computed/knec-registration" },
+    { label: "Statutory Returns", path: "/reports/computed/statutory-returns" }, { label: "Ministry Data Submission", path: "/reports/computed/ministry-data" },
   ]},
   { key: "Audit & Security", icon: ScrollText, color: "#0F172A", reports: [
     { label: "Audit Trail", path: "/reports/view/audit-trail" }, { label: "Login History", path: "/reports/view/login-history" },

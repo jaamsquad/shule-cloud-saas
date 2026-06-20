@@ -40,13 +40,14 @@ export default function StudentProgressReport() {
         queryKey: ["reports_student_progress", selectedStudent, selectedYear],
         queryFn: async () => {
             const res = await api.get("/reports/student-progress", {
-                params: { student_id: selectedStudent || undefined, year: selectedYear }
+                params: { student_id: selectedStudent, year: selectedYear }
             });
             return res.data;
-        }
+        },
+        enabled: !!selectedStudent,   // no default student — fetch only after one is chosen
     });
 
-    const student = resData?.student || { name: "Fatuma Waridi", admNo: "BS001", className: "Grade 8 Stream 1" };
+    const student = resData?.student || null;
     const historicalExams = resData?.historicalExams || [];
     const attendanceTrends = resData?.attendanceTrends || [];
     const evaluations = resData?.evaluations || [];
@@ -167,15 +168,23 @@ export default function StudentProgressReport() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                    <select 
-                        value={selectedStudent} 
+                    <input
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        placeholder="Search student name or adm…"
+                        className="h-11 px-4 bg-slate-50 border border-slate-200/60 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-indigo-500 transition-colors w-full md:w-56"
+                    />
+                    <select
+                        value={selectedStudent}
                         onChange={e => setSelectedStudent(e.target.value)}
                         className="h-11 px-4 bg-slate-50 border border-slate-200/60 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-indigo-500 transition-colors w-full md:w-64"
                     >
-                        <option value="">Select Student (Default: Fatuma Waridi)</option>
-                        {studentsList.map((s: any) => (
-                            <option key={s._id} value={s._id}>{s.name} ({s.admNo})</option>
-                        ))}
+                        <option value="">Select a student…</option>
+                        {studentsList
+                            .filter((s: any) => !searchTerm || `${s.name} ${s.admNo}`.toLowerCase().includes(searchTerm.toLowerCase()))
+                            .map((s: any) => (
+                                <option key={s._id} value={s._id}>{s.name} ({s.admNo})</option>
+                            ))}
                     </select>
 
                     <select 
@@ -197,6 +206,13 @@ export default function StudentProgressReport() {
                 </div>
             </div>
 
+            {!student ? (
+                <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
+                    <User className="w-12 h-12" />
+                    <p className="font-black uppercase tracking-widest text-xs">{isLoading ? "Loading…" : "Search and select a student to view their progress"}</p>
+                </div>
+            ) : (
+              <>
             {/* Student Profile Overview */}
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center gap-4">
@@ -347,6 +363,8 @@ export default function StudentProgressReport() {
                     </Table>
                 </div>
             </div>
+              </>
+            )}
         </div>
     );
 }

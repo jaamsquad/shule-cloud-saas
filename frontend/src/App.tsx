@@ -218,6 +218,7 @@ import StudentsAttendanceReport from "./pages/tenant/modules/attendance/Students
 import EmployeesAttendanceReport from "./pages/tenant/modules/attendance/EmployeesAttendanceReport";
 import StudentsReportCard from "./pages/tenant/modules/reports/StudentsReportCard";
 import ReportsCenter from "./pages/tenant/modules/reports/ReportsCenter";
+import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
 import NemisLayout from "./pages/tenant/modules/nemis/NemisLayout";
 import NemisDashboard from "./pages/tenant/modules/nemis/NemisDashboard";
 import NemisValidation from "./pages/tenant/modules/nemis/NemisValidation";
@@ -786,6 +787,7 @@ const App = () => {
                 <Route path="settings" element={<NemisSettings />} />
               </Route>
               <Route path="/reports/view/:key" element={<GenericReport />} />
+              <Route path="/reports/computed/:key" element={<ComputedReport />} />
               <Route path="/reports/report-cards" element={<StudentsReportCard />} />
               <Route path="/reports/students-info" element={<StudentsInfoReport />} />
               <Route path="/reports/parents-info" element={<ParentsInfoReport />} />
