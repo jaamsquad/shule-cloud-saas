@@ -219,6 +219,14 @@ import EmployeesAttendanceReport from "./pages/tenant/modules/attendance/Employe
 import StudentsReportCard from "./pages/tenant/modules/reports/StudentsReportCard";
 import ReportsCenter from "./pages/tenant/modules/reports/ReportsCenter";
 import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
+import TscLayout from "./pages/tenant/modules/tsc/TscLayout";
+import TscDashboard from "./pages/tenant/modules/tsc/TscDashboard";
+import TscTeachers from "./pages/tenant/modules/tsc/TscTeachers";
+import TscTeacherProfile from "./pages/tenant/modules/tsc/TscTeacherProfile";
+import TscRecords from "./pages/tenant/modules/tsc/TscRecords";
+import TscWorkload from "./pages/tenant/modules/tsc/TscWorkload";
+import TscReports from "./pages/tenant/modules/tsc/TscReports";
+import TscSettings from "./pages/tenant/modules/tsc/TscSettings";
 import NemisLayout from "./pages/tenant/modules/nemis/NemisLayout";
 import NemisDashboard from "./pages/tenant/modules/nemis/NemisDashboard";
 import NemisValidation from "./pages/tenant/modules/nemis/NemisValidation";
@@ -773,6 +781,21 @@ const App = () => {
 
               {/* Reports Module */}
               <Route path="/reports" element={<ReportsCenter />} />
+
+              {/* Teacher Service Commission */}
+              <Route path="/tsc/teachers/:id" element={<TscTeacherProfile />} />
+              <Route path="/tsc" element={<TscLayout />}>
+                <Route index element={<TscDashboard />} />
+                <Route path="teachers" element={<TscTeachers />} />
+                <Route path="records" element={<TscRecords />} />
+                <Route path="workload" element={<TscWorkload />} />
+                <Route path="qualifications" element={<TscRecords tab="qualifications" />} />
+                <Route path="deployment" element={<TscRecords tab="deployment" />} />
+                <Route path="leave" element={<TscRecords tab="leave" />} />
+                <Route path="performance" element={<TscRecords tab="performance" />} />
+                <Route path="reports" element={<TscReports />} />
+                <Route path="settings" element={<TscSettings />} />
+              </Route>
 
               {/* NEMIS Assistant */}
               <Route path="/nemis" element={<NemisLayout />}>
