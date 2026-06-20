@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { tsc } from "./tscApi";
+import { KENYA_COUNTIES } from "@/lib/kenyaCounties";
 
 const BLUE = "#1D4ED8";
 const SECTIONS = ["Personal", "Employment", "TSC Records", "Subjects", "Workload", "Qualifications", "Deployment", "Leave", "Performance", "Documents"] as const;
@@ -19,6 +20,7 @@ export default function TscTeacherProfile() {
     const [tab, setTab] = useState<Section>("Personal");
 
     const { data, isLoading } = useQuery({ queryKey: ["tsc_teacher", id], queryFn: () => tsc.teacher(id) });
+    const { data: settings } = useQuery({ queryKey: ["tsc_settings"], queryFn: tsc.settings });
     const { data: balances = [] } = useQuery({ queryKey: ["tsc_balances", id], queryFn: () => tsc.leaveBalances(id), enabled: tab === "Leave" });
 
     if (isLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-[#1D4ED8]" /></div>;
@@ -50,16 +52,16 @@ export default function TscTeacherProfile() {
                 </div>
 
                 {tab === "Personal" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["nationalId", "National ID"], ["kraPin", "KRA PIN"], ["nhifNo", "NHIF Number"], ["nssfNo", "NSSF Number"], ["phone", "Phone"], ["email", "Email"], ["address", "Physical Address"], ["emergencyContact", "Emergency Contact"]]} readOnly={["phone", "email"]} />}
-                {tab === "Employment" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["employmentType", "Employment Type"], ["dateOfEmployment", "Date of Employment"], ["dateConfirmed", "Date Confirmed"], ["jobGroup", "Job Group"], ["salaryScale", "Salary Scale"], ["payrollNumber", "Payroll Number"], ["department", "Department"], ["position", "Position"], ["reportingOfficer", "Reporting Officer"], ["status", "Current Status"]]} />}
-                {tab === "TSC Records" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["tscNumber", "TSC Number"], ["registrationDate", "Registration Date"], ["registrationStatus", "Registration Status"], ["currentSchool", "Current School"], ["previousSchool", "Previous School"], ["county", "County"], ["subCounty", "Sub County"], ["zone", "Zone"], ["institutionCode", "Institution Code"], ["verificationStatus", "Verification Status"]]} />}
+                {tab === "Employment" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["employmentType", "Employment Type", settings?.employmentTypes], ["dateOfEmployment", "Date of Employment", undefined, "date"], ["dateConfirmed", "Date Confirmed", undefined, "date"], ["jobGroup", "Job Group", settings?.jobGroups], ["salaryScale", "Salary Scale"], ["payrollNumber", "Payroll Number"], ["department", "Department"], ["position", "Position"], ["reportingOfficer", "Reporting Officer"], ["status", "Current Status", ["Active", "On Leave", "Suspended", "Retired", "Inactive"]]]} />}
+                {tab === "TSC Records" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["tscNumber", "TSC Number"], ["registrationDate", "Registration Date", undefined, "date"], ["registrationStatus", "Registration Status", ["Registered", "Pending", "Deregistered"]], ["currentSchool", "Current School"], ["previousSchool", "Previous School"], ["county", "County"], ["subCounty", "Sub County"], ["ward", "Ward"], ["zone", "Zone"], ["institutionCode", "Institution Code"], ["verificationStatus", "Verification Status", ["Verified", "Unverified", "Pending"]]]} />}
 
-                {tab === "Subjects" && <LinkedList col="tsc_subjects" staffId={id} title="Teaching Subjects" icon={ClipboardCheck} fields={[["subjectName", "Subject"], ["gradeLevels", "Grade Levels"], ["streams", "Streams"], ["weeklyLessons", "Weekly Lessons"], ["practicalLessons", "Practical Lessons"], ["type", "Optional/Compulsory"], ["startDate", "Start Date"], ["endDate", "End Date"]]} columns={["subjectName", "gradeLevels", "weeklyLessons", "type"]} />}
+                {tab === "Subjects" && <SubjectsPanel staff={s} />}
                 {tab === "Workload" && <WorkloadPanel workload={data.workload} subjects={data.subjects} />}
-                {tab === "Qualifications" && <LinkedList col="tsc_qualifications" staffId={id} title="Qualifications" icon={Award} fields={[["category", "Category"], ["level", "Level"], ["course", "Course"], ["institution", "Institution"], ["year", "Year Completed"], ["certificateNo", "Certificate Number"], ["certificate", "Upload Certificate"]]} columns={["level", "course", "institution", "year"]} fileKeys={["certificate"]} />}
-                {tab === "Deployment" && <LinkedList col="tsc_deployment" staffId={id} title="Deployment History" icon={MapPin} timeline fields={[["schoolName", "School Name"], ["county", "County"], ["subCounty", "Sub County"], ["institutionCode", "Institution Code"], ["position", "Position"], ["startDate", "Start Date"], ["endDate", "End Date"], ["reason", "Reason for Transfer"], ["promotion", "Promotion"], ["letter", "Deployment Letter"]]} columns={["schoolName", "position", "startDate", "endDate"]} fileKeys={["letter"]} />}
+                {tab === "Qualifications" && <LinkedList col="tsc_qualifications" staffId={id} title="Qualifications" icon={Award} fields={[["category", "Category", settings?.qualificationCategories], ["level", "Level", settings?.qualificationCategories], ["course", "Course"], ["institution", "Institution"], ["year", "Year Completed"], ["certificateNo", "Certificate Number"], ["certificate", "Upload Certificate"]]} columns={["level", "course", "institution", "year"]} fileKeys={["certificate"]} />}
+                {tab === "Deployment" && <LinkedList col="tsc_deployment" staffId={id} title="Deployment History" icon={MapPin} timeline fields={[["schoolName", "School Name"], ["county", "County"], ["subCounty", "Sub County"], ["ward", "Ward"], ["institutionCode", "Institution Code"], ["position", "Position"], ["startDate", "Start Date", undefined, "date"], ["endDate", "End Date", undefined, "date"], ["reason", "Reason for Transfer"], ["promotion", "Promotion", ["Yes", "No"]], ["letter", "Deployment Letter"]]} columns={["schoolName", "position", "startDate", "endDate"]} fileKeys={["letter"]} />}
                 {tab === "Leave" && <>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">{balances.map((b: any) => <div key={b.type} className="bg-white rounded-xl border border-slate-100 p-3"><div className="text-lg font-black text-slate-800">{b.balance}<span className="text-[10px] text-slate-300">/{b.entitled}</span></div><div className="text-[10px] text-slate-400 font-bold">{b.type} left</div></div>)}</div>
-                    <LinkedList col="tsc_leave" staffId={id} title="Leave Records" icon={CalendarDays} fields={[["type", "Leave Type"], ["startDate", "Start Date"], ["endDate", "End Date"], ["totalDays", "Total Days"], ["reason", "Reason"], ["status", "Approval Status"], ["approvedBy", "Approved By"], ["returnDate", "Return Date"], ["attachment", "Attachment"]]} columns={["type", "startDate", "endDate", "totalDays", "status"]} fileKeys={["attachment"]} />
+                    <LinkedList col="tsc_leave" staffId={id} title="Leave Records" icon={CalendarDays} fields={[["type", "Leave Type", settings?.leaveTypes], ["startDate", "Start Date", undefined, "date"], ["endDate", "End Date", undefined, "date"], ["totalDays", "Total Days"], ["reason", "Reason"], ["status", "Approval Status", ["Pending", "Approved", "Rejected"]], ["approvedBy", "Approved By"], ["returnDate", "Return Date", undefined, "date"], ["attachment", "Attachment"]]} columns={["type", "startDate", "endDate", "totalDays", "status"]} fileKeys={["attachment"]} />
                 </>}
                 {tab === "Performance" && <LinkedList col="tsc_performance" staffId={id} title="Performance Records" icon={ClipboardCheck} fields={[["period", "Period"], ["appraisalScore", "Appraisal Score"], ["classroomObservation", "Classroom Observation"], ["cbcImplementation", "CBC Implementation"], ["principalReview", "Principal Review"], ["awards", "Awards"], ["disciplinary", "Disciplinary Cases"], ["document", "Appraisal Document"]]} columns={["period", "appraisalScore", "principalReview"]} fileKeys={["document"]} />}
                 {tab === "Documents" && <LinkedList col="tsc_documents" staffId={id} title="Documents" icon={FileText} fields={[["docType", "Document Type"], ["title", "Title"], ["file", "Upload File"]]} columns={["docType", "title"]} fileKeys={["file"]} />}
@@ -69,20 +71,64 @@ export default function TscTeacherProfile() {
 }
 
 // ── Editable staff fields (TSC core data) ─────────────────────────────────────
-function EditFields({ id, staff, fields, onSaved, readOnly = [] }: { id: string; staff: any; fields: [string, string][]; onSaved: () => void; readOnly?: string[] }) {
+// Field = [key, label, options?, type?]. options enables a dropdown; type 'date'
+// renders a date picker. county/subCounty/ward use the Kenya dataset + cascade.
+type EField = [string, string, (string[] | undefined)?, ("date" | "text")?];
+function EditFields({ id, staff, fields, onSaved, readOnly = [] }: { id: string; staff: any; fields: EField[]; onSaved: () => void; readOnly?: string[] }) {
     const [form, setForm] = useState<Record<string, any>>(Object.fromEntries(fields.map(([k]) => [k, staff[k] ?? ""])));
     const [saving, setSaving] = useState(false);
+    const set = (k: string, v: any) => setForm(f => {
+        const next = { ...f, [k]: v };
+        if (k === "county") { next.subCounty = ""; next.ward = ""; }
+        if (k === "subCounty") next.ward = "";
+        return next;
+    });
     const save = async () => { setSaving(true); try { await tsc.updateTeacher(id, form); toast.success("Saved"); onSaved(); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } finally { setSaving(false); } };
+
+    const render = (k: string, label: string, options?: string[], type?: string) => {
+        // Kenya location cascade.
+        if (k === "county") options = KENYA_COUNTIES.map(c => c.name);
+        if (k === "subCounty") options = (KENYA_COUNTIES.find(c => c.name === form.county)?.subCounties.map(s => s.name)) || [];
+        if (k === "ward") options = (KENYA_COUNTIES.find(c => c.name === form.county)?.subCounties.find(s => s.name === form.subCounty)?.wards) || [];
+        const base = "w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#1D4ED8] disabled:bg-slate-50 disabled:text-slate-500";
+        if (options) return <select value={form[k] ?? ""} onChange={e => set(k, e.target.value)} className={`${base} bg-white`}><option value="">Select…</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
+        if (type === "date") return <input type="date" value={(form[k] || "").slice(0, 10)} onChange={e => set(k, e.target.value)} className={base} />;
+        return <input value={form[k] ?? ""} disabled={readOnly.includes(k)} onChange={e => set(k, e.target.value)} className={base} />;
+    };
+
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {fields.map(([k, label]) => (
-                    <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
-                        <input value={form[k] ?? ""} disabled={readOnly.includes(k)} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#1D4ED8] disabled:bg-slate-50 disabled:text-slate-500" />
-                    </div>
+                {fields.map(([k, label, options, type]) => (
+                    <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>{render(k, label, options, type)}</div>
                 ))}
             </div>
             <button onClick={save} disabled={saving} className="mt-4 h-10 px-5 text-white rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50" style={{ background: BLUE }}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+        </div>
+    );
+}
+
+// ── Subjects panel — reads the SAME staff.subjectAssignments shown on
+//    /staff/teachers, so the two views never disagree. ─────────────────────────
+function SubjectsPanel({ staff }: { staff: any }) {
+    const assignments: any[] = staff.subjectAssignments || [];
+    const grouped: Record<string, string[]> = {};
+    assignments.forEach((a: any) => { (grouped[a.subjectName] ||= []); if (a.className) grouped[a.subjectName].push(a.className); });
+    return (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <h3 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2"><ClipboardCheck className="w-4 h-4 text-[#1D4ED8]" /> Teaching Subjects</h3>
+            {Object.keys(grouped).length === 0 ? (
+                <p className="text-xs text-slate-400">No subjects assigned yet. Assign subjects from <b>Employees → Teachers</b> (the “Assign” button on the teacher card).</p>
+            ) : (
+                <div className="space-y-2">
+                    {Object.entries(grouped).map(([sub, classes]) => (
+                        <div key={sub} className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] font-black text-[#1D4ED8] bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">{sub}</span>
+                            {classes.map(cn => <span key={cn} className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{cn}</span>)}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -104,7 +150,10 @@ function WorkloadPanel({ workload, subjects }: { workload: any; subjects: any[] 
 }
 
 // ── Generic linked-record list with add modal + file uploads ──────────────────
-function LinkedList({ col, staffId, title, icon: Icon, fields, columns, fileKeys = [], timeline }: { col: string; staffId: string; title: string; icon: any; fields: [string, string][]; columns: string[]; fileKeys?: string[]; timeline?: boolean }) {
+// Field tuple: [key, label, options?, type?]. options → dropdown; type 'date' →
+// date picker. county/subCounty/ward auto-cascade off the Kenya dataset.
+type LField = [string, string, (string[] | undefined)?, ("date")?];
+function LinkedList({ col, staffId, title, icon: Icon, fields, columns, fileKeys = [], timeline }: { col: string; staffId: string; title: string; icon: any; fields: LField[]; columns: string[]; fileKeys?: string[]; timeline?: boolean }) {
     const qc = useQueryClient();
     const { data: rows = [], isLoading } = useQuery({ queryKey: ["tsc_linked", col, staffId], queryFn: () => tsc.list(col, staffId) });
     const [open, setOpen] = useState(false);
@@ -162,11 +211,22 @@ function LinkedList({ col, staffId, title, icon: Icon, fields, columns, fileKeys
                     <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                         <h2 className="font-black text-slate-800 mb-4">Add — {title}</h2>
                         <div className="grid grid-cols-2 gap-3">
-                            {fields.map(([k, label]) => fileKeys.includes(k) ? (
-                                <label key={k} className="col-span-2 flex items-center gap-2 h-11 px-3 border border-dashed border-slate-300 rounded-lg cursor-pointer text-sm text-slate-500"><Upload className="w-4 h-4" />{form[`${k}Name`] || label}<input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(k, f); }} /></label>
-                            ) : (
-                                <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label><input value={form[k] ?? ""} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#1D4ED8]" /></div>
-                            ))}
+                            {fields.map(([k, label, options, type]) => {
+                                if (fileKeys.includes(k)) return <label key={k} className="col-span-2 flex items-center gap-2 h-11 px-3 border border-dashed border-slate-300 rounded-lg cursor-pointer text-sm text-slate-500"><Upload className="w-4 h-4" />{form[`${k}Name`] || label}<input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onFile(k, f); }} /></label>;
+                                let opts = options;
+                                if (k === "county") opts = KENYA_COUNTIES.map(c => c.name);
+                                if (k === "subCounty") opts = KENYA_COUNTIES.find(c => c.name === form.county)?.subCounties.map(s => s.name) || [];
+                                if (k === "ward") opts = KENYA_COUNTIES.find(c => c.name === form.county)?.subCounties.find(s => s.name === form.subCounty)?.wards || [];
+                                const setF = (v: any) => setForm(f => { const n = { ...f, [k]: v }; if (k === "county") { n.subCounty = ""; n.ward = ""; } if (k === "subCounty") n.ward = ""; return n; });
+                                const base = "w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#1D4ED8]";
+                                return (
+                                    <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
+                                        {opts ? <select value={form[k] ?? ""} onChange={e => setF(e.target.value)} className={`${base} bg-white`}><option value="">Select…</option>{opts.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                            : type === "date" ? <input type="date" value={(form[k] || "").slice(0, 10)} onChange={e => setF(e.target.value)} className={base} />
+                                                : <input value={form[k] ?? ""} onChange={e => setF(e.target.value)} className={base} />}
+                                    </div>
+                                );
+                            })}
                         </div>
                         <div className="flex gap-2 mt-5"><button onClick={() => setOpen(false)} className="flex-1 h-10 border border-slate-200 rounded-xl text-sm font-bold text-slate-600">Cancel</button><button onClick={add} disabled={saving} className="flex-1 h-10 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50" style={{ background: BLUE }}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add</button></div>
                     </div>
