@@ -95,10 +95,14 @@ const fmtDate = (v: any) => {
 const fmtMoney = (v: any) => `KSh ${(parseFloat(v) || 0).toLocaleString()}`;
 const cell = (row: any, c: Col) => { const v = row[c.key]; return c.type === "date" ? fmtDate(v) : c.type === "money" ? fmtMoney(v) : (v ?? "—"); };
 
+// Keys that represent a student's class/grade — enables the "sort by class" filter.
+const CLASS_KEYS = ["studentClass", "currentClass", "className", "grade", "class", "transportZone", "hostelName"];
+
 export default function GenericReport() {
   const { key = "" } = useParams();
   const cfg = REPORT_REGISTRY[key];
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("");
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["generic_report", cfg?.collection],
@@ -117,7 +121,17 @@ export default function GenericReport() {
     </div>
   );
 
-  const filtered = rows.filter((r: any) => !search || cfg.columns.some(c => String(r[c.key] ?? "").toLowerCase().includes(search.toLowerCase())));
+  // Detect a class/grade column on this report (if any) to offer sort-by-class.
+  const classCol = cfg.columns.find(c => CLASS_KEYS.includes(c.key))?.key
+    || (rows[0] && CLASS_KEYS.find(k => k in rows[0]));
+  const classes: string[] = classCol ? Array.from(new Set(rows.map((r: any) => String(r[classCol] ?? "")).filter(Boolean))).sort() : [];
+
+  let filtered = rows.filter((r: any) => !search || cfg.columns.some(c => String(r[c.key] ?? "").toLowerCase().includes(search.toLowerCase())));
+  if (classCol && classFilter) filtered = filtered.filter((r: any) => String(r[classCol] ?? "") === classFilter);
+  // Sort by class when a class column exists, then by the first column.
+  if (classCol) filtered = [...filtered].sort((a: any, b: any) =>
+    String(a[classCol] ?? "").localeCompare(String(b[classCol] ?? "")) ||
+    String(a[cfg.columns[0].key] ?? "").localeCompare(String(b[cfg.columns[0].key] ?? "")));
 
   const print = () => {
     const head = cfg.columns.map(c => `<th style="background:#2563EB;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase">${c.label}</th>`).join("");
@@ -137,6 +151,12 @@ export default function GenericReport() {
             <h1 className="text-2xl font-black text-slate-900">{cfg.title}</h1>
           </div>
           <div className="flex items-center gap-3">
+            {classCol && classes.length > 0 && (
+              <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-[#2563EB]">
+                <option value="">All classes</option>
+                {classes.map(cl => <option key={cl} value={cl}>{cl}</option>)}
+              </select>
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" className="h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-[#2563EB]" />
