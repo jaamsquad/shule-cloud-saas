@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { resolvePortal } from "@/lib/portal";
 import SchoolLanding from "./SchoolLanding";
-import { MarketingNav, MarketingFooter, BLUE, NAVY, TEAL } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, PURPLE, BLUE, NAVY, TEAL } from "./MarketingChrome";
 
 const cbe = [
   { icon: Target, title: "7 Core Competencies", desc: "Map and monitor all 7 CBE core competencies across every learning area with live progress analytics." },
@@ -50,66 +50,58 @@ export default function Landing() {
     <div className="min-h-screen bg-white text-slate-800 font-sans">
       <MarketingNav />
 
-      {/* ── Hero ───────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,#EFF5FF 0%, #ffffff 60%)" }} />
-        <div className="max-w-7xl mx-auto px-6 pt-16 pb-20 lg:pt-24 relative grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mb-5" style={{ background: `${TEAL}1A`, color: TEAL }}>
-              <Star className="w-3.5 h-3.5" /> Built for CBE & 8-4-4
-            </span>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black leading-[1.05] mb-5" style={{ color: NAVY }}>
-              Kenya's complete <span style={{ color: BLUE }}>school management</span> system
-            </h1>
-            <p className="text-lg text-slate-500 max-w-xl mb-8">
-              Run academics, finance, communication and parent engagement from one cloud platform — with full Competency-Based Education and 8-4-4 support.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 mb-8">
-              <Link to="/register" className="inline-flex items-center gap-2 px-7 py-3.5 font-bold text-white rounded-xl shadow-lg" style={{ background: BLUE }}>
-                Get Started Free <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link to="/contact" className="inline-flex items-center gap-2 px-7 py-3.5 font-bold rounded-xl border-2 text-slate-700 hover:bg-slate-50" style={{ borderColor: "#E2E8F0" }}>
-                <PlayCircle className="w-5 h-5" style={{ color: BLUE }} /> Request a Free Demo
-              </Link>
+      {/* ── Hero (eSkooly-style purple banner) ─────────────────────────── */}
+      <section className="relative overflow-hidden" style={{ background: "linear-gradient(120deg,#613ddf 0%, #4d2fc4 55%, #3a1f9e 100%)" }}>
+        {/* decorative background lines */}
+        <div className="absolute top-0 right-0 w-1/2 h-full opacity-20 hidden sm:block" style={{ backgroundImage: "radial-gradient(circle at 80% 20%, rgba(255,255,255,.4), transparent 45%)" }} />
+        <div className="max-w-7xl mx-auto px-6 pt-16 pb-24 lg:pt-20 relative grid lg:grid-cols-2 gap-12 items-center">
+          <div className="text-white">
+            <div className="flex items-center gap-3 mb-5">
+              <span className="text-2xl font-bold">#1</span>
+              <span className="text-[11px] leading-tight">Globally<br />Ranked</span>
+              <span className="text-sm font-medium ml-2 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Verified</span>
             </div>
-            <div className="flex items-center gap-4 text-sm text-slate-500">
-              <div className="flex -space-x-2">
-                {[BLUE, TEAL, "#F59E0B", "#7C3AED"].map(c => <div key={c} className="w-8 h-8 rounded-full border-2 border-white" style={{ background: c }} />)}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-light leading-[1.05] mb-5">
+              Free <span className="font-bold">Online</span> School<br /><span className="font-bold">Management</span> Software
+            </h1>
+            <p className="text-base text-white/80 max-w-lg mb-8 leading-relaxed">
+              You can now manage your school, college, or any educational institution seamlessly with ShuleCloud — built for Kenya's CBC & 8-4-4, with M-PESA fees, parent portals and instant reporting.
+            </p>
+            <div className="flex flex-wrap items-center gap-4 mb-2">
+              <Link to="/register" className="inline-flex items-center gap-2 px-9 py-4 font-bold text-white rounded-full shadow-xl" style={{ background: "#7C5CFF" }}>
+                Get Started, <span className="font-light">It's Free</span>
+              </Link>
+              <Link to="/contact" className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-white/15 hover:bg-white/25 transition-colors">
+                <PlayCircle className="w-8 h-8 text-white" />
+              </Link>
+              <div className="text-sm leading-tight">
+                Trusted by <b>10,000+</b> schools<br />
+                <span className="flex items-center gap-0.5 text-white/90">Rated 4.6 {[0, 1, 2, 3].map(i => <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />)}<Star className="w-3.5 h-3.5 text-amber-400" /></span>
               </div>
-              <span><b className="text-slate-800">500+ schools</b> trust EduPoa</span>
             </div>
           </div>
 
-          {/* Dashboard mockup */}
-          <div className="relative">
-            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-5 rotate-1">
+          {/* Dashboard mockup with floating revenue card */}
+          <div className="relative lg:pl-10">
+            <div className="bg-white rounded-3xl shadow-2xl border border-white/30 p-5 relative z-10">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: BLUE }}><GraduationCap className="w-4 h-4" /></div><span className="font-black text-sm" style={{ color: NAVY }}>School Dashboard</span></div>
+                <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: PURPLE }}><GraduationCap className="w-4 h-4" /></div><span className="font-black text-sm" style={{ color: NAVY }}>School Dashboard</span></div>
                 <div className="flex gap-1"><span className="w-2 h-2 rounded-full bg-rose-300" /><span className="w-2 h-2 rounded-full bg-amber-300" /><span className="w-2 h-2 rounded-full bg-emerald-300" /></div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-4">
-                {[{ l: "Learners", v: "1,248", c: BLUE }, { l: "Collected", v: "KSh 8.2M", c: TEAL }, { l: "Competency", v: "82%", c: "#F59E0B" }].map(s => (
-                  <div key={s.l} className="rounded-xl p-3" style={{ background: `${s.c}12` }}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{s.l}</p>
-                    <p className="text-lg font-black" style={{ color: s.c }}>{s.v}</p>
-                  </div>
+                {[{ l: "Learners", v: "1,248" }, { l: "Collected", v: "KSh 8.2M" }, { l: "Competency", v: "82%" }].map(s => (
+                  <div key={s.l} className="rounded-xl p-3" style={{ background: `${PURPLE}10` }}><p className="text-[10px] font-bold text-slate-400 uppercase">{s.l}</p><p className="text-lg font-black" style={{ color: PURPLE }}>{s.v}</p></div>
                 ))}
               </div>
-              <div className="rounded-xl border border-slate-100 p-4 mb-3">
-                <div className="flex items-center justify-between mb-3"><span className="text-xs font-bold text-slate-500">Competency Progress</span><TrendingUp className="w-4 h-4" style={{ color: TEAL }} /></div>
-                <div className="flex items-end gap-2 h-20">
-                  {[45, 62, 55, 78, 66, 88, 80].map((h, i) => <div key={i} className="flex-1 rounded-t" style={{ height: `${h}%`, background: i % 2 ? TEAL : `${TEAL}66` }} />)}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white" style={{ background: BLUE }}><Wallet className="w-4 h-4" /></div>
-                <div className="flex-1"><p className="text-xs font-bold text-slate-700">M-PESA payment received</p><p className="text-[10px] text-slate-400">John Doe · KSh 12,000</p></div>
-                <CheckCircle2 className="w-5 h-5" style={{ color: TEAL }} />
+              <div className="rounded-xl border border-slate-100 p-4">
+                <div className="flex items-center justify-between mb-3"><span className="text-xs font-bold text-slate-500">Competency Progress</span><TrendingUp className="w-4 h-4" style={{ color: PURPLE }} /></div>
+                <div className="flex items-end gap-2 h-20">{[45, 62, 55, 78, 66, 88, 80].map((h, i) => <div key={i} className="flex-1 rounded-t" style={{ height: `${h}%`, background: i % 2 ? PURPLE : `${PURPLE}66` }} />)}</div>
               </div>
             </div>
-            <div className="absolute -bottom-5 -left-5 bg-white rounded-2xl shadow-xl border border-slate-100 px-4 py-3 -rotate-3 hidden sm:block">
-              <p className="text-[10px] font-bold text-slate-400 uppercase">CBE Report cards</p>
-              <p className="text-sm font-black" style={{ color: NAVY }}>Generated in seconds</p>
+            {/* floating revenue card */}
+            <div className="absolute -bottom-6 left-0 bg-white/90 backdrop-blur rounded-2xl border border-white shadow-xl px-6 py-4 z-20 hidden sm:block">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Revenue</p>
+              <p className="text-xl font-black" style={{ color: NAVY }}>KSh 242,000</p>
             </div>
           </div>
         </div>
