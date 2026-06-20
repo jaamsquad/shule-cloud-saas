@@ -30,7 +30,7 @@ const NATIVE_GROUP_DASHBOARD: Record<string, string> = {
 // Resolve where a group's parent label should navigate (its overview page).
 export const groupOverviewPath = (label: string) => NATIVE_GROUP_DASHBOARD[label] || `/g/${groupSlug(label)}`;
 
-export interface NavChild { label: string; path: string; locked?: boolean; create?: boolean; pagePerm?: string }
+export interface NavChild { label: string; path: string; locked?: boolean; create?: boolean; pagePerm?: string; planModule?: string }
 export interface NavItem {
   label: string;
   icon: React.ElementType;
@@ -311,8 +311,9 @@ export const navItems: NavItem[] = [
       { label: "Test Result", path: "/tests/results" }
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
-      { label: "Integrations", path: "/integrations" },
-      { label: "Custom Domain & Branding", path: "/settings/domains" },
+      // Owner-gated via plan modules; Roles is always available (no planModule).
+      { label: "Integrations", path: "/integrations", planModule: "integrations" },
+      { label: "Custom Domain & Branding", path: "/settings/domains", planModule: "custom_domain" },
       { label: "Roles & Permissions", path: "/roles" },
   ] },
 ];
