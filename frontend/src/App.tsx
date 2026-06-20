@@ -222,6 +222,8 @@ import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
 import ExpenseLayout from "./pages/tenant/modules/expense/ExpenseLayout";
 import ExpenseDashboard from "./pages/tenant/modules/expense/ExpenseDashboard";
 import { ExpensesPage, CategoriesPage, SuppliersPage, RequestsPage, OrdersPage, PaymentsPage, RecurringPage, BudgetsPage, ApprovalsPage, ReportsPage as ExpReportsPage, SettingsPage as ExpSettingsPage } from "./pages/tenant/modules/expense/ExpensePages";
+import ProcLayout from "./pages/tenant/modules/procurement/ProcLayout";
+import { ProcDashboard, RequestsPage as ProcRequests, OrdersPage as ProcOrders, SuppliersPage as ProcSuppliers, QuotationsPage, GrnPage, MatchingPage, ContractsPage, TendersPage, ReportsPage as ProcReports, SettingsPage as ProcSettings } from "./pages/tenant/modules/procurement/ProcPages";
 import CbcLayout from "./pages/tenant/modules/cbc/CbcLayout";
 import { CbcDashboard, LearningAreasPage, CompetenciesPage, StrandsPage, ActivitiesPage, CommentsPage, RecordPage, ProgressPage, ReportCardsPage, AnalyticsPage, ReportsPage as CbcReportsPage, SettingsPage as CbcSettingsPage } from "./pages/tenant/modules/cbc/CbcPages";
 import TscLayout from "./pages/tenant/modules/tsc/TscLayout";
@@ -801,6 +803,21 @@ const App = () => {
                 <Route path="approvals" element={<ApprovalsPage />} />
                 <Route path="reports" element={<ExpReportsPage />} />
                 <Route path="settings" element={<ExpSettingsPage />} />
+              </Route>
+
+              {/* Procurement */}
+              <Route path="/procurement" element={<ProcLayout />}>
+                <Route index element={<ProcDashboard />} />
+                <Route path="requests" element={<ProcRequests />} />
+                <Route path="orders" element={<ProcOrders />} />
+                <Route path="suppliers" element={<ProcSuppliers />} />
+                <Route path="quotations" element={<QuotationsPage />} />
+                <Route path="grn" element={<GrnPage />} />
+                <Route path="matching" element={<MatchingPage />} />
+                <Route path="contracts" element={<ContractsPage />} />
+                <Route path="tenders" element={<TendersPage />} />
+                <Route path="reports" element={<ProcReports />} />
+                <Route path="settings" element={<ProcSettings />} />
               </Route>
 
               {/* CBC Assessment */}

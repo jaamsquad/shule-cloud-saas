@@ -11,6 +11,16 @@ const COLORS = ["#7C3AED", "#1D4ED8", "#10B981", "#F59E0B", "#EF4444", "#EC4899"
 const toData = (o: Record<string, number> = {}) => Object.entries(o).map(([name, value]) => ({ name, value }));
 const useAreas = () => { const { data = [] } = useQuery({ queryKey: ["cbc", "cbc_learning_areas"], queryFn: () => cbc.list("cbc_learning_areas") }); return data.map((a: any) => a.name).filter(Boolean); };
 const useStudents = () => { const { data = [] } = useQuery({ queryKey: ["cbc_students"], queryFn: cbc.students }); return data; };
+// Classes from the school's class list (used for Grade/Class dropdowns).
+const useClasses = () => {
+    const { data = [] } = useQuery({ queryKey: ["cbc_classes"], queryFn: async () => { try { const r = await (await import("@/lib/api")).default.get("/academics/classes"); return r.data || []; } catch { return []; } } });
+    return Array.from(new Set(data.map((c: any) => c.name || c.levelName || c.className).filter(Boolean))) as string[];
+};
+// Teachers (staff with a teaching designation) for teacher dropdowns.
+const useTeachers = () => {
+    const { data = [] } = useQuery({ queryKey: ["cbc_teachers"], queryFn: async () => { try { const r = await (await import("@/lib/api")).default.get("/staff"); return r.data || []; } catch { return []; } } });
+    return data.filter((s: any) => /teacher|tutor|instructor|hod/i.test(`${s.designation || ""} ${(s.roles || []).join(" ")}`)).map((s: any) => s.employeeName || s.name).filter(Boolean) as string[];
+};
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export function CbcDashboard() {
@@ -44,8 +54,9 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 // ── Config CRUD pages ─────────────────────────────────────────────────────────
 export function LearningAreasPage() {
+    const classes = useClasses(); const teachers = useTeachers();
     return <CbcCrud collection="cbc_learning_areas" title="Learning Areas" addLabel="New Learning Area"
-        fields={[{ k: "name", label: "Name", required: true }, { k: "grade", label: "Grade Level" }, { k: "code", label: "Code" }, { k: "description", label: "Description", type: "textarea" }, { k: "teacher", label: "Assigned Teacher" }, { k: "active", label: "Status", type: "select", options: ["Active", "Inactive"] }]}
+        fields={[{ k: "name", label: "Name", required: true }, { k: "grade", label: "Grade Level", type: "select", options: () => classes }, { k: "code", label: "Code" }, { k: "description", label: "Description", type: "textarea" }, { k: "teacher", label: "Assigned Teacher", type: "select", options: () => teachers }, { k: "active", label: "Status", type: "select", options: ["Active", "Inactive"] }]}
         columns={[{ k: "name", label: "Learning Area" }, { k: "grade", label: "Grade" }, { k: "code", label: "Code" }, { k: "teacher", label: "Teacher" }]} />;
 }
 export function CompetenciesPage() {
@@ -60,17 +71,19 @@ export function StrandsPage() {
         columns={[{ k: "learningArea", label: "Learning Area" }, { k: "strand", label: "Strand" }, { k: "subStrand", label: "Sub-Strand" }]} />;
 }
 export function ActivitiesPage() {
-    const areas = useAreas();
+    const areas = useAreas(); const classes = useClasses();
+    const { data: strandRows = [] } = useQuery({ queryKey: ["cbc", "cbc_strands"], queryFn: () => cbc.list("cbc_strands") });
+    const strands = Array.from(new Set(strandRows.map((s: any) => s.strand).filter(Boolean))) as string[];
     const types = ["Observation", "Practical Activity", "Oral Assessment", "Project", "Portfolio", "Written Exercise", "Quiz", "Group Work", "Presentation", "Experiment"];
     return <CbcCrud collection="cbc_activities" title="Assessment Activities" addLabel="New Activity"
-        fields={[{ k: "title", label: "Title", required: true }, { k: "type", label: "Type", type: "select", options: types, required: true }, { k: "learningArea", label: "Learning Area", type: "select", options: () => areas, required: true }, { k: "grade", label: "Grade" }, { k: "class", label: "Class" }, { k: "strand", label: "Strand" }, { k: "subStrand", label: "Sub-Strand" }, { k: "date", label: "Date", type: "date" }, { k: "maxScore", label: "Max Score", type: "number" }, { k: "instructions", label: "Instructions", type: "textarea" }]}
+        fields={[{ k: "title", label: "Title", required: true }, { k: "type", label: "Type", type: "select", options: types, required: true }, { k: "learningArea", label: "Learning Area", type: "select", options: () => areas, required: true }, { k: "grade", label: "Grade", type: "select", options: () => classes }, { k: "class", label: "Class", type: "select", options: () => classes }, { k: "strand", label: "Strand", type: "select", options: () => strands }, { k: "subStrand", label: "Sub-Strand" }, { k: "date", label: "Date", type: "date" }, { k: "maxScore", label: "Max Score", type: "number" }, { k: "instructions", label: "Instructions", type: "textarea" }]}
         columns={[{ k: "title", label: "Title" }, { k: "type", label: "Type" }, { k: "learningArea", label: "Area" }, { k: "grade", label: "Grade" }, { k: "date", label: "Date" }]} />;
 }
 export function CommentsPage() {
     const students = useStudents();
     return <CbcCrud collection="cbc_comments" title="Teacher Comments" addLabel="New Comment"
-        fields={[{ k: "studentId", label: "Learner", type: "select", options: () => students.map((s: any) => `${s.studentName || s.name}|${s._id}`).map((x: string) => x), required: true }, { k: "type", label: "Type", type: "select", options: ["Teacher", "Head Teacher"] }, { k: "strengths", label: "Strengths", type: "textarea" }, { k: "improvement", label: "Areas to Improve", type: "textarea" }, { k: "recommendations", label: "Recommendations", type: "textarea" }, { k: "text", label: "General Remarks", type: "textarea" }]}
-        columns={[{ k: "studentId", label: "Learner" }, { k: "type", label: "Type" }, { k: "text", label: "Remarks" }]} />;
+        fields={[{ k: "studentName", label: "Learner", type: "select", options: () => students.map((s: any) => s.studentName || s.name).filter(Boolean), required: true }, { k: "type", label: "Type", type: "select", options: ["Teacher", "Head Teacher"] }, { k: "strengths", label: "Strengths", type: "textarea" }, { k: "improvement", label: "Areas to Improve", type: "textarea" }, { k: "recommendations", label: "Recommendations", type: "textarea" }, { k: "text", label: "General Remarks", type: "textarea" }]}
+        columns={[{ k: "studentName", label: "Learner" }, { k: "type", label: "Type" }, { k: "text", label: "Remarks" }]} />;
 }
 
 // ── Record Assessments (bulk class entry) ─────────────────────────────────────

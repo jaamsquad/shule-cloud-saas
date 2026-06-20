@@ -144,6 +144,10 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'cbc.view': ['cbc'],
     'cbc.assess': ['cbc'],
     'cbc.manage': ['cbc'],
+    // Procurement
+    'procurement.view': ['procurement'],
+    'procurement.manage': ['procurement'],
+    'procurement.approve': ['procurement'],
     // Academics — each section gated by its own code
     'classes.view': ['classes'],
     'subjects.view': ['subjects'],

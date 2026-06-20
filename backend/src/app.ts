@@ -34,6 +34,7 @@ import computedReportRoutes from './modules/reports/computed.routes';
 import tscRoutes from './modules/tsc/tsc.routes';
 import expenseRoutes from './modules/expense/expense.routes';
 import cbcRoutes from './modules/cbc/cbc.routes';
+import procurementRoutes from './modules/procurement/procurement.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -295,6 +296,7 @@ app.use('/api/v1', computedReportRoutes); // Computed reports (exam analysis, fi
 app.use('/api/v1', tscRoutes);            // Teacher Service Commission (TSC) management
 app.use('/api/v1', expenseRoutes);        // Expense Management
 app.use('/api/v1', cbcRoutes);            // CBC Assessment
+app.use('/api/v1', procurementRoutes);    // Procurement (shares suppliers/PR/PO with Expense)
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);
