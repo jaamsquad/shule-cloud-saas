@@ -17,14 +17,14 @@ const MODULES = [
     "communications", "transport", "hostel", "library", "cafeteria", "pos",
     "sports", "trips", "frontdesk", "secretary", "certificates", "live_class",
     "academic_system", "academics_content", "behaviour", "question_paper",
-    "integrations", "custom_domain", "nemis", "expenses",
+    "integrations", "custom_domain", "nemis", "expenses", "cbc",
 ];
 
 const MODULE_LABEL: Record<string, string> = {
     live_class: "Live Class & LMS", pos: "Point of Sale", frontdesk: "Front Desk",
     academic_system: "Academic System", academics_content: "Academic Content",
     behaviour: "Behaviour & Skills", question_paper: "Question Paper",
-    custom_domain: "Custom Domain & Branding", integrations: "Integrations", nemis: "NEMIS Assistant", expenses: "Expense Management",
+    custom_domain: "Custom Domain & Branding", integrations: "Integrations", nemis: "NEMIS Assistant", expenses: "Expense Management", cbc: "CBC Assessment",
 };
 const moduleLabel = (m: string) => MODULE_LABEL[m] || m.charAt(0).toUpperCase() + m.slice(1);
 

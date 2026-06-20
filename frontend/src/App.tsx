@@ -222,6 +222,8 @@ import ComputedReport from "./pages/tenant/modules/reports/ComputedReport";
 import ExpenseLayout from "./pages/tenant/modules/expense/ExpenseLayout";
 import ExpenseDashboard from "./pages/tenant/modules/expense/ExpenseDashboard";
 import { ExpensesPage, CategoriesPage, SuppliersPage, RequestsPage, OrdersPage, PaymentsPage, RecurringPage, BudgetsPage, ApprovalsPage, ReportsPage as ExpReportsPage, SettingsPage as ExpSettingsPage } from "./pages/tenant/modules/expense/ExpensePages";
+import CbcLayout from "./pages/tenant/modules/cbc/CbcLayout";
+import { CbcDashboard, LearningAreasPage, CompetenciesPage, StrandsPage, ActivitiesPage, CommentsPage, RecordPage, ProgressPage, ReportCardsPage, AnalyticsPage, ReportsPage as CbcReportsPage, SettingsPage as CbcSettingsPage } from "./pages/tenant/modules/cbc/CbcPages";
 import TscLayout from "./pages/tenant/modules/tsc/TscLayout";
 import TscDashboard from "./pages/tenant/modules/tsc/TscDashboard";
 import TscTeachers from "./pages/tenant/modules/tsc/TscTeachers";
@@ -799,6 +801,22 @@ const App = () => {
                 <Route path="approvals" element={<ApprovalsPage />} />
                 <Route path="reports" element={<ExpReportsPage />} />
                 <Route path="settings" element={<ExpSettingsPage />} />
+              </Route>
+
+              {/* CBC Assessment */}
+              <Route path="/cbc" element={<CbcLayout />}>
+                <Route index element={<CbcDashboard />} />
+                <Route path="learning-areas" element={<LearningAreasPage />} />
+                <Route path="competencies" element={<CompetenciesPage />} />
+                <Route path="strands" element={<StrandsPage />} />
+                <Route path="activities" element={<ActivitiesPage />} />
+                <Route path="record" element={<RecordPage />} />
+                <Route path="progress" element={<ProgressPage />} />
+                <Route path="report-cards" element={<ReportCardsPage />} />
+                <Route path="comments" element={<CommentsPage />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+                <Route path="reports" element={<CbcReportsPage />} />
+                <Route path="settings" element={<CbcSettingsPage />} />
               </Route>
 
               {/* Teacher Service Commission */}
