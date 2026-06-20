@@ -4,6 +4,7 @@ import { Loader2, Save, Check, X, Printer, Download, AlertTriangle } from "lucid
 import { toast } from "sonner";
 import ExpCrud, { Fld, Col } from "./ExpCrud";
 import { exp, ksh, toCSV, download } from "./expenseApi";
+import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 const ACCENT = "#B45309";
 const APPROVAL = ["Draft", "Submitted", "Pending", "Approved", "Rejected"];
@@ -131,11 +132,12 @@ export function ApprovalsPage() {
 const REPORTS = [{ k: "summary", l: "Expense Summary" }, { k: "by-category", l: "By Category" }, { k: "by-department", l: "By Department" }, { k: "supplier-payments", l: "Supplier Payments" }];
 export function ReportsPage() {
     const [active, setActive] = useState("summary");
+    const school = useSchoolBrand();
     const { data, isLoading } = useQuery({ queryKey: ["exp_report", active], queryFn: () => exp.report(active) });
     const cols = data?.columns || []; const rows = data?.rows || [];
     const csv = () => download(toCSV(cols.map((c: any) => c.label), rows.map((r: any) => cols.map((c: any) => r[c.key] ?? ""))), `${data.title}.csv`);
     const excel = async () => { const { utils, writeFile } = await import("xlsx"); const ws = utils.aoa_to_sheet([cols.map((c: any) => c.label), ...rows.map((r: any) => cols.map((c: any) => r[c.key] ?? ""))]); const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Report"); writeFile(wb, `${data.title}.xlsx`); };
-    const print = () => { const w = window.open("", "_blank"); if (!w) return; const head = cols.map((c: any) => `<th>${c.label}</th>`).join(""); const body = rows.map((r: any) => `<tr>${cols.map((c: any) => `<td>${c.type === "money" ? ksh(r[c.key]) : (r[c.key] ?? "")}</td>`).join("")}</tr>`).join(""); w.document.write(`<!DOCTYPE html><html><head><title>${data.title}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial}table{width:100%;border-collapse:collapse}th{background:${ACCENT};color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #eee;font-size:12px}</style></head><body><h2>${data.title}</h2><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><script>onload=()=>print()</script></body></html>`); w.document.close(); };
+    const print = () => { const head = cols.map((c: any) => `<th>${c.label}</th>`).join(""); const body = rows.map((r: any) => `<tr>${cols.map((c: any) => `<td>${c.type === "money" ? ksh(r[c.key]) : (r[c.key] ?? "")}</td>`).join("")}</tr>`).join(""); printBranded(school, data.title, `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`, ACCENT); };
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap gap-2">{REPORTS.map(r => <button key={r.k} onClick={() => setActive(r.k)} className={`h-9 px-4 rounded-lg text-sm font-bold ${active === r.k ? "text-white" : "bg-white border border-slate-200 text-slate-600"}`} style={active === r.k ? { background: ACCENT } : {}}>{r.l}</button>)}</div>

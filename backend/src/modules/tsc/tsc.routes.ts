@@ -12,6 +12,7 @@
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
+import { sanitizeUpdate } from '../../lib/sanitizeUpdate';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -67,7 +68,7 @@ router.get('/tsc/settings', async (req, res) => {
     });
 });
 router.patch('/tsc/settings', async (req, res) => {
-    await db(req).collection('tsc_settings').updateOne({}, { $set: { ...req.body, updatedAt: new Date() } }, { upsert: true });
+    await db(req).collection('tsc_settings').updateOne({}, { $set: { ...sanitizeUpdate(req.body), updatedAt: new Date() } }, { upsert: true });
     res.json({ ok: true });
 });
 
@@ -190,7 +191,7 @@ LINKED.forEach((col) => {
         catch (e: any) { res.status(500).json({ message: e.message }); }
     });
     router.patch(`/${col}/:id`, async (req, res) => {
-        try { await db(req).collection(col).updateOne({ _id: oid(req.params.id)! }, { $set: { ...req.body, updatedAt: new Date() } }); await auditLog(req, `edit_${col}`, req.params.id); res.json({ ok: true }); }
+        try { await db(req).collection(col).updateOne({ _id: oid(req.params.id)! }, { $set: { ...sanitizeUpdate(req.body), updatedAt: new Date() } }); await auditLog(req, `edit_${col}`, req.params.id); res.json({ ok: true }); }
         catch (e: any) { res.status(500).json({ message: e.message }); }
     });
     router.delete(`/${col}/:id`, async (req, res) => {

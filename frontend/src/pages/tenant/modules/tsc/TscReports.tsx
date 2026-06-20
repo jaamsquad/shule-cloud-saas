@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2, Printer, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { tsc, toCSV, download } from "./tscApi";
+import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 const REPORTS = [
     { kind: "register", label: "Teacher Register" },
@@ -17,6 +18,7 @@ export default function TscReports() {
     const [active, setActive] = useState<any>(null);
     const [data, setData] = useState<any>(null);
     const [busy, setBusy] = useState(false);
+    const school = useSchoolBrand();
 
     const run = async (r: any) => {
         setActive(r); setBusy(true);
@@ -26,11 +28,10 @@ export default function TscReports() {
     const exportCSV = () => { if (!data) return; download(toCSV(data.columns.map((c: any) => c.label), data.rows.map((row: any) => data.columns.map((c: any) => row[c.key] ?? ""))), `${data.title}.csv`); };
     const exportExcel = async () => { if (!data) return; const { utils, writeFile } = await import("xlsx"); const ws = utils.aoa_to_sheet([data.columns.map((c: any) => c.label), ...data.rows.map((row: any) => data.columns.map((c: any) => row[c.key] ?? ""))]); const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Report"); writeFile(wb, `${data.title}.xlsx`); };
     const print = () => {
-        if (!data) return; const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+        if (!data) return;
         const head = data.columns.map((c: any) => `<th>${c.label}</th>`).join("");
         const body = data.rows.map((r: any) => `<tr>${data.columns.map((c: any) => `<td>${r[c.key] ?? ""}</td>`).join("")}</tr>`).join("");
-        w.document.write(`<!DOCTYPE html><html><head><title>${data.title}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial}table{width:100%;border-collapse:collapse}th{background:#1D4ED8;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #eee;font-size:12px}</style></head><body><h2>${data.title}</h2><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><script>onload=()=>print()</script></body></html>`);
-        w.document.close();
+        printBranded(school, data.title, `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`, "#1D4ED8");
     };
 
     return (

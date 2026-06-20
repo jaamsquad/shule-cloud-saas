@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Trash2, Pencil, X, Search, Upload, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { exp, ksh } from "./expenseApi";
+import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 export type Fld = { k: string; label: string; type?: "text" | "number" | "date" | "select" | "textarea" | "file" | "money"; options?: string[] | (() => string[]); required?: boolean };
 export type Col = { k: string; label: string; type?: "money" | "date" | "badge" };
@@ -17,6 +18,7 @@ export default function ExpCrud({
     searchKeys?: string[]; totalKey?: string; numberLabel?: string; printable?: boolean;
 }) {
     const qc = useQueryClient();
+    const school = useSchoolBrand();
     const { data: rows = [], isLoading } = useQuery({ queryKey: ["exp", collection], queryFn: () => exp.list(collection) });
     const [q, setQ] = useState("");
     const [open, setOpen] = useState(false);
@@ -47,11 +49,9 @@ export default function ExpCrud({
     const cell = (r: any, c: Col) => c.type === "money" ? ksh(r[c.k]) : c.type === "badge" ? <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{r[c.k] || "—"}</span> : (r[c.k] ?? "—");
 
     const print = () => {
-        const w = window.open("", "_blank"); if (!w) return;
         const head = columns.map(c => `<th>${c.label}</th>`).join("");
         const body = filtered.map((r: any) => `<tr>${columns.map(c => `<td>${c.type === "money" ? ksh(r[c.k]) : (r[c.k] ?? "")}</td>`).join("")}</tr>`).join("");
-        w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial}table{width:100%;border-collapse:collapse}th{background:${ACCENT};color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #eee;font-size:12px}</style></head><body><h2>${title}</h2><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><script>onload=()=>print()</script></body></html>`);
-        w.document.close();
+        printBranded(school, title, `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`, ACCENT);
     };
 
     return (

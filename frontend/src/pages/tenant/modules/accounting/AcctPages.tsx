@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, Plus, Trash2, X, CheckCircle2, Download, Printer, AlertTriangle } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { toast } from "sonner";
-import { acct, ksh, toCSV, download, printStatement } from "./acctApi";
+import { acct, ksh, toCSV, download } from "./acctApi";
+import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 const ACCENT = "#047857";
 const COLORS = ["#047857", "#1D4ED8", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4"];
@@ -117,8 +118,9 @@ export function JournalsPage() {
 
 // ── Statement pages (generic table view + print) ──────────────────────────────
 function StatementTable({ title, cols, rows, footer }: { title: string; cols: { k: string; label: string; money?: boolean }[]; rows: any[]; footer?: React.ReactNode }) {
+    const school = useSchoolBrand();
     const csv = () => download(toCSV(cols.map(c => c.label), rows.map(r => cols.map(c => r[c.k] ?? ""))), `${title}.csv`);
-    const print = () => printStatement(title, `<table><thead><tr>${cols.map(c => `<th>${c.label}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${c.money ? ksh(r[c.k]) : (r[c.k] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+    const print = () => printBranded(school, title, `<table><thead><tr>${cols.map(c => `<th>${c.label}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${c.money ? ksh(r[c.k]) : (r[c.k] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`, ACCENT);
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
             <div className="flex items-center justify-between p-4 border-b border-slate-100"><h3 className="font-black text-slate-800">{title}</h3><div className="flex gap-2"><button onClick={csv} className="h-9 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 flex items-center gap-1.5"><Download className="w-3.5 h-3.5" /> CSV</button><button onClick={print} className="h-9 px-3 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: ACCENT }}><Printer className="w-3.5 h-3.5" /> Print</button></div></div>

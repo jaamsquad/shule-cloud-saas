@@ -10,6 +10,7 @@
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
+import { sanitizeUpdate } from '../../lib/sanitizeUpdate';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -52,7 +53,7 @@ function crud(coll: string) {
         try {
             // Posted journal entries cannot be edited.
             if (coll === 'accounting_journals') { const j = await db(req).collection(coll).findOne({ _id: oid(req.params.id)! }); if (j?.status === 'posted') return res.status(403).json({ message: 'Posted journal entries cannot be modified' }); }
-            await db(req).collection(coll).updateOne({ _id: oid(req.params.id)! }, { $set: { ...req.body, updatedAt: new Date(), updatedBy: user(req) } }); await audit(req, `update_${coll}`, req.params.id); res.json({ ok: true });
+            await db(req).collection(coll).updateOne({ _id: oid(req.params.id)! }, { $set: { ...sanitizeUpdate(req.body), updatedAt: new Date(), updatedBy: user(req) } }); await audit(req, `update_${coll}`, req.params.id); res.json({ ok: true });
         } catch (e: any) { res.status(500).json({ message: e.message }); }
     });
     router.delete(`/${coll}/:id`, async (req, res) => {

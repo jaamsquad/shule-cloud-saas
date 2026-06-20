@@ -11,6 +11,7 @@
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
+import { sanitizeUpdate } from '../../lib/sanitizeUpdate';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -106,7 +107,7 @@ function crud(coll: string, numberPrefix?: string) {
         try {
             const _id = oid(req.params.id); if (!_id) return res.status(400).json({ message: 'Bad id' });
             const before = await db(req).collection(coll).findOne({ _id });
-            await db(req).collection(coll).updateOne({ _id }, { $set: { ...req.body, updatedAt: new Date(), updatedBy: user(req) } });
+            await db(req).collection(coll).updateOne({ _id }, { $set: { ...sanitizeUpdate(req.body), updatedAt: new Date(), updatedBy: user(req) } });
             // When an expense flips to approved, post the journal.
             if (coll === 'expenses' && /approved/i.test(req.body.approvalStatus || '') && !/approved/i.test(before?.approvalStatus || '')) {
                 const after = await db(req).collection(coll).findOne({ _id });
