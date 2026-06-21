@@ -94,9 +94,9 @@ class MainActivity : AppCompatActivity() {
         setupErrorRetry()
         setupPullToRefresh()
 
-        // Deep link (VIEW intent) or normal launch.
+        // Priority: a deep link (VIEW intent) → the saved school's home → login.
         val target = intent?.data?.toString()?.takeIf { AppConfig.isInternalUrl(it) }
-            ?: AppConfig.LOGIN_URL
+            ?: AppConfig.launchUrl(this)
 
         if (savedInstanceState == null) {
             if (NetworkUtil.isOnline(this)) webView.loadUrl(target)
@@ -104,6 +104,20 @@ class MainActivity : AppCompatActivity() {
         } else {
             webView.restoreState(savedInstanceState)
             keepSplash = false
+        }
+    }
+
+    /**
+     * Remembers which school the user is on so the next launch opens it directly.
+     * Saves the subdomain when on a school page; clears it when the user is sent
+     * back to the login page (i.e. logged out).
+     */
+    private fun rememberSchoolFromUrl(url: String?) {
+        val school = AppConfig.schoolSubdomainOf(url)
+        if (school != null) {
+            AppConfig.saveSchool(this, school)
+        } else if (url != null && url.contains("/login")) {
+            AppConfig.clearSchool(this)
         }
     }
 
@@ -138,10 +152,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupClients(onFirstPaint: () -> Unit) {
         webView.webViewClient = ShuleWebViewClient(
             onPageStarted = { binding.progressBar.show(); onFirstPaint() },
-            onPageFinished = {
+            onPageFinished = { url ->
                 binding.progressBar.hide()
                 binding.swipeRefresh.isRefreshing = false
                 CookieManager.getInstance().flush()
+                rememberSchoolFromUrl(url)
             },
             onError = { showError(it) },
             openExternal = ::openInExternalBrowser
@@ -338,7 +353,7 @@ class MainActivity : AppCompatActivity() {
             binding.errorView.root.visibility = android.view.View.GONE
             binding.swipeRefresh.visibility = android.view.View.VISIBLE
             if (NetworkUtil.isOnline(this)) {
-                if (webView.url != null) webView.reload() else webView.loadUrl(AppConfig.LOGIN_URL)
+                if (webView.url != null) webView.reload() else webView.loadUrl(AppConfig.launchUrl(this))
             } else showError(ErrorType.NO_INTERNET)
         }
     }

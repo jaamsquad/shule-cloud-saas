@@ -15,8 +15,8 @@ import android.webkit.WebViewClient
  * SSL errors safely (never blindly proceeding).
  */
 class ShuleWebViewClient(
-    private val onPageStarted: () -> Unit,
-    private val onPageFinished: () -> Unit,
+    private val onPageStarted: (url: String?) -> Unit,
+    private val onPageFinished: (url: String?) -> Unit,
     private val onError: (ErrorType) -> Unit,
     private val openExternal: (String?) -> Unit,
 ) : WebViewClient() {
@@ -33,12 +33,12 @@ class ShuleWebViewClient(
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        onPageStarted()
+        onPageStarted(url)
     }
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
-        onPageFinished()
+        onPageFinished(url)
     }
 
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
