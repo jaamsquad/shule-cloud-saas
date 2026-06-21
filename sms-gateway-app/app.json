@@ -21,11 +21,15 @@
       "expo-dev-client",
       [
         "expo-notifications",
-        { "color": "#613ddf" }
+        {
+          "color": "#613ddf"
+        }
       ]
     ],
     "extra": {
-      "eas": { "projectId": "" }
+      "eas": {
+        "projectId": "19ab2095-d7e1-4cd8-89a5-51017f573ca2"
+      }
     }
   }
 }
