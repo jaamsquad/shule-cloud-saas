@@ -23,6 +23,7 @@ import OwnerReminders from "./OwnerReminders";
 import OwnerBroadcast from "./OwnerBroadcast";
 import OwnerWhatsApp from "./OwnerWhatsApp";
 import OwnerProfile from "./OwnerProfile";
+import OwnerBlog from "./blog/OwnerBlog";
 
 // Owner role from JWT → drives which tabs/actions are visible.
 const ownerRole = (): string => {
@@ -34,7 +35,7 @@ export default function OwnerDashboard() {
   const isSuper = role === "super_owner";
   const canUsers = isSuper || role === "owner";
   const canPlans = isSuper || role === "owner" || role === "sales";
-  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate" | "whatsapp" | "profile">("analytics");
+  const [tab, setTab] = useState<"analytics" | "tenants" | "plans" | "billing" | "users" | "messages" | "settings" | "reminders" | "communicate" | "whatsapp" | "blog" | "profile">("analytics");
   const navigate = useNavigate();
 
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
@@ -122,11 +123,12 @@ export default function OwnerDashboard() {
 
         {/* Tabs — filtered by the owner user's role */}
         <div className="flex gap-1 border-b border-border flex-wrap">
-          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "whatsapp", "messages", "settings", "profile"] as const)
+          {(["analytics", "tenants", "plans", "billing", "users", "reminders", "communicate", "whatsapp", "blog", "messages", "settings", "profile"] as const)
             .filter(t => {
               if (t === "users" && !canUsers) return false;
               if (t === "plans" && !canPlans) return false;
               if (t === "whatsapp" && !isSuper) return false;
+              if (t === "blog" && !isSuper) return false;
               return true;
             })
             .map(t => (
@@ -152,6 +154,8 @@ export default function OwnerDashboard() {
         {tab === "communicate" && <OwnerBroadcast />}
 
         {tab === "whatsapp" && <OwnerWhatsApp />}
+
+        {tab === "blog" && <OwnerBlog />}
 
         {tab === "settings" && <OwnerSettings />}
 

@@ -32,7 +32,7 @@ const PRODUCTS: { group: string; items: MegaItem[] }[] = [
   ] },
 ];
 const EXPLORE: MegaItem[] = [
-  { icon: PenLine, title: "Blog", desc: "Our latest news and updates.", to: "/features" },
+  { icon: PenLine, title: "Blog", desc: "Our latest news and updates.", to: "/blogs" },
   { icon: Sliders, title: "Features & Tools", desc: "Everything ShuleCloud can do.", to: "/features" },
   { icon: Rocket, title: "Our Story", desc: "How we got here and where we're going.", to: "/contact" },
 ];
@@ -165,7 +165,7 @@ export function MarketingFooter() {
           </div>
         </div>
         {[
-          { h: "Product", links: [["Features", "/features"], ["Status", "/status"]] },
+          { h: "Product", links: [["Features", "/features"], ["Blog", "/blogs"], ["Status", "/status"]] },
           { h: "Company", links: [["FAQs", "/faq"], ["Contact", "/contact"], ["Sign In", "/login"], ["Get Started", "/register"]] },
           { h: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
         ].map(col => (
