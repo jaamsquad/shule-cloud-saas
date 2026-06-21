@@ -2,6 +2,7 @@
     <string name="app_name">ShuleCloud</string>
     <string name="default_notification_channel_id">shulecloud_default</string>
     <string name="retry">Retry</string>
+    <string name="refresh">Refresh</string>
 
     <string name="err_no_internet_title">No internet connection</string>
     <string name="err_no_internet_msg">Please check your connection and try again.</string>
