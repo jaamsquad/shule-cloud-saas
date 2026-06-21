@@ -77,6 +77,50 @@ router.post('/communications/sms/send', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Send a single test SMS to verify the gateway is wired up correctly.
+router.post('/communications/sms/test', async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const { phone } = req.body || {};
+        if (!phone) return res.status(400).json({ message: 'A test phone number is required' });
+        const message = 'ShuleCloud SMS test — your gateway is connected and working. ✅';
+        const settings = await getSmsSettings(db);
+        if (settings.provider === 'api') {
+            await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
+            const sent = await sendViaApi(db, settings.apiConfig, [phone], message);
+            return res.json({ provider: 'api', ...sent });
+        }
+        const online = await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true });
+        if (online === 0) return res.status(409).json({ message: 'No phone is connected & online. Open the ShuleCloud SMS app on your paired phone, then try again.' });
+        const result = await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
+        res.json({ provider: 'device', ...result, onlineDevices: online });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Connection status summary for the admin dashboard.
+router.get('/communications/sms/status', async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const now = Date.now();
+        const devices = await db.collection('sms_devices').find({ revoked: { $ne: true } }).sort({ lastSeen: -1 }).toArray();
+        const live = devices.map((d: any) => ({ ...d, token: undefined, online: d.online && d.lastSeen && (now - new Date(d.lastSeen).getTime() < 90_000) }));
+        const connectedDevice = live.find((d: any) => d.paired && d.online) || live.find((d: any) => d.paired) || null;
+        const settings = await getSmsSettings(db);
+        const stats = await deviceStats(db, schoolId(req));
+        const webConnected = true; // the admin is making this authenticated request, so the web side is up
+        const deviceConnected = settings.provider === 'api' ? !!(settings.apiConfig?.apiKey) : !!(connectedDevice && connectedDevice.online);
+        res.json({
+            provider: settings.provider,
+            webConnected,
+            deviceConnected,
+            ready: webConnected && deviceConnected,
+            device: connectedDevice,
+            deviceCount: live.length,
+            stats,
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/communications/sms/logs', async (req, res) => {
     try {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });

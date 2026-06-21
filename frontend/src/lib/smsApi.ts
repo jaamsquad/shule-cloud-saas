@@ -7,6 +7,9 @@ export const sms = {
   getSettings: () => api.get("/communications/sms/settings").then(r => r.data),
   saveSettings: (body: any) => api.post("/communications/sms/settings", body).then(r => r.data),
 
+  status: () => api.get("/communications/sms/status").then(r => r.data),
+  test: (phone: string) => api.post("/communications/sms/test", { phone }).then(r => r.data),
+
   devices: () => api.get("/sms/devices").then(r => r.data),
   pair: (name?: string) => api.post("/sms/devices/pair", { name }).then(r => r.data),
   resetDevice: (id: string) => api.post(`/sms/devices/${id}/reset`).then(r => r.data),

@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { sms } from "@/lib/smsApi";
 import SmsDevices from "./SmsDevices";
+import SmsConnection from "./SmsConnection";
 
 const MAX_CHARS = 160;
 
@@ -24,7 +25,7 @@ export default function BulkSMS() {
     const [selectedClass, setSelectedClass] = useState("");
     const [scheduledAt, setScheduledAt] = useState("");
     const [isSending, setIsSending] = useState(false);
-    const [tab, setTab] = useState<"compose" | "history" | "devices">("compose");
+    const [tab, setTab] = useState<"connection" | "compose" | "history" | "devices">("connection");
 
     const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: students = [] } = useQuery({ queryKey: ["students"], queryFn: async () => { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } });
@@ -89,12 +90,14 @@ export default function BulkSMS() {
                 </div>
 
                 <div className="flex gap-2 mb-6">
-                    {[{ key: "compose", label: "Compose" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }].map(t => (
+                    {[{ key: "connection", label: "Connection" }, { key: "compose", label: "Compose" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }].map(t => (
                         <button key={t.key} onClick={() => setTab(t.key as any)} className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all flex items-center gap-1.5 ${tab === t.key ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
                             {t.key === "devices" && <Smartphone className="w-3.5 h-3.5" />}{t.label}
                         </button>
                     ))}
                 </div>
+
+                {tab === "connection" && <SmsConnection onOpenDashboard={() => setTab("devices")} />}
 
                 {tab === "devices" && <SmsDevices />}
 

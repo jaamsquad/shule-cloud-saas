@@ -8,14 +8,17 @@
  */
 import { Platform } from "react-native";
 
-// Lazy require so the app still bundles in environments without the native module.
+// Lazy require so the app still bundles in environments without the native
+// module (e.g. Expo Go), where SMS sending is stubbed.
 let SmsModule: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  SmsModule = require("react-native-android-sms-sender").default || require("react-native-android-sms-sender");
+  SmsModule = require("react-native-sms-android").default || require("react-native-sms-android");
 } catch {
   SmsModule = null;
 }
+
+export const hasNativeSms = () => !!SmsModule && Platform.OS === "android";
 
 export async function sendSms(phone: string, message: string): Promise<void> {
   if (Platform.OS !== "android") throw new Error("SMS sending is Android-only");
@@ -25,6 +28,10 @@ export async function sendSms(phone: string, message: string): Promise<void> {
     if (__DEV__) { console.log(`[SMS dev-stub] → ${phone}: ${message}`); return; }
     throw new Error("Native SMS module not available");
   }
-  // The module exposes sendSMS(phone, message) returning a promise.
-  await SmsModule.sendSMS(phone, message);
+  // react-native-sms-android: SmsAndroid.autoSend(phone, message, fail, success)
+  await new Promise<void>((resolve, reject) => {
+    try {
+      SmsModule.autoSend(phone, message, (err: any) => reject(new Error(String(err))), () => resolve());
+    } catch (e: any) { reject(e); }
+  });
 }

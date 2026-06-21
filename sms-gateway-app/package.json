@@ -4,6 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start --dev-client",
+    "start:go": "expo start --go",
     "android": "expo run:android",
     "prebuild": "expo prebuild --platform android --clean"
   },
@@ -17,7 +18,7 @@
     "expo-notifications": "~0.28.0",
     "react": "18.2.0",
     "react-native": "0.74.5",
-    "react-native-android-sms-sender": "^1.0.0",
+    "react-native-sms-android": "^0.4.1",
     "socket.io-client": "^4.8.1",
     "@react-native-async-storage/async-storage": "1.23.1"
   },
