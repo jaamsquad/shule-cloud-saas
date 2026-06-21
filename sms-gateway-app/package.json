@@ -27,9 +27,17 @@
   "devDependencies": {
     "@babel/core": "^7.25.0",
     "@types/react": "~19.1.0",
-    "babel-preset-expo": "~13.0.0",
+    "babel-preset-expo": "~54.0.10",
     "sharp": "^0.35.2",
     "typescript": "~5.9.2"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["@notifee/react-native", "react-native-send-direct-sms"],
+        "listUnknownPackages": false
+      }
+    }
   },
   "private": true
 }
