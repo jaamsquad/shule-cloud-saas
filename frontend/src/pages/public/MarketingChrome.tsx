@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { ShuleCloudLogo } from "./ShuleCloudLogo";
 import {
   GraduationCap, Menu, Mail, Phone, MapPin, Shield, Lock, ChevronDown,
   Cloud, Smartphone, Monitor, Network, Server, BookOpen, PenLine, Sliders,
@@ -36,7 +37,7 @@ const EXPLORE: MegaItem[] = [
   { icon: Rocket, title: "Our Story", desc: "How we got here and where we're going.", to: "/contact" },
 ];
 const SUPPORT: MegaItem[] = [
-  { icon: BookOpenCheck, title: "Knowledge Base", desc: "Advice & answers to your FAQs.", to: "/contact" },
+  { icon: BookOpenCheck, title: "FAQs", desc: "Advice & answers to common questions.", to: "/faq" },
   { icon: PlayCircle, title: "Video Tutorials", desc: "Detailed how-to-use guides.", to: "/features" },
   { icon: Headset, title: "Support Center", desc: "Get help from the ShuleCloud team.", to: "/contact" },
 ];
@@ -65,10 +66,7 @@ export function MarketingNav() {
     <header className="sticky top-0 z-50 bg-white border-b border-slate-100">
       <div className="max-w-7xl mx-auto px-6 h-[70px] flex items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: PURPLE }}><GraduationCap className="w-5 h-5" /></div>
-          <span className="text-xl font-black tracking-tight" style={{ color: NAVY }}>Shule<span style={{ color: PURPLE }}>Cloud</span></span>
-        </Link>
+        <Link to="/"><ShuleCloudLogo /></Link>
 
         {/* Desktop mega-menu nav */}
         <nav className="hidden lg:flex items-center gap-8 text-sm font-semibold text-slate-700">
@@ -104,7 +102,7 @@ export function MarketingNav() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpenMobile(false)} />
           <div className="absolute left-0 top-0 h-full w-80 bg-white p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <span className="text-xl font-black" style={{ color: NAVY }}>Shule<span style={{ color: PURPLE }}>Cloud</span></span>
+              <ShuleCloudLogo />
               <button onClick={() => setOpenMobile(false)}><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             {[...PRODUCTS.flatMap(g => g.items), ...EXPLORE, ...SUPPORT].map(it => <Link key={it.title} to={it.to} onClick={() => setOpenMobile(false)} className="flex items-center gap-2 py-2.5 text-sm font-bold text-slate-700"><it.icon className="w-4 h-4" style={{ color: PURPLE }} /> {it.title}</Link>)}
@@ -140,10 +138,7 @@ export function MarketingFooter() {
     <footer className="border-t border-slate-100 pt-14 pb-8">
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-5 gap-8">
         <div className="col-span-2">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ background: BLUE }}><GraduationCap className="w-5 h-5" /></div>
-            <span className="text-xl font-black" style={{ color: NAVY }}>Shule<span style={{ color: BLUE }}>Cloud</span></span>
-          </div>
+          <div className="mb-4"><ShuleCloudLogo /></div>
           <p className="text-sm text-slate-500 max-w-xs mb-4">The all-in-one cloud platform powering schools across Kenya — academics, finance, communication and more.</p>
           <div className="space-y-1.5 text-sm text-slate-500">
             <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-slate-300" /> {CONTACT_EMAIL}</p>
@@ -153,7 +148,7 @@ export function MarketingFooter() {
         </div>
         {[
           { h: "Product", links: [["Features", "/features"], ["Status", "/status"]] },
-          { h: "Company", links: [["Contact", "/contact"], ["Sign In", "/login"], ["Get Started", "/register"]] },
+          { h: "Company", links: [["FAQs", "/faq"], ["Contact", "/contact"], ["Sign In", "/login"], ["Get Started", "/register"]] },
           { h: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
         ].map(col => (
           <div key={col.h}>

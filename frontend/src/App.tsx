@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { resolvePortal } from "@/lib/portal";
 
@@ -25,6 +25,7 @@ import StaffPortalLogin from "./pages/staff-portal/StaffPortalLogin";
 // Public pages
 import Landing from "./pages/public/Landing";
 import Features from "./pages/public/Features";
+import FAQ from "./pages/public/FAQ";
 import Contact from "./pages/public/Contact";
 import Status from "./pages/public/Status";
 import Terms from "./pages/public/Terms";
@@ -424,6 +425,7 @@ const App = () => {
             <Route path="/" element={<Landing />} />
             <Route path="/application" element={<PublicApplication />} />
             <Route path="/features" element={<Features />} />
+            <Route path="/faq" element={<FAQ />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/status" element={<Status />} />
             <Route path="/terms" element={<Terms />} />
@@ -435,8 +437,6 @@ const App = () => {
             {/* 2. SYSTEM OWNER PORTAL */}
             <Route path="/owner" element={<OwnerLogin />} />
             <Route path="/owner/login" element={<OwnerLogin />} />
-            {/* Owner registration is disabled — accounts are created from the portal. */}
-            <Route path="/owner/register" element={<Navigate to="/owner/login" replace />} />
 
             {/* Owner pages render their own header — guard by owner_token, NOT the
                 tenant DashboardLayout (which would bounce owners to /login). */}

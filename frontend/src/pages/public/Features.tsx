@@ -1,73 +1,111 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { School, Users, BookOpen, ClipboardCheck, Calendar, CreditCard, Shield, BarChart3, Heart, Library, Bell, GraduationCap, Monitor, Truck, Home, MessageSquare } from "lucide-react";
+import { MarketingNav, MarketingFooter, PURPLE, NAVY } from "./MarketingChrome";
+import { DemoModal } from "./DemoModal";
 
-const modules = [
-  { icon: Users, title: "Student Management", desc: "Complete student lifecycle from admission to alumni. CBC-ready profiles, guardian linkage, ID card generation, promotions, transfers, houses & clubs allocation.", color: "bg-primary/10 text-primary" },
-  { icon: GraduationCap, title: "Staff & HR", desc: "Staff profiles, workload tracking, leave management, duty rosters, appraisals, payroll integration, document management and ID card generation.", color: "bg-info/10 text-info" },
-  { icon: BookOpen, title: "CBC Academics", desc: "Learning areas, strands, sub-strands, competencies & rubrics. Scheme of work, lesson plans, portfolio evidence, competency progress tracking.", color: "bg-success/10 text-success" },
-  { icon: ClipboardCheck, title: "Assessments & Exams", desc: "Question bank with tagging, blueprints, auto-generate papers, mark entry, moderation workflow, results publishing, analytics & report cards.", color: "bg-secondary/20 text-secondary-foreground" },
-  { icon: Calendar, title: "Smart Timetable", desc: "Teacher availability, room allocation, auto-generation with clash detection, substitute management, and multiple view modes.", color: "bg-warning/10 text-warning" },
-  { icon: CreditCard, title: "Finance & Fees", desc: "Fee structures, billing cycles, bulk invoicing, M-Pesa payments, arrears tracking, bursaries, refunds, statements and cashbook reports.", color: "bg-primary/10 text-primary" },
-  { icon: Shield, title: "RBAC & Security", desc: "Custom roles, granular permissions (MODULE:ACTION format), audit logs, tenant isolation with PostgreSQL RLS, and secure authentication.", color: "bg-destructive/10 text-destructive" },
-  { icon: BarChart3, title: "Reports & Analytics", desc: "Academic performance, attendance summaries, financial reports, library stats, clinic data. Export to CSV, XLSX, and PDF.", color: "bg-info/10 text-info" },
-  { icon: Heart, title: "School Clinic", desc: "Student medical profiles, visit logs, medication tracking, referrals, sickbay admissions, allergy/chronic condition alerts.", color: "bg-destructive/10 text-destructive" },
-  { icon: Library, title: "Library System", desc: "Book catalog, issue/return, fine calculation, overdue tracking, borrowing history, inventory stock-take.", color: "bg-success/10 text-success" },
-  { icon: Monitor, title: "LMS / E-Learning", desc: "Courses, resource uploads, assignments, submissions, grading, quizzes, discussion boards, student & teacher views.", color: "bg-primary/10 text-primary" },
-  { icon: Bell, title: "Attendance", desc: "Daily and lesson-based attendance, session history, chronic absentee lists, late/early departure logs, parent visibility.", color: "bg-warning/10 text-warning" },
-  { icon: MessageSquare, title: "Communications", desc: "Announcements, targeted messaging, notification templates, consent forms, emergency broadcasts, SMS & email integration.", color: "bg-info/10 text-info" },
-  { icon: Truck, title: "Transport & Boarding", desc: "Routes, bus rosters, trip manifests, fuel logs. Dorm allocation, roll calls, duty rosters, boarding incidents.", color: "bg-success/10 text-success" },
-  { icon: Home, title: "Assets & Inventory", desc: "Items catalog, stock management, suppliers, reorder alerts, asset register, maintenance tickets.", color: "bg-secondary/20 text-secondary-foreground" },
-  { icon: Shield, title: "Discipline & Counselling", desc: "Incident reporting, merit/demerit system, detentions, counselling sessions, parent acknowledgement workflow.", color: "bg-destructive/10 text-destructive" },
+// Grouped the way a head teacher thinks about running a school, not a flat
+// feature dump — each group reads like a sentence, not a marketing bullet.
+const groups: { area: string; blurb: string; items: { title: string; desc: string }[] }[] = [
+  {
+    area: "People",
+    blurb: "Every student, guardian and staff member in one place — from the first admission form to the alumni record.",
+    items: [
+      { title: "Student lifecycle", desc: "Admissions, CBC-ready profiles, guardian linkage, promotions, transfers, houses & clubs and ID cards." },
+      { title: "Staff & HR", desc: "Profiles, workload, leave, duty rosters, appraisals and staff ID cards — with TSC and BoM records." },
+      { title: "Parent & student portals", desc: "Dedicated logins so parents see fees, results and attendance the moment they update." },
+    ],
+  },
+  {
+    area: "Teaching & learning",
+    blurb: "Plan, assess and report against the CBC the way the curriculum is actually designed.",
+    items: [
+      { title: "CBC academics", desc: "Learning areas, strands, sub-strands, competencies and rubrics, with portfolio evidence and progress tracking." },
+      { title: "Assessments & exams", desc: "Question banks, paper generation, mark entry, moderation, results publishing and report cards." },
+      { title: "Smart timetable", desc: "Teacher availability, room allocation, auto-generation with clash detection and substitutions." },
+      { title: "LMS & e-learning", desc: "Courses, resources, assignments, quizzes and grading for both teachers and learners." },
+    ],
+  },
+  {
+    area: "Money",
+    blurb: "Bill, collect and reconcile fees without a single manual ledger entry.",
+    items: [
+      { title: "Fees & finance", desc: "Fee structures, bulk invoicing, arrears tracking, bursaries, refunds, statements and cashbook." },
+      { title: "M-PESA built in", desc: "Per-school Daraja STK Push — parents pay from their phone and receipts post automatically." },
+      { title: "Accounting & expenses", desc: "General ledger, expense management, procurement and budget vs actual reporting." },
+    ],
+  },
+  {
+    area: "Day-to-day operations",
+    blurb: "The unglamorous things that keep a school running — handled.",
+    items: [
+      { title: "Attendance", desc: "Daily and lesson-based attendance, card-scan check-in and chronic-absentee lists for parents." },
+      { title: "Communications", desc: "Announcements, targeted messaging, SMS, email and WhatsApp — results, fees and emergencies." },
+      { title: "Clinic & library", desc: "Medical profiles and visit logs, plus a full book catalogue with issue, return and fines." },
+      { title: "Transport, boarding & assets", desc: "Routes and manifests, dorm allocation and roll calls, inventory and maintenance tickets." },
+    ],
+  },
+  {
+    area: "Trust & control",
+    blurb: "School data stays the school's — isolated, audited and access-controlled.",
+    items: [
+      { title: "Roles & permissions", desc: "Custom roles with granular module permissions, so everyone sees exactly what they should." },
+      { title: "Per-school isolation", desc: "Each school's data lives in its own database, enforced on every request — never shared." },
+      { title: "Reports & analytics", desc: "Performance, attendance and finance reporting, exported to CSV, Excel or branded PDF." },
+    ],
+  },
 ];
 
 export default function Features() {
+  const [demo, setDemo] = useState(false);
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
-              <School className="w-5 h-5 text-primary-foreground" />
+    <div className="min-h-screen bg-white text-slate-800 font-sans">
+      <DemoModal open={demo} onClose={() => setDemo(false)} />
+      <MarketingNav />
+
+      {/* Hero */}
+      <section className="relative overflow-hidden text-white" style={{ background: "linear-gradient(115deg,#5a36d6 0%, #4326b5 60%, #34199a 100%)" }}>
+        <div className="absolute -top-32 -left-24 w-[460px] h-[460px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: "radial-gradient(circle, #b69bff, transparent 70%)" }} />
+        <div className="max-w-3xl mx-auto px-6 py-20 text-center relative">
+          <h1 className="text-4xl md:text-5xl font-light leading-[1.1] mb-5">Everything a Kenyan school needs, <span className="font-bold">nothing it doesn't</span>.</h1>
+          <p className="text-lg text-white/75 mb-9">One platform, built around how schools actually run — from the admission form to the audited account.</p>
+          <Link to="/register" className="inline-block px-9 py-4 font-bold rounded-full" style={{ background: "#fff", color: PURPLE }}>Start free — no card needed</Link>
+        </div>
+      </section>
+
+      {/* Feature groups */}
+      <div className="max-w-5xl mx-auto px-6 py-24 space-y-20">
+        {groups.map((g, i) => (
+          <section key={g.area} className="md:grid md:grid-cols-[0.8fr_1.2fr] md:gap-12">
+            <div className="mb-6 md:mb-0">
+              <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: PURPLE }}>{String(i + 1).padStart(2, "0")}</p>
+              <h2 className="text-2xl md:text-3xl font-black mb-3" style={{ color: NAVY }}>{g.area}</h2>
+              <p className="text-slate-500 leading-relaxed">{g.blurb}</p>
             </div>
-            <span className="font-heading text-xl font-bold text-foreground">ShuleCloud</span>
-          </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <Link to="/features" className="text-sm font-medium text-foreground">Features</Link>
-            <Link to="/contact" className="text-sm text-muted-foreground hover:text-foreground">Contact</Link>
-          </div>
-          <Button size="sm" asChild><Link to="/login">Sign In</Link></Button>
-        </div>
-      </nav>
-
-      <div className="max-w-7xl mx-auto px-6 py-20">
-        <div className="text-center mb-16">
-          <h1 className="font-heading text-4xl md:text-5xl font-bold text-foreground">Powerful Features for Modern Schools</h1>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">16 integrated modules designed specifically for Kenya's CBC curriculum. Every feature your school needs, in one platform.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {modules.map(m => (
-            <div key={m.title} className="bg-card border border-border rounded-xl p-6 hover:shadow-card-hover transition-all group">
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${m.color}`}>
-                  <m.icon className="w-6 h-6" />
+            <div className="divide-y divide-slate-100 border-t border-slate-100">
+              {g.items.map(it => (
+                <div key={it.title} className="py-5">
+                  <h3 className="font-black text-lg" style={{ color: NAVY }}>{it.title}</h3>
+                  <p className="text-slate-500 leading-relaxed mt-1">{it.desc}</p>
                 </div>
-                <div>
-                  <h3 className="font-heading font-semibold text-foreground text-lg mb-1">{m.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{m.desc}</p>
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        <div className="text-center mt-16">
-          <Button size="lg" asChild>
-            <Link to="/contact">Get Started Today</Link>
-          </Button>
-        </div>
+          </section>
+        ))}
       </div>
+
+      {/* CTA */}
+      <section className="py-24 text-center text-white" style={{ background: `linear-gradient(135deg, ${PURPLE}, ${NAVY})` }}>
+        <div className="max-w-2xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-black mb-4">See it with your own school's data</h2>
+          <p className="text-white/80 text-lg mb-9">Set up takes minutes, and it's free to start. Bring your classes, fees and timetable across in an afternoon.</p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link to="/register" className="px-9 py-4 font-black rounded-full bg-white" style={{ color: PURPLE }}>Get Started, It's Free</Link>
+            <button onClick={() => setDemo(true)} className="px-9 py-4 font-semibold rounded-full border border-white/40 text-white hover:bg-white/10">Book a demo</button>
+          </div>
+        </div>
+      </section>
+
+      <MarketingFooter />
     </div>
   );
 }
