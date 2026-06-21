@@ -12,6 +12,27 @@ object AppConfig {
     private const val PREFS = "shulecloud"
     private const val KEY_SCHOOL = "school_subdomain"
 
+    // Document / printable types that the in-app WebView can't render natively —
+    // these are opened in the external browser (which can preview + print them).
+    private val DOC_EXTENSIONS = setOf(
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "zip", "rtf", "odt", "ods"
+    )
+
+    /** True if the URL points at a document/printable file we should open externally. */
+    fun isDocumentUrl(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        return try {
+            val uri = android.net.Uri.parse(url)
+            val path = uri.path?.lowercase() ?: return false
+            val ext = path.substringAfterLast('.', "")
+            if (ext in DOC_EXTENSIONS) return true
+            // Common print/export query patterns (?print=1, ?format=pdf, /print, …)
+            val full = url.lowercase()
+            full.contains("format=pdf") || full.contains("export=pdf") ||
+                full.contains("/print") || full.contains("print=1") || full.contains("output=pdf")
+        } catch (_: Exception) { false }
+    }
+
     /** Returns true if a URL belongs to ShuleCloud (root or any *.shulecloud.com). */
     fun isInternalUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
@@ -47,9 +68,11 @@ object AppConfig {
 
     fun clearSchool(ctx: Context) = prefs(ctx).edit().remove(KEY_SCHOOL).apply()
 
-    /** Where to load on launch: the saved school's home if known, else login. */
+    /** Where to load on launch: the saved school's login page if known, else the
+     *  root login. The backend keeps an authenticated session, so the school's
+     *  /login redirects straight into the dashboard when already signed in. */
     fun launchUrl(ctx: Context): String {
         val school = savedSchool(ctx) ?: return LOGIN_URL
-        return "https://$school.$ROOT_DOMAIN/"
+        return "https://$school.$ROOT_DOMAIN/login"
     }
 }

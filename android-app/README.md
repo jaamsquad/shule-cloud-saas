@@ -25,6 +25,11 @@ to each school's subdomain, and keeps the session across launches.
 - **URL handling:** stays in-app for `shulecloud.com` and any subdomain; opens
   everything else (YouTube, external sites) in the device browser. Never Chrome
   Custom Tabs for internal pages.
+- **Print / documents:** PDFs, Office files, and print/export URLs open in the
+  external browser (which can preview and print them). `window.print()` is
+  redirected to the browser too via a small JS shim.
+- **Launch:** opens the saved school's `/login` (the kept session redirects
+  straight to the dashboard); first run / after logout opens the root login.
 - **Back navigation:** goes back in history, else "Press back again to exit".
 - **Security:** HTTPS only (`usesCleartextTraffic=false`, mixed content never
   allowed), `allowFileAccess=false`, WebView debugging off in release, SSL

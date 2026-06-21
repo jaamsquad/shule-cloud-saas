@@ -140,6 +140,26 @@ class MainActivity : AppCompatActivity() {
         mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
         userAgentString = "$userAgentString ShuleCloudApp/${BuildConfig.VERSION_NAME}"
         cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+    }.also {
+        webView.addJavascriptInterface(PrintBridge(), "ShuleCloudPrint")
+    }
+
+    // Redirect the page's print() to the external browser, which renders + prints
+    // the document properly (the in-app WebView can't print).
+    private fun injectPrintShim() {
+        webView.evaluateJavascript(
+            "(function(){if(window.__scPrintHooked)return;window.__scPrintHooked=true;" +
+            "window.print=function(){try{ShuleCloudPrint.printCurrent(window.location.href);}catch(e){}};})();",
+            null
+        )
+    }
+
+    /** Native bridge so the page's print action can open externally to print. */
+    inner class PrintBridge {
+        @android.webkit.JavascriptInterface
+        fun printCurrent(url: String?) {
+            runOnUiThread { openInExternalBrowser(url ?: webView.url) }
+        }
     }
 
     private fun configureCookies() = with(CookieManager.getInstance()) {
@@ -156,6 +176,7 @@ class MainActivity : AppCompatActivity() {
                 binding.progressBar.hide()
                 CookieManager.getInstance().flush()
                 rememberSchoolFromUrl(url)
+                injectPrintShim()
             },
             onError = { showError(it) },
             openExternal = ::openInExternalBrowser
@@ -211,7 +232,13 @@ class MainActivity : AppCompatActivity() {
                         v: WebView?, req: android.webkit.WebResourceRequest?
                     ): Boolean {
                         val u = req?.url?.toString()
-                        if (AppConfig.isInternalUrl(u)) webView.loadUrl(u!!) else openInExternalBrowser(u)
+                        // Documents/printables and external links → device browser;
+                        // other internal pages continue in the main WebView.
+                        when {
+                            AppConfig.isDocumentUrl(u) -> openInExternalBrowser(u)
+                            AppConfig.isInternalUrl(u) -> webView.loadUrl(u!!)
+                            else -> openInExternalBrowser(u)
+                        }
                         return true
                     }
                 }
