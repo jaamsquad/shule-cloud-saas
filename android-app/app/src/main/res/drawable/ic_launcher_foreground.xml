@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:scaleX="1.6" android:scaleY="1.6" android:pivotX="54" android:pivotY="54"
+        android:translateX="0" android:translateY="0">
+        <!-- Cloud -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M40,66 C34.5,66 30,61.7 30,56.4 C30,51.6 33.7,47.6 38.5,46.9 C40.2,41.3 45.3,37.5 51.2,37.5 C58.1,37.5 63.8,42.6 64.6,49.2 C67.8,50.1 70,52.9 70,56.2 C70,60.3 66.5,63.5 62.2,63.5 L40,66 Z" />
+        <!-- Mortarboard -->
+        <path
+            android:fillColor="#613DDF"
+            android:pathData="M50,49 L60,53 L50,57 L40,53 Z" />
+        <path
+            android:fillColor="#613DDF"
+            android:pathData="M45,55 L45,59 C45,60.5 47.2,61.7 50,61.7 C52.8,61.7 55,60.5 55,59 L55,55 L50,57 Z" />
+    </group>
+</vector>

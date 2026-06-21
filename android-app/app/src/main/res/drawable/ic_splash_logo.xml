@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Cloud -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14,38 C8.5,38 4,33.7 4,28.4 C4,23.6 7.7,19.6 12.5,18.9 C14.2,13.3 19.3,9.5 25.2,9.5 C32.1,9.5 37.8,14.6 38.6,21.2 C41.8,22.1 44,24.9 44,28.2 C44,32.3 40.5,35.5 36.2,35.5 L14,38 Z" />
+    <!-- Mortarboard -->
+    <path
+        android:fillColor="#613DDF"
+        android:pathData="M24,21 L34,25 L24,29 L14,25 Z" />
+    <path
+        android:fillColor="#613DDF"
+        android:pathData="M19,27 L19,31 C19,32.5 21.2,33.7 24,33.7 C26.8,33.7 29,32.5 29,31 L29,27 L24,29 Z" />
+</vector>

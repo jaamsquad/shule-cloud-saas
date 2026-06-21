@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+app/build/
+/app/release/
+
+# Keep the placeholder google-services.json in the repo so the project builds,
+# but ignore a real one a developer drops in (it contains project keys).
+# (Comment the next line out if you want to commit your real config.)
+# app/google-services.json
