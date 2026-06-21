@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send, Mail, Phone, AlertTriangle, CheckCircle2, Beaker } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { ContactPicker, type Contact } from "./ContactPicker";
 
 interface Props {
     channel: "email" | "whatsapp";
@@ -23,6 +24,8 @@ export default function ChannelComposer({ channel }: Props) {
     const accent = isEmail ? "#5C67F2" : "#25D366";
 
     const [mode, setMode] = useState<"compose" | "results">("compose");
+    const [recipientMode, setRecipientMode] = useState<"groups" | "person">("groups");
+    const [person, setPerson] = useState<Contact | null>(null);
     const [audience, setAudience] = useState("students");
     const [manual, setManual] = useState("");
     const [subject, setSubject] = useState("");
@@ -62,8 +65,15 @@ export default function ChannelComposer({ channel }: Props) {
 
     const send = useMutation({
         mutationFn: async () => {
-            const body: any = { audience, message };
-            if (manualList().length) body.to = manualList();
+            const body: any = { message };
+            if (recipientMode === "person") {
+                const dest = isEmail ? person?.email : person?.phone;
+                if (!dest) throw new Error(isEmail ? "Pick a person with an email" : "Pick a person with a phone number");
+                body.to = [dest];
+            } else {
+                body.audience = audience;
+                if (manualList().length) body.to = manualList();
+            }
             if (isEmail) body.subject = subject;
             return (await api.post(`/communications/${channel}/send`, body)).data;
         },
@@ -167,6 +177,16 @@ export default function ChannelComposer({ channel }: Props) {
                 {/* Composer */}
                 <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
                     <div>
+                        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-3 w-fit">
+                            {([["groups", "Groups"], ["person", "One person"]] as const).map(([k, label]) => (
+                                <button key={k} onClick={() => setRecipientMode(k)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${recipientMode === k ? "bg-white shadow-sm text-slate-800" : "text-slate-500"}`}>{label}</button>
+                            ))}
+                        </div>
+
+                        {recipientMode === "person" ? (
+                            <ContactPicker channel={isEmail ? "email" : "whatsapp"} value={person} onChange={setPerson} />
+                        ) : (
+                        <>
                         <label className="block text-xs font-bold text-slate-600 mb-2">Audience</label>
                         <div className="flex flex-wrap gap-2">
                             {AUDIENCES.map(a => (
@@ -177,13 +197,14 @@ export default function ChannelComposer({ channel }: Props) {
                                 </button>
                             ))}
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">Extra recipients (optional)</label>
-                        <textarea value={manual} onChange={e => setManual(e.target.value)} rows={2}
-                            placeholder={isEmail ? "extra@email.com, another@email.com" : "0712345678, 0723456789"}
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" />
+                        <div className="mt-4">
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Extra recipients (optional)</label>
+                            <textarea value={manual} onChange={e => setManual(e.target.value)} rows={2}
+                                placeholder={isEmail ? "extra@email.com, another@email.com" : "0712345678, 0723456789"}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" />
+                        </div>
+                        </>
+                        )}
                     </div>
 
                     {isEmail && (
@@ -202,10 +223,10 @@ export default function ChannelComposer({ channel }: Props) {
                     </div>
 
                     <div className="flex justify-end">
-                        <button onClick={() => send.mutate()} disabled={send.isPending || !message || (isEmail && !subject)}
+                        <button onClick={() => send.mutate()} disabled={send.isPending || !message || (isEmail && !subject) || (recipientMode === "person" && !(isEmail ? person?.email : person?.phone))}
                             className="inline-flex items-center gap-2 h-10 px-6 rounded-lg text-white font-black text-xs uppercase tracking-widest disabled:opacity-50"
                             style={{ background: accent }}>
-                            {send.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send Broadcast
+                            {send.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {recipientMode === "person" ? `Send to ${person?.name || "person"}` : "Send Broadcast"}
                         </button>
                     </div>
                 </div>

@@ -7,6 +7,7 @@ import { sms } from "@/lib/smsApi";
 import SmsDevices from "./SmsDevices";
 import SmsConnection from "./SmsConnection";
 import SmsResults from "./SmsResults";
+import { ContactPicker, type Contact } from "./ContactPicker";
 
 const MAX_CHARS = 160;
 
@@ -22,6 +23,8 @@ const RECIPIENT_GROUPS = [
 
 export default function BulkSMS() {
     const [message, setMessage] = useState("");
+    const [recipientMode, setRecipientMode] = useState<"groups" | "person">("groups");
+    const [person, setPerson] = useState<Contact | null>(null);
     const [selectedGroups, setSelectedGroups] = useState<string[]>(["all_students"]);
     const [selectedClass, setSelectedClass] = useState("");
     const [scheduledAt, setScheduledAt] = useState("");
@@ -49,13 +52,16 @@ export default function BulkSMS() {
 
     const handleSend = async () => {
         if (!message.trim()) { toast.error("Message is required"); return; }
-        if (selectedGroups.length === 0) { toast.error("Select at least one recipient group"); return; }
+        if (recipientMode === "person" && !person?.phone) { toast.error("Pick a person with a phone number"); return; }
+        if (recipientMode === "groups" && selectedGroups.length === 0) { toast.error("Select at least one recipient group"); return; }
         setIsSending(true);
         try {
-            const audiences = Array.from(new Set(
+            const audiences = recipientMode === "person" ? [] : Array.from(new Set(
                 selectedGroups.map(k => RECIPIENT_GROUPS.find(g => g.key === k)?.audience).filter(Boolean) as string[]
             ));
-            const to = selectedGroups.includes("class_specific") ? classNumbers() : [];
+            const to = recipientMode === "person"
+                ? [person!.phone!]
+                : (selectedGroups.includes("class_specific") ? classNumbers() : []);
             const res = await sms.send({ message: message.trim(), audiences, to, scheduledAt: scheduledAt || null });
             if (res.provider === "device") {
                 toast.success(scheduledAt ? `Scheduled ${res.queued} message(s)` : `Queued ${res.queued} message(s) to your connected phone${res.onlineDevices === 0 ? " — no phone is online yet" : ""}`);
@@ -106,7 +112,18 @@ export default function BulkSMS() {
                         {/* Recipient selection */}
                         <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6">
                             <h3 className="text-sm font-semibold text-slate-800 mb-1">Recipients</h3>
-                            <p className="text-xs text-slate-400 mb-4">Choose who receives this message.</p>
+                            <p className="text-xs text-slate-400 mb-3">Choose who receives this message.</p>
+
+                            <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-4">
+                                {([["groups", "Groups"], ["person", "One person"]] as const).map(([k, label]) => (
+                                    <button key={k} onClick={() => setRecipientMode(k)} className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-colors ${recipientMode === k ? "bg-white shadow-sm text-slate-800" : "text-slate-500"}`}>{label}</button>
+                                ))}
+                            </div>
+
+                            {recipientMode === "person" ? (
+                                <ContactPicker channel="sms" value={person} onChange={setPerson} />
+                            ) : (
+                            <>
                             <div className="space-y-2">
                                 {RECIPIENT_GROUPS.map(g => (
                                     <label key={g.key} className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border cursor-pointer transition-colors ${selectedGroups.includes(g.key) ? "border-[#5C67F2] bg-indigo-50/60" : "border-slate-200 hover:bg-slate-50"}`}>
@@ -128,6 +145,8 @@ export default function BulkSMS() {
                                 <span className="text-xs font-semibold text-slate-500">Estimated recipients</span>
                                 <span className="text-xl font-bold text-slate-800">~{estimateRecipients()}</span>
                             </div>
+                            </>
+                            )}
                         </div>
 
                         {/* Compose */}
@@ -163,9 +182,11 @@ export default function BulkSMS() {
                                 <p className="text-xs text-slate-400 mt-1.5">Leave empty to send now. Scheduled messages are released automatically when due.</p>
                             </div>
 
-                            <button onClick={handleSend} disabled={isSending || !message.trim() || selectedGroups.length === 0}
+                            <button onClick={handleSend} disabled={isSending || !message.trim() || (recipientMode === "groups" ? selectedGroups.length === 0 : !person?.phone)}
                                 className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg transition-colors">
-                                {isSending ? "Sending…" : `${scheduledAt ? "Schedule" : "Send"} to ~${estimateRecipients()} recipients`}
+                                {isSending ? "Sending…" : recipientMode === "person"
+                                    ? `${scheduledAt ? "Schedule" : "Send"} to ${person?.name || "1 person"}`
+                                    : `${scheduledAt ? "Schedule" : "Send"} to ~${estimateRecipients()} recipients`}
                             </button>
                         </div>
                     </div>

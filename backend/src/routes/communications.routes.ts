@@ -74,6 +74,59 @@ router.post('/communications/whatsapp/send', async (req, res) => {
     }
 });
 
+// Searchable contacts (students, parents, staff/teachers) for sending to a
+// single person. Each row carries a phone + email so the same list works for
+// SMS, WhatsApp and Email composers. ?q= filters by name; ?type= narrows.
+router.get('/communications/contacts', async (req, res) => {
+    try {
+        const db = dbFromReq(req);
+        const q = String((req.query as any).q || '').trim().toLowerCase();
+        const type = String((req.query as any).type || 'all');
+        const match = (name: string) => !q || name.toLowerCase().includes(q);
+        const out: { id: string; name: string; role: string; phone?: string; email?: string; meta?: string }[] = [];
+
+        if (type === 'all' || type === 'students') {
+            const students = await db.collection('students').find({}).limit(2000).toArray().catch(() => []);
+            students.forEach((s: any) => {
+                const name = s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+                if (name && match(name)) out.push({
+                    id: String(s._id), name, role: 'Student',
+                    phone: s.phone, email: s.studentEmail || s.email,
+                    meta: s.currentClass || s.studentClass || s.admNo || '',
+                });
+            });
+        }
+        if (type === 'all' || type === 'parents') {
+            const students = await db.collection('students').find({}).limit(2000).toArray().catch(() => []);
+            students.forEach((s: any) => {
+                const pn = s.parentName || s.fatherName || s.motherName || s.guardianName;
+                const phone = s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone;
+                const email = s.parentEmail || s.guardianEmail;
+                const childName = s.studentName || s.name;
+                const display = pn || (childName ? `Parent of ${childName}` : 'Parent');
+                if ((phone || email) && match(`${display} ${childName || ''}`)) out.push({
+                    id: `parent:${s._id}`, name: display, role: 'Parent', phone, email,
+                    meta: childName ? `Parent of ${childName}` : '',
+                });
+            });
+        }
+        if (type === 'all' || type === 'staff' || type === 'teachers') {
+            const staff = await db.collection('staff').find({}).limit(2000).toArray().catch(() => []);
+            staff.forEach((s: any) => {
+                const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+                const isTeacher = /teacher|tutor/i.test(s.role || s.designation || '') || (s.subjects && s.subjects.length);
+                if (type === 'teachers' && !isTeacher) return;
+                if (name && match(name)) out.push({
+                    id: String(s._id), name, role: isTeacher ? 'Teacher' : 'Staff',
+                    phone: s.phone, email: s.email,
+                    meta: s.designation || s.role || '',
+                });
+            });
+        }
+        res.json(out.slice(0, 200));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // List exams / class tests / CBC activities for WhatsApp result sending.
 router.get('/communications/whatsapp/result-sources', async (req, res) => {
     try { res.json(await listResultSources(dbFromReq(req))); }
