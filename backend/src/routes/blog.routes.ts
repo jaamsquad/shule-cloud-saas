@@ -11,9 +11,33 @@
 import { Router, Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import { getDb } from '../lib/mongodb';
 
 const router = Router();
+
+// ─── Image uploads ───────────────────────────────────────────────────────────
+const BLOG_UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'blog');
+fs.mkdirSync(BLOG_UPLOAD_DIR, { recursive: true });
+
+const imageStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, BLOG_UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+        const ext = (path.extname(file.originalname) || '.png').toLowerCase().slice(0, 6);
+        cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`);
+    },
+});
+const uploadImage = multer({
+    storage: imageStorage,
+    limits: { fileSize: 8 * 1024 * 1024 },   // 8MB
+    fileFilter: (_req, file, cb) => {
+        if (/^image\/(png|jpe?g|gif|webp|svg\+xml)$/.test(file.mimetype)) cb(null, true);
+        else cb(new Error('Only image files are allowed'));
+    },
+});
 const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
 
 // ─── Auth: Super Owner only ──────────────────────────────────────────────────
@@ -268,6 +292,21 @@ router.delete('/blog/admin/tags/:id', requireSuperOwner, async (req, res) => {
 // ─── Audit log ───────────────────────────────────────────────────────────────
 router.get('/blog/admin/audit', requireSuperOwner, async (_req, res) => {
     res.json(await getDb().collection('blog_audit').find({}).sort({ at: -1 }).limit(200).toArray());
+});
+
+// ─── Image upload ────────────────────────────────────────────────────────────
+// Returns an absolute URL so it works from both the owner portal and the public
+// blog. PUBLIC_API_URL (e.g. https://api.shulecloud.com) is preferred; otherwise
+// we derive the origin from the request.
+router.post('/blog/admin/upload', requireSuperOwner, (req, res) => {
+    uploadImage.single('file')(req, res, (err: any) => {
+        if (err) return res.status(400).json({ message: err.message || 'Upload failed' });
+        const file = (req as any).file;
+        if (!file) return res.status(400).json({ message: 'No file received' });
+        const origin = process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+        const url = `${origin.replace(/\/$/, '')}/uploads/blog/${file.filename}`;
+        res.json({ url, filename: file.filename, size: file.size });
+    });
 });
 
 // ════════════════════════════════════════════════════════════════════════════

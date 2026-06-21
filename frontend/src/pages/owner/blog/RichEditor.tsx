@@ -10,9 +10,11 @@ import {
  * (which also lets you paste Markdown-ish HTML). Good enough for blog articles
  * without pulling in a multi-megabyte editor library.
  */
-export function RichEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function RichEditor({ value, onChange, onUploadImage }: { value: string; onChange: (html: string) => void; onUploadImage?: (file: File) => Promise<string> }) {
   const ref = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // Sync incoming value when it changes externally (e.g. loading a post).
   useEffect(() => {
@@ -27,7 +29,19 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
   const block = (tag: string) => exec("formatBlock", tag);
 
   const addLink = () => { const url = prompt("Link URL"); if (url) exec("createLink", url); };
-  const addImage = () => { const url = prompt("Image URL"); if (url) exec("insertImage", url); };
+
+  // Upload a file then insert it; falls back to URL prompt if no uploader given.
+  const insertFile = async (file: File) => {
+    if (!onUploadImage) { const url = prompt("Image URL"); if (url) exec("insertImage", url); return; }
+    setUploading(true);
+    try { const url = await onUploadImage(file); exec("insertImage", url); }
+    catch { /* surfaced by caller's toast */ } finally { setUploading(false); }
+  };
+  const addImage = () => { if (onUploadImage) fileRef.current?.click(); else { const url = prompt("Image URL"); if (url) exec("insertImage", url); } };
+  const onDrop = (e: React.DragEvent) => {
+    const img = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    if (img) { e.preventDefault(); insertFile(img); }
+  };
 
   const Btn = ({ children, onClick, title }: { children: React.ReactNode; onClick: () => void; title: string }) => (
     <button type="button" title={title} onMouseDown={e => e.preventDefault()} onClick={onClick}
@@ -52,7 +66,9 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
         <Btn title="Divider" onClick={() => exec("insertHorizontalRule")}><Minus className="w-4 h-4" /></Btn>
         <span className="w-px h-5 bg-slate-200 mx-1" />
         <Btn title="Link" onClick={addLink}><Link2 className="w-4 h-4" /></Btn>
-        <Btn title="Image" onClick={addImage}><ImageIcon className="w-4 h-4" /></Btn>
+        <Btn title="Upload image" onClick={addImage}><ImageIcon className="w-4 h-4" /></Btn>
+        {uploading && <span className="text-[11px] text-slate-400 font-bold ml-1">Uploading…</span>}
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { const f = e.target.files?.[0]; if (f) insertFile(f); e.target.value = ""; }} />
         <div className="ml-auto">
           <Btn title={source ? "Visual editor" : "HTML source"} onClick={() => setSource(s => !s)}>
             {source ? <Eye className="w-4 h-4" /> : <Code2 className="w-4 h-4" />}
@@ -72,6 +88,8 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
           ref={ref}
           contentEditable
           onInput={e => onChange((e.target as HTMLDivElement).innerHTML)}
+          onDrop={onDrop}
+          onDragOver={e => onUploadImage && e.preventDefault()}
           className="blog-content min-h-[320px] max-h-[640px] overflow-y-auto p-4 focus:outline-none prose prose-slate max-w-none"
           suppressContentEditableWarning
         />

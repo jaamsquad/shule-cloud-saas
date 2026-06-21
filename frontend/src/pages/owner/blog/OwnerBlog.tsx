@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FileText, Eye, Star, Pin, Plus, Search, Trash2, Pencil, ArrowLeft, Save,
   Tag as TagIcon, FolderTree, LayoutDashboard, Loader2, CheckCircle2, Globe,
+  Upload, X as XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { blogAdmin } from "@/lib/blogApi";
@@ -180,6 +181,12 @@ function PostEditor({ id, onBack }: { id: string; onBack: () => void }) {
 
   const set = (k: string, v: any) => { dirty.current = true; setForm((f: any) => ({ ...f, [k]: v })); };
 
+  // Shared image upload — used by the featured-image picker and the rich editor.
+  const upload = async (file: File) => {
+    try { const { url } = await blogAdmin.upload(file); return url; }
+    catch (e: any) { toast.error(e?.response?.data?.message || "Image upload failed"); throw e; }
+  };
+
   const save = useMutation({
     mutationFn: async (silent?: boolean) => {
       const payload = { ...form, publishAt: form.publishAt || null };
@@ -231,11 +238,11 @@ function PostEditor({ id, onBack }: { id: string; onBack: () => void }) {
           <input value={form.subtitle} onChange={e => set("subtitle", e.target.value)} placeholder="Subtitle (optional)" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none" />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Slug (URL)"><div className="flex items-center"><span className="text-xs text-slate-400 mr-1">/blogs/</span><input value={form.slug} onChange={e => set("slug", e.target.value)} placeholder="auto from title" className="flex-1 h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></div></Field>
-            <Field label="Featured image URL"><input value={form.featuredImage} onChange={e => set("featuredImage", e.target.value)} placeholder="https://…" className="w-full h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
+            <Field label="Featured image"><ImageUpload value={form.featuredImage} onChange={v => set("featuredImage", v)} upload={upload} /></Field>
           </div>
           <Field label="Short description"><textarea value={form.shortDescription} onChange={e => set("shortDescription", e.target.value)} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
           <Field label="Content">
-            <RichEditor value={form.content} onChange={v => set("content", v)} />
+            <RichEditor value={form.content} onChange={v => set("content", v)} onUploadImage={upload} />
           </Field>
           <Field label="Excerpt (shown in listings)"><textarea value={form.excerpt} onChange={e => set("excerpt", e.target.value)} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
         </div>
@@ -247,7 +254,7 @@ function PostEditor({ id, onBack }: { id: string; onBack: () => void }) {
           <Field label="Meta description"><textarea value={form.metaDescription} onChange={e => set("metaDescription", e.target.value)} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
           <Field label="Keywords (comma separated)"><input value={(form.keywords || []).join(", ")} onChange={e => set("keywords", e.target.value.split(",").map(s => s.trim()).filter(Boolean))} className="w-full h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
           <Field label="Canonical URL"><input value={form.canonicalUrl} onChange={e => set("canonicalUrl", e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
-          <Field label="Open Graph image URL"><input value={form.ogImage} onChange={e => set("ogImage", e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
+          <Field label="Open Graph image (social share)"><ImageUpload value={form.ogImage} onChange={v => set("ogImage", v)} upload={upload} /></Field>
           <Field label="Robots"><input value={form.robots} onChange={e => set("robots", e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none" /></Field>
         </div>
       )}
@@ -361,3 +368,32 @@ function Toggle({ label, v, on }: { label: string; v: boolean; on: () => void })
   );
 }
 function Center() { return <div className="flex items-center justify-center h-40"><Loader2 className="w-6 h-6 animate-spin text-[#613ddf]" /></div>; }
+
+// Image upload field — pick/drop a file (uploaded to the server) with a preview;
+// the resolved URL is also editable for pasting an existing link.
+function ImageUpload({ value, onChange, upload }: { value: string; onChange: (url: string) => void; upload: (f: File) => Promise<string> }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try { onChange(await upload(file)); } catch { /* toast handled upstream */ } finally { setBusy(false); }
+  };
+  return (
+    <div>
+      {value ? (
+        <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 mb-2">
+          <img src={value} alt="" className="w-full h-full object-cover" />
+          <button onClick={() => onChange("")} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center"><XIcon className="w-3.5 h-3.5" /></button>
+        </div>
+      ) : (
+        <button onClick={() => ref.current?.click()} onDrop={e => { e.preventDefault(); pick(Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"))); }} onDragOver={e => e.preventDefault()}
+          className="w-full h-32 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-[#613ddf] mb-2">
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Upload className="w-5 h-5 mb-1" /><span className="text-xs font-bold">Click or drop an image</span></>}
+        </button>
+      )}
+      <input ref={ref} type="file" accept="image/*" hidden onChange={e => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder="…or paste an image URL" className="w-full h-9 px-3 border border-slate-200 rounded-lg text-xs focus:outline-none" />
+    </div>
+  );
+}

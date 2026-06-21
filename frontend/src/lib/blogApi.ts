@@ -11,6 +11,12 @@ export const blogAdmin = {
   patch: (id: string, body: any) => api.patch(`/blog/admin/posts/${id}`, body).then(r => r.data),
   remove: (id: string) => api.delete(`/blog/admin/posts/${id}`).then(r => r.data),
 
+  upload: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/blog/admin/upload", fd, { headers: { "Content-Type": "multipart/form-data" } }).then(r => r.data as { url: string });
+  },
+
   categories: () => api.get("/blog/admin/categories").then(r => r.data),
   createCategory: (body: any) => api.post("/blog/admin/categories", body).then(r => r.data),
   updateCategory: (id: string, body: any) => api.put(`/blog/admin/categories/${id}`, body).then(r => r.data),

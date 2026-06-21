@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import path from 'path';
 import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
@@ -58,10 +59,13 @@ app.use(cors({
     origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-student-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-student-id', 'x-device-token'],
 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
+
+// Serve uploaded files (blog images, etc.) statically.
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ── Public school search (no auth) — used by bare localhost login page ─────────
 app.get('/api/v1/onboard/search-schools', async (req, res) => {
