@@ -116,6 +116,21 @@ export function MarketingNav() {
 }
 
 /**
+ * School photo behind a purple gradient — the standard backdrop for the purple
+ * hero bands across the public site. Absolutely positioned; place inside a
+ * `relative overflow-hidden` section and render content in a sibling with
+ * `relative` so it sits above this layer.
+ */
+export function HeroBackdrop() {
+  return (
+    <div className="absolute inset-0">
+      <img src="/auth-hero.png" alt="" aria-hidden="true" className="w-full h-full object-cover object-[center_25%]" />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(115deg, rgba(90,54,214,.93) 0%, rgba(67,38,181,.92) 55%, rgba(52,25,154,.95) 100%)" }} />
+    </div>
+  );
+}
+
+/**
  * Shared shell for public info/legal pages (Terms, Privacy, Status, …) so they
  * match the landing page — purple header band + the marketing nav and footer.
  */
@@ -123,9 +138,12 @@ export function LegalShell({ title, subtitle, children }: { title: string; subti
   return (
     <div className="min-h-screen bg-white text-slate-800 font-sans">
       <MarketingNav />
-      <section className="text-center text-white py-20 px-6" style={{ background: "linear-gradient(120deg,#613ddf 0%, #4d2fc4 55%, #3a1f9e 100%)" }}>
-        <h1 className="text-4xl md:text-5xl font-black">{title}</h1>
-        {subtitle && <p className="text-white/80 text-lg mt-3 max-w-2xl mx-auto">{subtitle}</p>}
+      <section className="relative overflow-hidden text-center text-white py-20 px-6">
+        <HeroBackdrop />
+        <div className="relative">
+          <h1 className="text-4xl md:text-5xl font-black">{title}</h1>
+          {subtitle && <p className="text-white/80 text-lg mt-3 max-w-2xl mx-auto">{subtitle}</p>}
+        </div>
       </section>
       <main className="max-w-3xl mx-auto px-6 py-16">{children}</main>
       <MarketingFooter />

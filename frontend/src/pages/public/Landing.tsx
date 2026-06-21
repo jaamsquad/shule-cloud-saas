@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { resolvePortal } from "@/lib/portal";
 import SchoolLanding from "./SchoolLanding";
-import { MarketingNav, MarketingFooter, PURPLE, NAVY } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, HeroBackdrop, PURPLE, NAVY } from "./MarketingChrome";
 import { DemoModal } from "./DemoModal";
 
 const cbe = [
@@ -186,8 +186,9 @@ export default function Landing() {
       </section>
 
       {/* ── CTA band ──────────────────────────────────────────────────── */}
-      <section className="py-24 text-center text-white" style={{ background: `linear-gradient(135deg, ${PURPLE}, ${NAVY})` }}>
-        <div className="max-w-3xl mx-auto px-6">
+      <section className="relative overflow-hidden py-24 text-center text-white">
+        <HeroBackdrop />
+        <div className="max-w-3xl mx-auto px-6 relative">
           <h2 className="text-3xl md:text-5xl font-black mb-4">Ready to transform your school?</h2>
           <p className="text-white/80 text-lg max-w-xl mx-auto mb-10">Join hundreds of schools already running smarter with ShuleCloud. Get set up in minutes — it's free to start.</p>
           <div className="flex flex-wrap items-center justify-center gap-5">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Mail, Phone, MapPin, Send, CheckCircle2, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { MarketingNav, MarketingFooter, BLUE, NAVY, TEAL, CONTACT_PHONE, CONTACT_EMAIL } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, HeroBackdrop, BLUE, NAVY, TEAL, CONTACT_PHONE, CONTACT_EMAIL } from "./MarketingChrome";
 
 export default function Contact() {
   const { toast } = useToast();
@@ -36,11 +36,11 @@ export default function Contact() {
       <MarketingNav />
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,#EEF4FF 0%, #ffffff 70%)" }} />
-        <div className="max-w-3xl mx-auto px-6 pt-16 pb-10 text-center relative">
-          <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4" style={{ color: NAVY }}>Let's talk about your school</h1>
-          <p className="text-lg text-slate-500">Questions, a demo, or help getting set up — our Kenyan-based team is here for you.</p>
+      <section className="relative overflow-hidden text-white">
+        <HeroBackdrop />
+        <div className="max-w-3xl mx-auto px-6 py-20 text-center relative">
+          <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">Let's talk about your school</h1>
+          <p className="text-lg text-white/80">Questions, a demo, or help getting set up — our Kenyan-based team is here for you.</p>
         </div>
       </section>
 

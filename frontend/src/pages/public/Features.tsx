@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { MarketingNav, MarketingFooter, PURPLE, NAVY } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, HeroBackdrop, PURPLE, NAVY } from "./MarketingChrome";
 import { DemoModal } from "./DemoModal";
 
 // Grouped the way a head teacher thinks about running a school, not a flat
@@ -63,8 +63,8 @@ export default function Features() {
       <MarketingNav />
 
       {/* Hero */}
-      <section className="relative overflow-hidden text-white" style={{ background: "linear-gradient(115deg,#5a36d6 0%, #4326b5 60%, #34199a 100%)" }}>
-        <div className="absolute -top-32 -left-24 w-[460px] h-[460px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: "radial-gradient(circle, #b69bff, transparent 70%)" }} />
+      <section className="relative overflow-hidden text-white">
+        <HeroBackdrop />
         <div className="max-w-3xl mx-auto px-6 py-20 text-center relative">
           <h1 className="text-4xl md:text-5xl font-light leading-[1.1] mb-5">Everything a Kenyan school needs, <span className="font-bold">nothing it doesn't</span>.</h1>
           <p className="text-lg text-white/75 mb-9">One platform, built around how schools actually run — from the admission form to the audited account.</p>
@@ -94,8 +94,9 @@ export default function Features() {
       </div>
 
       {/* CTA */}
-      <section className="py-24 text-center text-white" style={{ background: `linear-gradient(135deg, ${PURPLE}, ${NAVY})` }}>
-        <div className="max-w-2xl mx-auto px-6">
+      <section className="relative overflow-hidden py-24 text-center text-white">
+        <HeroBackdrop />
+        <div className="max-w-2xl mx-auto px-6 relative">
           <h2 className="text-3xl md:text-4xl font-black mb-4">See it with your own school's data</h2>
           <p className="text-white/80 text-lg mb-9">Set up takes minutes, and it's free to start. Bring your classes, fees and timetable across in an afternoon.</p>
           <div className="flex flex-wrap items-center justify-center gap-4">
