@@ -314,6 +314,12 @@ class MainActivity : AppCompatActivity() {
             if (NetworkUtil.isOnline(this)) webView.reload()
             else { binding.swipeRefresh.isRefreshing = false; showError(ErrorType.NO_INTERNET) }
         }
+        // Only allow the pull-to-refresh gesture when the page is scrolled to the
+        // very top. Otherwise scrolling inner areas (e.g. the school sidebar) or
+        // dragging mid-page would trigger an unwanted refresh.
+        binding.swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            webView.scrollY > 0
+        }
     }
 
     // ── Error page ────────────────────────────────────────────────────────────
