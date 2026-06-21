@@ -1,35 +1,34 @@
+/**
+ * Background safety-net using expo-background-task (the modern replacement for
+ * background-fetch). The persistent foreground service does the real work; this
+ * periodic task is a backstop that also fires after device reboot, draining the
+ * queue and sending a heartbeat in case the service isn't running yet.
+ */
 import * as TaskManager from "expo-task-manager";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import { loadSession } from "./config";
 import { runOnce, heartbeat } from "./worker";
 
 export const SMS_TASK = "shulecloud-sms-poll";
 
-// Background task: even when the app is backgrounded, periodically drain the
-// queue. Android limits how often this runs (~15 min minimum), so the socket
-// push + foreground timer do the heavy lifting; this is the safety net.
 TaskManager.defineTask(SMS_TASK, async () => {
   try {
     const session = await loadSession();
-    if (!session) return BackgroundFetch.BackgroundFetchResult.NoData;
+    if (!session) return BackgroundTask.BackgroundTaskResult.Success;
     await heartbeat(session);
-    const n = await runOnce(session);
-    return n > 0 ? BackgroundFetch.BackgroundFetchResult.NewData : BackgroundFetch.BackgroundFetchResult.NoData;
+    await runOnce(session);
+    return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
 
 export async function registerBackground() {
   try {
-    await BackgroundFetch.registerTaskAsync(SMS_TASK, {
-      minimumInterval: 60 * 15, // 15 min (Android floor)
-      stopOnTerminate: false,
-      startOnBoot: true,
-    });
-  } catch { /* already registered */ }
+    await BackgroundTask.registerTaskAsync(SMS_TASK, { minimumInterval: 15 });
+  } catch { /* already registered or unsupported (Expo Go) */ }
 }
 
 export async function unregisterBackground() {
-  try { await BackgroundFetch.unregisterTaskAsync(SMS_TASK); } catch { /* noop */ }
+  try { await BackgroundTask.unregisterTaskAsync(SMS_TASK); } catch { /* noop */ }
 }

@@ -1,17 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
-import { io, Socket } from "socket.io-client";
-import { SOCKET_URL, Session, clearSession } from "../config";
+import * as Notifications from "expo-notifications";
+import { Session, clearSession } from "../config";
 import { runOnce, heartbeat } from "../worker";
+import { connectSocket, getSocket, disconnectSocket } from "../socket";
+import {
+  hasForegroundService, registerForegroundService, startForegroundService, stopForegroundService,
+} from "../foregroundService";
 
 const PURPLE = "#613ddf";
 
 export function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [online, setOnline] = useState(false);
+  const [bg, setBg] = useState(false);
   const [stats, setStats] = useState({ sent: 0, failed: 0 });
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
 
   const addLog = (line: string) => setLog(l => [`${new Date().toLocaleTimeString()} · ${line}`, ...l].slice(0, 50));
 
@@ -24,36 +28,55 @@ export function Dashboard({ session, onSignOut }: { session: Session; onSignOut:
         onProgress: ({ sent, failed }) => { batch = { sent, failed }; },   // cumulative within the batch
         onLog: addLog,
       });
-      // Add the batch totals to the running session counters once.
       if (batch.sent || batch.failed) setStats(prev => ({ sent: prev.sent + batch.sent, failed: prev.failed + batch.failed }));
     } finally { setBusy(false); }
   };
 
   useEffect(() => {
-    // Socket: instant push when new jobs are queued.
-    const socket = io(`${SOCKET_URL}/sms`, {
-      path: "/socket.io",
-      auth: { token: session.token, subdomain: session.subdomain },
-      transports: ["websocket"],
-    });
-    socketRef.current = socket;
-    socket.on("connect", () => { setOnline(true); addLog("Connected to ShuleCloud"); drain(); });
-    socket.on("disconnect", () => { setOnline(false); addLog("Disconnected — will retry"); });
-    socket.on("sms:ready", () => drain());
-    socket.on("sms:jobs", (p: any) => { addLog(`${p?.count ?? "New"} message(s) incoming`); drain(); });
+    let mounted = true;
+    (async () => {
+      // Ask for the notification permission (Android 13+) — required for the
+      // persistent foreground-service notification that keeps us alive.
+      try { await Notifications.requestPermissionsAsync(); } catch {}
 
-    // Foreground safety timer + heartbeat.
-    heartbeat(session);
-    const poll = setInterval(() => { drain(); }, 20000);
+      // Live socket for the on-screen UI.
+      const socket = connectSocket(session, () => { addLog("New message(s) incoming"); drain(); });
+      socket.on("connect", () => { if (mounted) { setOnline(true); addLog("Connected to ShuleCloud"); } drain(); });
+      socket.on("disconnect", () => { if (mounted) setOnline(false); });
+
+      // Start the foreground service so sending continues when the app is closed.
+      if (hasForegroundService()) {
+        registerForegroundService();
+        await startForegroundService(session.subdomain);
+        if (mounted) { setBg(true); addLog("Background service started — sending will continue when closed"); }
+      } else {
+        addLog("Background service unavailable in this build (Expo Go) — keep the app open");
+      }
+
+      heartbeat(session);
+    })();
+
+    // Foreground UI heartbeat/drain (the service handles it when backgrounded).
+    const poll = setInterval(() => drain(), 15000);
     const hb = setInterval(() => heartbeat(session), 30000);
-    return () => { socket.disconnect(); clearInterval(poll); clearInterval(hb); };
+    return () => { mounted = false; clearInterval(poll); clearInterval(hb); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // keep the online dot in sync with the live socket
+  useEffect(() => {
+    const s = getSocket();
+    if (!s) return;
+    const on = () => setOnline(true); const off = () => setOnline(false);
+    s.on("connect", on); s.on("disconnect", off);
+    setOnline(!!s.connected);
+    return () => { s.off("connect", on); s.off("disconnect", off); };
+  });
 
   const signOut = () => {
     Alert.alert("Disconnect this phone?", "It will stop sending SMS for the school until you pair again.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Disconnect", style: "destructive", onPress: async () => { socketRef.current?.disconnect(); await clearSession(); onSignOut(); } },
+      { text: "Disconnect", style: "destructive", onPress: async () => { await stopForegroundService(); disconnectSocket(); await clearSession(); onSignOut(); } },
     ]);
   };
 
@@ -66,6 +89,9 @@ export function Dashboard({ session, onSignOut }: { session: Session; onSignOut:
           {online ? "● Connected & ready" : "○ Reconnecting…"}
         </Text>
         <Text style={styles.statusSub}>School: {session.subdomain}</Text>
+        <Text style={[styles.statusSub, { marginTop: 6 }]}>
+          {bg ? "🟢 Background sending ON — works when the app is closed" : "🟡 Keep the app open for sending"}
+        </Text>
       </View>
 
       <View style={styles.statsRow}>
@@ -87,7 +113,7 @@ export function Dashboard({ session, onSignOut }: { session: Session; onSignOut:
         <Text style={styles.signOutText}>Disconnect this phone</Text>
       </TouchableOpacity>
 
-      <Text style={styles.note}>Keep this app open or running in the background, and disable battery optimisation for reliable delivery.</Text>
+      <Text style={styles.note}>For most reliable delivery, disable battery optimisation for this app (Settings → Apps → ShuleCloud SMS → Battery → Unrestricted).</Text>
     </ScrollView>
   );
 }

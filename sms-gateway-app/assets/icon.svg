@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6b46f0"/>
+      <stop offset="1" stop-color="#3a1f9e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <!-- Graduation cap (mortarboard) matching the ShuleCloud logo mark -->
+  <g fill="#ffffff">
+    <!-- board (diamond) -->
+    <path d="M512 300 L820 430 L512 560 L204 430 Z"/>
+    <!-- cap base under the board -->
+    <path d="M360 495 v95 c0 46 68 83 152 83 s152 -37 152 -83 v-95 L512 560 Z" opacity="0.92"/>
+  </g>
+  <!-- tassel -->
+  <path d="M820 430 v150" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="820" cy="600" r="26" fill="#9b7bff"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg width="900" height="320" viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg">
+  <!-- graduation cap above the wordmark -->
+  <g transform="translate(450,40)" fill="#ffffff">
+    <path d="M0 0 L70 28 L0 56 L-70 28 Z"/>
+    <path d="M-34 42 v22 c0 11 15 19 34 19 s34 -8 34 -19 v-22 L0 56 Z"/>
+  </g>
+  <!-- wordmark: "shule clOud" -->
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="120">
+    <text x="450" y="240" text-anchor="middle">
+      <tspan fill="#1a1333">shule cl</tspan><tspan fill="#6b46f0">O</tspan><tspan fill="#1a1333">ud</tspan>
+    </text>
+  </g>
+</svg>
