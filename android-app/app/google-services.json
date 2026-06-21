@@ -1,23 +1,27 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "project_id": "shulecloud-app",
-    "storage_bucket": "shulecloud-app.appspot.com"
+    "project_number": "274860127721",
+    "project_id": "shulecloud-45e79",
+    "storage_bucket": "shulecloud-45e79.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:274860127721:android:d34ee2fe0acbd2b9ed8778",
         "android_client_info": {
           "package_name": "com.shulecloud.app"
         }
       },
       "oauth_client": [],
       "api_key": [
-        { "current_key": "AIzaSyPLACEHOLDER0000000000000000000000000" }
+        {
+          "current_key": "AIzaSyDUBQ5Zz4zEcKegtGXkBo63Mmaq9wLhqW8"
+        }
       ],
       "services": {
-        "appinvite_service": { "other_platform_oauth_client": [] }
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
       }
     }
   ],
