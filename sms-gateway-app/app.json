@@ -14,7 +14,6 @@
     },
     "android": {
       "package": "com.shulecloud.smsgateway",
-      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#613ddf"
