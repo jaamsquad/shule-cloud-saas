@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
     sendEmail, sendWhatsApp, resolveEmails, resolvePhones, getCommSettings, dbFromReq, schoolIdFromReq,
 } from '../services/communications.service';
+import { buildResultMessages, listResultSources } from '../services/smsGateway.service';
 import { whatsAppManager } from '../services/whatsapp/SessionManager';
 
 const router = Router();
@@ -71,6 +72,31 @@ router.post('/communications/whatsapp/send', async (req, res) => {
     } catch (e: any) {
         res.status(400).json({ message: e.message });
     }
+});
+
+// List exams / class tests / CBC activities for WhatsApp result sending.
+router.get('/communications/whatsapp/result-sources', async (req, res) => {
+    try { res.json(await listResultSources(dbFromReq(req))); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Send per-student results to parents over WhatsApp (existing QR session or API).
+router.post('/communications/whatsapp/send-results', async (req, res) => {
+    try {
+        const db = dbFromReq(req);
+        const { type, id } = req.body || {};
+        if (!type || !id) return res.status(400).json({ message: 'Choose a result source' });
+        const messages = await buildResultMessages(db, type, id);
+        if (messages.length === 0) return res.status(409).json({ message: 'No results found, or students have no parent phone numbers.' });
+
+        // Group identical-by-recipient sends; WhatsApp is per-number with its own body.
+        const results: any[] = [];
+        for (const m of messages) {
+            const r = await sendWhatsApp(db, { to: [m.phone], message: m.text, schoolId: schoolIdFromReq(req) });
+            results.push(...r);
+        }
+        res.json({ recipients: messages.length, ...summarize(results) });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 router.post('/communications/whatsapp/test', async (req, res) => {

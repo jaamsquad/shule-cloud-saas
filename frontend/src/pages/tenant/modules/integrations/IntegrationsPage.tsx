@@ -295,6 +295,42 @@ export const INTEGRATIONS_CONFIG = [
 
 const CATEGORIES = ["All", ...Array.from(new Set(INTEGRATIONS_CONFIG.map(i => i.category)))];
 
+// Real brand marks via Simple Icons (open-source CC0 icon set, served from CDN).
+// Maps our integration key → [simpleicons slug, brand hex]. Missing keys fall
+// back to the emoji defined in the config.
+export const BRAND_SLUG: Record<string, [string, string]> = {
+    daraja: ["safaricom", "1AB248"],
+    stripe: ["stripe", "635BFF"],
+    flutterwave: ["flutterwave", "FF9B00"],
+    google_classroom: ["googleclassroom", "0F9D58"],
+    zoom: ["zoom", "0B5CFF"],
+    microsoft_teams: ["microsoftteams", "6264A7"],
+    jitsi: ["jitsi", "97979A"],
+    africas_talking: ["africastalking", "F5333F"],
+    twilio: ["twilio", "F22F46"],
+    whatsapp: ["whatsapp", "25D366"],
+    sendgrid: ["sendgrid", "1A82E2"],
+    mailgun: ["mailgun", "F06B66"],
+    smtp: ["maildotru", "168DE2"],
+};
+
+/** Renders a brand logo from Simple Icons, falling back to the emoji on error. */
+export function BrandLogo({ intgKey, emoji, color }: { intgKey: string; emoji: string; color: string }) {
+    const brand = BRAND_SLUG[intgKey];
+    const [failed, setFailed] = useState(false);
+    if (!brand || failed) return <span className="text-2xl">{emoji}</span>;
+    const [slug, hex] = brand;
+    return (
+        <img
+            src={`https://cdn.simpleicons.org/${slug}/${hex || color.replace("#", "")}`}
+            alt=""
+            className="w-6 h-6 object-contain"
+            onError={() => setFailed(true)}
+            loading="lazy"
+        />
+    );
+}
+
 export default function IntegrationsPage() {
     const navigate = useNavigate();
     const [activeCategory, setActiveCategory] = useState("All");
@@ -397,9 +433,9 @@ export default function IntegrationsPage() {
                                         )}
 
                                         <div className="flex items-start gap-3 mb-3">
-                                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 border"
-                                                style={{ backgroundColor: `${intg.color}15`, borderColor: `${intg.color}30` }}>
-                                                {intg.logo}
+                                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 border bg-white"
+                                                style={{ borderColor: `${intg.color}30` }}>
+                                                <BrandLogo intgKey={intg.key} emoji={intg.logo} color={intg.color} />
                                             </div>
                                             <div className="flex-1 min-w-0 pt-0.5">
                                                 <p className="font-black text-gray-900 text-sm leading-tight">{intg.name}</p>

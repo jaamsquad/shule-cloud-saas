@@ -22,11 +22,28 @@ export default function ChannelComposer({ channel }: Props) {
     const Icon = isEmail ? Mail : Phone;
     const accent = isEmail ? "#5C67F2" : "#25D366";
 
+    const [mode, setMode] = useState<"compose" | "results">("compose");
     const [audience, setAudience] = useState("students");
     const [manual, setManual] = useState("");
     const [subject, setSubject] = useState("");
     const [message, setMessage] = useState("");
     const [testTo, setTestTo] = useState("");
+    const [resType, setResType] = useState<"exam" | "classTest" | "cbc">("exam");
+    const [resId, setResId] = useState("");
+
+    // Result sources for the "Send Results" mode (only meaningful for WhatsApp here).
+    const { data: resultSources } = useQuery({
+        queryKey: ["wa_result_sources", channel],
+        queryFn: async () => (await api.get(`/communications/${channel}/result-sources`)).data,
+        enabled: !isEmail,
+    });
+    const resList = resType === "exam" ? (resultSources?.exams || []) : resType === "classTest" ? (resultSources?.classTests || []) : (resultSources?.cbcActivities || []);
+
+    const sendResults = useMutation({
+        mutationFn: async () => (await api.post(`/communications/${channel}/send-results`, { type: resType, id: resId })).data,
+        onSuccess: (d: any) => { toast.success(`Results sent to ${d.recipients} parent(s) (${d.sent} ok, ${d.failed} failed).`); setResId(""); qc.invalidateQueries({ queryKey: ["comm_logs", channel] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Could not send results"),
+    });
 
     const { data: status } = useQuery({
         queryKey: ["comm_status"],
@@ -84,14 +101,14 @@ export default function ChannelComposer({ channel }: Props) {
                 <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm font-semibold text-amber-700">
                     <AlertTriangle className="w-4 h-4" />
                     {isEmail
-                        ? <>Email (SMTP) is not configured. <Link to="/communications/settings" className="underline font-black">Open Settings →</Link></>
+                        ? <>Email (SMTP) is not configured. <Link to="/integrations" className="underline font-black">Open Integrations →</Link></>
                         : <>WhatsApp is not connected. <Link to="/communications/whatsapp-integration" className="underline font-black">Scan the QR code →</Link></>}
                 </div>
             )}
             {disabled && (
                 <div className="mb-5 bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                     <AlertTriangle className="w-4 h-4" /> {isEmail ? "Email" : "WhatsApp"} is configured but disabled.
-                    <Link to={isEmail ? "/communications/settings" : "/communications/whatsapp-integration"} className="underline font-black">Enable it →</Link>
+                    <Link to={isEmail ? "/integrations" : "/communications/whatsapp-integration"} className="underline font-black">Enable it →</Link>
                 </div>
             )}
             {chStatus?.configured && chStatus?.enabled && (
@@ -101,6 +118,51 @@ export default function ChannelComposer({ channel }: Props) {
                 </div>
             )}
 
+            {!isEmail && (
+                <div className="flex gap-2 mb-5">
+                    {([["compose", "Compose"], ["results", "Send Results"]] as const).map(([k, label]) => (
+                        <button key={k} onClick={() => setMode(k)}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${mode === k ? "text-white" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}
+                            style={mode === k ? { background: accent, borderColor: accent } : {}}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {mode === "results" && !isEmail ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-2">Result type</label>
+                            <div className="flex flex-wrap gap-2">
+                                {([["exam", "Exam Results"], ["classTest", "Class Test"], ["cbc", "CBC Assessment"]] as const).map(([k, label]) => (
+                                    <button key={k} onClick={() => { setResType(k); setResId(""); }}
+                                        className="px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors"
+                                        style={resType === k ? { background: accent, borderColor: accent, color: "white" } : { borderColor: "#e2e8f0", color: "#475569" }}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Choose {resType === "exam" ? "exam" : resType === "classTest" ? "class test" : "CBC activity"}</label>
+                            <select value={resId} onChange={e => setResId(e.target.value)} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]">
+                                <option value="">— Select —</option>
+                                {resList.map((s: any) => <option key={s.id} value={s.id}>{s.name}{s.subject ? ` · ${s.subject}` : ""}{s.learningArea ? ` · ${s.learningArea}` : ""}</option>)}
+                            </select>
+                        </div>
+                        <p className="text-xs text-slate-400">A personalised WhatsApp message is generated for each learner and sent to their parent/guardian.</p>
+                        <div className="flex justify-end">
+                            <button onClick={() => resId && sendResults.mutate()} disabled={!resId || sendResults.isPending}
+                                className="inline-flex items-center gap-2 h-10 px-6 rounded-lg text-white font-black text-xs uppercase tracking-widest disabled:opacity-50" style={{ background: accent }}>
+                                {sendResults.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send Results
+                            </button>
+                        </div>
+                    </div>
+                    <div />
+                </div>
+            ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* Composer */}
                 <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
@@ -179,6 +241,7 @@ export default function ChannelComposer({ channel }: Props) {
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 }

@@ -9,7 +9,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
-import { INTEGRATIONS_CONFIG } from "./IntegrationsPage";
+import { INTEGRATIONS_CONFIG, BrandLogo } from "./IntegrationsPage";
 
 export default function IntegrationDetail() {
     const { key } = useParams<{ key: string }>();
@@ -142,9 +142,9 @@ export default function IntegrationDetail() {
             {/* ── Integration hero ───────────────────────────────────── */}
             <div className="px-4 sm:px-8 py-6" style={{ background: `linear-gradient(135deg, ${intg.color}08 0%, transparent 70%)` }}>
                 <div className="max-w-4xl mx-auto flex items-start gap-4">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 border-2"
-                        style={{ backgroundColor: `${intg.color}15`, borderColor: `${intg.color}30` }}>
-                        {intg.logo}
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center flex-shrink-0 border-2 bg-white"
+                        style={{ borderColor: `${intg.color}30` }}>
+                        <BrandLogo intgKey={intg.key} emoji={intg.logo} color={intg.color} />
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">

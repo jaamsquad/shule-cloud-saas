@@ -26,9 +26,16 @@ export const newToken = () => crypto.randomBytes(24).toString('hex');
 
 export const getSmsSettings = async (db: Db) => {
     const s = await db.collection('sms_settings').findOne({ _id: 'sms' as any }).catch(() => null);
+    // Pull the SMS-API credentials from the Integrations page (Africa's Talking)
+    // when the school hasn't set an explicit apiConfig on sms_settings.
+    let apiConfig = s?.apiConfig || {};
+    if (!apiConfig.apiKey) {
+        const at = await db.collection('integration_settings').findOne({ integration: 'africas_talking' }).catch(() => null);
+        if (at && (at.enabled || at.apiKey)) apiConfig = { apiKey: at.apiKey, username: at.username, senderId: at.senderId, environment: at.environment };
+    }
     return {
         provider: (s?.provider as SmsProvider) || 'device',
-        apiConfig: s?.apiConfig || {},          // { provider, apiKey, username, senderId, ... }
+        apiConfig,                                // { apiKey, username, senderId, ... }
         pacingMs: s?.pacingMs ?? 2500,           // gap between messages on a device
         dailyLimit: s?.dailyLimit ?? 0,          // 0 = unlimited
         updatedAt: s?.updatedAt || null,
@@ -128,3 +135,67 @@ export const deviceStats = async (db: Db, schoolId: string) => {
 };
 
 export { room as smsRoom };
+
+// ─── Result-message builder (shared by SMS + WhatsApp results) ────────────────
+const gradeFor = (score: number) => score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : score >= 50 ? 'D' : 'E';
+const studentPhone = (s: any) => s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone;
+const studentName = (s: any) => s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student';
+const CBC_LABEL: Record<string, string> = { EE: 'Exceeding Expectation', ME: 'Meeting Expectation', AE: 'Approaching Expectation', BE: 'Below Expectation' };
+
+/** Build personalised result messages (phone + text) for an exam/class-test/CBC source. */
+export const buildResultMessages = async (
+    db: Db, type: 'exam' | 'classTest' | 'cbc', id: string,
+): Promise<{ phone: string; text: string }[]> => {
+    const { ObjectId } = await import('mongodb');
+    const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
+    const school = (await db.collection('settings').findOne({}).catch(() => null))?.schoolName || '';
+    const students = await db.collection('students').find({}).toArray();
+    const byId: Record<string, any> = {};
+    students.forEach((s: any) => { byId[String(s._id)] = s; if (s.admNo) byId[s.admNo] = s; if (s.registrationNo) byId[s.registrationNo] = s; });
+    const out: { phone: string; text: string }[] = [];
+    const pre = school ? school + ': ' : '';
+
+    if (type === 'exam') {
+        const exam = await db.collection('exams').findOne({ _id: oid(id) });
+        const marks = await db.collection('marks').find({ examId: id }).toArray();
+        const byStudent: Record<string, any[]> = {};
+        marks.forEach((m: any) => { (byStudent[m.studentId] ||= []).push(m); });
+        for (const [sid, ms] of Object.entries(byStudent)) {
+            const st = byId[sid]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            const total = ms.reduce((t, m) => t + Number(m.marks || m.score || 0), 0);
+            const avg = ms.length ? Math.round(total / ms.length) : 0;
+            const lines = ms.map(m => `${m.subjectName || 'Subj'}:${Number(m.marks || m.score || 0)}(${gradeFor(Number(m.marks || m.score || 0))})`).join(', ');
+            out.push({ phone, text: `${pre}${studentName(st)} — ${exam?.name || 'Exam'} results. ${lines}. Mean: ${avg}% (${gradeFor(avg)}).` });
+        }
+    } else if (type === 'classTest') {
+        const test = await db.collection('class_tests').findOne({ _id: oid(id) });
+        const tmarks = await db.collection('test_marks').find({ test_id: oid(id) }).toArray();
+        for (const m of tmarks) {
+            const st = byId[String(m.student_id)] || byId[m.studentId]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            const score = Number(m.score ?? m.marks ?? 0);
+            const display = test?.total_marks ? `${score}/${test.total_marks}` : `${score}`;
+            out.push({ phone, text: `${pre}${studentName(st)} scored ${display} in ${test?.name || 'the class test'}${test?.subject_name ? ' (' + test.subject_name + ')' : ''}.` });
+        }
+    } else if (type === 'cbc') {
+        const activity = await db.collection('cbc_activities').findOne({ _id: oid(id) });
+        const assessments = await db.collection('cbc_assessments').find({ activityId: id, deletedAt: { $exists: false } }).toArray();
+        for (const a of assessments) {
+            const st = byId[a.studentId]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            out.push({ phone, text: `${pre}${studentName(st)} — ${activity?.learningArea || activity?.title || 'CBC'} assessment: ${a.level} (${CBC_LABEL[a.level] || ''}).` });
+        }
+    }
+    return out;
+};
+
+export const listResultSources = async (db: Db) => {
+    const [exams, tests, cbc] = await Promise.all([
+        db.collection('exams').find({}).sort({ createdAt: -1 }).limit(100).toArray().catch(() => []),
+        db.collection('class_tests').find({}).sort({ date: -1 }).limit(100).toArray().catch(() => []),
+        db.collection('cbc_activities').find({ deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(100).toArray().catch(() => []),
+    ]);
+    return {
+        exams: exams.map((e: any) => ({ id: String(e._id), name: e.name || e.examName || 'Exam', term: e.term, year: e.year })),
+        classTests: tests.map((t: any) => ({ id: String(t._id), name: t.name || t.title || 'Class Test', subject: t.subject_name || t.subjectName, total: t.total_marks })),
+        cbcActivities: cbc.map((a: any) => ({ id: String(a._id), name: a.title || a.name || a.learningArea || 'CBC Activity', learningArea: a.learningArea, strand: a.strand })),
+    };
+};

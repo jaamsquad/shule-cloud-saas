@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { resolvePortal } from "@/lib/portal";
 
@@ -150,7 +150,6 @@ import LiveClass from "./pages/tenant/modules/LiveClass";
 import LiveRoom from "./pages/tenant/modules/LiveRoom";
 import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
-import CommunicationsSettings from "./pages/tenant/modules/communications/CommunicationsSettings";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
 import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppIntegration";
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
@@ -696,7 +695,7 @@ const App = () => {
               <Route path="/communications/whatsapp" element={<ChannelComposer channel="whatsapp" />} />
               <Route path="/communications/notifications" element={<ReportNotificationSettings />} />
               <Route path="/communications/preferences" element={<CommunicationPreferences />} />
-              <Route path="/communications/settings" element={<CommunicationsSettings />} />
+              <Route path="/communications/settings" element={<Navigate to="/integrations" replace />} />
               <Route path="/communications/whatsapp-integration" element={<WhatsAppIntegration />} />
 
               {/* Integrations */}

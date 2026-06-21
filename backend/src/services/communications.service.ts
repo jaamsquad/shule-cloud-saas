@@ -3,9 +3,52 @@ import { Db } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
+// Config now lives on the Integrations page (integration_settings). We merge the
+// relevant integration records into the legacy field names the senders expect,
+// falling back to any old communication_settings doc for backward compatibility.
 export const getCommSettings = async (db: Db): Promise<any> => {
-    try { return (await db.collection('communication_settings').findOne({})) || {}; }
-    catch { return {}; }
+    try {
+        const legacy = (await db.collection('communication_settings').findOne({})) || {};
+        const integ = await db.collection('integration_settings').find({}).toArray().catch(() => []);
+        const byKey: Record<string, any> = {};
+        integ.forEach((r: any) => { if (r.integration) byKey[r.integration] = r; });
+
+        const smtp = byKey['smtp'];
+        const sendgrid = byKey['sendgrid'];
+        const mailgun = byKey['mailgun'];
+        const wa = byKey['whatsapp'];
+
+        const merged: any = { ...legacy };
+
+        // Email — prefer a configured/enabled integration, else legacy.
+        if (smtp && (smtp.enabled || smtp.host)) {
+            merged.emailEnabled = smtp.enabled !== false;
+            merged.smtpHost = smtp.host; merged.smtpPort = smtp.port;
+            merged.smtpUser = smtp.username; merged.smtpPass = smtp.password;
+            merged.emailFromAddress = smtp.fromEmail || merged.emailFromAddress;
+            merged.emailFromName = smtp.fromName || merged.emailFromName;
+        } else if (sendgrid && (sendgrid.enabled || sendgrid.apiKey)) {
+            merged.emailEnabled = sendgrid.enabled !== false;
+            merged.emailProvider = 'sendgrid'; merged.sendgridApiKey = sendgrid.apiKey;
+            merged.emailFromAddress = sendgrid.fromEmail || merged.emailFromAddress;
+            merged.emailFromName = sendgrid.fromName || merged.emailFromName;
+        } else if (mailgun && (mailgun.enabled || mailgun.apiKey)) {
+            merged.emailEnabled = mailgun.enabled !== false;
+            merged.emailProvider = 'mailgun'; merged.mailgunApiKey = mailgun.apiKey; merged.mailgunDomain = mailgun.domain;
+            merged.emailFromAddress = mailgun.fromEmail || merged.emailFromAddress;
+        }
+
+        // WhatsApp API (Meta Cloud) — used when no scanned QR session is active.
+        if (wa && (wa.enabled || wa.accessToken)) {
+            merged.whatsappApiKey = wa.accessToken || merged.whatsappApiKey;
+            merged.whatsappPhoneNumberId = wa.phoneNumberId || merged.whatsappPhoneNumberId;
+            merged.whatsappBusinessId = wa.businessId || merged.whatsappBusinessId;
+        }
+
+        return merged;
+    } catch {
+        try { return (await db.collection('communication_settings').findOne({})) || {}; } catch { return {}; }
+    }
 };
 
 // ─── Recipient resolution ──────────────────────────────────────────────────────

@@ -357,7 +357,7 @@ export const navItems: NavItem[] = [
       { label: "WhatsApp Integration", path: "/communications/whatsapp-integration" },
       { label: "Report Notifications", path: "/communications/notifications" },
       { label: "Communication Settings", path: "/communications/preferences" },
-      { label: "Gateway Settings", path: "/communications/settings" },
+      { label: "Gateway Settings", path: "/integrations" },
   ] },
   { label: "Live Class & LMS", icon: Video, moduleKey: "live_class", children: [
       { label: "Live Classes (Jitsi)", path: "/live" },
