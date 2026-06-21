@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ShuleCloud SMS",
+    "slug": "shulecloud-sms-gateway",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "shulecloudsms",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.shulecloud.smsgateway",
+      "permissions": [
+        "android.permission.SEND_SMS",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-notifications",
+        { "color": "#613ddf" }
+      ]
+    ],
+    "extra": {
+      "eas": { "projectId": "" }
+    }
+  }
+}

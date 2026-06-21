@@ -1,39 +1,47 @@
 import { useState } from "react";
-import { Home, Send, Loader2, MessageSquare, Users, RefreshCw, CheckCircle2 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Home, Send, Loader2, MessageSquare, Users, RefreshCw, CheckCircle2, Smartphone } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { sms } from "@/lib/smsApi";
+import SmsDevices from "./SmsDevices";
 
 const MAX_CHARS = 160;
 
+// Each group maps to an audience key the backend's resolvePhones understands
+// (students | parents | staff). Class-specific resolves numbers client-side.
 const RECIPIENT_GROUPS = [
-    { key: "all_students", label: "All Students", icon: "🎓" },
-    { key: "all_parents", label: "All Parents / Guardians", icon: "👨‍👩‍👧" },
-    { key: "all_staff", label: "All Staff", icon: "👔" },
-    { key: "all_teachers", label: "All Teachers", icon: "📚" },
-    { key: "fee_defaulters", label: "Fee Defaulters", icon: "💳" },
-    { key: "class_specific", label: "Specific Class", icon: "🏫" },
+    { key: "all_students", audience: "students", label: "All Students", icon: "🎓" },
+    { key: "all_parents", audience: "parents", label: "All Parents / Guardians", icon: "👨‍👩‍👧" },
+    { key: "all_staff", audience: "staff", label: "All Staff", icon: "👔" },
+    { key: "all_teachers", audience: "staff", label: "All Teachers", icon: "📚" },
+    { key: "class_specific", audience: "", label: "Specific Class", icon: "🏫" },
 ];
 
 export default function BulkSMS() {
-    const qc = useQueryClient();
     const [message, setMessage] = useState("");
     const [selectedGroups, setSelectedGroups] = useState<string[]>(["all_students"]);
     const [selectedClass, setSelectedClass] = useState("");
+    const [scheduledAt, setScheduledAt] = useState("");
     const [isSending, setIsSending] = useState(false);
-    const [tab, setTab] = useState<"compose" | "history">("compose");
+    const [tab, setTab] = useState<"compose" | "history" | "devices">("compose");
 
     const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: students = [] } = useQuery({ queryKey: ["students"], queryFn: async () => { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } });
-    const { data: logs = [], refetch } = useQuery({ queryKey: ["sms_logs"], queryFn: async () => { const r = await api.get("/sms_logs"); return Array.isArray(r.data) ? r.data : []; } });
+    const { data: logData, refetch } = useQuery({ queryKey: ["sms_jobs"], queryFn: sms.logs, refetchInterval: tab === "history" ? 5000 : false });
+    const logs = logData?.jobs || [];
 
     const toggleGroup = (key: string) => setSelectedGroups(prev => prev.includes(key) ? prev.filter(g => g !== key) : [...prev, key]);
+
+    const classNumbers = () => students
+        .filter((s: any) => s.studentClass === selectedClass || s.classId === selectedClass || s.currentClass === selectedClass)
+        .flatMap((s: any) => [s.parentPhone, s.fatherPhone, s.motherPhone, s.phone].filter(Boolean));
 
     const estimateRecipients = () => {
         let count = 0;
         if (selectedGroups.includes("all_students") || selectedGroups.includes("all_parents")) count += students.length;
         if (selectedGroups.includes("all_staff") || selectedGroups.includes("all_teachers")) count += 20;
-        if (selectedGroups.includes("class_specific") && selectedClass) count += students.filter((s: any) => s.studentClass === selectedClass || s.classId === selectedClass).length;
+        if (selectedGroups.includes("class_specific") && selectedClass) count += classNumbers().length;
         return Math.max(count, 0);
     };
 
@@ -42,18 +50,17 @@ export default function BulkSMS() {
         if (selectedGroups.length === 0) { toast.error("Select at least one recipient group"); return; }
         setIsSending(true);
         try {
-            const payload = {
-                message: message.trim(),
-                recipientGroups: selectedGroups,
-                selectedClass: selectedGroups.includes("class_specific") ? selectedClass : null,
-                estimatedRecipients: estimateRecipients(),
-                status: "Sent",
-                sentAt: new Date().toISOString(),
-                sentBy: "Admin",
-            };
-            await api.post("/sms_logs", payload);
-            toast.success(`SMS sent to ~${estimateRecipients()} recipients`);
-            qc.invalidateQueries({ queryKey: ["sms_logs"] });
+            const audiences = Array.from(new Set(
+                selectedGroups.map(k => RECIPIENT_GROUPS.find(g => g.key === k)?.audience).filter(Boolean) as string[]
+            ));
+            const to = selectedGroups.includes("class_specific") ? classNumbers() : [];
+            const res = await sms.send({ message: message.trim(), audiences, to, scheduledAt: scheduledAt || null });
+            if (res.provider === "device") {
+                toast.success(scheduledAt ? `Scheduled ${res.queued} message(s)` : `Queued ${res.queued} message(s) to your connected phone${res.onlineDevices === 0 ? " — no phone is online yet" : ""}`);
+            } else {
+                toast.success(`API gateway: ${res.sent || 0} sent, ${res.failed || 0} failed`);
+            }
+            refetch();
             setMessage("");
             setTab("history");
         } catch (e: any) {
@@ -82,10 +89,14 @@ export default function BulkSMS() {
                 </div>
 
                 <div className="flex gap-2 mb-6">
-                    {[{ key: "compose", label: "Compose" }, { key: "history", label: `History (${logs.length})` }].map(t => (
-                        <button key={t.key} onClick={() => setTab(t.key as any)} className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all ${tab === t.key ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>{t.label}</button>
+                    {[{ key: "compose", label: "Compose" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }].map(t => (
+                        <button key={t.key} onClick={() => setTab(t.key as any)} className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wide border transition-all flex items-center gap-1.5 ${tab === t.key ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                            {t.key === "devices" && <Smartphone className="w-3.5 h-3.5" />}{t.label}
+                        </button>
                     ))}
                 </div>
+
+                {tab === "devices" && <SmsDevices />}
 
                 {tab === "compose" && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -147,10 +158,16 @@ export default function BulkSMS() {
                                 </div>
                             </div>
 
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Schedule (optional)</p>
+                                <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]" />
+                                <p className="text-[10px] text-slate-400 mt-1.5">Leave empty to send now. Scheduled messages are released automatically when due.</p>
+                            </div>
+
                             <button onClick={handleSend} disabled={isSending || !message.trim() || selectedGroups.length === 0}
                                 className="w-full h-14 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-sm uppercase tracking-widest rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-indigo-200 transition-all">
                                 {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                                Send to ~{estimateRecipients()} Recipients
+                                {scheduledAt ? "Schedule" : "Send"} to ~{estimateRecipients()} Recipients
                             </button>
                         </div>
                     </div>
@@ -165,22 +182,26 @@ export default function BulkSMS() {
                         {logs.length === 0 ? (
                             <p className="text-center text-slate-300 text-xs font-bold uppercase py-12">No SMS sent yet</p>
                         ) : (
-                            <div className="space-y-3">
-                                {[...logs].reverse().map((log: any) => (
-                                    <div key={log._id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-bold text-slate-700">{log.message}</p>
-                                                <div className="flex items-center gap-3 mt-2 text-[9px] text-slate-400 font-bold uppercase flex-wrap">
-                                                    <span>To: {(log.recipientGroups || []).join(", ")}</span>
-                                                    <span>~{log.estimatedRecipients || 0} recipients</span>
-                                                    <span>{new Date(log.sentAt || log.createdAt).toLocaleString("en-GB")}</span>
+                            <div className="space-y-2">
+                                {logs.map((log: any) => {
+                                    const color = ({ delivered: "bg-emerald-50 text-emerald-600", sent: "bg-emerald-50 text-emerald-600", sending: "bg-blue-50 text-blue-600", queued: "bg-amber-50 text-amber-600", scheduled: "bg-violet-50 text-violet-600", failed: "bg-rose-50 text-rose-500" } as any)[log.status] || "bg-slate-100 text-slate-500";
+                                    return (
+                                        <div key={log._id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-slate-700 truncate">{log.message}</p>
+                                                    <div className="flex items-center gap-3 mt-2 text-[9px] text-slate-400 font-bold uppercase flex-wrap">
+                                                        <span>{log.phone}</span>
+                                                        {log.audience && <span>{log.audience}</span>}
+                                                        <span>{new Date(log.scheduledAt || log.createdAt).toLocaleString("en-GB")}</span>
+                                                        {log.error && <span className="text-rose-400 normal-case">{log.error}</span>}
+                                                    </div>
                                                 </div>
+                                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex-shrink-0 ${color}`}>{log.status}</span>
                                             </div>
-                                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase flex-shrink-0 ${log.status === "Sent" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{log.status || "Sent"}</span>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

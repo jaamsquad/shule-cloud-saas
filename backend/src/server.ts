@@ -10,8 +10,10 @@ import http from 'http';
 import app from './app';
 import { connectDB } from './lib/mongodb';
 import { attachWhatsAppSocket } from './services/whatsapp/socket';
+import { attachSmsSocket } from './services/smsSocket';
 import { whatsAppManager } from './services/whatsapp/SessionManager';
 import { installSignalLogFilter } from './services/whatsapp/logger';
+import { releaseScheduledSms } from './services/smsScheduler';
 
 // Quieten libsignal's direct console noise (huge SessionEntry dumps on key rotation).
 installSignalLogFilter();
@@ -26,7 +28,8 @@ async function bootstrap() {
 
         // Wrap Express in an HTTP server so Socket.IO can share the port.
         const server = http.createServer(app);
-        attachWhatsAppSocket(server);
+        const io = attachWhatsAppSocket(server);
+        attachSmsSocket(io);   // /sms namespace for the Android gateway app
 
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
@@ -39,6 +42,10 @@ async function bootstrap() {
         // run a heartbeat every minute to reconnect stale sessions / clean QRs.
         setTimeout(() => { whatsAppManager.restoreAll().catch(() => {}); }, 8000);
         setInterval(() => { whatsAppManager.heartbeat().catch(() => {}); }, 60_000);
+
+        // ── SMS scheduler ─────────────────────────────────────────────────────
+        // Release due scheduled SMS jobs every 30s across all tenants.
+        setInterval(() => { releaseScheduledSms().catch(() => {}); }, 30_000);
     } catch (error) {
         console.error('Server bootstrap failed:', error);
         process.exit(1);
