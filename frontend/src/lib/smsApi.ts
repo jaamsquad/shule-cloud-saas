@@ -10,6 +10,10 @@ export const sms = {
   status: () => api.get("/communications/sms/status").then(r => r.data),
   test: (phone: string) => api.post("/communications/sms/test", { phone }).then(r => r.data),
 
+  resultSources: () => api.get("/communications/sms/result-sources").then(r => r.data),
+  sendResults: (body: { type: string; id: string; scheduledAt?: string | null }) =>
+    api.post("/communications/sms/send-results", body).then(r => r.data),
+
   devices: () => api.get("/sms/devices").then(r => r.data),
   pair: (name?: string) => api.post("/sms/devices/pair", { name }).then(r => r.data),
   resetDevice: (id: string) => api.post(`/sms/devices/${id}/reset`).then(r => r.data),

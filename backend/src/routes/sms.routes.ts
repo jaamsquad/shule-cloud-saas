@@ -97,6 +97,98 @@ router.post('/communications/sms/test', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Results SMS: list sources + send per-student results ────────────────────
+
+// List exams / class tests / CBC activities the admin can send results for.
+router.get('/communications/sms/result-sources', async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const [exams, tests, cbc] = await Promise.all([
+            db.collection('exams').find({}).sort({ createdAt: -1 }).limit(100).toArray().catch(() => []),
+            db.collection('class_tests').find({}).sort({ date: -1 }).limit(100).toArray().catch(() => []),
+            db.collection('cbc_activities').find({ deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(100).toArray().catch(() => []),
+        ]);
+        res.json({
+            exams: exams.map((e: any) => ({ id: String(e._id), name: e.name || e.examName || 'Exam', term: e.term, year: e.year })),
+            classTests: tests.map((t: any) => ({ id: String(t._id), name: t.name || t.title || 'Class Test', subject: t.subject_name || t.subjectName, total: t.total_marks })),
+            cbcActivities: cbc.map((a: any) => ({ id: String(a._id), name: a.title || a.name || a.learningArea || 'CBC Activity', learningArea: a.learningArea, strand: a.strand })),
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+const gradeFor = (score: number) => score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : score >= 50 ? 'D' : 'E';
+const studentPhone = (s: any) => s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone;
+const studentName = (s: any) => s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student';
+
+// Build per-student result messages for a source and queue/send them.
+router.post('/communications/sms/send-results', async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const { type, id, scheduledAt } = req.body || {};
+        if (!type || !id) return res.status(400).json({ message: 'Choose a result source' });
+
+        const school = (await db.collection('settings').findOne({}))?.schoolName || '';
+        const students = await db.collection('students').find({}).toArray();
+        const byId: Record<string, any> = {}; students.forEach((s: any) => { byId[String(s._id)] = s; byId[s.admNo] = s; byId[s.registrationNo] = s; });
+
+        // messages: phone -> text
+        const messages: { phone: string; text: string }[] = [];
+
+        if (type === 'exam') {
+            const exam = await db.collection('exams').findOne({ _id: oid(id) });
+            const marks = await db.collection('marks').find({ examId: id }).toArray();
+            const byStudent: Record<string, any[]> = {};
+            marks.forEach((m: any) => { (byStudent[m.studentId] ||= []).push(m); });
+            for (const [sid, ms] of Object.entries(byStudent)) {
+                const st = byId[sid]; if (!st) continue;
+                const phone = studentPhone(st); if (!phone) continue;
+                const total = ms.reduce((t, m) => t + Number(m.marks || m.score || 0), 0);
+                const avg = ms.length ? Math.round(total / ms.length) : 0;
+                const lines = ms.map(m => `${m.subjectName || 'Subj'}:${Number(m.marks || m.score || 0)}(${gradeFor(Number(m.marks || m.score || 0))})`).join(', ');
+                messages.push({ phone, text: `${school ? school + ': ' : ''}${studentName(st)} — ${exam?.name || 'Exam'} results. ${lines}. Mean: ${avg}% (${gradeFor(avg)}).` });
+            }
+        } else if (type === 'classTest') {
+            const test = await db.collection('class_tests').findOne({ _id: oid(id) });
+            const tmarks = await db.collection('test_marks').find({ test_id: oid(id) }).toArray();
+            for (const m of tmarks) {
+                const st = byId[String(m.student_id)] || byId[m.studentId]; if (!st) continue;
+                const phone = studentPhone(st); if (!phone) continue;
+                const score = Number(m.score ?? m.marks ?? 0);
+                const out = test?.total_marks ? `${score}/${test.total_marks}` : `${score}`;
+                messages.push({ phone, text: `${school ? school + ': ' : ''}${studentName(st)} scored ${out} in ${test?.name || 'the class test'}${test?.subject_name ? ' (' + test.subject_name + ')' : ''}.` });
+            }
+        } else if (type === 'cbc') {
+            const activity = await db.collection('cbc_activities').findOne({ _id: oid(id) });
+            const assessments = await db.collection('cbc_assessments').find({ activityId: id, deletedAt: { $exists: false } }).toArray();
+            const LEVEL_LABEL: Record<string, string> = { EE: 'Exceeding Expectation', ME: 'Meeting Expectation', AE: 'Approaching Expectation', BE: 'Below Expectation' };
+            for (const a of assessments) {
+                const st = byId[a.studentId]; if (!st) continue;
+                const phone = studentPhone(st); if (!phone) continue;
+                messages.push({ phone, text: `${school ? school + ': ' : ''}${studentName(st)} — ${activity?.learningArea || activity?.title || 'CBC'} assessment: ${a.level} (${LEVEL_LABEL[a.level] || ''}).` });
+            }
+        } else {
+            return res.status(400).json({ message: 'Unknown result type' });
+        }
+
+        if (messages.length === 0) return res.status(409).json({ message: 'No results found, or students have no parent phone numbers.' });
+
+        // Queue/send each personalised message. (Same provider routing as /send.)
+        const settings = await getSmsSettings(db);
+        let queued = 0;
+        const when = scheduledAt ? new Date(scheduledAt) : null;
+        for (const m of messages) {
+            const r = await queueSms(db, schoolId(req), [m.phone], m.text, { audience: `results:${type}`, scheduledAt: when, createdBy: (req as any).user?.id });
+            queued += r.queued;
+        }
+        if (settings.provider === 'api' && !when) {
+            // Fire the API for each (already queued above); send in one batched call is hard with
+            // per-student bodies, so send individually.
+            for (const m of messages) await sendViaApi(db, settings.apiConfig, [m.phone], m.text);
+        }
+        res.json({ provider: settings.provider, recipients: messages.length, queued });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Connection status summary for the admin dashboard.
 router.get('/communications/sms/status', async (req, res) => {
     try {
