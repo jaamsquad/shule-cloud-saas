@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Platform, PermissionsAndroid } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Platform, PermissionsAndroid, Linking } from "react-native";
 import * as Device from "expo-device";
 import { api } from "../api";
 import { saveSession, Session } from "../config";
@@ -30,20 +30,32 @@ export function PairScreen({ onPaired }: { onPaired: (s: Session) => void }) {
     setBusy(true);
     try {
       const perm = await requestSmsPermission();
+      // Pairing itself doesn't need SMS — only *sending* does. So if Android
+      // auto-denied/suppressed the prompt (common for sideloaded apps), still
+      // let the user pair, but warn them to grant it in Settings before sending.
+      const proceed = async () => {
+        const res = await api.register(sd, {
+          pairingCode: code.trim(),
+          deviceName: Device.deviceName || `${Device.brand} ${Device.modelName}`,
+        });
+        const session: Session = { subdomain: sd, token: res.token, deviceId: res.deviceId, schoolId: res.school };
+        await saveSession(session);
+        onPaired(session);
+      };
+
       if (perm === "denied") {
-        // Android but user declined — can't send SMS without it.
-        Alert.alert("Permission needed", "Please allow the SMS permission so this phone can send messages. You can enable it in Settings → Apps → ShuleCloud SMS → Permissions.");
+        Alert.alert(
+          "Allow SMS to send messages",
+          "Android restricts the SMS permission for apps installed outside the Play Store, so it may not have prompted.\n\nTo SEND messages: Open Settings → Permissions → SMS → Allow. (If SMS is greyed out, use the ⋮ menu → \"Allow restricted settings\" first.)\n\nYou can still connect now and grant it after.",
+          [
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+            { text: "Connect anyway", onPress: () => { proceed().catch((e: any) => Alert.alert("Pairing failed", e?.message || "Try again.")); } },
+          ],
+        );
         setBusy(false); return;
       }
-      // perm === "granted" (Android) or "n/a" (iOS) → continue. iOS pairs for
-      // status/preview only; it cannot actually send SMS.
-      const res = await api.register(sd, {
-        pairingCode: code.trim(),
-        deviceName: Device.deviceName || `${Device.brand} ${Device.modelName}`,
-      });
-      const session: Session = { subdomain: sd, token: res.token, deviceId: res.deviceId, schoolId: res.school };
-      await saveSession(session);
-      onPaired(session);
+      // granted (Android) or n/a (iOS) → continue.
+      await proceed();
     } catch (e: any) {
       Alert.alert("Pairing failed", e?.message || "Check the subdomain and code, then try again.");
     } finally { setBusy(false); }
