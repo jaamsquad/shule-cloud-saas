@@ -19,13 +19,14 @@ class ShuleWebViewClient(
     private val onPageFinished: (url: String?) -> Unit,
     private val onError: (ErrorType) -> Unit,
     private val openExternal: (String?) -> Unit,
+    private val openInApp: (String?) -> Unit,
 ) : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
         val url = request?.url?.toString() ?: return false
-        // Documents / printables (PDF, Office, print/export URLs) → external
-        // browser, which can preview and print them (the WebView can't).
-        if (AppConfig.isDocumentUrl(url)) { openExternal(url); return true }
+        // Documents / printables (PDF, Office, print/export URLs) → in-app browser
+        // (Custom Tab), which can preview and print them (the WebView can't).
+        if (AppConfig.isDocumentUrl(url)) { openInApp(url); return true }
         // Allow ShuleCloud (login + school subdomains) to load in-app; the
         // backend's redirect to subdomain.shulecloud.com passes through here.
         if (AppConfig.isInternalUrl(url)) return false

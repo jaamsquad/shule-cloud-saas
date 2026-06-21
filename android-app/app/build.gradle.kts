@@ -53,6 +53,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.1")
     implementation("androidx.webkit:webkit:1.11.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.browser:browser:1.8.0")   // Chrome Custom Tabs (in-app browser)
 
     // Firebase Cloud Messaging
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))

@@ -158,7 +158,7 @@ class MainActivity : AppCompatActivity() {
     inner class PrintBridge {
         @android.webkit.JavascriptInterface
         fun printCurrent(url: String?) {
-            runOnUiThread { openInExternalBrowser(url ?: webView.url) }
+            runOnUiThread { openInAppBrowser(url ?: webView.url) }
         }
     }
 
@@ -179,7 +179,8 @@ class MainActivity : AppCompatActivity() {
                 injectPrintShim()
             },
             onError = { showError(it) },
-            openExternal = ::openInExternalBrowser
+            openExternal = ::openInExternalBrowser,
+            openInApp = ::openInAppBrowser
         )
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -232,10 +233,11 @@ class MainActivity : AppCompatActivity() {
                         v: WebView?, req: android.webkit.WebResourceRequest?
                     ): Boolean {
                         val u = req?.url?.toString()
-                        // Documents/printables and external links → device browser;
-                        // other internal pages continue in the main WebView.
+                        // Documents/printables → in-app browser (Custom Tab, can
+                        // render + print); internal pages stay in the main WebView;
+                        // external links → the system browser.
                         when {
-                            AppConfig.isDocumentUrl(u) -> openInExternalBrowser(u)
+                            AppConfig.isDocumentUrl(u) -> openInAppBrowser(u)
                             AppConfig.isInternalUrl(u) -> webView.loadUrl(u!!)
                             else -> openInExternalBrowser(u)
                         }
@@ -333,6 +335,28 @@ class MainActivity : AppCompatActivity() {
             })
         } catch (e: Exception) {
             Toast.makeText(this, "Cannot open link", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Opens a URL in an in-app browser (Chrome Custom Tab) — used for prints and
+     * documents (PDF/Office), which the WebView can't render but Custom Tabs can,
+     * while keeping the user inside the app. Falls back to the system browser if
+     * no Custom Tabs provider is available.
+     */
+    private fun openInAppBrowser(url: String?) {
+        url ?: return
+        try {
+            val tab = androidx.browser.customtabs.CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .build()
+            tab.intent.putExtra(
+                "androidx.browser.customtabs.extra.SHARE_STATE",
+                2 /* SHARE_STATE_OFF */
+            )
+            tab.launchUrl(this, Uri.parse(url))
+        } catch (e: Exception) {
+            openInExternalBrowser(url)   // fallback if no Custom Tabs provider
         }
     }
 
