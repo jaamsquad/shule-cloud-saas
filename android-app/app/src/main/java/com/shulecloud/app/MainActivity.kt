@@ -86,13 +86,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         requestNotificationPermissionIfNeeded()
+        setupToolbar()
         configureWebView()
         configureCookies()
         setupClients { keepSplash = false }
         setupDownloads()
         setupBack()
         setupErrorRetry()
-        setupPullToRefresh()
 
         // Priority: a deep link (VIEW intent) → the saved school's home → login.
         val target = intent?.data?.toString()?.takeIf { AppConfig.isInternalUrl(it) }
@@ -154,7 +154,6 @@ class MainActivity : AppCompatActivity() {
             onPageStarted = { binding.progressBar.show(); onFirstPaint() },
             onPageFinished = { url ->
                 binding.progressBar.hide()
-                binding.swipeRefresh.isRefreshing = false
                 CookieManager.getInstance().flush()
                 rememberSchoolFromUrl(url)
             },
@@ -324,22 +323,19 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun setupPullToRefresh() {
-        binding.swipeRefresh.setOnRefreshListener {
-            if (NetworkUtil.isOnline(this)) webView.reload()
-            else { binding.swipeRefresh.isRefreshing = false; showError(ErrorType.NO_INTERNET) }
-        }
-        // Only allow the pull-to-refresh gesture when the page is scrolled to the
-        // very top. Otherwise scrolling inner areas (e.g. the school sidebar) or
-        // dragging mid-page would trigger an unwanted refresh.
-        binding.swipeRefresh.setOnChildScrollUpCallback { _, _ ->
-            webView.scrollY > 0
+    private fun setupToolbar() {
+        binding.toolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.action_refresh) {
+                if (NetworkUtil.isOnline(this)) webView.reload()
+                else showError(ErrorType.NO_INTERNET)
+                true
+            } else false
         }
     }
 
     // ── Error page ────────────────────────────────────────────────────────────
     private fun showError(type: ErrorType) {
-        binding.swipeRefresh.visibility = android.view.View.GONE
+        webView.visibility = android.view.View.GONE
         binding.progressBar.hide()
         with(binding.errorView) {
             root.visibility = android.view.View.VISIBLE
@@ -351,7 +347,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupErrorRetry() {
         binding.errorView.retryButton.setOnClickListener {
             binding.errorView.root.visibility = android.view.View.GONE
-            binding.swipeRefresh.visibility = android.view.View.VISIBLE
+            webView.visibility = android.view.View.VISIBLE
             if (NetworkUtil.isOnline(this)) {
                 if (webView.url != null) webView.reload() else webView.loadUrl(AppConfig.launchUrl(this))
             } else showError(ErrorType.NO_INTERNET)
