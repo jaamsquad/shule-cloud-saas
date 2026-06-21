@@ -160,10 +160,21 @@ router.get('/cbc/report-card/:studentId', async (req, res) => {
         const comments = await db(req).collection('cbc_comments').find({ studentId: sid }).sort({ createdAt: -1 }).toArray().catch(() => []);
         const tenant = await getMetaDb().collection('Tenant').findOne({ _id: oid(String((req as any).tenantContext?.tenantId || '')) || undefined as any }).catch(() => null);
 
+        // Resolve the school's real current academic term/year when not explicitly
+        // requested — mirrors the legacy `periods` and v2 `terms` collections.
+        let curTerm = term as string | undefined;
+        let curYear = year as string | undefined;
+        if (!curTerm || !curYear) {
+            const period = await db(req).collection('periods').findOne({ isCurrent: true }).catch(() => null);
+            const activeTerm = !period ? await db(req).collection('terms').findOne({ isActive: true }).catch(() => null) : null;
+            curTerm = curTerm || period?.label || period?.name || period?.term || period?.title || activeTerm?.name || '';
+            curYear = curYear || String(period?.academicYear || activeTerm?.academicYear || new Date().getFullYear());
+        }
+
         res.json({
             school: { name: tenant?.instituteName || tenant?.name || 'School', logo: tenant?.logo || '' },
             student: { name: student.studentName || student.name, admissionNo: student.registrationNo || student.admNo, grade: student.currentClass || student.studentClass, gender: student.gender },
-            term: term || '', year: year || String(new Date().getFullYear()),
+            term: curTerm || '', year: curYear || String(new Date().getFullYear()),
             learningAreas,
             teacherComment: comments.find((c: any) => /teacher/i.test(c.type || ''))?.text || comments[0]?.text || '',
             headComment: comments.find((c: any) => /head|principal/i.test(c.type || ''))?.text || '',

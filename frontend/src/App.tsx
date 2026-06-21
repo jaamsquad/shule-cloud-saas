@@ -24,7 +24,6 @@ import StaffPortalLogin from "./pages/staff-portal/StaffPortalLogin";
 
 // Public pages
 import Landing from "./pages/public/Landing";
-import Pricing from "./pages/public/Pricing";
 import Features from "./pages/public/Features";
 import Contact from "./pages/public/Contact";
 import Status from "./pages/public/Status";
@@ -424,7 +423,6 @@ const App = () => {
             {/* 1. PUBLIC WEBSITE */}
             <Route path="/" element={<Landing />} />
             <Route path="/application" element={<PublicApplication />} />
-            <Route path="/pricing" element={<Pricing />} />
             <Route path="/features" element={<Features />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/status" element={<Status />} />

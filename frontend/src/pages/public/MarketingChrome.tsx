@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   GraduationCap, Menu, Mail, Phone, MapPin, Shield, Lock, ChevronDown,
@@ -25,9 +25,9 @@ const PRODUCTS: { group: string; items: MegaItem[] }[] = [
     { icon: Network, title: "Integrations", desc: "Connect SMS, WhatsApp & M-PESA Daraja.", to: "/features", badge: "Free" },
   ] },
   { group: "Advanced", items: [
-    { icon: Server, title: "Custom Domains & Branding", desc: "Run on your own domain with your branding.", to: "/pricing", badge: "Paid" },
+    { icon: Server, title: "Custom Domains & Branding", desc: "Run on your own domain with your branding.", to: "/features", badge: "Paid" },
     { icon: GraduationCap, title: "CBC Assessment & LMS", desc: "Full competency-based assessment & e-learning.", to: "/features", badge: "Paid" },
-    { icon: Cloud, title: "Cloud Hosting", desc: "Secure per-school data isolation & storage.", to: "/pricing", badge: "Paid" },
+    { icon: Cloud, title: "Cloud Hosting", desc: "Secure per-school data isolation & storage.", to: "/features", badge: "Paid" },
   ] },
 ];
 const EXPLORE: MegaItem[] = [
@@ -88,7 +88,6 @@ export function MarketingNav() {
             <button className="flex items-center gap-1 py-6 hover:text-[#613ddf]">Support <ChevronDown className="w-3.5 h-3.5" /></button>
             {hover === "support" && <div className="absolute left-0 top-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-4" style={{ width: 320 }}>{SUPPORT.map(it => <MegaItemRow key={it.title} it={it} />)}</div>}
           </div>
-          <Link to="/pricing" className="py-6 hover:text-[#613ddf]">Pricing</Link>
         </nav>
 
         {/* Right actions */}
@@ -109,13 +108,30 @@ export function MarketingNav() {
               <button onClick={() => setOpenMobile(false)}><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             {[...PRODUCTS.flatMap(g => g.items), ...EXPLORE, ...SUPPORT].map(it => <Link key={it.title} to={it.to} onClick={() => setOpenMobile(false)} className="flex items-center gap-2 py-2.5 text-sm font-bold text-slate-700"><it.icon className="w-4 h-4" style={{ color: PURPLE }} /> {it.title}</Link>)}
-            <Link to="/pricing" onClick={() => setOpenMobile(false)} className="flex items-center gap-2 py-2.5 text-sm font-bold text-slate-700">Pricing</Link>
             <Link to="/login" onClick={() => setOpenMobile(false)} className="mt-4 flex items-center justify-center gap-1.5 h-11 rounded-lg text-sm font-bold" style={{ background: PURPLE_LIGHT, color: PURPLE }}><Lock className="w-3.5 h-3.5" /> Login</Link>
             <Link to="/register" onClick={() => setOpenMobile(false)} className="mt-2 flex items-center justify-center h-11 rounded-lg text-sm font-bold text-white" style={{ background: PURPLE }}>Sign Up Now</Link>
           </div>
         </div>
       )}
     </header>
+  );
+}
+
+/**
+ * Shared shell for public info/legal pages (Terms, Privacy, Status, …) so they
+ * match the landing page — purple header band + the marketing nav and footer.
+ */
+export function LegalShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-white text-slate-800 font-sans">
+      <MarketingNav />
+      <section className="text-center text-white py-20 px-6" style={{ background: "linear-gradient(120deg,#613ddf 0%, #4d2fc4 55%, #3a1f9e 100%)" }}>
+        <h1 className="text-4xl md:text-5xl font-black">{title}</h1>
+        {subtitle && <p className="text-white/80 text-lg mt-3 max-w-2xl mx-auto">{subtitle}</p>}
+      </section>
+      <main className="max-w-3xl mx-auto px-6 py-16">{children}</main>
+      <MarketingFooter />
+    </div>
   );
 }
 
@@ -136,7 +152,7 @@ export function MarketingFooter() {
           </div>
         </div>
         {[
-          { h: "Product", links: [["Features", "/features"], ["Pricing", "/pricing"], ["Status", "/status"]] },
+          { h: "Product", links: [["Features", "/features"], ["Status", "/status"]] },
           { h: "Company", links: [["Contact", "/contact"], ["Sign In", "/login"], ["Get Started", "/register"]] },
           { h: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
         ].map(col => (

@@ -34,7 +34,6 @@ export default function Features() {
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <Link to="/features" className="text-sm font-medium text-foreground">Features</Link>
-            <Link to="/pricing" className="text-sm text-muted-foreground hover:text-foreground">Pricing</Link>
             <Link to="/contact" className="text-sm text-muted-foreground hover:text-foreground">Contact</Link>
           </div>
           <Button size="sm" asChild><Link to="/login">Sign In</Link></Button>
