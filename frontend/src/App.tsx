@@ -346,7 +346,6 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 
 // Custom domain + branding
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
-import MpesaIntegration from "./pages/tenant/modules/settings/MpesaIntegration";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
 import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
@@ -543,7 +542,8 @@ const App = () => {
               <Route path="/wallet" element={<AdminWallets />} />
 
               {/* M-PESA integration */}
-              <Route path="/settings/mpesa" element={<MpesaIntegration />} />
+              {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
+              <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
                <Route path="/students/admissions" element={<Admissions />} />
               <Route path="/students/guardians" element={<Guardians />} />
