@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
-import { parseStkCallback, applyMpesaPayment } from '../services/mpesa.service';
+import { parseStkCallback, applyMpesaPayment, stkResultMessage } from '../services/mpesa.service';
 import { creditWallet } from '../services/wallet.service';
 
 const router = Router();
@@ -39,7 +39,7 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
         } else {
             await meta.collection('mpesa_transactions').updateOne(
                 { _id: txn._id },
-                { $set: { status: 'failed', resultCode: stk.ResultCode, resultDesc: stk.ResultDesc, completedAt: new Date() } },
+                { $set: { status: 'failed', resultCode: stk.ResultCode, resultDesc: stkResultMessage(stk.ResultCode, stk.ResultDesc), completedAt: new Date() } },
             );
         }
     } catch (e) {

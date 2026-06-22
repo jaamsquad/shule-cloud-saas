@@ -204,8 +204,9 @@ export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
             return { status: 'completed' as const };
         }
         if (!isNaN(code) && code !== 0) {
-            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: q.ResultDesc } });
-            return { status: 'failed' as const, message: q.ResultDesc };
+            const msg = stkResultMessage(code, q.ResultDesc);
+            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: msg } });
+            return { status: 'failed' as const, message: msg };
         }
     } catch { /* still processing */ }
     return { status: 'pending' as const };
@@ -216,6 +217,19 @@ export const parseStkCallback = (stk: any) => {
     const m: Record<string, any> = {};
     items.forEach((i: any) => { m[i.Name] = i.Value; });
     return { amount: m.Amount, mpesaReceiptNumber: m.MpesaReceiptNumber, phoneNumber: m.PhoneNumber, transactionDate: m.TransactionDate };
+};
+
+/** Turn a Daraja STK ResultCode/Desc into a clear, actionable message. */
+export const stkResultMessage = (code: number | string, desc?: string): string => {
+    switch (Number(code)) {
+        case 0: return 'Payment successful.';
+        case 1: return 'Payment failed: insufficient M-PESA balance.';
+        case 1032: return 'Payment cancelled by the user.';
+        case 1037: return 'No response — the user didn\'t enter their PIN in time, or the phone was unreachable.';
+        case 1019: return 'Transaction expired. Please try again.';
+        case 2029: return 'M-PESA rejected the request (code 2029). This usually means the Passkey doesn\'t match the Shortcode, or the Transaction Type (Paybill vs Till) is wrong. Verify them in Settings → M-PESA Integration against your Daraja app.';
+        default: return desc || `Payment failed (code ${code}).`;
+    }
 };
 
 const reduceInvoice = (inv: any, pay: number) => {
