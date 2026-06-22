@@ -200,6 +200,12 @@ class MainActivity : AppCompatActivity() {
             if (base64.isNullOrBlank()) return
             runOnUiThread { saveBase64ToDownloads(base64, fileName ?: "download", mime ?: "application/octet-stream") }
         }
+
+        // The popup blob couldn't be read — fall back to native print of the popup.
+        @android.webkit.JavascriptInterface
+        fun blobFailed() {
+            runOnUiThread { currentPopup?.let { printWebView(it, "Document") } }
+        }
     }
 
     /** Writes a base64 payload to the public Downloads folder and notifies the user. */
@@ -231,6 +237,64 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "Download failed", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // ── Document download (any PDF / image / Excel, anywhere in the app) ───────
+
+    /** Download a real http(s) document URL via DownloadManager (with cookies). */
+    private fun downloadDocumentUrl(url: String?) {
+        url ?: return
+        try {
+            val cookie = CookieManager.getInstance().getCookie(url)
+            val fileName = URLUtil.guessFileName(url, null, null)
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                if (!cookie.isNullOrBlank()) addRequestHeader("cookie", cookie)
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                setTitle(fileName)
+                setDescription("Downloading from ShuleCloud")
+            }
+            (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            Toast.makeText(this, "Downloading $fileName…", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Download failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** A popup tried to download a document. Handle blob/data via JS, else manager. */
+    private fun handlePopupDocument(url: String?, contentDisposition: String?, mime: String?, popup: WebView) {
+        url ?: return
+        if (url.startsWith("blob:") || url.startsWith("data:")) {
+            grabPopupBlob(popup, url)
+        } else {
+            downloadDocumentUrl(url)
+            removePopup(popup)
+        }
+    }
+
+    /** Read a blob:/data: document from a popup into base64 and save it. */
+    private fun grabPopupBlob(popup: WebView?, url: String) {
+        popup ?: return
+        val js = """
+        (function(){
+          try{
+            var u="$url";
+            var name=(document.title||'document').replace(/[^a-z0-9._-]+/gi,'_');
+            fetch(u).then(function(r){return r.blob();}).then(function(b){
+              if(!/\.[a-z0-9]{2,5}$/i.test(name)){
+                var t=b.type||''; var ext = t.indexOf('pdf')>=0?'.pdf':t.indexOf('sheet')>=0?'.xlsx':t.indexOf('csv')>=0?'.csv':t.indexOf('png')>=0?'.png':t.indexOf('jpeg')>=0?'.jpg':'';
+                name=name+ext;
+              }
+              var fr=new FileReader();
+              fr.onloadend=function(){ ShuleCloudPrint.saveBlob(fr.result, name, b.type||''); };
+              fr.readAsDataURL(b);
+            }).catch(function(e){ ShuleCloudPrint.blobFailed(); });
+          }catch(e){ ShuleCloudPrint.blobFailed(); }
+        })();
+        """.trimIndent()
+        popup.evaluateJavascript(js, null)
+        // Remove the (blank) popup window after a moment.
+        popup.postDelayed({ removePopup(popup) }, 1500)
     }
 
     /** Sends a WebView's rendered content to Android's print service (creates a
@@ -276,7 +340,7 @@ class MainActivity : AppCompatActivity() {
             },
             onError = { showError(it) },
             openExternal = ::openInExternalBrowser,
-            openInApp = ::openInAppBrowser
+            downloadDoc = ::downloadDocumentUrl
         )
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -318,11 +382,12 @@ class MainActivity : AppCompatActivity() {
                 origin: String?, callback: GeolocationPermissions.Callback?
             ) { callback?.invoke(origin, true, false) }
 
-            // New windows / target=_blank. The web app's print uses
-            // window.open("","_blank") then document.write(html)+window.print(),
-            // so the popup has NO url up front — we must host it as a real (hidden)
-            // WebView, let it render the written HTML, then route its window.print()
-            // to Android's native print service.
+            // New windows / target=_blank. Two cases:
+            //  (a) A document is opened (PDF/image/Excel via a real url or a blob)
+            //      → DOWNLOAD it (the WebView can't render PDFs/Excel anyway).
+            //  (b) The web app's print: window.open("","_blank") + document.write +
+            //      window.print(). We host it off-screen and route its print() to
+            //      Android's native print service (which produces a PDF you can save).
             override fun onCreateWindow(
                 view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?
             ): Boolean {
@@ -330,29 +395,40 @@ class MainActivity : AppCompatActivity() {
                 val popup = WebView(this@MainActivity)
                 popup.settings.javaScriptEnabled = true
                 popup.settings.domStorageEnabled = true
+                popup.settings.allowFileAccess = false
                 popup.addJavascriptInterface(PrintBridge(), "ShuleCloudPrint")
-                // Add it off-screen so document.write content actually renders.
                 binding.root.addView(popup, 0, 0)
                 currentPopup = popup
+
+                // If the popup loads a document (incl. blob/data), download it.
+                popup.setDownloadListener(DownloadListener { url, _, contentDisposition, mimeType, _ ->
+                    handlePopupDocument(url, contentDisposition, mimeType, popup)
+                })
 
                 popup.webViewClient = object : android.webkit.WebViewClient() {
                     override fun shouldOverrideUrlLoading(
                         v: WebView?, req: android.webkit.WebResourceRequest?
                     ): Boolean {
                         val u = req?.url?.toString()
-                        // A real navigation (not document.write): documents → in-app
-                        // browser, internal pages → main WebView, else system browser.
                         when {
-                            AppConfig.isDocumentUrl(u) -> openInAppBrowser(u)
-                            AppConfig.isInternalUrl(u) -> webView.loadUrl(u!!)
-                            else -> openInExternalBrowser(u)
+                            // Real document url → download it.
+                            AppConfig.isDocumentUrl(u) -> { downloadDocumentUrl(u); removePopup(popup) }
+                            // Other internal pages → continue in the main WebView.
+                            AppConfig.isInternalUrl(u) -> { webView.loadUrl(u!!); removePopup(popup) }
+                            // External links → system browser.
+                            else -> { openInExternalBrowser(u); removePopup(popup) }
                         }
-                        removePopup(popup)
                         return true
                     }
 
                     override fun onPageFinished(v: WebView?, url: String?) {
-                        // Hook window.print() in the popup to call our native printer.
+                        // If the popup itself IS a blob/data document (e.g. a PDF
+                        // built client-side and opened in a new tab), grab + save it.
+                        if (url != null && (url.startsWith("blob:") || url.startsWith("data:"))) {
+                            grabPopupBlob(v, url)
+                            return
+                        }
+                        // Otherwise it's a print page → route window.print() natively.
                         v?.evaluateJavascript(
                             "window.print=function(){ShuleCloudPrint.printPopup(document.title);};", null
                         )
