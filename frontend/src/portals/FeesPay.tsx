@@ -42,6 +42,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
     const [message, setMessage] = useState("");
     const [receipt, setReceipt] = useState<string | null>(null);
     const pollRef = useRef<any>(null);
+    const balanceAtSend = useRef<number>(0);   // fee balance when the push was sent
 
     const { data, isLoading } = useQuery({
         queryKey: ["fees_summary", base],
@@ -82,7 +83,15 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
                 const st = r.data?.status;
                 if (st === "completed") { setReceipt(r.data?.receipt || null); setStage("success"); qc.invalidateQueries({ queryKey: ["fees_summary", base] }); return; }
                 if (st === "failed") { setStage("failed"); setMessage(r.data?.message || "Payment was cancelled or failed."); return; }
-                // "pending" / "unknown" / network error → keep waiting.
+                // Fallback: if the callback already applied the payment, the balance
+                // drops even before the query says "completed". Detect that as success.
+                try {
+                    const fresh = await api.get(`${base}/fees`);
+                    const newBal = Number(fresh.data?.balance ?? balanceAtSend.current);
+                    if (newBal < balanceAtSend.current - 0.5) {
+                        setStage("success"); qc.invalidateQueries({ queryKey: ["fees_summary", base] }); return;
+                    }
+                } catch { /* ignore */ }
             } catch { /* transient error — keep polling */ }
             poll(cid, attempt + 1);
         }, 3000);
@@ -90,6 +99,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
 
     const startPay = async () => {
         if (!amount || Number(amount) <= 0 || !phone) return;
+        balanceAtSend.current = balance;   // remember balance to detect a drop = success
         setStage("sending"); setMessage("");
         try {
             const r = await api.post(`${base}/pay-mpesa`, { phone, amount: Number(amount), invoiceId: modal?.invoiceId });

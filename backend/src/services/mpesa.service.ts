@@ -214,12 +214,17 @@ export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
             }
             return { status: 'completed' as const, receipt };
         }
-        if (!isNaN(code) && code !== 0) {
+        // Daraja STK-query codes that mean "still being processed" — NOT a failure.
+        // The success/failure is then confirmed by the callback (or a later query).
+        // 1037 = no PIN entered yet / timeout pending; 1032 here can also appear
+        // transiently. Anything in the 500.001.1001 family is "processing".
+        const stillProcessing = code === 1037 || /processing|being processed|500\.001\.1001/i.test(String(q.ResultDesc || q.errorMessage || ''));
+        if (!isNaN(code) && code !== 0 && !stillProcessing) {
             const msg = stkResultMessage(code, q.ResultDesc);
             await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: msg } });
             return { status: 'failed' as const, message: msg };
         }
-    } catch { /* still processing */ }
+    } catch { /* query failed transiently — treat as still pending */ }
     return { status: 'pending' as const };
 }
 
