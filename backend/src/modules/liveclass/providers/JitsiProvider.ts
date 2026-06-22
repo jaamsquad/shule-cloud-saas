@@ -21,21 +21,39 @@ export class JitsiProvider implements MeetingProvider {
     }
 
     async getJoinInfo(input: JoinMeetingInput) {
-        const room = this.roomName(input.meetingId);
-        const domain = this.s.jitsiDomain || 'meet.jit.si';
+        const baseRoom = this.roomName(input.meetingId);
+        const hasJaas = !!(this.s.jitsiAppId && this.s.jitsiAppSecret);
+        // 8x8 JaaS authenticates rooms (no 5-min limit). Its App IDs look like
+        // "vpaas-magic-cookie-xxxx"; rooms must be prefixed with the App ID and
+        // the host is 8x8.vc. A self-hosted token-Jitsi keeps its own domain.
+        const isJaas = hasJaas && /^vpaas-/.test(this.s.jitsiAppId!);
+        const domain = isJaas ? '8x8.vc' : (this.s.jitsiDomain || 'meet.jit.si');
+        const room = isJaas ? `${this.s.jitsiAppId}/${baseRoom}` : baseRoom;
+
         let token: string | undefined;
-        if (this.s.jitsiAppId && this.s.jitsiAppSecret) {
-            // JWT for token-protected Jitsi (moderators get moderator: true).
+        if (hasJaas) {
+            const now = Math.floor(Date.now() / 1000);
             token = jwt.sign(
                 {
-                    aud: 'jitsi', iss: this.s.jitsiAppId, sub: domain, room: '*',
-                    exp: Math.floor(Date.now() / 1000) + 3 * 3600,
+                    aud: 'jitsi',
+                    iss: 'chat',
+                    sub: isJaas ? this.s.jitsiAppId : domain,
+                    room: '*',
+                    nbf: now - 10,
+                    exp: now + 3 * 3600,
                     context: {
-                        user: { name: input.displayName, avatar: input.avatar || '', moderator: input.role === 'moderator' },
-                        features: { recording: this.s.jitsiEnableRecording, livestreaming: false },
+                        user: {
+                            id: input.displayName, name: input.displayName, avatar: input.avatar || '',
+                            email: '', moderator: input.role === 'moderator',
+                        },
+                        features: {
+                            recording: this.s.jitsiEnableRecording, livestreaming: false,
+                            transcription: false, 'outbound-call': false,
+                        },
                     },
                 },
-                this.s.jitsiAppSecret,
+                this.s.jitsiAppSecret!,
+                isJaas ? { algorithm: 'RS256', header: { kid: this.s.jitsiAppId! } as any } : { algorithm: 'HS256' },
             );
         }
         return { embed: 'jitsi' as const, roomName: room, domain, jwt: token };
