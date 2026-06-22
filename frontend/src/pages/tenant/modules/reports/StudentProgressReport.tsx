@@ -13,6 +13,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function StudentProgressReport() {
     const [selectedStudent, setSelectedStudent] = useState("");
@@ -145,7 +146,7 @@ export default function StudentProgressReport() {
         </body>
         </html>`;
 
-        const win = window.open("", "_blank", "width=900,height=1000");
+        const win = openPrintDoc();
         if (!win) { toast.error("Pop-up blocked"); return; }
         win.document.write(html);
         win.document.close();

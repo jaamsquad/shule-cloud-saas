@@ -9,6 +9,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ interface CartItem {
 // ─── Receipt printer ──────────────────────────────────────────────────────────
 
 function printReceipt(order: any, institute: any) {
-    const win = window.open("", "_blank", "width=400,height=600");
+    const win = openPrintDoc();
     if (!win) { toast.error("Allow popups to print receipts"); return; }
 
     const schoolName = institute?.schoolName || institute?.name || "ShuleCloud Store";

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import CbcCrud, { Fld } from "./CbcCrud";
 import { cbc, LEVELS, levelColor, toCSV, download } from "./cbcApi";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const ACCENT = "#7C3AED";
 const COLORS = ["#7C3AED", "#1D4ED8", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#06B6D4"];
@@ -172,7 +173,7 @@ export function ReportCardsPage() {
     const { data, isLoading } = useQuery({ queryKey: ["cbc_rc", sid], queryFn: () => cbc.reportCard(sid), enabled: !!sid });
     const filtered = students.filter((s: any) => !search || `${s.studentName || s.name} ${s.registrationNo || s.admNo}`.toLowerCase().includes(search.toLowerCase()));
     const print = () => {
-        if (!data) return; const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+        if (!data) return; const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
         const areas = (data.learningAreas || []).map((a: any) => `<tr><td>${a.area}</td><td>${a.level} — ${a.levelLabel}</td><td>${(a.strands || []).map((s: any) => `${s.strand}: ${s.level}`).join("<br/>") || "—"}</td></tr>`).join("");
         w.document.write(`<!DOCTYPE html><html><head><title>CBC Report Card</title><style>@page{margin:15mm}body{font-family:Arial;color:#1e293b}.h{text-align:center;border-bottom:3px solid #7C3AED;padding-bottom:12px;margin-bottom:16px}h1{color:#7C3AED;font-size:20px;margin:4px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#7C3AED;color:#fff;padding:8px;text-align:left;font-size:11px}td{padding:8px;border-bottom:1px solid #eee;font-size:12px}.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:12px}.cm{border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:14px}</style></head><body>
         <div class="h">${data.school.logo ? `<img src="${data.school.logo}" style="height:50px"/>` : ""}<h1>${data.school.name}</h1><div style="color:#7C3AED;font-weight:600">CBC Learner Report Card</div></div>

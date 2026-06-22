@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Printer, Filter, ChevronDown, TrendingUp, TrendingDown, BarChart3, Users, BookOpen } from "lucide-react";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 // ── Math helpers ────────────────────────────────────────────────────────────
 const mean = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
@@ -221,7 +222,7 @@ export default function ExamRankings() {
 
     // ── Print ───────────────────────────────────────────────────────────────
     const printSheet = () => {
-        const win = window.open("", "_blank");
+        const win = openPrintDoc();
         if (!win) return;
         const schoolName = tenantProfile?.name || "School";
         const schoolLogo = tenantProfile?.logo || "";

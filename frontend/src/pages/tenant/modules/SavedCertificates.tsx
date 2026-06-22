@@ -6,6 +6,7 @@ import { Award, Search, Printer, CheckCircle, Ban, Trash2, Calendar, User, Shiel
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function SavedCertificates() {
     const queryClient = useQueryClient();
@@ -440,7 +441,7 @@ ${certHtml}
 </body>
 </html>`;
 
-        const win = window.open("", "_blank", "width=1100,height=800");
+        const win = openPrintDoc();
         if (!win) {
             toast.error("Popup blocked! Please allow popups and try again.");
             return;

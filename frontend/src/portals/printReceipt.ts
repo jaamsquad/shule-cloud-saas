@@ -1,5 +1,6 @@
 // Official-receipt printout matching the institutional layout
 // (crest, school name, OFFICIAL RECEIPT, field grid, amount-in-words, balance).
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 interface ReceiptData {
     receiptNo: string;
@@ -54,14 +55,12 @@ const fmt = (n: number) => Number(n).toLocaleString(undefined, { minimumFraction
 const longDate = (d?: string) => d ? new Date(d).toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : "—";
 
 export function printOfficialReceipt(party: PartyData, r: ReceiptData) {
-    const w = window.open("", "_blank", "width=820,height=1000");
-    if (!w) return;
     const now = new Date().toLocaleString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
     const crest = party.schoolCrest
         ? `<img src="${party.schoolCrest}" style="height:64px" />`
         : "";
 
-    w.document.write(`<!doctype html><html><head><title>${r.receiptNo}</title>
+    const html = `<!doctype html><html><head><title>${r.receiptNo}</title>
     <style>
       *{box-sizing:border-box} body{font-family:'Times New Roman',Georgia,serif;color:#111;padding:32px;font-size:13px}
       .wrap{max-width:720px;margin:0 auto}
@@ -111,7 +110,7 @@ export function printOfficialReceipt(party: PartyData, r: ReceiptData) {
       <div class="ts">${now}</div>
       <hr class="rule">
     </div>
-    </body></html>`);
-    w.document.close();
-    w.focus();
+    </body></html>`;
+    // Desktop → print window; mobile app → real PDF saved & opened.
+    void outputHtmlDoc(`Receipt ${r.receiptNo}`, html, { fileName: `Receipt-${r.receiptNo}` });
 }

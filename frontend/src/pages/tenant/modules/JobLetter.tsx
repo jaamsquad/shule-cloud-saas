@@ -7,6 +7,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function JobLetter() {
     const navigate = useNavigate();
@@ -56,7 +57,7 @@ export default function JobLetter() {
     const printInNewWindow = () => {
         const content = printRef.current;
         if (!content) return;
-        const win = window.open('', '_blank', 'width=900,height=700');
+        const win = openPrintDoc();
         if (!win) return;
         const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
             .map(el => el.outerHTML).join('\n');

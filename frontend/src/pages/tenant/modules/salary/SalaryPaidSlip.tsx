@@ -3,6 +3,7 @@ import { Home, Search, Calendar, Printer, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 function printSlip(run: any, institute: any) {
     const schoolName = institute?.schoolName || institute?.name || "School Name";
@@ -10,7 +11,7 @@ function printSlip(run: any, institute: any) {
     const phone = institute?.phone || "";
     const email = institute?.email || "";
     const logo = institute?.logo || null;
-    const win = window.open("", "_blank");
+    const win = openPrintDoc();
     if (!win) { toast.error("Allow popups to print salary slips"); return; }
 
     const allowancesRows = (run.allowances || [])

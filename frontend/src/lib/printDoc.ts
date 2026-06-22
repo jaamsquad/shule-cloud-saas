@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 export interface SchoolBrand { name: string; logo: string; address: string; phone: string; email: string; }
 
@@ -24,10 +25,8 @@ export function useSchoolBrand(): SchoolBrand {
  * the report title, and the supplied body HTML. `accent` themes the header/table.
  */
 export function printBranded(school: SchoolBrand, title: string, bodyHtml: string, accent = "#1D4ED8") {
-    const w = window.open("", "_blank");
-    if (!w) return;
     const contacts = [school.address, school.phone, school.email].filter(Boolean).join(" · ");
-    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    const html = `<!DOCTYPE html><html><head><title>${title}</title>
     <style>
       @page{margin:14mm}
       body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
@@ -51,6 +50,7 @@ export function printBranded(school: SchoolBrand, title: string, bodyHtml: strin
       ${bodyHtml}
       <div class="ft">Printed ${new Date().toLocaleString("en-GB")}</div>
       <script>window.onload=()=>window.print()</script>
-    </body></html>`);
-    w.document.close();
+    </body></html>`;
+    // Desktop → print window; mobile app → real PDF saved & opened.
+    void outputHtmlDoc(title, html, { fileName: title });
 }

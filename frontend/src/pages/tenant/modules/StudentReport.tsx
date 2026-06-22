@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { useState } from "react";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -135,7 +136,7 @@ export default function StudentReport() {
     })).reverse();
 
     function printReportCard(exam: any) {
-        const win = window.open("", "_blank");
+        const win = openPrintDoc();
         if (!win) { toast.error("Allow popups to print"); return; }
         const schoolName = institute?.schoolName || institute?.name || "School";
         const address = institute?.address || "";

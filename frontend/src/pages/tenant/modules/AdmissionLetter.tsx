@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 export default function AdmissionLetter() {
     const { items: students, isLoading } = useItems("students");
@@ -46,9 +47,6 @@ export default function AdmissionLetter() {
     // ─── PRINT FUNCTION ──────────────────────────────────────────────────────
     const printAdmissionLetter = () => {
         if (!student) return;
-
-        const printWindow = window.open('', '_blank', 'width=900,height=700');
-        if (!printWindow) return;
 
         const logoHtml = instituteLogo
             ? `<img src="${instituteLogo}" style="width:96px;height:96px;object-fit:contain;" />`
@@ -232,22 +230,10 @@ export default function AdmissionLetter() {
 </body>
 </html>`;
 
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-
-        const tryPrint = () => {
-            const imgs = printWindow.document.querySelectorAll('img');
-            const allReady = Array.from(imgs).every(img => img.complete && img.naturalHeight !== 0);
-            if (allReady) {
-                printWindow.focus();
-                printWindow.print();
-                printWindow.onafterprint = () => printWindow.close();
-            } else {
-                setTimeout(tryPrint, 150);
-            }
-        };
-        setTimeout(tryPrint, 600);
+        // Desktop → print window; mobile app → real PDF saved & opened. Image
+        // waiting is handled inside outputHtmlDoc, so no manual ready-loop needed.
+        const who = (student.studentName || student.firstName || "student");
+        void outputHtmlDoc(`Admission Letter — ${who}`, html, { fileName: `Admission-Letter-${who}` });
     };
     // ─────────────────────────────────────────────────────────────────────────
 

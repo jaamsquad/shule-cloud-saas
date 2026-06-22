@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function GenerateCertificate() {
     const [mode, setMode] = useState<'STANDARD' | 'LEAVING' | 'TRANSFER'>('STANDARD');
@@ -603,7 +604,7 @@ ${certsHtml}
 </body>
 </html>`;
 
-        const win = window.open("", "_blank", "width=1100,height=800");
+        const win = openPrintDoc();
         if (!win) {
             toast.error("Popup blocked! Please allow popups and try again.");
             return;

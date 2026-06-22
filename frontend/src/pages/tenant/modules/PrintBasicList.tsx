@@ -3,6 +3,7 @@ import { Home, Printer, Download, Search, GraduationCap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useItems } from "@/hooks/useItems";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function PrintBasicList() {
     const [selectedClass, setSelectedClass] = useState("all");
@@ -40,7 +41,7 @@ export default function PrintBasicList() {
 
     // ─── PRINT FUNCTION ───────────────────────────────────────────────────────
     const printReport = () => {
-        const printWindow = window.open('', '_blank', 'width=900,height=700');
+        const printWindow = openPrintDoc();
         if (!printWindow) return;
 
         const logoHtml = profileData?.logo

@@ -3,6 +3,7 @@ import { Home, Printer, Search, FileText, Loader2, Check } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 function grade(pct: number | null) { if (pct === null) return "—"; if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B"; if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F"; }
 function gradeColor(pct: number | null) { if (pct === null) return "text-gray-400"; return pct >= 70 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-rose-600"; }
@@ -45,7 +46,7 @@ export default function V2ReportCard() {
 
     const printReportCard = () => {
         if (!reportCard) return;
-        const win = window.open("", "_blank");
+        const win = openPrintDoc();
         if (!win) { toast.error("Allow popups"); return; }
         const rows = (reportCard.subjects || []).map((s: any) => `
             <tr style="${!s.hasMarks ? 'color:#94a3b8' : ''}">

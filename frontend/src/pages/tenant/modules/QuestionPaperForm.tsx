@@ -12,6 +12,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PRINT — Beautiful A4 question paper matching the modal preview exactly
@@ -275,7 +276,7 @@ ${sectionsHtml}
 </body>
 </html>`;
 
-    const win = window.open("", "_blank", "width=900,height=1100");
+    const win = openPrintDoc();
     if (!win) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
     win.document.write(html);
     win.document.close();

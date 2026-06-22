@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Printer, Search, Loader2, ArrowLeft, FileBarChart } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 type Col = { key: string; label: string; type?: "date" | "money" };
 type Cfg = { title: string; collection: string; columns: Col[] };
@@ -137,7 +138,7 @@ export default function GenericReport() {
     const head = cfg.columns.map(c => `<th style="background:#2563EB;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase">${c.label}</th>`).join("");
     const body = filtered.map((r: any, i: number) => `<tr style="background:${i % 2 ? "#F8FAFC" : "#fff"}">${cfg.columns.map(c => `<td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:11px">${cell(r, c)}</td>`).join("")}</tr>`).join("");
     const html = `<!DOCTYPE html><html><head><title>${cfg.title}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Inter,Arial,sans-serif;color:#0F172A}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.h{text-align:center;border-bottom:3px solid #2563EB;padding-bottom:12px;margin-bottom:18px}table{width:100%;border-collapse:collapse}</style></head><body><div class="h">${schoolLogo ? `<img src="${schoolLogo}" style="height:50px;margin-bottom:6px"/>` : ""}<h1 style="margin:0;font-size:22px;text-transform:uppercase">${schoolName}</h1><div style="color:#2563EB;font-weight:600;margin-top:4px">${cfg.title}</div></div><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><p style="margin-top:24px;font-size:10px;color:#94A3B8;text-align:right">${filtered.length} records · Printed ${new Date().toLocaleDateString()}</p></body></html>`;
-    const w = window.open("", "_blank", "width=1200,height=900");
+    const w = openPrintDoc();
     if (!w) { toast.error("Allow pop-ups to print"); return; }
     w.document.write(html); w.document.close(); w.focus(); w.onload = () => w.print();
   };

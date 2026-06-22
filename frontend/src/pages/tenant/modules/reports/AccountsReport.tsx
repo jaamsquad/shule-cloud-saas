@@ -14,6 +14,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function AccountsReport() {
     const school = useReportSchool();
@@ -118,7 +119,7 @@ export default function AccountsReport() {
         </body>
         </html>`;
 
-        const win = window.open("", "_blank", "width=1200,height=900");
+        const win = openPrintDoc();
         if (!win) { toast.error("Pop-up blocked"); return; }
         win.document.write(html);
         win.document.close();

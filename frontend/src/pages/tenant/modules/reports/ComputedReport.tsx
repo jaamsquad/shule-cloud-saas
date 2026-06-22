@@ -4,6 +4,7 @@ import { Printer, ArrowLeft, Loader2, FileBarChart } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const BLUE = "#2563EB";
 const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#0F766E"];
@@ -45,7 +46,7 @@ export default function ComputedReport() {
     const print = () => {
         const head = cols.map((c: any) => `<th style="background:#2563EB;color:#fff;padding:9px;text-align:left;font-size:11px">${c.label}</th>`).join("");
         const body = rows.map((r: any, i: number) => `<tr style="background:${i % 2 ? "#F8FAFC" : "#fff"}">${cols.map((c: any) => `<td style="padding:8px;border-bottom:1px solid #E2E8F0;font-size:11px">${r[c.key] ?? ""}</td>`).join("")}</tr>`).join("");
-        const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+        const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
         w.document.write(`<!DOCTYPE html><html><head><title>${data.title}</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial;color:#0F172A}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.h{text-align:center;border-bottom:3px solid #2563EB;padding-bottom:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse}</style></head><body><div class="h">${schoolLogo ? `<img src="${schoolLogo}" style="height:48px"/>` : ""}<h1 style="margin:4px 0;text-transform:uppercase">${schoolName}</h1><div style="color:#2563EB;font-weight:600">${data.title}</div></div><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><p style="text-align:right;color:#94A3B8;font-size:10px;margin-top:16px">${rows.length} records · ${new Date().toLocaleDateString()}</p><script>onload=()=>print()</script></body></html>`);
         w.document.close();
     };

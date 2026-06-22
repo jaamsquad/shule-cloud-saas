@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { openPrintDoc } from "@/lib/pdfDoc";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
@@ -100,7 +101,7 @@ export default function ParentsInfoReport() {
         </body>
         </html>`;
 
-        const win = window.open("", "_blank", "width=1200,height=900");
+        const win = openPrintDoc();
         if (!win) { toast.error("Pop-up blocked"); return; }
         win.document.write(html);
         win.document.close();

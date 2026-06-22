@@ -1,4 +1,5 @@
 // Professional invoice printout (matches the modern invoice template).
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 interface InvoiceData {
     invoiceNo: string;
@@ -134,9 +135,6 @@ export function invoiceHtml(p: Party, inv: InvoiceData, autoPrint = false): stri
 }
 
 export function printInvoice(p: Party, inv: InvoiceData) {
-    const w = window.open("", "_blank", "width=840,height=1000");
-    if (!w) return;
-    w.document.write(invoiceHtml(p, inv, true));
-    w.document.close();
-    w.focus();
+    // Desktop → print window; mobile app → real PDF saved & opened.
+    void outputHtmlDoc(`Invoice ${inv.invoiceNo}`, invoiceHtml(p, inv, true), { fileName: `Invoice-${inv.invoiceNo}` });
 }

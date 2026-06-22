@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Printer, Search, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { nemis, toCSV, downloadFile, StudentValidation } from "./nemisApi";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const dot = (s: string) => s === "ready" ? "bg-emerald-500" : s === "warning" ? "bg-amber-400" : "bg-rose-500";
 
@@ -22,7 +23,7 @@ export default function NemisValidation() {
         toast.success("Validation report downloaded");
     };
     const print = () => {
-        const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+        const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
         const body = filtered.map(v => `<tr><td>${v.studentName}</td><td>${v.admissionNo}</td><td>${v.grade}</td><td>${v.score}%</td><td>${v.missingRequired.join(", ") || "—"}</td></tr>`).join("");
         w.document.write(`<!DOCTYPE html><html><head><title>NEMIS Validation</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial}table{width:100%;border-collapse:collapse}th{background:#0F766E;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #eee;font-size:12px}</style></head><body><h2>NEMIS Validation Report</h2><p>Average score: ${summary.averageScore}% · ${summary.ready}/${summary.count} ready</p><table><thead><tr><th>Student</th><th>Adm No</th><th>Grade</th><th>Score</th><th>Missing Required</th></tr></thead><tbody>${body}</tbody></table><script>onload=()=>print()</script></body></html>`);
         w.document.close();

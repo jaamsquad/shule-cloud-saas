@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function useGradingFns() {
@@ -187,7 +188,7 @@ export default function ClassReportCards() {
 
     // ── Print single student ───────────────────────────────────────────────────
     const printStudent = (row: typeof studentSummaries[0]) => {
-        const win = window.open("", "_blank", "width=900,height=700");
+        const win = openPrintDoc();
         if (!win) return;
         const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
         // Use this student's own assigned subject list
@@ -227,7 +228,7 @@ export default function ClassReportCards() {
     const printAll = () => {
         const el = printAllRef.current;
         if (!el) return;
-        const win = window.open("", "_blank", "width=900,height=700");
+        const win = openPrintDoc();
         if (!win) return;
         const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
         win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Class Report Cards – ${className}</title>${styles}<style>@page{size:A4;margin:12mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;background:white}*{box-sizing:border-box}table{border-collapse:collapse;width:100%}th,td{padding:6px 10px;font-size:11px}.page-break{page-break-after:always;break-after:always}</style></head><body>${el.innerHTML}</body></html>`);

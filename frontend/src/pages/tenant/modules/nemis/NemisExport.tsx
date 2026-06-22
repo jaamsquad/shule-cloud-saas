@@ -4,6 +4,7 @@ import { Download, FileSpreadsheet, FileText, Loader2, AlertTriangle } from "luc
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { nemis, toCSV, downloadFile } from "./nemisApi";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function NemisExport() {
     const [grade, setGrade] = useState("");
@@ -46,7 +47,7 @@ export default function NemisExport() {
         setBusy("pdf");
         try {
             const d = await fetchData();
-            const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+            const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
             const head = d.headers.map((h: string) => `<th>${h}</th>`).join("");
             const body = d.rows.map((r: any[]) => `<tr>${r.map((c: any) => `<td>${c ?? ""}</td>`).join("")}</tr>`).join("");
             w.document.write(`<!DOCTYPE html><html><head><title>NEMIS Export</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial}table{width:100%;border-collapse:collapse;font-size:9px}th{background:#0F766E;color:#fff;padding:5px;text-align:left}td{padding:4px;border-bottom:1px solid #eee}</style></head><body><h2>NEMIS Students Export</h2><p>${d.count} records</p><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><script>onload=()=>print()</script></body></html>`);

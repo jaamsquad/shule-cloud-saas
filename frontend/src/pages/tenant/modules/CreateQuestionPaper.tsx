@@ -27,6 +27,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 // ─── Utility: open a dedicated print window with just the exam paper HTML ───
 function printExamPaper(paper: any, answerLinesCount: number, schoolName: string, schoolLogo: string) {
@@ -199,7 +200,7 @@ function printExamPaper(paper: any, answerLinesCount: number, schoolName: string
 </body>
 </html>`;
 
-    const printWin = window.open("", "_blank", "width=900,height=700");
+    const printWin = openPrintDoc();
     if (!printWin) {
         alert("Please allow pop-ups to enable printing.");
         return;

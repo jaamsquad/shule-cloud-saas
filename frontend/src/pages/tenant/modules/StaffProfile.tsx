@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function StaffProfile() {
     const { id } = useParams();
@@ -59,7 +60,7 @@ export default function StaffProfile() {
     // ── Download / Print dossier ──────────────────────────────────────────────
     const handleDownload = () => {
         if (!employee) return;
-        const win = window.open("", "_blank");
+        const win = openPrintDoc();
         if (!win) { toast.error("Allow popups to print"); return; }
         const name = employee.employeeName || employee.name || "Staff";
         const schoolName = tenantProfile?.name || tenantProfile?.instituteName || "School";

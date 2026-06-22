@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function ResultCard() {
     const [emailing, setEmailing] = useState(false);
@@ -376,7 +377,7 @@ export default function ResultCard() {
     const printInNewWindow = () => {
         const content = printRef.current;
         if (!content) return;
-        const win = window.open('', '_blank', 'width=900,height=700');
+        const win = openPrintDoc();
         if (!win) return;
         const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
             .map(el => el.outerHTML).join('\n');

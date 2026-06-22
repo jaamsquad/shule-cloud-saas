@@ -4,6 +4,7 @@ import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 /* ─── Subject colour palette ────────────────────────────────────────────── */
 const PALETTE = [
@@ -512,7 +513,7 @@ function printTimetable(opts: {
 </html>`;
 
     /* Open in a new window and trigger print */
-    const win = window.open("", "_blank", "width=1200,height=900");
+    const win = openPrintDoc();
     if (!win) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
     win.document.write(html);
     win.document.close();

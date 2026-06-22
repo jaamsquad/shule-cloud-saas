@@ -3,6 +3,7 @@ import { Home, Trophy, Loader2, Printer, Medal, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ function printRankings(
     institute: any,
     classLabel: string
 ) {
-    const win = window.open("", "_blank");
+    const win = openPrintDoc();
     if (!win) { toast.error("Allow popups to print"); return; }
 
     const schoolName = institute?.schoolName || institute?.name || "School";

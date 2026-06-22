@@ -4,6 +4,7 @@ import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const KSh = (n: any) => `KSh ${(parseFloat(n) || 0).toLocaleString()}`;
 const dval = (v: any) => (v ? new Date(v).getTime() : 0);
@@ -99,7 +100,7 @@ export default function AccountStatement() {
         } catch { toast.error("Excel export failed"); }
     };
     const printable = () => {
-        const w = window.open("", "_blank");
+        const w = openPrintDoc();
         if (!w) { toast.error("Allow popups to print"); return; }
         const body = rows.map(r => `<tr>${r.map((c, i) => `<td style="${i >= r.length - 3 ? 'text-align:right' : ''}">${c}</td>`).join("")}</tr>`).join("");
         w.document.write(`<!DOCTYPE html><html><head><title>Account Statement</title>

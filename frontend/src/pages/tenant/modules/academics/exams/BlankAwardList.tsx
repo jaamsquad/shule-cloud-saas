@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Home, Printer, ChevronDown, Loader2, BookOpen, GraduationCap, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 export default function BlankAwardList() {
     const [selectedExam, setSelectedExam] = useState<any>(null);
@@ -39,7 +40,7 @@ export default function BlankAwardList() {
     const printInNewWindow = () => {
         const content = printRef.current;
         if (!content) return;
-        const win = window.open('', '_blank', 'width=900,height=700');
+        const win = openPrintDoc();
         if (!win) return;
         const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
             .map(el => el.outerHTML).join('\n');

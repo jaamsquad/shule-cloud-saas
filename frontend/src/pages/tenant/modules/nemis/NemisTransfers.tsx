@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Printer, X } from "lucide-react";
 import { toast } from "sonner";
 import { nemis } from "./nemisApi";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const TABS = [
     { key: "", label: "All" },
@@ -28,7 +29,7 @@ export default function NemisTransfers() {
     };
     const setStatus = async (id: string, status: string) => { await nemis.updateTransfer(id, { status }); qc.invalidateQueries({ queryKey: ["nemis_transfers"] }); };
     const printDoc = (t: any) => {
-        const w = window.open("", "_blank"); if (!w) return toast.error("Allow pop-ups");
+        const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
         w.document.write(`<!DOCTYPE html><html><head><title>Transfer — ${t.studentName}</title><style>@page{margin:20mm}body{font-family:Arial;color:#1e293b}h1{color:#0F766E}table{margin-top:16px}td{padding:6px 12px}td:first-child{color:#64748b}</style></head><body><h1>Student Transfer ${t.direction === "incoming" ? "In" : "Out"}</h1><table><tr><td>Student</td><td><b>${t.studentName}</b></td></tr><tr><td>Admission No</td><td>${t.admissionNo || "—"}</td></tr><tr><td>From</td><td>${t.previousSchool || "—"}</td></tr><tr><td>To</td><td>${t.newSchool || "—"}</td></tr><tr><td>Date</td><td>${t.transferDate || "—"}</td></tr><tr><td>Reason</td><td>${t.reason || "—"}</td></tr><tr><td>Status</td><td>${t.status}</td></tr></table><div style="margin-top:60px;display:flex;justify-content:space-between"><div>____________________<br/>Head Teacher</div><div>____________________<br/>Date & Stamp</div></div><script>onload=()=>print()</script></body></html>`);
         w.document.close();
     };

@@ -3,6 +3,7 @@ import { ArrowLeft, Users, BookOpen, Briefcase, BarChart3, Award, Printer, Chevr
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
+import { openPrintDoc } from "@/lib/pdfDoc";
 
 const TABS = [
     { id: "overview",   label: "Overview",         icon: BarChart3 },
@@ -143,7 +144,7 @@ export default function ExamDetail() {
             .filter(s => !cls || s.class === cls)
             .sort((a, b) => b.pct - a.pct);
 
-        const win = window.open("", "_blank");
+        const win = openPrintDoc();
         if (!win) return;
         const schoolName = tenantProfile?.name || tenantProfile?.instituteName || "School";
         const schoolLogo = tenantProfile?.logo || tenantProfile?.logoUrl || "";
