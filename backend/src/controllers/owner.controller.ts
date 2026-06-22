@@ -140,15 +140,48 @@ export const deletePlan = async (req: Request, res: Response) => {
 };
 
 export const getRevenueReport = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
     try {
-        // Placeholder for revenue report
-        return res.json({
-            totalRevenue: 0,
-            monthlyRevenue: 0,
-            recentTransactions: []
-        });
-    } catch (error) {
-        return res.status(500).json({ message: 'Failed to fetch revenue report' });
+        const db = getDb();
+        const completed = await db.collection('subscription_payments').find({ status: 'completed' }).toArray().catch(() => []);
+        const totalRevenue = completed.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+        const monthlyRevenue = completed
+            .filter((p: any) => new Date(p.completedAt || p.createdAt) >= monthStart)
+            .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+        return res.json({ totalRevenue, monthlyRevenue, count: completed.length });
+    } catch (error: any) {
+        return res.status(500).json({ message: error.message || 'Failed to fetch revenue report' });
+    }
+};
+
+// Subscription payments schools have made (for the owner Billing page).
+export const getBillingPayments = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const db = getDb();
+        const { status } = req.query as any;
+        const q: any = {};
+        if (status && status !== 'all') q.status = status;
+        const payments = await db.collection('subscription_payments').find(q).sort({ createdAt: -1 }).limit(300).toArray();
+        // Attach school names.
+        const tenantIds = Array.from(new Set(payments.map((p: any) => String(p.tenantId)).filter(Boolean)));
+        const tenants = await db.collection('Tenant').find({ _id: { $in: tenantIds.map((id) => { try { return new ObjectId(id); } catch { return null; } }).filter(Boolean) as any } }).toArray().catch(() => []);
+        const nameById: Record<string, string> = {};
+        tenants.forEach((t: any) => { nameById[String(t._id)] = t.instituteName || t.name || t.subdomain || 'School'; });
+        res.json(payments.map((p: any) => ({
+            id: String(p._id),
+            tenant: { name: nameById[String(p.tenantId)] || 'School' },
+            plan: p.planName || '',
+            amount: Number(p.amount || 0),
+            status: p.status === 'completed' ? 'PAID' : p.status === 'failed' ? 'FAILED' : 'PENDING',
+            receipt: p.mpesaReceipt || null,
+            phone: p.phone || '',
+            issuedAt: p.createdAt,
+            paidAt: p.completedAt || null,
+        })));
+    } catch (error: any) {
+        return res.status(500).json({ message: error.message || 'Failed to fetch payments' });
     }
 };
 

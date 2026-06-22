@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -9,6 +9,7 @@ router.post('/plans', createPlan);
 router.patch('/plans/:id', updatePlan);
 router.delete('/plans/:id', deletePlan);
 router.get('/billing/revenue-report', getRevenueReport);
+router.get('/billing/payments', getBillingPayments);
 
 // ─── Owner analytics ─────────────────────────────────────────────────────────
 router.get('/stats', getOwnerStats);                 // GET /api/v1/owner/stats

@@ -17,8 +17,8 @@ export default function OwnerBilling() {
     const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
         queryKey: ["owner-invoices"],
         queryFn: async () => {
-            const res = await api.get("/owner/billing/invoices");
-            return res.data;
+            const res = await api.get("/owner/billing/payments");
+            return Array.isArray(res.data) ? res.data : [];
         }
     });
 
@@ -53,31 +53,31 @@ export default function OwnerBilling() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">TENANT SCHOOL</TableHead>
+                                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">PLAN</TableHead>
                                 <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">AMOUNT (KES)</TableHead>
                                 <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">STATUS</TableHead>
-                                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">DUE DATE</TableHead>
-                                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">ISSUED AT</TableHead>
+                                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">M-PESA CODE</TableHead>
+                                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground">PAID AT</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {invoicesLoading ? (
-                                <TableRow><TableCell colSpan={5} className="text-center py-10 animate-pulse text-muted-foreground">Consulting billing history...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="text-center py-10 animate-pulse text-muted-foreground">Consulting billing history...</TableCell></TableRow>
                             ) : invoices.length === 0 ? (
-                                <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No invoices generated for this period.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">No subscription payments yet.</TableCell></TableRow>
                             ) : invoices.map((invoice: any) => (
                                 <TableRow key={invoice.id} className="hover:bg-muted/30">
                                     <TableCell className="font-medium text-gray-900">{invoice.tenant?.name}</TableCell>
+                                    <TableCell className="text-gray-700">{invoice.plan || '—'}</TableCell>
                                     <TableCell className="text-gray-900">{(invoice.amount || 0).toLocaleString()}</TableCell>
                                     <TableCell>
-                                        <Badge className={invoice.status === 'PAID' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}>
+                                        <Badge className={invoice.status === 'PAID' ? 'bg-success/10 text-success' : invoice.status === 'FAILED' ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}>
                                             {invoice.status}
                                         </Badge>
                                     </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground font-mono">{invoice.receipt || '—'}</TableCell>
                                     <TableCell className="text-sm text-muted-foreground font-mono">
-                                        {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground font-mono">
-                                        {new Date(invoice.issuedAt).toLocaleDateString()}
+                                        {invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString() : (invoice.issuedAt ? new Date(invoice.issuedAt).toLocaleDateString() : '—')}
                                     </TableCell>
                                 </TableRow>
                             ))}
