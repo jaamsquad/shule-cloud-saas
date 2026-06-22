@@ -1,90 +1,48 @@
-import { useLocation, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { Menu, LayoutDashboard, Home } from "lucide-react";
-import AppSidebar from "@/components/AppSidebar";
-import TopHeader from "@/components/TopHeader";
+import { Link } from "react-router-dom";
+import { Home } from "lucide-react";
 
-const NotFound = () => {
-  const location = useLocation();
-  const [isLoggedIn] = useState(!!localStorage.getItem("token"));
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+const PURPLE = "#613ddf";
 
-  useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
-  }, [location.pathname]);
+/**
+ * The 404 body. When rendered via the catch-all inside DashboardLayout it shows
+ * inside the app's sidebar + top bar. When a logged-out user hits an unknown
+ * URL, NotFound (below) wraps this in a plain full-screen container.
+ */
+export function NotFoundContent() {
+  const loggedIn = !!localStorage.getItem("token");
+  return (
+    <div className="flex-1 w-full min-h-full flex flex-col items-center justify-center text-center px-6 py-16 bg-[#faf9ff]">
+      <p className="text-xs font-black uppercase tracking-[0.3em] mb-4" style={{ color: PURPLE }}>
+        Shule<span style={{ color: "#1a1333" }}>Cloud</span>
+      </p>
 
-  const content = (
-    <div className="flex-1 bg-white text-[#1a1a1a] font-sans flex flex-col p-6 md:p-12 selection:bg-[#1a1a1a] selection:text-white overflow-hidden relative w-full">
-      {/* Header for non-logged in */}
-      {!isLoggedIn && (
-        <header className="flex items-center justify-between z-10 relative">
-          <button className="p-1.5 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
-            <Menu className="w-5 h-5 text-gray-500 stroke-[1.5]" />
-          </button>
-        </header>
-      )}
+      <h1 className="font-black leading-none mb-4 select-none" style={{ color: PURPLE, fontSize: "clamp(5rem, 18vw, 11rem)" }}>
+        404
+      </h1>
 
-      {/* Main Content */}
-      <main className={`flex-1 flex flex-col relative ${isLoggedIn ? 'mt-4' : 'mt-12 md:mt-20'}`}>
-        <h2 className="text-[32px] md:text-[42px] lg:text-[48px] font-medium leading-[1.1] max-w-[26rem] md:max-w-3xl tracking-tight text-[#1a1a1a]">
-          Uh oh, the page you're looking for<br className="hidden md:block" /> can't be found.
-        </h2>
+      <h2 className="text-2xl md:text-3xl font-black mb-2" style={{ color: "#1a1333" }}>
+        The page you're looking for doesn't exist.
+      </h2>
+      <p className="text-slate-500 max-w-md mb-8">
+        It may have been moved or removed, or the link might be broken. Let's get you back on track.
+      </p>
 
-        {/* Navigation Buttons */}
-        <div className="mt-8 relative z-20">
-          {isLoggedIn ? (
-            <Link to="/dashboard" className="px-6 py-3 bg-[#1a1a1a] text-white rounded-xl font-bold flex items-center gap-2 hover:bg-black transition-colors w-max shadow-lg shadow-black/10">
-              <LayoutDashboard className="w-5 h-5" /> Back to Dashboard
-            </Link>
-          ) : (
-            <Link to="/dashboard" className="px-6 py-3 bg-[#1a1a1a] text-white rounded-xl font-bold flex items-center gap-2 hover:bg-black transition-colors w-max shadow-lg shadow-black/10">
-              <Home className="w-5 h-5" /> Return Dashboard
-            </Link>
-          )}
-        </div>
-
-        {/* Center Illustration - The Eyes */}
-        <div className="flex-1 flex items-center justify-center -mt-24 md:mt-0 pointer-events-none">
-          <svg width="240" height="160" viewBox="0 0 240 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-[200px] md:w-[280px]">
-            {/* Left Eyebrow */}
-            <path d="M45,55 Q75,35 105,55" stroke="#1a1a1a" strokeWidth="12" strokeLinecap="round" />
-            {/* Right Eyebrow */}
-            <path d="M135,55 Q165,35 195,55" stroke="#1a1a1a" strokeWidth="12" strokeLinecap="round" />
-
-            {/* Left Eye */}
-            <circle cx="75" cy="100" r="40" stroke="#1a1a1a" strokeWidth="10" fill="none" />
-            {/* Left Pupil */}
-            <circle cx="88" cy="85" r="15" fill="#1a1a1a" />
-
-            {/* Right Eye */}
-            <circle cx="165" cy="100" r="40" stroke="#1a1a1a" strokeWidth="10" fill="none" />
-            {/* Right Pupil */}
-            <circle cx="178" cy="85" r="15" fill="#1a1a1a" />
-          </svg>
-        </div>
-      </main>
+      <Link
+        to={loggedIn ? "/dashboard" : "/login"}
+        className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+        style={{ background: PURPLE }}
+      >
+        <Home className="w-4 h-4" /> Back home
+      </Link>
     </div>
   );
+}
 
-  if (isLoggedIn) {
-    return (
-      <div className="flex flex-col h-screen w-full bg-[#f8fafc] overflow-hidden ltr">
-        <TopHeader onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        <div className="flex flex-1 overflow-hidden relative">
-          <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
-            <AppSidebar />
-          </div>
-          <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-            <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar flex">
-              {content}
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
-  return <div className="min-h-screen flex">{content}</div>;
-};
-
-export default NotFound;
+/** Standalone 404 (logged-out / outside the dashboard layout). */
+export default function NotFound() {
+  return (
+    <div className="min-h-screen flex bg-[#faf9ff]">
+      <NotFoundContent />
+    </div>
+  );
+}

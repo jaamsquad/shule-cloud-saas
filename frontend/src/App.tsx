@@ -331,7 +331,7 @@ import Observations from "./pages/tenant/modules/behaviour/Observations";
 import AffectiveReport from "./pages/tenant/modules/behaviour/AffectiveReport";
 import PsychomotorReport from "./pages/tenant/modules/behaviour/PsychomotorReport";
 import PlaceholderPage from "./pages/PlaceholderPage";
-import NotFound from "./pages/NotFound";
+import NotFound, { NotFoundContent } from "./pages/NotFound";
 
 // Portal request management (admin views of student-portal submissions)
 import AdminRequisitions from "./pages/tenant/modules/portal/AdminRequisitions";
@@ -672,6 +672,7 @@ const App = () => {
               <Route path="/papers/create/new/:id" element={<QuestionPaperForm />} />
 
               {/* Exams Management Module */}
+              <Route path="/exams" element={<Exams />} />
               <Route path="/exams/create" element={<CreateExam />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
@@ -932,6 +933,8 @@ const App = () => {
               <Route path="/roles" element={<Roles />} />
               <Route path="/archives" element={<Archives />} />
               <Route path="/notifications" element={<Notifications />} />
+              {/* In-layout 404 — unknown app routes render inside the sidebar/top bar */}
+              <Route path="*" element={<NotFoundContent />} />
             </Route>
 
             {/* ── School POS Module ─────────────────────────────── */}

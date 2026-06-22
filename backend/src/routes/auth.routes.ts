@@ -15,6 +15,90 @@ const getInstDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 router.post('/login', login);
 
+// ─── Forgot / Reset password ──────────────────────────────────────────────────
+// Request a reset link. Always responds 200 (never reveals whether an email
+// exists). Generates a token, stores it on the User, and emails a reset link.
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email, subdomain } = req.body || {};
+        if (!email) return res.status(400).json({ message: 'Email is required' });
+        const metaDb = getMetaDb();
+
+        // Find the account by email (optionally scoped to a subdomain's tenant).
+        let user = await metaDb.collection('User').findOne({ email: String(email).toLowerCase() })
+            || await metaDb.collection('User').findOne({ email });
+        // Resolve the tenant (for branding + which SMTP to send from).
+        let tenant: any = null;
+        if (subdomain) tenant = await metaDb.collection('Tenant').findOne({ subdomain: String(subdomain).toLowerCase() });
+        if (!tenant && user?.tenantId) tenant = await metaDb.collection('Tenant').findOne({ _id: new ObjectId(String(user.tenantId)) }).catch(() => null);
+
+        // Always behave the same whether or not the user exists.
+        if (user) {
+            const crypto = await import('crypto');
+            const token = crypto.randomBytes(32).toString('hex');
+            const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+            await metaDb.collection('User').updateOne(
+                { _id: user._id },
+                { $set: { resetToken: token, resetTokenExpires: expires } }
+            );
+
+            const sub = String(subdomain || tenant?.subdomain || '').toLowerCase();
+            const base = process.env.PUBLIC_SITE_URL
+                ? (sub ? `https://${sub}.${process.env.PUBLIC_SITE_URL.replace(/^https?:\/\//, '')}` : process.env.PUBLIC_SITE_URL)
+                : (sub ? `https://${sub}.shulecloud.com` : 'https://shulecloud.com');
+            const resetUrl = `${base}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+            const schoolName = tenant?.instituteName || tenant?.name || 'ShuleCloud';
+
+            const html = `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1e293b">
+                <h2 style="color:#613ddf">${schoolName}</h2>
+                <p>We received a request to reset your password. Click the button below to set a new one. This link expires in 1 hour.</p>
+                <p style="margin:28px 0"><a href="${resetUrl}" style="background:#613ddf;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:bold">Reset my password</a></p>
+                <p style="font-size:12px;color:#64748b">If the button doesn't work, copy this link:<br>${resetUrl}</p>
+                <p style="font-size:12px;color:#94a3b8">If you didn't request this, you can safely ignore this email.</p>
+              </div>`;
+
+            try {
+                const { sendEmail } = await import('../services/communications.service');
+                const tenantDb = tenant ? getTenantDb(tenant.databaseName || subdomainToDbName(tenant.subdomain)) : metaDb;
+                await sendEmail(tenantDb, { to: [email], subject: `Reset your ${schoolName} password`, html });
+            } catch (e) {
+                // Don't leak failure to the client, but log for ops.
+                console.error('[forgot-password] email send failed:', (e as any)?.message);
+            }
+        }
+        res.json({ message: 'If an account exists for that email, a reset link has been sent.' });
+    } catch (e: any) {
+        // Even on error, respond success-shaped to avoid enumeration.
+        res.json({ message: 'If an account exists for that email, a reset link has been sent.' });
+    }
+});
+
+// Complete the reset using the emailed token.
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { token, email, password } = req.body || {};
+        if (!token || !password) return res.status(400).json({ message: 'Token and new password are required' });
+        if (String(password).length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        const metaDb = getMetaDb();
+
+        const q: any = { resetToken: token, resetTokenExpires: { $gt: new Date() } };
+        if (email) q.email = { $in: [String(email).toLowerCase(), email] };
+        const user = await metaDb.collection('User').findOne(q);
+        if (!user) return res.status(400).json({ message: 'This reset link is invalid or has expired. Please request a new one.' });
+
+        const bcrypt = await import('bcrypt');
+        const passwordHash = await bcrypt.hash(password, 10);
+        await metaDb.collection('User').updateOne(
+            { _id: user._id },
+            { $set: { passwordHash, updatedAt: new Date() }, $unset: { resetToken: '', resetTokenExpires: '' } }
+        );
+        res.json({ message: 'Your password has been reset. You can now sign in.' });
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
 // ─── Student Portal Login ─────────────────────────────────────────────────────
 router.post('/student-login', async (req, res) => {
     try {

@@ -26,9 +26,11 @@ export default function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post("/auth/forgot-password", { email, subdomain: activeSubdomain || undefined }).catch(() => {});
+      await api.post("/auth/forgot-password", { email, subdomain: activeSubdomain || undefined });
       setSent(true);
-      toast({ title: "Reset link sent!", description: "Check your email for the password reset link." });
+      toast({ title: "Check your email", description: "If an account exists for that email, a reset link is on its way." });
+    } catch (err: any) {
+      toast({ title: "Couldn't send reset email", description: err?.response?.data?.message || "Please try again shortly.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
