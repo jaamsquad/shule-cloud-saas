@@ -39,7 +39,7 @@ export default function Exams() {
     });
 
     const filtered = exams.filter((e: any) =>
-        e.name.toLowerCase().includes(search.toLowerCase())
+        (e.name || "").toLowerCase().includes(search.toLowerCase())
     );
 
     return (

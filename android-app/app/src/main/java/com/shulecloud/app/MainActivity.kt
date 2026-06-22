@@ -298,6 +298,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Read a blob:/data: download fired from the MAIN WebView and save+open it. */
+    private fun grabUrlFromMain(url: String, contentDisposition: String?, mime: String?) {
+        val suggested = try { URLUtil.guessFileName(url, contentDisposition, mime) } catch (_: Exception) { "document" }
+        val js = """
+        (function(){
+          try{
+            var u = "${url.replace("\"", "\\\"")}";
+            var name = "$suggested".replace(/[^a-z0-9._-]+/gi,'_');
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', u, true);
+            xhr.responseType = 'blob';
+            xhr.onload = function(){
+              try{
+                var b = xhr.response; var t = (b && b.type) || '';
+                if(!/\.[a-z0-9]{2,5}$/i.test(name)){
+                  var ext = t.indexOf('pdf')>=0?'.pdf':t.indexOf('sheet')>=0?'.xlsx':t.indexOf('csv')>=0?'.csv':t.indexOf('png')>=0?'.png':t.indexOf('jpeg')>=0?'.jpg':'';
+                  name = name + ext;
+                }
+                var fr = new FileReader();
+                fr.onloadend = function(){ ShuleCloudPrint.saveBlob(fr.result, name, t); };
+                fr.readAsDataURL(b);
+              }catch(e){}
+            };
+            xhr.send();
+          }catch(e){}
+        })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
     /** A popup tried to download a document. Handle blob/data via JS, else manager. */
     private fun handlePopupDocument(url: String?, contentDisposition: String?, mime: String?, popup: WebView) {
         url ?: return
@@ -508,6 +538,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            // blob:/data: can't be fetched by DownloadManager — read them from the
+            // page via JS instead (the same path the resource viewer uses).
+            if (url != null && (url.startsWith("blob:") || url.startsWith("data:"))) {
+                grabUrlFromMain(url, contentDisposition, mimeType)
+                return@DownloadListener
+            }
             try {
                 val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
                 val request = DownloadManager.Request(Uri.parse(url)).apply {
