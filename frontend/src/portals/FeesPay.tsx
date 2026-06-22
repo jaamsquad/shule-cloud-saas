@@ -40,6 +40,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
     const [phone, setPhone] = useState("");
     const [stage, setStage] = useState<Stage>("form");
     const [message, setMessage] = useState("");
+    const [receipt, setReceipt] = useState<string | null>(null);
     const pollRef = useRef<any>(null);
 
     const { data, isLoading } = useQuery({
@@ -57,7 +58,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
     const invoices: any[] = data?.invoices || [];
 
     useEffect(() => {
-        if (modal) { setAmount(String(modal.amount || balance)); setStage("form"); setMessage(""); }
+        if (modal) { setAmount(String(modal.amount || balance)); setStage("form"); setMessage(""); setReceipt(null); }
         return () => { if (pollRef.current) clearTimeout(pollRef.current); };
     }, [modal]); // eslint-disable-line
 
@@ -69,7 +70,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
             try {
                 const r = await api.get(`${base}/mpesa-status?checkoutRequestId=${encodeURIComponent(cid)}`);
                 const st = r.data?.status;
-                if (st === "completed") { setStage("success"); qc.invalidateQueries({ queryKey: ["fees_summary", base] }); return; }
+                if (st === "completed") { setReceipt(r.data?.receipt || null); setStage("success"); qc.invalidateQueries({ queryKey: ["fees_summary", base] }); return; }
                 if (st === "failed") { setStage("failed"); setMessage(r.data?.message || "Payment was cancelled or failed."); return; }
             } catch { /* keep polling */ }
             poll(cid, attempt + 1);
@@ -207,7 +208,13 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
                             <div className="p-8 text-center">
                                 <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4"><Check className="w-9 h-9 text-white" /></div>
                                 <h3 className="text-xl font-black text-slate-800 mb-1">Payment Received!</h3>
-                                <p className="text-slate-500 text-xs mb-6">Your fee balance has been updated.</p>
+                                <p className="text-slate-500 text-xs mb-4">Your fee balance has been updated.</p>
+                                {receipt && (
+                                    <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-2.5 mb-5">
+                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">M-PESA Code</p>
+                                        <p className="text-base font-black text-emerald-700 tracking-wider">{receipt}</p>
+                                    </div>
+                                )}
                                 <button onClick={closeModal} className="w-full py-3 bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-lg">Done</button>
                             </div>
                         ) : (

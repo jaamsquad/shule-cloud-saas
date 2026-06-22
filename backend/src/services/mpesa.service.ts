@@ -199,16 +199,20 @@ export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
         const code = Number(q.ResultCode);
         console.log('[mpesa] STK query result:', JSON.stringify({ id: checkoutRequestId, ResultCode: q.ResultCode, ResultDesc: q.ResultDesc, errorMessage: q.errorMessage }));
         if (code === 0) {
+            // The query confirms success but doesn't carry the receipt — that comes
+            // from the callback (stored as mpesaReceipt). Re-read to pick it up.
+            const fresh = await meta.collection('mpesa_transactions').findOne({ _id: txn._id });
+            const receipt = fresh?.mpesaReceipt || txn.mpesaReceipt || null;
             const upd = await meta.collection('mpesa_transactions').updateOne(
                 { _id: txn._id, applied: { $ne: true } },
                 { $set: { status: 'completed', applied: true, resultDesc: q.ResultDesc, completedAt: new Date() } },
             );
             if (upd.modifiedCount > 0) {
-                const ref = txn.mpesaReceipt || checkoutRequestId;
+                const ref = receipt || checkoutRequestId;
                 if (txn.purpose === 'wallet') await creditWallet(db, txn.studentId, txn.amount, { source: 'M-PESA', reference: ref, by: 'mpesa' });
                 else await applyMpesaPayment(db, { studentId: txn.studentId, studentName: txn.studentName, registrationNo: txn.registrationNo, invoiceId: txn.invoiceId, amount: txn.amount, receipt: ref });
             }
-            return { status: 'completed' as const };
+            return { status: 'completed' as const, receipt };
         }
         if (!isNaN(code) && code !== 0) {
             const msg = stkResultMessage(code, q.ResultDesc);
