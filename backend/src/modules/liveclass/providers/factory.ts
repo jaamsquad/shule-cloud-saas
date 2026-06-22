@@ -22,6 +22,7 @@ export interface PlatformMeetingSettings {
     jitsiAppId?: string;        // vpaas-magic-cookie-…
     jitsiKeyId?: string;        // the part after "/" in the API key name
     jitsiAppSecret?: string;    // RSA private key (PEM)
+    bbbAllowedForSchools?: boolean; // whether schools may see/use BigBlueButton
 }
 
 export async function getPlatformMeetingSettings(): Promise<PlatformMeetingSettings> {

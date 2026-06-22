@@ -8,7 +8,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { ObjectId, Db } from 'mongodb';
-import { getMeetingSettings, buildProvider, resolveProvider } from './providers/factory';
+import { getMeetingSettings, buildProvider, resolveProvider, getPlatformMeetingSettings } from './providers/factory';
 import { MeetingSettings } from './providers/MeetingProvider';
 
 const router = Router();
@@ -24,15 +24,20 @@ const log = async (d: Db, action: string, classId: string, by: string, meta?: an
 // ─── Settings ─────────────────────────────────────────────────────────────────
 router.get('/live-classes/settings', async (req, res) => {
     const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
-    const s = await getMeetingSettings(d, ns(req));
+    const [s, platform] = await Promise.all([getMeetingSettings(d, ns(req)), getPlatformMeetingSettings()]);
     // Jitsi credentials are platform-managed (super owner) and never exposed to
     // schools; we only tell the tenant whether the shared JaaS account is active.
     const jaasActive = !!(s.jitsiAppId && s.jitsiAppSecret);
+    // BigBlueButton is hidden from schools unless the super owner enabled it.
+    const bbbAllowedForSchools = platform.bbbAllowedForSchools === true;
+    // If BBB isn't allowed but the tenant had it selected, present Jitsi instead.
+    const provider = (!bbbAllowedForSchools && s.provider === 'bigbluebutton') ? 'jitsi' : s.provider;
     res.json({
         ...s,
+        provider,
         bbbSecret: s.bbbSecret ? '••••••••' : '',
         jitsiAppId: undefined, jitsiKeyId: undefined, jitsiAppSecret: undefined,
-        jaasManagedByPlatform: true, jaasActive,
+        jaasManagedByPlatform: true, jaasActive, bbbAllowedForSchools,
     });
 });
 
@@ -49,6 +54,9 @@ router.put('/live-classes/settings', async (req, res) => {
     ];
     const set: any = { updatedAt: new Date() };
     allowed.forEach(k => { if (b[k] !== undefined) set[k] = b[k]; });
+    // Block schools from selecting BigBlueButton unless the super owner allowed it.
+    const platform = await getPlatformMeetingSettings();
+    if (platform.bbbAllowedForSchools !== true && (set.provider === 'bigbluebutton')) set.provider = 'jitsi';
     // Secrets: only overwrite when a real value is supplied (avoid wiping on save).
     if (typeof b.bbbSecret === 'string' && b.bbbSecret && !b.bbbSecret.startsWith('•')) set.bbbSecret = b.bbbSecret.trim();
     await d.collection('meeting_settings').updateOne({ _id: 'live' as any }, { $set: set }, { upsert: true });

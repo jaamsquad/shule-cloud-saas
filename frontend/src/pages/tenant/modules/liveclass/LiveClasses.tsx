@@ -167,7 +167,7 @@ function ScheduleModal({ value, onClose, onSaved }: { value: LiveClass | null; o
           <Field label="Duration (min)"><input type="number" value={f.durationMinutes} onChange={e => set("durationMinutes", Number(e.target.value))} className="inp" /></Field>
         </div>
         <Field label="Description"><textarea value={f.description} onChange={e => set("description", e.target.value)} rows={2} className="inp" /></Field>
-        {settings?.allowTeacherOverride && (
+        {settings?.allowTeacherOverride && settings?.bbbAllowedForSchools && (
           <Field label="Meeting provider">
             <select value={f.provider} onChange={e => set("provider", e.target.value)} className="inp">
               <option value="jitsi">Jitsi Meet</option>

@@ -716,6 +716,8 @@ export const getPlatformMeeting = async (req: Request, res: Response) => {
             jitsiKeyId: s.jitsiKeyId || '',
             jitsiAppSecret: s.jitsiAppSecret ? '••••••••' : '',
             configured: !!(s.jitsiAppId && s.jitsiAppSecret),
+            // BigBlueButton is hidden from schools unless the super owner enables it.
+            bbbAllowedForSchools: s.bbbAllowedForSchools === true,
         });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
@@ -733,6 +735,7 @@ export const setPlatformMeeting = async (req: Request, res: Response) => {
         if (typeof b.jitsiAppSecret === 'string' && b.jitsiAppSecret && !b.jitsiAppSecret.startsWith('•')) {
             set.jitsiAppSecret = b.jitsiAppSecret.trim();
         }
+        if (b.bbbAllowedForSchools !== undefined) set.bbbAllowedForSchools = !!b.bbbAllowedForSchools;
         await getDb().collection('platform_meeting_settings').updateOne({ key: 'jitsi' }, { $set: set }, { upsert: true });
         return res.json({ ok: true });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }

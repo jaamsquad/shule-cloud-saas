@@ -20,7 +20,7 @@ export default function LiveClassSettings() {
 
   if (isLoading || !f) return <div className="flex-1 flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
 
-  const isBBB = f.provider === "bigbluebutton";
+  const isBBB = f.provider === "bigbluebutton" && f.bbbAllowedForSchools;
 
   return (
     <div className="flex-1 bg-[#F8FAFC] min-h-screen p-6">
@@ -29,18 +29,20 @@ export default function LiveClassSettings() {
       <p className="text-sm text-slate-400 mb-6">Choose your meeting provider and configure it. Switch any time — no code changes.</p>
 
       <div className="max-w-2xl space-y-5">
-        {/* Provider selection */}
-        <Section title="Meeting Provider">
-          <div className="grid sm:grid-cols-2 gap-3">
-            {[{ k: "jitsi", t: "Jitsi Meet", d: "Free, instant rooms. Great default." }, { k: "bigbluebutton", t: "BigBlueButton", d: "Self-hosted, with server recordings." }].map(o => (
-              <button key={o.k} onClick={() => { set("provider", o.k); setTest(null); }} className={`text-left p-4 rounded-xl border-2 transition-all ${f.provider === o.k ? "border-[#5C67F2] bg-indigo-50" : "border-slate-100 hover:border-indigo-200"}`}>
-                <div className="flex items-center justify-between"><span className="font-black text-sm text-slate-800">{o.t}</span>{f.provider === o.k && <CheckCircle2 className="w-4 h-4" style={{ color: PURPLE }} />}</div>
-                <p className="text-xs text-slate-400 mt-1">{o.d}</p>
-              </button>
-            ))}
-          </div>
-          <Toggle className="mt-4" label="Allow teachers to choose the provider per class" v={f.allowTeacherOverride} on={() => set("allowTeacherOverride", !f.allowTeacherOverride)} />
-        </Section>
+        {/* Provider selection — BigBlueButton only appears if the platform allows it */}
+        {f.bbbAllowedForSchools && (
+          <Section title="Meeting Provider">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {[{ k: "jitsi", t: "Jitsi Meet", d: "Free, instant rooms. Great default." }, { k: "bigbluebutton", t: "BigBlueButton", d: "Self-hosted, with server recordings." }].map(o => (
+                <button key={o.k} onClick={() => { set("provider", o.k); setTest(null); }} className={`text-left p-4 rounded-xl border-2 transition-all ${f.provider === o.k ? "border-[#5C67F2] bg-indigo-50" : "border-slate-100 hover:border-indigo-200"}`}>
+                  <div className="flex items-center justify-between"><span className="font-black text-sm text-slate-800">{o.t}</span>{f.provider === o.k && <CheckCircle2 className="w-4 h-4" style={{ color: PURPLE }} />}</div>
+                  <p className="text-xs text-slate-400 mt-1">{o.d}</p>
+                </button>
+              ))}
+            </div>
+            <Toggle className="mt-4" label="Allow teachers to choose the provider per class" v={f.allowTeacherOverride} on={() => set("allowTeacherOverride", !f.allowTeacherOverride)} />
+          </Section>
+        )}
 
         {/* Provider config */}
         {isBBB ? (
