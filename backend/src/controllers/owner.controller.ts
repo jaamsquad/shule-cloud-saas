@@ -738,6 +738,57 @@ export const setPlatformMeeting = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
+// Diagnose the platform JaaS config by actually signing a test token and
+// reporting precisely what's wrong (empty Key ID, unparseable private key, …).
+export const testPlatformMeeting = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const s: any = (await getDb().collection('platform_meeting_settings').findOne({ key: 'jitsi' })) || {};
+        const problems: string[] = [];
+        if (!s.jitsiAppId) problems.push('App ID is missing.');
+        else if (!/^vpaas-/.test(s.jitsiAppId)) problems.push('App ID should start with "vpaas-magic-cookie-".');
+        if (!s.jitsiKeyId) problems.push('Key ID is missing (the part after "/" in the API key name).');
+        let key: string = (s.jitsiAppSecret || '').trim();
+        if (!key) problems.push('RSA private key is missing.');
+        else {
+            if (key.includes('PUBLIC KEY')) problems.push('You pasted a PUBLIC key — JaaS needs the PRIVATE key.');
+            if (!key.includes('BEGIN') || !key.includes('PRIVATE KEY')) problems.push('Private key does not look like a PEM block (missing -----BEGIN PRIVATE KEY-----).');
+        }
+
+        let token: string | undefined;
+        let signError: string | undefined;
+        if (!problems.length) {
+            try {
+                const now = Math.floor(Date.now() / 1000);
+                token = jwt.sign(
+                    { aud: 'jitsi', iss: 'chat', sub: s.jitsiAppId, room: '*', nbf: now - 10, exp: now + 600,
+                      context: { user: { id: 'diag', name: 'Diagnostic', moderator: 'true' }, features: {} } },
+                    key, { algorithm: 'RS256', header: { kid: `${s.jitsiAppId}/${s.jitsiKeyId}` } as any },
+                );
+            } catch (e: any) {
+                signError = e.message;
+                if (/asn1|PEM|DECODER|unsupported|bad base|routines/i.test(e.message)) {
+                    signError = `Private key could not be parsed (${e.message}). Re-paste the full key, including the BEGIN/END lines and all line breaks.`;
+                }
+            }
+        }
+
+        return res.json({
+            ok: !problems.length && !signError,
+            kid: s.jitsiAppId && s.jitsiKeyId ? `${s.jitsiAppId}/${s.jitsiKeyId}` : '(incomplete)',
+            keyLooksPem: key.includes('BEGIN') && key.includes('PRIVATE KEY'),
+            keyLength: key.length,
+            problems,
+            signError,
+            // Paste this into jwt.io (with your PUBLIC key) to verify the signature.
+            sampleToken: token,
+            message: problems.length ? problems.join(' ')
+                : signError ? signError
+                : 'Signed a test token successfully. If meetings still fail, the Key ID/private key pair does not match what 8x8 has — regenerate the API key.',
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
 // ─── Personal reminders (per owner user) ─────────────────────────────────────
 export const listReminders = async (req: Request, res: Response) => {
     const claims = guard(req, res); if (!claims) return;
