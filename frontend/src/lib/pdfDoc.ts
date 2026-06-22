@@ -90,14 +90,20 @@ async function waitForImages(root: HTMLElement, timeoutMs = 8000) {
     ]);
 }
 
+/** Detect landscape from a @page rule (e.g. timetables) so wide tables aren't clipped. */
+function detectLandscape(html: string): boolean {
+    return /@page[^}]*\blandscape\b/i.test(html) || /size:\s*[^;]*\blandscape\b/i.test(html);
+}
+
 /**
  * Render a full HTML document string to a real multi-page A4 PDF blob.
  * The html is mounted in an off-screen, fixed-width container so the canvas
  * snapshot is deterministic regardless of the device screen size.
  */
-async function htmlToPdfBlob(html: string): Promise<Blob> {
-    // A4 portrait at ~96dpi ≈ 794px wide. Render at that width for predictable layout.
-    const RENDER_WIDTH = 794;
+async function htmlToPdfBlob(html: string, landscape = false): Promise<Blob> {
+    // A4 at ~96dpi: portrait ≈ 794px wide, landscape ≈ 1123px wide. Render at the
+    // matching width so the layout (esp. wide timetable grids) isn't squashed.
+    const RENDER_WIDTH = landscape ? 1123 : 794;
     const host = document.createElement("div");
     host.style.cssText =
         `position:fixed;left:-10000px;top:0;width:${RENDER_WIDTH}px;background:#fff;z-index:-1;`;
@@ -119,7 +125,7 @@ async function htmlToPdfBlob(html: string): Promise<Blob> {
             windowWidth: RENDER_WIDTH,
         });
 
-        const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
+        const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true, orientation: landscape ? "landscape" : "portrait" });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
         const imgH = (canvas.height * pageW) / canvas.width; // full image height scaled to page width
@@ -158,6 +164,8 @@ export interface OutputOpts {
     fileName?: string;
     /** Force a path regardless of platform: "print" or "pdf". */
     mode?: "auto" | "print" | "pdf";
+    /** Force landscape PDF. When omitted, detected from the html's @page rule. */
+    landscape?: boolean;
 }
 
 /**
@@ -171,7 +179,8 @@ export async function outputHtmlDoc(title: string, html: string, opts: OutputOpt
     if (!wantPdf) { printInWindow(title, html); return; }
 
     try {
-        const blob = await htmlToPdfBlob(html);
+        const landscape = opts.landscape ?? detectLandscape(html);
+        const blob = await htmlToPdfBlob(html, landscape);
         downloadBlob(blob, `${slug(opts.fileName || title)}.pdf`);
     } catch {
         // If rasterising fails for any reason, never leave the user stuck — print.
@@ -232,6 +241,51 @@ export function openPrintDoc(opts: OutputOpts = {}) {
         get onload() { return onload; },
     };
     return win as unknown as Window;
+}
+
+/**
+ * Snapshot an ALREADY-RENDERED on-page element to a PDF (mobile) or print the
+ * page (desktop). Use for pages that render the document inline and call
+ * window.print() directly (e.g. the portal timetable). On desktop we keep the
+ * native print (it respects @media print). In the app we rasterise just the
+ * element so the user gets a real, shareable PDF.
+ */
+export async function printElementToPdf(
+    el: HTMLElement | null,
+    title: string,
+    opts: { fileName?: string; landscape?: boolean } = {},
+): Promise<void> {
+    if (!isMobileApp()) { try { window.print(); } catch { /* noop */ } return; }
+    if (!el) { try { window.print(); } catch { /* noop */ } return; }
+    try {
+        const landscape = opts.landscape ?? el.scrollWidth > el.scrollHeight;
+        await waitForImages(el);
+        const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+        const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true, orientation: landscape ? "landscape" : "portrait" });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgH = (canvas.height * pageW) / canvas.width;
+        if (imgH <= pageH) {
+            pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageW, imgH);
+        } else {
+            const pxPerPage = Math.floor((canvas.width * pageH) / pageW);
+            let rendered = 0, first = true;
+            while (rendered < canvas.height) {
+                const sliceH = Math.min(pxPerPage, canvas.height - rendered);
+                const slice = document.createElement("canvas");
+                slice.width = canvas.width; slice.height = sliceH;
+                const ctx = slice.getContext("2d")!;
+                ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, slice.width, slice.height);
+                ctx.drawImage(canvas, 0, rendered, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+                if (!first) pdf.addPage();
+                pdf.addImage(slice.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageW, (sliceH * pageW) / canvas.width);
+                first = false; rendered += sliceH;
+            }
+        }
+        downloadBlob(pdf.output("blob"), `${slug(opts.fileName || title)}.pdf`);
+    } catch {
+        try { window.print(); } catch { /* noop */ }
+    }
 }
 
 /** Fetch an image URL and return a data: URI, so logos render in the canvas/PDF

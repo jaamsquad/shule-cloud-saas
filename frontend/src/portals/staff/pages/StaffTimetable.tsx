@@ -1,12 +1,15 @@
+import { useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Printer } from "lucide-react";
 import { PageTitle, PanelCard } from "../../PortalShell";
 import TimetableGrid from "../../TimetableGrid";
+import { printElementToPdf } from "@/lib/pdfDoc";
 import type { StaffCtx } from "../StaffLayout";
 
 export default function StaffTimetable() {
     const { api } = useOutletContext<StaffCtx>();
+    const printRef = useRef<HTMLDivElement>(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["staff_timetable"],
@@ -18,20 +21,22 @@ export default function StaffTimetable() {
         <>
             <div className="flex items-center justify-between mb-4 print:hidden">
                 <PageTitle title="My Timetable" />
-                <button onClick={() => window.print()}
+                <button onClick={() => printElementToPdf(printRef.current, "Teaching Timetable", { fileName: "Teaching-Timetable", landscape: true })}
                     className="inline-flex items-center gap-2 bg-[#0f2942] hover:bg-[#15395c] text-white text-sm font-bold px-4 py-2 rounded">
                     <Printer className="w-4 h-4" /> Print
                 </button>
             </div>
-            <PanelCard title="Teaching Timetable">
-                {isLoading ? (
-                    <div className="flex items-center gap-2 text-slate-400 text-sm py-8 justify-center">
-                        <Loader2 className="w-5 h-5 animate-spin" /> Loading timetable…
-                    </div>
-                ) : (
-                    <TimetableGrid data={data} />
-                )}
-            </PanelCard>
+            <div ref={printRef}>
+                <PanelCard title="Teaching Timetable">
+                    {isLoading ? (
+                        <div className="flex items-center gap-2 text-slate-400 text-sm py-8 justify-center">
+                            <Loader2 className="w-5 h-5 animate-spin" /> Loading timetable…
+                        </div>
+                    ) : (
+                        <TimetableGrid data={data} />
+                    )}
+                </PanelCard>
+            </div>
         </>
     );
 }

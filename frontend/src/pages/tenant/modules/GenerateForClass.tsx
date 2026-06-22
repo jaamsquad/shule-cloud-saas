@@ -4,7 +4,7 @@ import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { openPrintDoc } from "@/lib/pdfDoc";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 /* ─── Subject colour palette ────────────────────────────────────────────── */
 const PALETTE = [
@@ -512,15 +512,11 @@ function printTimetable(opts: {
 </body>
 </html>`;
 
-    /* Open in a new window and trigger print */
-    const win = openPrintDoc();
-    if (!win) { toast.error("Pop-up blocked — allow pop-ups and try again"); return; }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-        win.print();
-    }, 250);
+    /* Desktop → print window; mobile app → real landscape PDF saved & opened. */
+    void outputHtmlDoc(`Timetable — ${className}`, html, {
+        fileName: `Timetable-${className}`,
+        landscape: true,
+    });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
