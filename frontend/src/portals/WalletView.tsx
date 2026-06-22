@@ -42,15 +42,21 @@ export default function WalletView({ api, base, canManage, canPayFees, accent = 
     const openTopup = () => { setTopup(true); setAmount(""); setPhone(""); setStage("form"); setMessage(""); };
     const closeTopup = () => { if (pollRef.current) clearTimeout(pollRef.current); setTopup(false); setStage("form"); };
 
+    // Poll for the full STK lifetime (~2.5 min); only leave waiting on a terminal
+    // result (completed / failed). Never give up early.
     const pollTopup = (cid: string, attempt: number) => {
-        if (attempt > 20) { setStage("failed"); setMessage("Timed out. If you completed the payment, your wallet will update shortly."); return; }
+        if (attempt > 50) {
+            setStage("failed");
+            setMessage("We didn't get a confirmation. If you completed the payment, your wallet will update shortly — no need to pay again.");
+            return;
+        }
         pollRef.current = setTimeout(async () => {
             try {
                 const r = await api.get(`${base}/mpesa-status?checkoutRequestId=${encodeURIComponent(cid)}`);
                 const st = r.data?.status;
                 if (st === "completed") { setStage("success"); invalidate(); return; }
                 if (st === "failed") { setStage("failed"); setMessage(r.data?.message || "Payment was cancelled or failed."); return; }
-            } catch { /* keep polling */ }
+            } catch { /* transient — keep polling */ }
             pollTopup(cid, attempt + 1);
         }, 3000);
     };

@@ -64,15 +64,26 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
 
     const closeModal = () => { if (pollRef.current) clearTimeout(pollRef.current); setModal(null); setStage("form"); };
 
+    // Keep polling for the full STK lifetime (~2.5 min). We only ever leave the
+    // "waiting" state on a TERMINAL result from M-PESA — completed, or failed/
+    // cancelled. We never give up early; if Safaricom never responds at all we
+    // surface a gentle "still pending" message after the max window.
+    const MAX_POLLS = 50;            // 50 × 3s = 150s, longer than the prompt lifetime
     const poll = (cid: string, attempt: number) => {
-        if (attempt > 20) { setStage("failed"); setMessage("Timed out waiting for confirmation. If you completed the payment, it will reflect shortly."); return; }
+        if (attempt > MAX_POLLS) {
+            // Not a hard failure — the prompt simply expired without an answer.
+            setStage("failed");
+            setMessage("We didn't get a confirmation. If you completed the payment, it will reflect on your account shortly — you don't need to pay again.");
+            return;
+        }
         pollRef.current = setTimeout(async () => {
             try {
                 const r = await api.get(`${base}/mpesa-status?checkoutRequestId=${encodeURIComponent(cid)}`);
                 const st = r.data?.status;
                 if (st === "completed") { setReceipt(r.data?.receipt || null); setStage("success"); qc.invalidateQueries({ queryKey: ["fees_summary", base] }); return; }
                 if (st === "failed") { setStage("failed"); setMessage(r.data?.message || "Payment was cancelled or failed."); return; }
-            } catch { /* keep polling */ }
+                // "pending" / "unknown" / network error → keep waiting.
+            } catch { /* transient error — keep polling */ }
             poll(cid, attempt + 1);
         }, 3000);
     };
@@ -229,7 +240,7 @@ export default function FeesPay({ api, base, title = "Pay Fees", student }: Prop
                                         <Loader2 className="w-10 h-10 animate-spin text-green-500 mx-auto mb-3" />
                                         <p className="font-bold text-slate-700 text-sm">Check your phone</p>
                                         <p className="text-xs text-slate-500 mt-1">{message}</p>
-                                        <p className="text-[11px] text-slate-400 mt-3">Waiting for confirmation…</p>
+                                        <p className="text-[11px] text-slate-400 mt-3">Waiting for your M-PESA confirmation — this can take up to 2 minutes. Please don't close this window.</p>
                                     </div>
                                 ) : stage === "failed" ? (
                                     <div className="text-center py-4">

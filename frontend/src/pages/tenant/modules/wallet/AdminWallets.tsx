@@ -26,14 +26,15 @@ export default function AdminWallets() {
 
     const invalidate = () => { qc.invalidateQueries({ queryKey: ["wallets"] }); qc.invalidateQueries({ queryKey: ["wallets_summary"] }); qc.invalidateQueries({ queryKey: ["wallet_detail", selected?.id] }); };
 
+    // Poll for the full STK lifetime (~2.5 min); only stop on a terminal result.
     const pollStk = (cid: string, attempt: number) => {
-        if (attempt > 20) { setStk("idle"); toast.error("Top-up timed out. If paid, it will reflect shortly."); return; }
+        if (attempt > 50) { setStk("idle"); toast.error("No confirmation received. If paid, it will reflect shortly — no need to retry."); return; }
         pollRef.current = setTimeout(async () => {
             try {
                 const r = await api.get(`/wallets/mpesa-status?checkoutRequestId=${encodeURIComponent(cid)}`);
                 if (r.data?.status === "completed") { setStk("idle"); setAmount(""); setPhone(""); toast.success("Wallet topped up via M-PESA"); invalidate(); return; }
                 if (r.data?.status === "failed") { setStk("idle"); toast.error(r.data?.message || "Top-up failed or cancelled"); return; }
-            } catch { /* keep polling */ }
+            } catch { /* transient — keep polling */ }
             pollStk(cid, attempt + 1);
         }, 3000);
     };
