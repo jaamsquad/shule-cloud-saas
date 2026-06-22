@@ -104,12 +104,32 @@ export async function stkPush(c: MpesaConfig, { phone, amount, accountRef, descr
     const ts = timestamp();
     const password = b64(`${c.shortcode}${c.passkey}${ts}`);
     const msisdn = normalizeMsisdn(phone);
-    const { ok, status, data } = await daraja(c, '/mpesa/stkpush/v1/processrequest', {
-        BusinessShortCode: c.shortcode, Password: password, Timestamp: ts, TransactionType: c.txType,
-        Amount: Math.max(1, Math.round(amount)), PartyA: msisdn, PartyB: c.shortcode, PhoneNumber: msisdn,
+    if (!/^254(7|1)\d{8}$/.test(msisdn)) {
+        throw new Error(`Invalid M-PESA phone number "${phone}". Use a Safaricom number like 07XXXXXXXX.`);
+    }
+    // TransactionType must match the shortcode type: Paybill→CustomerPayBillOnline,
+    // Till/Buy Goods→CustomerBuyGoodsOnline. A mismatch is the usual cause of
+    // Daraja's "unresolved reason type" error.
+    const txType = (c.txType || 'CustomerPayBillOnline').trim();
+    const payload = {
+        BusinessShortCode: c.shortcode, Password: password, Timestamp: ts, TransactionType: txType,
+        Amount: Math.max(1, Math.round(amount)), PartyA: msisdn,
+        PartyB: c.shortcode, PhoneNumber: msisdn,
         CallBackURL: callbackUrl, AccountReference: String(accountRef || 'Fees').slice(0, 12), TransactionDesc: (description || 'Fees payment').slice(0, 20),
-    });
-    if (!ok || data?.ResponseCode !== '0') throw new Error(data?.errorMessage || data?.ResponseDescription || `STK push failed (HTTP ${status})`);
+    };
+    const { ok, status, data } = await daraja(c, '/mpesa/stkpush/v1/processrequest', payload);
+    if (!ok || data?.ResponseCode !== '0') {
+        // Log the full Daraja response so the real cause is visible in server logs.
+        console.error('[mpesa] STK push rejected:', JSON.stringify({
+            status, response: data, sent: { shortcode: c.shortcode, txType, env: c.env, partyB: payload.PartyB, callbackUrl },
+        }));
+        const reason = data?.errorMessage || data?.ResponseDescription || `STK push failed (HTTP ${status})`;
+        // Add a hint for the most common, otherwise-opaque Daraja error.
+        const hint = /unresolved reason type/i.test(String(reason))
+            ? ' — check that your M-PESA Shortcode, Passkey and Transaction Type match (Paybill vs Till) in Settings, and belong to the same shortcode.'
+            : '';
+        throw new Error(reason + hint);
+    }
     return { merchantRequestId: data.MerchantRequestID as string, checkoutRequestId: data.CheckoutRequestID as string, customerMessage: data.CustomerMessage as string };
 }
 
