@@ -18,9 +18,18 @@ object AppConfig {
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "zip", "rtf", "odt", "ods"
     )
 
-    /** True if the URL points at a document/printable file we should open externally. */
+    /** True for blob:/data: URLs — files built in the browser (resource files,
+     *  exports). The WebView can't render these, so we always save+open them. */
+    fun isBlobOrData(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        val u = url.lowercase()
+        return u.startsWith("blob:") || u.startsWith("data:")
+    }
+
+    /** True if the URL points at a document/printable file we should handle natively. */
     fun isDocumentUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
+        if (isBlobOrData(url)) return true
         return try {
             val uri = android.net.Uri.parse(url)
             val path = uri.path?.lowercase() ?: return false

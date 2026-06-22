@@ -309,29 +309,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Read a blob:/data: document from a popup into base64 and save it. */
-    private fun grabPopupBlob(popup: WebView?, url: String) {
+    /** Read a blob:/data: document from inside the popup into base64 and save it.
+     *  Uses XHR(responseType=blob) against the popup's OWN location, so it works
+     *  for large PDFs (no giant URL string round-tripped through Kotlin). */
+    private fun grabPopupBlob(popup: WebView?, @Suppress("UNUSED_PARAMETER") url: String) {
         popup ?: return
         val js = """
         (function(){
           try{
-            var u="$url";
-            var name=(document.title||'document').replace(/[^a-z0-9._-]+/gi,'_');
-            fetch(u).then(function(r){return r.blob();}).then(function(b){
-              if(!/\.[a-z0-9]{2,5}$/i.test(name)){
-                var t=b.type||''; var ext = t.indexOf('pdf')>=0?'.pdf':t.indexOf('sheet')>=0?'.xlsx':t.indexOf('csv')>=0?'.csv':t.indexOf('png')>=0?'.png':t.indexOf('jpeg')>=0?'.jpg':'';
-                name=name+ext;
-              }
-              var fr=new FileReader();
-              fr.onloadend=function(){ ShuleCloudPrint.saveBlob(fr.result, name, b.type||''); };
-              fr.readAsDataURL(b);
-            }).catch(function(e){ ShuleCloudPrint.blobFailed(); });
+            var u = document.URL || location.href;
+            var name = (document.title||'document').replace(/[^a-z0-9._-]+/gi,'_');
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', u, true);
+            xhr.responseType = 'blob';
+            xhr.onload = function(){
+              try{
+                var b = xhr.response;
+                var t = (b && b.type) || '';
+                if(!/\.[a-z0-9]{2,5}$/i.test(name)){
+                  var ext = t.indexOf('pdf')>=0?'.pdf':t.indexOf('sheet')>=0?'.xlsx':t.indexOf('excel')>=0?'.xls':t.indexOf('csv')>=0?'.csv':t.indexOf('png')>=0?'.png':t.indexOf('jpeg')>=0?'.jpg':t.indexOf('word')>=0?'.docx':'.pdf';
+                  name = name + ext;
+                }
+                var fr = new FileReader();
+                fr.onloadend = function(){ ShuleCloudPrint.saveBlob(fr.result, name, t); };
+                fr.onerror = function(){ ShuleCloudPrint.blobFailed(); };
+                fr.readAsDataURL(b);
+              }catch(e){ ShuleCloudPrint.blobFailed(); }
+            };
+            xhr.onerror = function(){ ShuleCloudPrint.blobFailed(); };
+            xhr.send();
           }catch(e){ ShuleCloudPrint.blobFailed(); }
         })();
         """.trimIndent()
         popup.evaluateJavascript(js, null)
-        // Remove the (blank) popup window after a moment.
-        popup.postDelayed({ removePopup(popup) }, 1500)
+        // Remove the (blank) popup window after the content has been read.
+        popup.postDelayed({ removePopup(popup) }, 3000)
     }
 
     /** Sends a WebView's rendered content to Android's print service (creates a
@@ -448,7 +460,10 @@ class MainActivity : AppCompatActivity() {
                     ): Boolean {
                         val u = req?.url?.toString()
                         when {
-                            // Real document url → download it.
+                            // blob:/data: (resource files, PDFs built client-side) →
+                            // let the popup load it so onPageFinished can read it.
+                            AppConfig.isBlobOrData(u) -> return false
+                            // Real http(s) document url → download via DownloadManager.
                             AppConfig.isDocumentUrl(u) -> { downloadDocumentUrl(u); removePopup(popup) }
                             // Other internal pages → continue in the main WebView.
                             AppConfig.isInternalUrl(u) -> { webView.loadUrl(u!!); removePopup(popup) }
@@ -459,16 +474,20 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onPageFinished(v: WebView?, url: String?) {
-                        // If the popup itself IS a blob/data document (e.g. a PDF
-                        // built client-side and opened in a new tab), grab + save it.
-                        if (url != null && (url.startsWith("blob:") || url.startsWith("data:"))) {
-                            grabPopupBlob(v, url)
-                            return
-                        }
-                        // Otherwise it's a print page → route window.print() natively.
+                        // The url param can be empty/truncated for large data: PDFs,
+                        // so decide by asking the page what it actually is. If the
+                        // popup is a document (data:/blob: or a non-HTML content type)
+                        // grab + save it; otherwise treat it as a print page.
                         v?.evaluateJavascript(
-                            "window.print=function(){ShuleCloudPrint.printPopup(document.title);};", null
-                        )
+                            "(function(){try{var u=document.URL||'';var ct=document.contentType||'';" +
+                            "if(u.indexOf('blob:')===0||u.indexOf('data:')===0||(ct&&ct.indexOf('text/html')<0))return 'DOC';return 'PAGE';}catch(e){return 'PAGE';}})();"
+                        ) { result ->
+                            val r = result?.replace("\"", "") ?: "PAGE"
+                            if (r == "DOC") grabPopupBlob(v, url ?: "")
+                            else v.evaluateJavascript(
+                                "window.print=function(){ShuleCloudPrint.printPopup(document.title);};", null
+                            )
+                        }
                     }
                 }
                 transport.webView = popup
