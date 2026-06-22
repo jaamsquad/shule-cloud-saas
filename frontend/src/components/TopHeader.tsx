@@ -12,8 +12,8 @@ import { navItems } from "./AppSidebar";
 // Flatten the sidebar nav into searchable {label, path, group} entries.
 const NAV_LINKS = navItems.flatMap((item: any) =>
     item.children
-        ? item.children.filter((c: any) => c.path && c.path !== "/logout").map((c: any) => ({ label: c.label, path: c.path, group: item.label }))
-        : item.path && item.path !== "/logout" ? [{ label: item.label, path: item.path, group: "" }] : []
+        ? item.children.filter((c: any) => c.path && c.label && c.path !== "/logout").map((c: any) => ({ label: c.label, path: c.path, group: item.label || "" }))
+        : item.path && item.label && item.path !== "/logout" ? [{ label: item.label, path: item.path, group: "" }] : []
 );
 
 const TYPE_META: Record<string, { icon: any; link: (id: string) => string }> = {
@@ -59,7 +59,7 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
 
     // Sidebar-tab matches (client-side).
     const pageMatches = q.length >= 1
-        ? NAV_LINKS.filter(n => n.label.toLowerCase().includes(q.toLowerCase())).slice(0, 6).map(n => ({ type: "Page", id: n.path, label: n.label, sub: n.group, path: n.path }))
+        ? NAV_LINKS.filter(n => (n.label || "").toLowerCase().includes(q.toLowerCase())).slice(0, 6).map(n => ({ type: "Page", id: n.path, label: n.label, sub: n.group, path: n.path }))
         : [];
 
     // DB search (debounced).
