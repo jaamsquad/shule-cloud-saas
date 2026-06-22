@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -41,6 +41,7 @@ router.get('/mpesa-settings', getPlatformMpesa);
 router.post('/mpesa-settings', setPlatformMpesa);
 router.get('/meeting-settings', getPlatformMeeting);
 router.post('/meeting-settings', setPlatformMeeting);
+router.post('/meeting-settings/test', testPlatformMeeting);
 
 // ─── Personal reminders ──────────────────────────────────────────────────────
 router.get('/reminders', listReminders);
