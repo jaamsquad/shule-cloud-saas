@@ -376,23 +376,22 @@ class MainActivity : AppCompatActivity() {
         popup.postDelayed({ removePopup(popup) }, 3000)
     }
 
-    /** Sends a WebView's rendered content to Android's print service (creates a
-     *  PDF the user can print or save), then removes the off-screen popup. */
+    private var printedPopups = java.util.Collections.newSetFromMap(java.util.WeakHashMap<WebView, Boolean>())
+
+    /** Opens Android's native print dialog for a WebView's rendered content
+     *  (choose a printer or "Save as PDF"). Prints each popup at most once. */
     private fun printWebView(target: WebView, title: String?) {
+        if (!printedPopups.add(target)) return   // already printed this popup
         try {
             val jobName = (title?.takeIf { it.isNotBlank() } ?: getString(R.string.app_name)) + " Document"
             val printManager = getSystemService(PRINT_SERVICE) as android.print.PrintManager
             val adapter = target.createPrintDocumentAdapter(jobName)
-            printManager.print(
-                jobName, adapter,
-                android.print.PrintAttributes.Builder().build()
-            )
+            printManager.print(jobName, adapter, android.print.PrintAttributes.Builder().build())
         } catch (e: Exception) {
             Toast.makeText(this, "Couldn't start printing", Toast.LENGTH_SHORT).show()
-        } finally {
-            // Give the print service a moment to capture the adapter before removal.
-            target.postDelayed({ removePopup(target) }, 1500)
         }
+        // Keep the popup alive — the print framework needs the adapter. It's a
+        // 0x0 off-screen view; remove it later when the popup is replaced/destroyed.
     }
 
     private fun removePopup(popup: WebView?) {
@@ -504,20 +503,21 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onPageFinished(v: WebView?, url: String?) {
-                        // The url param can be empty/truncated for large data: PDFs,
-                        // so decide by asking the page what it actually is. If the
-                        // popup is a document (data:/blob: or a non-HTML content type)
-                        // grab + save it; otherwise treat it as a print page.
-                        v?.evaluateJavascript(
-                            "(function(){try{var u=document.URL||'';var ct=document.contentType||'';" +
-                            "if(u.indexOf('blob:')===0||u.indexOf('data:')===0||(ct&&ct.indexOf('text/html')<0))return 'DOC';return 'PAGE';}catch(e){return 'PAGE';}})();"
-                        ) { result ->
-                            val r = result?.replace("\"", "") ?: "PAGE"
-                            if (r == "DOC") grabPopupBlob(v, url ?: "")
-                            else v.evaluateJavascript(
-                                "window.print=function(){ShuleCloudPrint.printPopup(document.title);};", null
-                            )
-                        }
+                        v ?: return
+                        // Universal behaviour: open Android's NATIVE PRINT dialog for
+                        // whatever the popup is (report card, statement, PDF…). The
+                        // user can pick a printer or "Save as PDF". This avoids the
+                        // unreliable blob-download path entirely.
+                        //  - Hook the page's own window.print() to the native printer.
+                        //  - Auto-trigger print shortly after load, since most popups
+                        //    call print() themselves on load anyway (we guard against
+                        //    printing twice with a flag).
+                        v.evaluateJavascript(
+                            "(function(){if(window.__scHooked)return;window.__scHooked=true;" +
+                            "window.print=function(){ShuleCloudPrint.printPopup(document.title);};})();",
+                            null
+                        )
+                        v.postDelayed({ printWebView(v, "Document") }, 600)
                     }
                 }
                 transport.webView = popup
