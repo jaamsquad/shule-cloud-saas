@@ -945,6 +945,60 @@ router.get('/student-portal/live-meetings', async (req, res) => {
     }
 });
 
+// New Live Classes module — list the student's upcoming/live classes.
+router.get('/student-portal/live-classes', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        let cls = '';
+        try {
+            const decoded: any = jwt.verify((req.headers.authorization || '').split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
+            const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
+            cls = String(student?.studentClass || student?.currentClass || '');
+        } catch { /* anonymous */ }
+        const horizon = new Date(Date.now() - 6 * 3600000);
+        const all = await db.collection('live_classes')
+            .find({ deletedAt: { $exists: false }, status: { $in: ['scheduled', 'live'] }, startAt: { $gte: horizon } })
+            .sort({ startAt: 1 }).limit(50).toArray();
+        const visible = all.filter((m: any) => m.audience === 'all' || !m.classId || (cls && String(m.classId).toLowerCase() === cls.toLowerCase()));
+        res.json(visible.map((m: any) => ({
+            _id: String(m._id), title: m.title, subjectName: m.subjectName, teacherName: m.teacherName,
+            startAt: m.startAt, durationMinutes: m.durationMinutes, provider: m.provider, status: m.status,
+            joinOpensAt: new Date(new Date(m.startAt).getTime() - 15 * 60000),
+        })));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Student joins a live class (enforces the 15-min window + records attendance).
+router.post('/student-portal/live-classes/:id/join', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        let studentId = '', name = 'Student', admissionNo = '';
+        try {
+            const decoded: any = jwt.verify((req.headers.authorization || '').split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
+            studentId = decoded.studentId;
+            const s = await db.collection('students').findOne({ _id: new ObjectId(studentId) });
+            name = s?.studentName || s?.name || 'Student'; admissionNo = s?.registrationNo || s?.admNo || '';
+        } catch { /* anonymous */ }
+        const lc = await db.collection('live_classes').findOne({ _id: new ObjectId(req.params.id) });
+        if (!lc) return res.status(404).json({ message: 'Class not found' });
+        const opensAt = new Date(new Date(lc.startAt).getTime() - 15 * 60000);
+        if (Date.now() < opensAt.getTime()) return res.status(425).json({ message: 'This class opens 15 minutes before it starts.' });
+        if (lc.status === 'ended' || lc.status === 'cancelled') return res.status(409).json({ message: 'This class has ended.' });
+
+        const { resolveProvider } = await import('../modules/liveclass/providers/factory');
+        const { provider } = await resolveProvider(db, lc.provider);
+        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName: name, role: 'attendee', password: lc.password, subjectName: lc.subjectName });
+        if (lc.attendanceEnabled && studentId) {
+            await db.collection('meeting_attendance').updateOne(
+                { classId: String(lc._id), userId: studentId },
+                { $setOnInsert: { classId: String(lc._id), meetingId: lc.meetingId, userId: studentId, name, admissionNo, joinedAt: new Date(), ip: req.ip || '', device: req.headers['user-agent'] || '' } },
+                { upsert: true },
+            );
+        }
+        res.json({ ok: true, provider: provider.name, ...join });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/student-portal/announcements', async (req, res) => {
     try {
         const db = getInstDb(req);

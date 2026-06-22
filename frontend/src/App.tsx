@@ -148,6 +148,9 @@ import SalaryReport from "./pages/tenant/modules/salary/SalaryReport";
 import SalaryComponents from "./pages/tenant/modules/salary/SalaryComponents";
 import LiveClass from "./pages/tenant/modules/LiveClass";
 import LiveRoom from "./pages/tenant/modules/LiveRoom";
+import LiveClasses from "./pages/tenant/modules/liveclass/LiveClasses";
+import LiveClassSettings from "./pages/tenant/modules/liveclass/LiveClassSettings";
+import MeetingRoom from "./pages/tenant/modules/liveclass/MeetingRoom";
 import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
@@ -632,6 +635,8 @@ const App = () => {
               <Route path="/salary/report" element={<SalaryReport />} />
               <Route path="/salary/components" element={<SalaryComponents />} />
               <Route path="/live" element={<LiveClass />} />
+              <Route path="/live-classes" element={<LiveClasses />} />
+              <Route path="/live-classes/settings" element={<LiveClassSettings />} />
 
               {/* Online Store & POS Admin */}
               <Route path="/pos-admin/analytics" element={<POSAdminAnalytics />} />
@@ -967,6 +972,7 @@ const App = () => {
 
             {/* Live Class Room — full-screen, outside dashboard layout */}
             <Route path="/live/room/:meetingId" element={<LiveRoom />} />
+            <Route path="/live-classes/room/:id" element={<MeetingRoom />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

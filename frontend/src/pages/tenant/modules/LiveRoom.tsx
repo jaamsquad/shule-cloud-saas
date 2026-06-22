@@ -19,7 +19,10 @@ export default function LiveRoom() {
     const userName = searchParams.get("name") || (role === "moderator" ? "Teacher" : "Student");
     const isModerator = role === "moderator";
     const isViewer = role === "viewer" || searchParams.get("view") === "1";
-    const roomName = `ShuleCloud-${meetingId}`;
+    // Prefer an explicit room/domain (new Live Classes module passes these so the
+    // student joins the SAME room the teacher created); else the legacy default.
+    const roomName = searchParams.get("room") || `ShuleCloud-${meetingId}`;
+    const jitsiDomain = searchParams.get("domain") || "meet.jit.si";
 
     // Redirect back path depends on where they came from
     const returnPath = searchParams.get("return") || (
@@ -33,7 +36,7 @@ export default function LiveRoom() {
             if (!window.JitsiMeetExternalAPI || !containerRef.current) return;
             if (apiRef.current) { try { apiRef.current.dispose(); } catch (_) {} }
 
-            apiRef.current = new window.JitsiMeetExternalAPI("meet.jit.si", {
+            apiRef.current = new window.JitsiMeetExternalAPI(jitsiDomain, {
                 roomName,
                 parentNode: containerRef.current,
                 width: "100%",
@@ -97,14 +100,14 @@ export default function LiveRoom() {
             init();
         } else {
             const script = document.createElement("script");
-            script.src = "https://meet.jit.si/external_api.js";
+            script.src = `https://${jitsiDomain}/external_api.js`;
             script.async = true;
             script.onload = init;
             script.onerror = () => {
                 if (containerRef.current) {
                     containerRef.current.innerHTML = `
                         <iframe
-                            src="https://meet.jit.si/${roomName}#userInfo.displayName=${encodeURIComponent(userName)}"
+                            src="https://${jitsiDomain}/${roomName}#userInfo.displayName=${encodeURIComponent(userName)}"
                             allow="camera; microphone; fullscreen; display-capture; autoplay"
                             style="width:100%;height:100%;border:none;"
                             allowfullscreen

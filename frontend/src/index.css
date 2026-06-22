@@ -254,3 +254,8 @@
 .blog-content table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .95em; }
 .blog-content th, .blog-content td { border: 1px solid #e2e8f0; padding: .55em .8em; text-align: left; }
 .blog-content th { background: #faf9ff; font-weight: 700; }
+
+/* Live Classes module form inputs */
+.inp { width: 100%; height: 2.5rem; padding: 0 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.875rem; outline: none; color: #1e293b; }
+.inp:focus { border-color: #5C67F2; }
+textarea.inp { height: auto; padding: 0.5rem 0.75rem; }

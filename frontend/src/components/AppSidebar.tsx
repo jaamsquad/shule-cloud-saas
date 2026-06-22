@@ -360,7 +360,9 @@ export const navItems: NavItem[] = [
       { label: "Gateway Settings", path: "/integrations" },
   ] },
   { label: "Live Class & LMS", icon: Video, moduleKey: "live_class", children: [
-      { label: "Live Classes (Jitsi)", path: "/live" },
+      { label: "Live Classes", path: "/live-classes" },
+      { label: "Live Class Settings", path: "/live-classes/settings" },
+      { label: "Quick Meet (Jitsi)", path: "/live" },
       { label: "Courses", path: "/lms/courses" },
       { label: "Quizzes & Exams", path: "/lms/quizzes" },
       { label: "Learning Materials", path: "/lms/lessons" },
