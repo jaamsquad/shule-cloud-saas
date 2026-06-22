@@ -986,8 +986,11 @@ router.post('/student-portal/live-classes/:id/join', async (req, res) => {
         if (lc.status === 'ended' || lc.status === 'cancelled') return res.status(409).json({ message: 'This class has ended.' });
 
         const { resolveProvider } = await import('../modules/liveclass/providers/factory');
-        const { provider } = await resolveProvider(db, lc.provider);
-        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName: name, role: 'attendee', password: lc.password, subjectName: lc.subjectName });
+        // Must use the SAME per-school namespace the teacher used, or the student
+        // would land in a different (non-namespaced) room and never meet.
+        const tenantNs = (req as any).tenantContext?.tenantSubdomain || undefined;
+        const { provider } = await resolveProvider(db, lc.provider, { tenantNs });
+        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName: name, role: 'attendee', password: lc.password, subjectName: lc.subjectName, userId: studentId || undefined });
         if (lc.attendanceEnabled && studentId) {
             await db.collection('meeting_attendance').updateOne(
                 { classId: String(lc._id), userId: studentId },

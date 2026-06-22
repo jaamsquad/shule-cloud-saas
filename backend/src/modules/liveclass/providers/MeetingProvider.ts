@@ -22,6 +22,8 @@ export interface JoinMeetingInput {
     password?: string;
     avatar?: string;
     subjectName?: string;
+    userId?: string;   // stable identity for the JaaS JWT `context.user.id`
+    email?: string;    // optional, surfaced in the JaaS JWT
 }
 
 export interface ProviderRecording {
@@ -40,7 +42,7 @@ export interface MeetingProvider {
     createMeeting(input: CreateMeetingInput): Promise<{ ok: boolean; meetingRef?: string; message?: string }>;
 
     /** Returns a fully-formed join URL (or the data the client needs to embed). */
-    getJoinInfo(input: JoinMeetingInput): Promise<{ joinUrl?: string; embed?: 'jitsi'; roomName?: string; domain?: string; jwt?: string }>;
+    getJoinInfo(input: JoinMeetingInput): Promise<{ joinUrl?: string; embed?: 'jitsi'; roomName?: string; domain?: string; jwt?: string; scriptUrl?: string; appId?: string }>;
 
     endMeeting(meetingId: string): Promise<{ ok: boolean; message?: string }>;
 
@@ -64,8 +66,9 @@ export interface MeetingSettings {
     jitsiEnablePassword: boolean;
     jitsiEnableLobby: boolean;
     jitsiEnableRecording: boolean;
-    jitsiAppId?: string;            // optional JWT (8x8/JaaS or self-hosted)
-    jitsiAppSecret?: string;
+    jitsiAppId?: string;            // JaaS App ID (vpaas-magic-cookie-…) or self-hosted issuer
+    jitsiKeyId?: string;            // JaaS Key ID — completes the JWT `kid` as <AppID>/<KeyID>
+    jitsiAppSecret?: string;        // RSA private key (JaaS) or shared secret (self-hosted)
     // BigBlueButton
     bbbUrl: string;                 // e.g. https://bbb.example.com/bigbluebutton
     bbbSecret: string;
@@ -78,6 +81,9 @@ export interface MeetingSettings {
     recordingEnabled: boolean;
     attendanceEnabled: boolean;
     notifyEnabled: boolean;
+    // Runtime-only: per-school namespace so rooms are isolated under the shared
+    // platform JaaS account. Not persisted — injected by the factory per request.
+    tenantNs?: string;
 }
 
 export const DEFAULT_MEETING_SETTINGS: MeetingSettings = {

@@ -36,6 +36,10 @@ export const liveClass = {
 
   stats: () => api.get("/live-classes/stats/overview").then(r => r.data),
 
+  // Ad-hoc "Quick Meet" room on the shared platform JaaS account (no 5-min limit).
+  quickMeet: (body: { meetingId?: string; displayName?: string; role?: "moderator" | "attendee"; avatar?: string }) =>
+    api.post("/live-classes/quick-meet", body).then(r => r.data),
+
   getSettings: () => api.get("/live-classes/settings").then(r => r.data),
   saveSettings: (body: any) => api.put("/live-classes/settings", body).then(r => r.data),
   testConnection: (body: any) => api.post("/live-classes/provider/test-connection", body).then(r => r.data),

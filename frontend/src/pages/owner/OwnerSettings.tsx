@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Power, Smartphone, AtSign } from "lucide-react";
+import { Loader2, Check, Power, Smartphone, AtSign, Video } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -43,6 +43,19 @@ export default function OwnerSettings() {
         <div><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
             <input type={type} value={mp[k] ?? ""} onChange={(e) => setMp((p: any) => ({ ...p, [k]: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
     );
+
+    // Platform Jitsi / JaaS (Live Classes) — one account shared by all schools
+    const { data: meetingCfg } = useQuery({
+        queryKey: ["owner_meeting"],
+        queryFn: async () => { try { return (await api.get("/owner/meeting-settings")).data; } catch { return {}; } },
+    });
+    const [mt, setMt] = useState<any>({ jitsiEnabled: true, jitsiDomain: "8x8.vc", jitsiAppId: "", jitsiKeyId: "", jitsiAppSecret: "" });
+    useEffect(() => { if (meetingCfg) setMt((p: any) => ({ ...p, ...meetingCfg })); }, [meetingCfg]);
+    const saveMeeting = useMutation({
+        mutationFn: async () => api.post("/owner/meeting-settings", mt),
+        onSuccess: () => { toast.success("Live Classes provider saved"); qc.invalidateQueries({ queryKey: ["owner_meeting"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     // Company email (SMTP) — super_owner only
     const { data: emailCfg } = useQuery({
@@ -105,6 +118,33 @@ export default function OwnerSettings() {
                     <div className="col-span-2">{mpField("callbackBase", "Callback Base URL (e.g. https://api.shulecloud.com/api/v1)")}</div>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-3">Production STK endpoint: <code>https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest</code> (used automatically when Environment = Production).</p>
+            </div>
+
+            {/* Platform Live Classes (Jitsi / 8x8 JaaS) — shared by all schools */}
+            <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Video className="w-4 h-4" style={{ color: PRIMARY }} /> Live Classes — Jitsi / 8x8 JaaS</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">One JaaS account used by <b>all schools</b>. Each school's rooms stay isolated (namespaced by school). {meetingCfg?.configured ? "Configured ✓" : "Not configured yet."}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setMt((p: any) => ({ ...p, jitsiEnabled: !p.jitsiEnabled }))}
+                            className={`h-9 px-3 rounded-lg text-xs font-bold text-white ${mt.jitsiEnabled ? "bg-emerald-500" : "bg-slate-400"}`}>{mt.jitsiEnabled ? "Enabled" : "Disabled"}</button>
+                        <button onClick={() => saveMeeting.mutate()} disabled={saveMeeting.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveMeeting.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2"><label className="block text-[11px] font-bold text-slate-600 mb-1">App ID (vpaas-magic-cookie-…)</label>
+                        <input value={mt.jitsiAppId ?? ""} onChange={(e) => setMt((p: any) => ({ ...p, jitsiAppId: e.target.value }))} placeholder="vpaas-magic-cookie-…" className="w-full h-10 px-3 rounded-lg text-sm font-mono" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Key ID (after the / in the API key name)</label>
+                        <input value={mt.jitsiKeyId ?? ""} onChange={(e) => setMt((p: any) => ({ ...p, jitsiKeyId: e.target.value }))} placeholder="e.g. 5abcea-…" className="w-full h-10 px-3 rounded-lg text-sm font-mono" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Domain</label>
+                        <input value={mt.jitsiDomain ?? ""} onChange={(e) => setMt((p: any) => ({ ...p, jitsiDomain: e.target.value }))} placeholder="8x8.vc" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                    <div className="col-span-2"><label className="block text-[11px] font-bold text-slate-600 mb-1">RSA Private Key (PEM)</label>
+                        <textarea value={mt.jitsiAppSecret ?? ""} onChange={(e) => setMt((p: any) => ({ ...p, jitsiAppSecret: e.target.value }))} rows={4}
+                            placeholder={"-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----"} className="w-full px-3 py-2 rounded-lg text-xs font-mono" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3">Generate the App ID + RSA key pair at <code>jaas.8x8.vc → API Keys</code>. The free JaaS tier removes the 5-minute meeting limit. Schools cannot change this — it's locked platform-wide.</p>
             </div>
 
             {/* Company Email (SMTP) — super_owner only */}

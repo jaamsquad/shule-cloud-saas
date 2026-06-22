@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { PhoneOff, ChevronLeft, Wifi, Shield, User } from "lucide-react";
+import { liveClass } from "@/lib/liveClassApi";
 
 declare global {
     interface Window { JitsiMeetExternalAPI: any; }
@@ -19,10 +20,9 @@ export default function LiveRoom() {
     const userName = searchParams.get("name") || (role === "moderator" ? "Teacher" : "Student");
     const isModerator = role === "moderator";
     const isViewer = role === "viewer" || searchParams.get("view") === "1";
-    // Prefer an explicit room/domain (new Live Classes module passes these so the
-    // student joins the SAME room the teacher created); else the legacy default.
-    const roomName = searchParams.get("room") || `ShuleCloud-${meetingId}`;
-    const jitsiDomain = searchParams.get("domain") || "meet.jit.si";
+    // Join info resolved from the backend (platform JaaS → no 5-min limit, isolated
+    // per school). Falls back to a raw room only if that call fails.
+    const [conn, setConn] = useState<{ room: string; domain: string; jwt?: string; scriptUrl?: string } | null>(null);
 
     // Redirect back path depends on where they came from
     const returnPath = searchParams.get("return") || (
@@ -31,13 +31,53 @@ export default function LiveRoom() {
         : "/live"
     );
 
+    // Resolve join info once. If the caller already passed an explicit room + jwt
+    // (e.g. a student joining a teacher's class, where the backend issued the exact
+    // namespaced room and token), use those verbatim so both land in the SAME room.
+    // Otherwise this is an ad-hoc Quick Meet → ask the backend for platform JaaS info.
     useEffect(() => {
+        let cancelled = false;
+        const explicitRoom = searchParams.get("room");
+        const explicitJwt = searchParams.get("jwt") || undefined;
+        const explicitScript = searchParams.get("scriptUrl") || undefined;
+        const explicitDomain = searchParams.get("domain") || undefined;
+        if (explicitRoom && (explicitJwt || explicitDomain)) {
+            setConn({ room: explicitRoom, domain: explicitDomain || "meet.jit.si", jwt: explicitJwt, scriptUrl: explicitScript });
+            return;
+        }
+        (async () => {
+            const fallback = {
+                room: explicitRoom || `ShuleCloud-${meetingId}`,
+                domain: explicitDomain || "meet.jit.si",
+                jwt: undefined as string | undefined,
+                scriptUrl: undefined as string | undefined,
+            };
+            try {
+                const info: any = await liveClass.quickMeet({
+                    meetingId: meetingId || undefined,
+                    displayName: userName,
+                    role: isModerator ? "moderator" : "attendee",
+                });
+                if (cancelled) return;
+                setConn(info?.roomName ? { room: info.roomName, domain: info.domain, jwt: info.jwt, scriptUrl: info.scriptUrl } : fallback);
+            } catch {
+                if (!cancelled) setConn(fallback);
+            }
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [meetingId]);
+
+    useEffect(() => {
+        if (!conn) return;
+        const { room: roomName, domain: jitsiDomain, jwt, scriptUrl } = conn;
         const init = () => {
             if (!window.JitsiMeetExternalAPI || !containerRef.current) return;
             if (apiRef.current) { try { apiRef.current.dispose(); } catch (_) {} }
 
             apiRef.current = new window.JitsiMeetExternalAPI(jitsiDomain, {
                 roomName,
+                jwt,
                 parentNode: containerRef.current,
                 width: "100%",
                 height: "100%",
@@ -100,7 +140,8 @@ export default function LiveRoom() {
             init();
         } else {
             const script = document.createElement("script");
-            script.src = `https://${jitsiDomain}/external_api.js`;
+            // JaaS needs external_api.js from the per-App-ID path; backend supplies it.
+            script.src = scriptUrl || `https://${jitsiDomain}/external_api.js`;
             script.async = true;
             script.onload = init;
             script.onerror = () => {
@@ -120,7 +161,8 @@ export default function LiveRoom() {
         return () => {
             if (apiRef.current) { try { apiRef.current.dispose(); } catch (_) {} }
         };
-    }, [roomName, isModerator, userName, navigate, returnPath]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [conn]);
 
     const handleLeave = () => {
         if (apiRef.current) { try { apiRef.current.executeCommand("hangup"); } catch (_) {} }

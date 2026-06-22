@@ -34,6 +34,8 @@ export default function StudentLive() {
             const r = await api.post(`/student-portal/live-classes/${c._id}/join`, {});
             if (r.data.embed === "jitsi") {
                 const q = new URLSearchParams({ role: "viewer", name: student.name || "Student", title: c.title, return: "/live", room: r.data.roomName, domain: r.data.domain });
+                if (r.data.jwt) q.set("jwt", r.data.jwt);
+                if (r.data.scriptUrl) q.set("scriptUrl", r.data.scriptUrl);
                 navigate(`/live/${c._id}?${q.toString()}`);
             } else if (r.data.joinUrl) {
                 window.location.href = r.data.joinUrl;
