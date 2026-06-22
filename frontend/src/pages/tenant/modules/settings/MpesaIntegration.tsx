@@ -95,6 +95,11 @@ export default function MpesaIntegration() {
                                 <option value="sandbox">Sandbox (testing)</option>
                                 <option value="production">Production (live)</option>
                             </select>
+                            {form.env === "sandbox" && (
+                                <p className="text-[11px] text-amber-600 font-semibold mt-1.5 leading-snug">
+                                    ⚠️ Sandbox never sends a real prompt to a normal phone. It only works with Safaricom's test number <b>254708374149</b>. To receive prompts on real phones, switch to <b>Production</b> with your live Paybill/Till credentials.
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-600 mb-1">Transaction Type</label>

@@ -12,10 +12,11 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     try {
         const stk = req.body?.Body?.stkCallback;
-        if (!stk) return;
+        if (!stk) { console.warn('[M-PESA] callback with no stkCallback body:', JSON.stringify(req.body)); return; }
+        console.log('[M-PESA] STK callback:', JSON.stringify({ id: stk.CheckoutRequestID, code: stk.ResultCode, desc: stk.ResultDesc }));
         const meta = getMetaDb();
         const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId: stk.CheckoutRequestID });
-        if (!txn) return;
+        if (!txn) { console.warn('[M-PESA] callback for unknown checkoutRequestId:', stk.CheckoutRequestID); return; }
 
         if (Number(stk.ResultCode) === 0) {
             const m = parseStkCallback(stk);

@@ -190,6 +190,7 @@ export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
         const cfg = await resolveMpesaConfig(db);
         const q: any = await stkQuery(cfg, checkoutRequestId);
         const code = Number(q.ResultCode);
+        console.log('[mpesa] STK query result:', JSON.stringify({ id: checkoutRequestId, ResultCode: q.ResultCode, ResultDesc: q.ResultDesc, errorMessage: q.errorMessage }));
         if (code === 0) {
             const upd = await meta.collection('mpesa_transactions').updateOne(
                 { _id: txn._id, applied: { $ne: true } },
