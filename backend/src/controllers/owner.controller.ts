@@ -704,6 +704,40 @@ export const setPlatformMpesa = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
+// ─── Platform Jitsi / JaaS (Live Classes) — one shared account for all schools ─
+export const getPlatformMeeting = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const s: any = (await getDb().collection('platform_meeting_settings').findOne({ key: 'jitsi' })) || {};
+        return res.json({
+            jitsiEnabled: s.jitsiEnabled !== false,
+            jitsiDomain: s.jitsiDomain || '8x8.vc',
+            jitsiAppId: s.jitsiAppId || '',
+            jitsiKeyId: s.jitsiKeyId || '',
+            jitsiAppSecret: s.jitsiAppSecret ? '••••••••' : '',
+            configured: !!(s.jitsiAppId && s.jitsiAppSecret),
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const setPlatformMeeting = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const b = req.body || {};
+        const set: any = { updatedAt: new Date() };
+        if (b.jitsiEnabled !== undefined) set.jitsiEnabled = !!b.jitsiEnabled;
+        if (typeof b.jitsiDomain === 'string') set.jitsiDomain = b.jitsiDomain.trim();
+        if (typeof b.jitsiAppId === 'string') set.jitsiAppId = b.jitsiAppId.trim();
+        if (typeof b.jitsiKeyId === 'string') set.jitsiKeyId = b.jitsiKeyId.trim();
+        // Don't overwrite the stored RSA private key with the masked placeholder.
+        if (typeof b.jitsiAppSecret === 'string' && b.jitsiAppSecret && !b.jitsiAppSecret.startsWith('•')) {
+            set.jitsiAppSecret = b.jitsiAppSecret.trim();
+        }
+        await getDb().collection('platform_meeting_settings').updateOne({ key: 'jitsi' }, { $set: set }, { upsert: true });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
 // ─── Personal reminders (per owner user) ─────────────────────────────────────
 export const listReminders = async (req: Request, res: Response) => {
     const claims = guard(req, res); if (!claims) return;

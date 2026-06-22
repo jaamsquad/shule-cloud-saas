@@ -57,17 +57,17 @@ export default function LiveClassSettings() {
           </Section>
         ) : (
           <Section title="Jitsi Configuration">
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[12px] text-amber-700 leading-snug">
-              ⚠️ The free public <b>meet.jit.si</b> ends meetings after <b>5 minutes</b>. To remove the limit, either set up
-              <b> 8x8 JaaS</b> (free tier at jaas.8x8.vc — paste the App ID + RSA private key below) or point the domain at your own <b>self-hosted Jitsi</b>.
-            </div>
-            <Field label="Jitsi Domain"><input value={f.jitsiDomain || ""} onChange={e => set("jitsiDomain", e.target.value)} placeholder="meet.jit.si or your self-hosted domain (ignored when using JaaS App ID)" className="inp" /></Field>
+            {f.jaasActive ? (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-[12px] text-emerald-700 leading-snug">
+                ✅ <b>Unlimited meetings are active.</b> Your live classes run on the platform's managed 8x8 JaaS account — no 5-minute limit, and your school's rooms are kept private and isolated from other schools. Nothing to configure here.
+              </div>
+            ) : (
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[12px] text-amber-700 leading-snug">
+                ⚠️ The platform's unlimited Jitsi (8x8 JaaS) isn't set up yet, so meetings currently use the free public server and end after <b>5 minutes</b>. Ask your ShuleCloud provider to enable it — it then applies to your school automatically.
+              </div>
+            )}
             <Field label="Room name prefix"><input value={f.jitsiRoomPrefix || ""} onChange={e => set("jitsiRoomPrefix", e.target.value)} placeholder="ShuleCloud" className="inp" /></Field>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <Field label="App ID (JaaS / JWT)"><input value={f.jitsiAppId || ""} onChange={e => set("jitsiAppId", e.target.value)} placeholder="vpaas-magic-cookie-…" className="inp" /></Field>
-              <Field label="API Key / Private Key (JWT)"><input type="password" value={f.jitsiAppSecret || ""} onChange={e => set("jitsiAppSecret", e.target.value)} placeholder="RSA private key (JaaS) or shared secret" className="inp" /></Field>
-            </div>
-            <p className="text-[11px] text-slate-400">Leave the App ID/Key blank to use the free public server (5-min limit). Fill them in for unlimited, authenticated meetings.</p>
+            <p className="text-[11px] text-slate-400">The Jitsi provider account is managed centrally by your ShuleCloud provider. You only control the room prefix and the toggles below.</p>
             <div className="flex flex-wrap gap-4 pt-1">
               <Toggle label="Lobby" v={f.jitsiEnableLobby} on={() => set("jitsiEnableLobby", !f.jitsiEnableLobby)} />
               <Toggle label="Password" v={f.jitsiEnablePassword} on={() => set("jitsiEnablePassword", !f.jitsiEnablePassword)} />

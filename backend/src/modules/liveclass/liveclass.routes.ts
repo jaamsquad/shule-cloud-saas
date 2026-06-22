@@ -13,6 +13,8 @@ import { MeetingSettings } from './providers/MeetingProvider';
 
 const router = Router();
 const db = (req: Request): Db | null => (req as any).tenantDb || null;
+// Per-school namespace for room isolation under the shared platform JaaS account.
+const ns = (req: Request) => ({ tenantNs: (req as any).tenantContext?.tenantSubdomain || undefined });
 const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
 const user = (req: Request) => (req as any).user || {};
 const log = async (d: Db, action: string, classId: string, by: string, meta?: any) => {
@@ -22,17 +24,26 @@ const log = async (d: Db, action: string, classId: string, by: string, meta?: an
 // ─── Settings ─────────────────────────────────────────────────────────────────
 router.get('/live-classes/settings', async (req, res) => {
     const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
-    const s = await getMeetingSettings(d);
-    // Never expose provider secrets to the client.
-    res.json({ ...s, bbbSecret: s.bbbSecret ? '••••••••' : '', jitsiAppSecret: s.jitsiAppSecret ? '••••••••' : '' });
+    const s = await getMeetingSettings(d, ns(req));
+    // Jitsi credentials are platform-managed (super owner) and never exposed to
+    // schools; we only tell the tenant whether the shared JaaS account is active.
+    const jaasActive = !!(s.jitsiAppId && s.jitsiAppSecret);
+    res.json({
+        ...s,
+        bbbSecret: s.bbbSecret ? '••••••••' : '',
+        jitsiAppId: undefined, jitsiKeyId: undefined, jitsiAppSecret: undefined,
+        jaasManagedByPlatform: true, jaasActive,
+    });
 });
 
 router.put('/live-classes/settings', async (req, res) => {
     const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
     const b = req.body || {};
+    // Jitsi credentials are managed by the super owner (platform-wide JaaS) and
+    // are intentionally NOT accepted here — schools only control room prefix/toggles.
     const allowed: (keyof MeetingSettings)[] = [
         'provider', 'allowTeacherOverride',
-        'jitsiDomain', 'jitsiRoomPrefix', 'jitsiEnablePassword', 'jitsiEnableLobby', 'jitsiEnableRecording', 'jitsiAppId',
+        'jitsiDomain', 'jitsiRoomPrefix', 'jitsiEnablePassword', 'jitsiEnableLobby', 'jitsiEnableRecording',
         'bbbUrl', 'bbbAllowRecording', 'bbbWelcome', 'bbbAutoMute', 'bbbLockViewers', 'bbbGuestAccess',
         'recordingEnabled', 'attendanceEnabled', 'notifyEnabled',
     ];
@@ -40,19 +51,33 @@ router.put('/live-classes/settings', async (req, res) => {
     allowed.forEach(k => { if (b[k] !== undefined) set[k] = b[k]; });
     // Secrets: only overwrite when a real value is supplied (avoid wiping on save).
     if (typeof b.bbbSecret === 'string' && b.bbbSecret && !b.bbbSecret.startsWith('•')) set.bbbSecret = b.bbbSecret.trim();
-    if (typeof b.jitsiAppSecret === 'string' && b.jitsiAppSecret && !b.jitsiAppSecret.startsWith('•')) set.jitsiAppSecret = b.jitsiAppSecret.trim();
     await d.collection('meeting_settings').updateOne({ _id: 'live' as any }, { $set: set }, { upsert: true });
     res.json({ ok: true });
 });
 
 router.post('/live-classes/provider/test-connection', async (req, res) => {
     const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
-    const settings = await getMeetingSettings(d);
+    const settings = await getMeetingSettings(d, ns(req));
     // Apply any unsaved overrides from the form so the user can test before saving.
     const merged = { ...settings, ...req.body };
     if (merged.bbbSecret?.startsWith?.('•')) merged.bbbSecret = settings.bbbSecret;
     const provider = buildProvider(merged, req.body?.provider);
     res.json(await provider.testConnection());
+});
+
+// ─── Quick Meet — ad-hoc room (no scheduled class), still on platform JaaS ──────
+router.post('/live-classes/quick-meet', async (req, res) => {
+    try {
+        const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
+        const b = req.body || {};
+        const meetingId = (b.meetingId || `QM${Date.now().toString(36)}`).toString().replace(/[^a-zA-Z0-9-]/g, '');
+        const role = b.role === 'moderator' ? 'moderator' : 'attendee';
+        const { provider } = await resolveProvider(d, 'jitsi', ns(req));
+        const join = await provider.getJoinInfo({
+            meetingId, displayName: b.displayName || user(req).name || 'Participant', role, avatar: b.avatar,
+        });
+        res.json({ ok: true, provider: provider.name, meetingId, ...join });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -82,7 +107,7 @@ router.post('/live-classes', async (req, res) => {
         const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
         const b = req.body || {};
         if (!b.title || !b.startAt) return res.status(400).json({ message: 'Title and start time are required' });
-        const settings = await getMeetingSettings(d);
+        const settings = await getMeetingSettings(d, ns(req));
         const provider = settings.allowTeacherOverride && b.provider ? b.provider : settings.provider;
         const meetingId = `LC${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
         const doc = {
@@ -145,7 +170,7 @@ router.post('/live-classes/:id/start', async (req, res) => {
         const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
         const lc = await d.collection('live_classes').findOne({ _id: oid(req.params.id) });
         if (!lc) return res.status(404).json({ message: 'Not found' });
-        const { provider } = await resolveProvider(d, lc.provider);
+        const { provider } = await resolveProvider(d, lc.provider, ns(req));
         const created = await provider.createMeeting({
             meetingId: lc.meetingId, title: lc.title, moderatorName: lc.teacherName,
             record: lc.recordingEnabled, waitingRoom: lc.waitingRoom, autoMute: lc.autoMute, durationMinutes: lc.durationMinutes,
@@ -154,7 +179,7 @@ router.post('/live-classes/:id/start', async (req, res) => {
         if (!created.ok) return res.status(502).json({ message: created.message || 'Could not start the meeting' });
         await d.collection('live_classes').updateOne({ _id: lc._id }, { $set: { status: 'live', startedAt: new Date() } });
         await log(d, 'start', req.params.id, user(req).name || 'teacher');
-        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName: lc.teacherName, role: 'moderator', password: lc.password, subjectName: lc.subjectName });
+        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName: lc.teacherName, role: 'moderator', password: lc.password, subjectName: lc.subjectName, userId: lc.teacherId || user(req).id, email: user(req).email });
         res.json({ ok: true, provider: provider.name, ...join });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -171,9 +196,9 @@ router.post('/live-classes/:id/join', async (req, res) => {
             if (Date.now() < opensAt.getTime()) return res.status(425).json({ message: 'The class hasn\'t opened yet. The Join button activates 15 minutes before start.' });
             if (lc.status === 'ended' || lc.status === 'cancelled') return res.status(409).json({ message: 'This class has ended.' });
         }
-        const { provider } = await resolveProvider(d, lc.provider);
+        const { provider } = await resolveProvider(d, lc.provider, ns(req));
         const displayName = req.body?.displayName || user(req).name || 'Participant';
-        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName, role, password: lc.password, avatar: req.body?.avatar, subjectName: lc.subjectName });
+        const join = await provider.getJoinInfo({ meetingId: lc.meetingId, displayName, role, password: lc.password, avatar: req.body?.avatar, subjectName: lc.subjectName, userId: req.body?.userId || user(req).id, email: user(req).email });
         // Record attendance join (best-effort).
         if (lc.attendanceEnabled && role === 'attendee') {
             await d.collection('meeting_attendance').updateOne(
@@ -215,7 +240,7 @@ router.post('/live-classes/:id/end', async (req, res) => {
         const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
         const lc = await d.collection('live_classes').findOne({ _id: oid(req.params.id) });
         if (!lc) return res.status(404).json({ message: 'Not found' });
-        const { provider } = await resolveProvider(d, lc.provider);
+        const { provider } = await resolveProvider(d, lc.provider, ns(req));
         await provider.endMeeting(lc.meetingId).catch(() => {});
         await d.collection('live_classes').updateOne({ _id: lc._id }, { $set: { status: 'ended', endedAt: new Date() } });
         await log(d, 'end', req.params.id, user(req).name || 'teacher');
@@ -236,7 +261,7 @@ router.get('/live-classes/:id/recordings', async (req, res) => {
         const d = db(req); if (!d) return res.status(400).json({ message: 'No tenant' });
         const lc = await d.collection('live_classes').findOne({ _id: oid(req.params.id) });
         if (!lc) return res.status(404).json({ message: 'Not found' });
-        const { provider } = await resolveProvider(d, lc.provider);
+        const { provider } = await resolveProvider(d, lc.provider, ns(req));
         const providerRecs = await provider.getRecordings(lc.meetingId).catch(() => []);
         const uploaded = await d.collection('meeting_recordings').find({ classId: req.params.id }).toArray();
         res.json([...providerRecs.map(r => ({ ...r, source: provider.name })), ...uploaded.map(r => ({ ...r, source: 'upload' }))]);
@@ -259,7 +284,7 @@ router.delete('/live-classes/recordings/:recId', async (req, res) => {
         // Try local first; if not found, ask the provider to delete it.
         const local = await d.collection('meeting_recordings').findOneAndDelete({ _id: oid(req.params.recId) });
         if ((local as any)?.value || local) return res.json({ ok: true });
-        const { provider } = await resolveProvider(d);
+        const { provider } = await resolveProvider(d, undefined, ns(req));
         await provider.deleteRecording(req.params.recId);
         res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

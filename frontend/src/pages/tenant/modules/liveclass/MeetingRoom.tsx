@@ -59,7 +59,7 @@ export default function MeetingRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const mountJitsi = (info: { roomName: string; domain: string; jwt?: string }) => {
+  const mountJitsi = (info: { roomName: string; domain: string; jwt?: string; scriptUrl?: string }) => {
     const start = () => {
       if (!window.JitsiMeetExternalAPI || !containerRef.current) return;
       apiRef.current = new window.JitsiMeetExternalAPI(info.domain, {
@@ -74,10 +74,14 @@ export default function MeetingRoom() {
       apiRef.current.addEventListener("readyToClose", leave);
       setLoading(false);
     };
+    // JaaS requires external_api.js from the per-App-ID path (8x8.vc/<AppID>/…),
+    // not the generic host — the backend tells us the exact URL.
+    const scriptUrl = info.scriptUrl || `https://${info.domain}/external_api.js`;
     if (window.JitsiMeetExternalAPI) start();
     else {
       const s = document.createElement("script");
-      s.src = `https://${info.domain}/external_api.js`;
+      s.src = scriptUrl;
+      s.async = true;
       s.onload = start;
       s.onerror = () => { setError("Could not load the meeting engine."); setLoading(false); };
       document.body.appendChild(s);

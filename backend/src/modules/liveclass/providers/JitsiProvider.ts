@@ -13,7 +13,12 @@ export class JitsiProvider implements MeetingProvider {
     constructor(private s: MeetingSettings) {}
 
     private roomName(meetingId: string) {
-        return `${this.s.jitsiRoomPrefix || 'ShuleCloud'}-${meetingId}`.replace(/[^a-zA-Z0-9-]/g, '');
+        // Namespace every room with the tenant (subdomain) so two schools sharing
+        // the platform JaaS account can never land in the same room, even if their
+        // meetingIds collide. e.g. "acme-ShuleCloud-LCxxxx".
+        const ns = (this.s.tenantNs || '').replace(/[^a-zA-Z0-9-]/g, '');
+        const prefix = this.s.jitsiRoomPrefix || 'ShuleCloud';
+        return `${ns ? ns + '-' : ''}${prefix}-${meetingId}`.replace(/[^a-zA-Z0-9-]/g, '');
     }
 
     async createMeeting(_input: CreateMeetingInput) {
@@ -33,6 +38,7 @@ export class JitsiProvider implements MeetingProvider {
         let token: string | undefined;
         if (hasJaas) {
             const now = Math.floor(Date.now() / 1000);
+            const isMod = input.role === 'moderator';
             token = jwt.sign(
                 {
                     aud: 'jitsi',
@@ -43,20 +49,38 @@ export class JitsiProvider implements MeetingProvider {
                     exp: now + 3 * 3600,
                     context: {
                         user: {
-                            id: input.displayName, name: input.displayName, avatar: input.avatar || '',
-                            email: '', moderator: input.role === 'moderator',
+                            id: input.userId || `sc-${Buffer.from(input.displayName).toString('hex').slice(0, 16)}`,
+                            name: input.displayName,
+                            avatar: input.avatar || '',
+                            email: input.email || '',
+                            // JaaS expects this as the string "true"/"false".
+                            moderator: isMod ? 'true' : 'false',
+                            'hidden-from-recorder': false,
                         },
                         features: {
-                            recording: this.s.jitsiEnableRecording, livestreaming: false,
-                            transcription: false, 'outbound-call': false,
+                            // Only moderators get privileged features; students can't record/stream.
+                            recording: isMod && this.s.jitsiEnableRecording,
+                            livestreaming: false,
+                            transcription: false,
+                            'outbound-call': false,
                         },
                     },
                 },
                 this.s.jitsiAppSecret!,
-                isJaas ? { algorithm: 'RS256', header: { kid: this.s.jitsiAppId! } as any } : { algorithm: 'HS256' },
+                // For JaaS the `kid` is "<AppID>/<KeyID>" — the Key ID identifies
+                // which of your RSA keys signed this token. Without it 8x8 can't
+                // find the public key and rejects the JWT.
+                isJaas
+                    ? { algorithm: 'RS256', header: { kid: `${this.s.jitsiAppId}/${this.s.jitsiKeyId || ''}` } as any }
+                    : { algorithm: 'HS256' },
             );
         }
-        return { embed: 'jitsi' as const, roomName: room, domain, jwt: token };
+        // JaaS requires its external_api.js to be loaded from the per-App-ID path,
+        // not the generic 8x8.vc one, or JitsiMeetExternalAPI won't initialise.
+        const scriptUrl = isJaas
+            ? `https://8x8.vc/${this.s.jitsiAppId}/external_api.js`
+            : `https://${domain}/external_api.js`;
+        return { embed: 'jitsi' as const, roomName: room, domain, jwt: token, scriptUrl, appId: isJaas ? this.s.jitsiAppId : undefined };
     }
 
     async endMeeting(_meetingId: string) { return { ok: true }; }
