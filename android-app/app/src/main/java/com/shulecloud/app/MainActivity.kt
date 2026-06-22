@@ -208,35 +208,72 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Writes a base64 payload to the public Downloads folder and notifies the user. */
+    /**
+     * Decodes a base64 document, saves a copy to public Downloads, AND opens it
+     * in the device's viewer (PDF app / gallery / Office app) — the closest thing
+     * to the desktop in-page preview, since the WebView itself can't render PDFs.
+     */
     private fun saveBase64ToDownloads(base64: String, fileName: String, mime: String) {
         try {
-            // The shim sends a data: URL — strip the prefix if present.
             val pure = base64.substringAfter(",", base64)
             val bytes = android.util.Base64.decode(pure, android.util.Base64.DEFAULT)
-            val resolver = contentResolver
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val values = android.content.ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, mime)
-                    put(MediaStore.Downloads.IS_PENDING, 1)
+            val safeName = fileName.ifBlank { "document" }
+            val finalMime = mime.ifBlank { guessMime(safeName) }
+
+            // 1) Save a viewable copy in app cache and open it.
+            val cacheDir = File(this.cacheDir, "docs").apply { mkdirs() }
+            val cacheFile = File(cacheDir, safeName)
+            cacheFile.outputStream().use { it.write(bytes) }
+            openSavedFile(cacheFile, finalMime)
+
+            // 2) Also persist to public Downloads so the user keeps it.
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = android.content.ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                        put(MediaStore.Downloads.MIME_TYPE, finalMime)
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    if (uri != null) {
+                        contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
+                        contentResolver.update(uri, values, null, null)
+                    }
+                } else {
+                    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    File(dir, safeName).outputStream().use { it.write(bytes) }
                 }
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                if (uri != null) {
-                    resolver.openOutputStream(uri)?.use { it.write(bytes) }
-                    values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
-                    Toast.makeText(this, "Saved to Downloads: $fileName", Toast.LENGTH_LONG).show()
-                }
-            } else {
-                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val file = File(dir, fileName)
-                file.outputStream().use { it.write(bytes) }
-                Toast.makeText(this, "Saved to Downloads: $fileName", Toast.LENGTH_LONG).show()
-            }
+            } catch (_: Exception) { /* keeping a copy is best-effort */ }
         } catch (e: Exception) {
-            Toast.makeText(this, "Download failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Couldn't open document", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** Opens a saved file with whatever app handles its type (PDF/image/Office). */
+    private fun openSavedFile(file: File, mime: String) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent, "Open with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Saved to Downloads (no app to open it)", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun guessMime(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "pdf" -> "application/pdf"
+        "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        "xls" -> "application/vnd.ms-excel"
+        "csv" -> "text/csv"
+        "doc" -> "application/msword"
+        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else -> "application/octet-stream"
     }
 
     // ── Document download (any PDF / image / Excel, anywhere in the app) ───────
