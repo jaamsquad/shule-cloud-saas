@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
 
     private var backPressedOnce = false
     private val downloadReceiver = DownloadCompleteReceiver()
+    private var currentPopup: WebView? = null
 
     // ── Activity result launchers ─────────────────────────────────────────────
     private val fileChooserLauncher =
@@ -144,22 +145,117 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(PrintBridge(), "ShuleCloudPrint")
     }
 
-    // Redirect the page's print() to the external browser, which renders + prints
-    // the document properly (the in-app WebView can't print).
-    private fun injectPrintShim() {
-        webView.evaluateJavascript(
-            "(function(){if(window.__scPrintHooked)return;window.__scPrintHooked=true;" +
-            "window.print=function(){try{ShuleCloudPrint.printCurrent(window.location.href);}catch(e){}};})();",
-            null
-        )
+    // Installs JS bridges on the main page:
+    //  1) Intercept blob:/data: downloads (CSV/Excel/PDF built client-side) and
+    //     hand them to native, since Android DownloadManager can't fetch blobs.
+    //  2) Leave window.print() alone here — print uses a popup window which is
+    //     handled in onCreateWindow.
+    private fun injectBridges() {
+        val js = """
+        (function(){
+          if(window.__scBridges) return; window.__scBridges=true;
+          function send(blob, name){
+            var r=new FileReader();
+            r.onloadend=function(){ try{ ShuleCloudPrint.saveBlob(r.result, name||'download', blob.type||''); }catch(e){} };
+            r.readAsDataURL(blob);
+          }
+          // Intercept programmatic anchor downloads with blob:/data: hrefs.
+          var origClick=HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click=function(){
+            try{
+              var href=this.href||'';
+              if((href.indexOf('blob:')===0||href.indexOf('data:')===0) && this.download){
+                var name=this.download;
+                if(href.indexOf('data:')===0){ ShuleCloudPrint.saveBlob(href, name, ''); return; }
+                fetch(href).then(function(res){return res.blob();}).then(function(b){send(b,name);});
+                return;
+              }
+            }catch(e){}
+            return origClick.apply(this, arguments);
+          };
+        })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
     }
 
-    /** Native bridge so the page's print action can open externally to print. */
+    /** JS bridge for the web app's print actions. */
     inner class PrintBridge {
+        // A direct document URL print (rare) — open it in the in-app browser.
         @android.webkit.JavascriptInterface
         fun printCurrent(url: String?) {
             runOnUiThread { openInAppBrowser(url ?: webView.url) }
         }
+
+        // The popup-based print (window.open + document.write + window.print).
+        // Print the popup WebView via Android's native print service.
+        @android.webkit.JavascriptInterface
+        fun printPopup(title: String?) {
+            runOnUiThread { currentPopup?.let { printWebView(it, title) } }
+        }
+
+        // Receives a base64 blob download (CSV/Excel/etc.) that DownloadManager
+        // can't fetch, and saves it to the Downloads folder.
+        @android.webkit.JavascriptInterface
+        fun saveBlob(base64: String?, fileName: String?, mime: String?) {
+            if (base64.isNullOrBlank()) return
+            runOnUiThread { saveBase64ToDownloads(base64, fileName ?: "download", mime ?: "application/octet-stream") }
+        }
+    }
+
+    /** Writes a base64 payload to the public Downloads folder and notifies the user. */
+    private fun saveBase64ToDownloads(base64: String, fileName: String, mime: String) {
+        try {
+            // The shim sends a data: URL — strip the prefix if present.
+            val pure = base64.substringAfter(",", base64)
+            val bytes = android.util.Base64.decode(pure, android.util.Base64.DEFAULT)
+            val resolver = contentResolver
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, mime)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                    Toast.makeText(this, "Saved to Downloads: $fileName", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val file = File(dir, fileName)
+                file.outputStream().use { it.write(bytes) }
+                Toast.makeText(this, "Saved to Downloads: $fileName", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Download failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Sends a WebView's rendered content to Android's print service (creates a
+     *  PDF the user can print or save), then removes the off-screen popup. */
+    private fun printWebView(target: WebView, title: String?) {
+        try {
+            val jobName = (title?.takeIf { it.isNotBlank() } ?: getString(R.string.app_name)) + " Document"
+            val printManager = getSystemService(PRINT_SERVICE) as android.print.PrintManager
+            val adapter = target.createPrintDocumentAdapter(jobName)
+            printManager.print(
+                jobName, adapter,
+                android.print.PrintAttributes.Builder().build()
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't start printing", Toast.LENGTH_SHORT).show()
+        } finally {
+            // Give the print service a moment to capture the adapter before removal.
+            target.postDelayed({ removePopup(target) }, 1500)
+        }
+    }
+
+    private fun removePopup(popup: WebView?) {
+        popup ?: return
+        try { binding.root.removeView(popup); popup.destroy() } catch (_: Exception) {}
+        if (currentPopup === popup) currentPopup = null
     }
 
     private fun configureCookies() = with(CookieManager.getInstance()) {
@@ -176,7 +272,7 @@ class MainActivity : AppCompatActivity() {
                 binding.progressBar.hide()
                 CookieManager.getInstance().flush()
                 rememberSchoolFromUrl(url)
-                injectPrintShim()
+                injectBridges()
             },
             onError = { showError(it) },
             openExternal = ::openInExternalBrowser,
@@ -222,26 +318,44 @@ class MainActivity : AppCompatActivity() {
                 origin: String?, callback: GeolocationPermissions.Callback?
             ) { callback?.invoke(origin, true, false) }
 
-            // New windows / target=_blank → load in the same WebView (no Chrome)
+            // New windows / target=_blank. The web app's print uses
+            // window.open("","_blank") then document.write(html)+window.print(),
+            // so the popup has NO url up front — we must host it as a real (hidden)
+            // WebView, let it render the written HTML, then route its window.print()
+            // to Android's native print service.
             override fun onCreateWindow(
                 view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?
             ): Boolean {
                 val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
                 val popup = WebView(this@MainActivity)
+                popup.settings.javaScriptEnabled = true
+                popup.settings.domStorageEnabled = true
+                popup.addJavascriptInterface(PrintBridge(), "ShuleCloudPrint")
+                // Add it off-screen so document.write content actually renders.
+                binding.root.addView(popup, 0, 0)
+                currentPopup = popup
+
                 popup.webViewClient = object : android.webkit.WebViewClient() {
                     override fun shouldOverrideUrlLoading(
                         v: WebView?, req: android.webkit.WebResourceRequest?
                     ): Boolean {
                         val u = req?.url?.toString()
-                        // Documents/printables → in-app browser (Custom Tab, can
-                        // render + print); internal pages stay in the main WebView;
-                        // external links → the system browser.
+                        // A real navigation (not document.write): documents → in-app
+                        // browser, internal pages → main WebView, else system browser.
                         when {
                             AppConfig.isDocumentUrl(u) -> openInAppBrowser(u)
                             AppConfig.isInternalUrl(u) -> webView.loadUrl(u!!)
                             else -> openInExternalBrowser(u)
                         }
+                        removePopup(popup)
                         return true
+                    }
+
+                    override fun onPageFinished(v: WebView?, url: String?) {
+                        // Hook window.print() in the popup to call our native printer.
+                        v?.evaluateJavascript(
+                            "window.print=function(){ShuleCloudPrint.printPopup(document.title);};", null
+                        )
                     }
                 }
                 transport.webView = popup
