@@ -999,6 +999,48 @@ router.post('/student-portal/live-classes/:id/join', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Staff portal: leave requests ────────────────────────────────────────────
+const staffFromReq = async (req: Request, db: Db) => {
+    try {
+        const decoded: any = jwt.verify((req.headers.authorization || '').split(' ')[1], process.env.JWT_SECRET || 'secret');
+        if (!decoded?.staffId) return null;
+        const staff = await db.collection('staff').findOne({ _id: new ObjectId(decoded.staffId) });
+        return staff ? { id: String(staff._id), name: staff.employeeName || staff.name || decoded.name || 'Staff', staff } : null;
+    } catch { return null; }
+};
+
+// Staff submit a leave request.
+router.post('/staff-portal/leave-requests', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        const me = await staffFromReq(req, db);
+        if (!me) return res.status(401).json({ message: 'Not authenticated' });
+        const { type, startDate, endDate, reason } = req.body || {};
+        if (!type || !startDate || !endDate) return res.status(400).json({ message: 'Leave type and dates are required' });
+        const days = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
+        const doc = {
+            staffId: me.id, staffName: me.name,
+            designation: me.staff.designation || me.staff.role || '',
+            type, startDate: new Date(startDate), endDate: new Date(endDate), days,
+            reason: reason || '', status: 'pending',
+            createdAt: new Date(), updatedAt: new Date(),
+        };
+        const r = await db.collection('staff_leave_requests').insertOne(doc);
+        res.status(201).json({ ...doc, _id: r.insertedId });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Staff list their own leave requests.
+router.get('/staff-portal/leave-requests', async (req, res) => {
+    try {
+        const db = getInstDb(req);
+        const me = await staffFromReq(req, db);
+        if (!me) return res.status(401).json({ message: 'Not authenticated' });
+        const rows = await db.collection('staff_leave_requests').find({ staffId: me.id }).sort({ createdAt: -1 }).toArray();
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/student-portal/announcements', async (req, res) => {
     try {
         const db = getInstDb(req);

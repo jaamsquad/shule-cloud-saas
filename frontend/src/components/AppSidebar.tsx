@@ -490,6 +490,14 @@ export default function AppSidebar() {
       }
   });
 
+  // Pending staff leave requests → badge on the "Leave Management" item.
+  const { data: pendingLeave } = useQuery({
+      queryKey: ["tsc_pending_leave"],
+      queryFn: async () => { try { return (await api.get("/tsc/leave-requests/pending-count")).data?.count || 0; } catch { return 0; } },
+      refetchInterval: 60000,
+  });
+  const badgeFor = (path: string): number => (path === "/tsc/leave" ? (pendingLeave || 0) : 0);
+
   const isDark = theme?.sidebarBackground === "dark";
   const activeBg = theme?.activeItemBackground || "bg-[#5C67F2]";
 
@@ -655,6 +663,9 @@ export default function AppSidebar() {
                                   {/* Bullet indicator */}
                                   <div className={`w-1.5 h-1.5 rounded-full ${isChildActive ? activeBg : "bg-transparent"}`}></div>
                                   {child.label}
+                                  {badgeFor(child.path) > 0 && (
+                                    <span className="ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white">{badgeFor(child.path)}</span>
+                                  )}
                                   {child.locked && <Lock className="w-3 h-3 text-red-300 ml-auto" />}
                                 </Link>
                               )}

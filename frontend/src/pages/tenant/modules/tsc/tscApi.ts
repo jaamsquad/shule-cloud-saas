@@ -9,6 +9,9 @@ export const tsc = {
     leaveBalances: (id: string) => api.get(`/tsc/leave-balances/${id}`).then(r => r.data),
     settings: () => api.get("/tsc/settings").then(r => r.data),
     setSettings: (body: any) => api.patch("/tsc/settings", body).then(r => r.data),
+    leaveRequests: (status?: string) => api.get("/tsc/leave-requests", { params: status ? { status } : {} }).then(r => r.data),
+    pendingLeaveCount: () => api.get("/tsc/leave-requests/pending-count").then(r => r.data),
+    reviewLeave: (id: string, status: string, note?: string) => api.patch(`/tsc/leave-requests/${id}`, { status, note }).then(r => r.data),
     report: (kind: string, type?: string) => api.get(`/tsc/reports/${kind}${type ? `?type=${type}` : ""}`).then(r => r.data),
     alerts: () => api.get("/tsc/alerts").then(r => r.data),
     // Linked collections

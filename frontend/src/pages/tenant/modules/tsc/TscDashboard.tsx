@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Users, BadgeCheck, Building, GraduationCap, CalendarOff, AlertTriangle, FileWarning, Clock, Loader2 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { tsc } from "./tscApi";
@@ -35,6 +36,8 @@ export default function TscDashboard() {
                 ))}
             </div>
 
+            <PendingLeaveCard />
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card title="Teachers by Department">
                     <ResponsiveContainer width="100%" height={240}><BarChart data={toData(ch.byDept)}><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} allowDecimals={false} /><Tooltip /><Bar dataKey="value" fill={BLUE} radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
@@ -55,4 +58,26 @@ export default function TscDashboard() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
     return <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"><h3 className="text-sm font-black text-slate-700 mb-3">{title}</h3>{children}</div>;
+}
+
+function PendingLeaveCard() {
+    const { data: reqs = [] } = useQuery({ queryKey: ["tsc_leave_requests"], queryFn: () => tsc.leaveRequests("pending") });
+    const fmt = (d?: string) => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+    if (!reqs.length) return null;
+    return (
+        <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-black text-amber-800">Pending Staff Leave Requests ({reqs.length})</h3>
+                <Link to="/tsc/leave" className="text-xs font-black text-amber-700 hover:underline">Review →</Link>
+            </div>
+            <div className="space-y-1.5">
+                {reqs.slice(0, 4).map((r: any) => (
+                    <div key={r._id} className="flex items-center justify-between text-sm">
+                        <span className="font-bold text-slate-700">{r.staffName} · {r.type}</span>
+                        <span className="text-xs text-slate-500">{fmt(r.startDate)} → {fmt(r.endDate)} ({r.days}d)</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }

@@ -72,6 +72,49 @@ router.patch('/tsc/settings', async (req, res) => {
     res.json({ ok: true });
 });
 
+// ── Staff leave requests (from the staff portal) ──────────────────────────────
+router.get('/tsc/leave-requests', async (req, res) => {
+    try {
+        const { status } = req.query as any;
+        const q: any = {};
+        if (status && status !== 'all') q.status = status;
+        const rows = await db(req).collection('staff_leave_requests').find(q).sort({ createdAt: -1 }).toArray().catch(() => []);
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Count of pending requests — for the sidebar badge + dashboard.
+router.get('/tsc/leave-requests/pending-count', async (req, res) => {
+    try {
+        const n = await db(req).collection('staff_leave_requests').countDocuments({ status: 'pending' }).catch(() => 0);
+        res.json({ count: n });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Approve / reject a request. On approval, mirror it into tsc_leave (the record
+// the Leave Management table + stats already read).
+router.patch('/tsc/leave-requests/:id', async (req, res) => {
+    try {
+        const { ObjectId } = await import('mongodb');
+        const _id = new ObjectId(req.params.id);
+        const { status, note } = req.body || {};
+        if (!['approved', 'rejected', 'pending'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
+        const reqDoc = await db(req).collection('staff_leave_requests').findOne({ _id });
+        if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+        await db(req).collection('staff_leave_requests').updateOne({ _id }, { $set: { status, note: note || '', reviewedAt: new Date() } });
+        if (status === 'approved') {
+            await db(req).collection('tsc_leave').updateOne(
+                { sourceRequestId: String(_id) },
+                { $set: { sourceRequestId: String(_id), staffId: reqDoc.staffId, teacherName: reqDoc.staffName, type: reqDoc.type, startDate: reqDoc.startDate, endDate: reqDoc.endDate, days: reqDoc.days, reason: reqDoc.reason, status: 'Approved', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+                { upsert: true },
+            );
+        } else {
+            await db(req).collection('tsc_leave').deleteOne({ sourceRequestId: String(_id) }).catch(() => {});
+        }
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 router.get('/tsc/stats', async (req, res) => {
     try {
