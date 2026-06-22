@@ -15,6 +15,7 @@ router.get('/integrations/mpesa/settings', async (req, res) => {
             enabled: cfg.enabled,
             env: cfg.env,
             shortcode: cfg.shortcode,
+            tillNumber: cfg.tillNumber || '',
             txType: cfg.txType,
             initiator: cfg.initiator || '',
             // never return raw secrets — only masked hints (from the effective config)
@@ -34,7 +35,7 @@ router.put('/integrations/mpesa/settings', async (req, res) => {
         const b = req.body || {};
         const $set: any = { updatedAt: new Date() };
         // Plain fields
-        ['env', 'shortcode', 'txType', 'initiator'].forEach(k => { if (b[k] !== undefined) $set[k] = b[k]; });
+        ['env', 'shortcode', 'tillNumber', 'txType', 'initiator'].forEach(k => { if (b[k] !== undefined) $set[k] = b[k]; });
         if (b.enabled !== undefined) $set.enabled = !!b.enabled;
         // Secrets: only overwrite when a non-empty value is provided (avoid wiping on save).
         ['consumerKey', 'consumerSecret', 'passkey', 'securityCredential'].forEach(k => {

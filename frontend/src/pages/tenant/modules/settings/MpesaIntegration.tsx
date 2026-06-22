@@ -16,7 +16,7 @@ export default function MpesaIntegration() {
     useEffect(() => {
         if (settings) setForm((f: any) => ({
             ...f, env: settings.env, txType: settings.txType, enabled: settings.enabled,
-            shortcode: settings.shortcode, initiator: settings.initiator,
+            shortcode: settings.shortcode, tillNumber: settings.tillNumber, initiator: settings.initiator,
         }));
     }, [settings]);
 
@@ -25,7 +25,7 @@ export default function MpesaIntegration() {
     const save = useMutation({
         mutationFn: async () => {
             // Only send secrets the user actually typed (leave existing ones intact).
-            const payload: any = { env: form.env, txType: form.txType, enabled: form.enabled, shortcode: form.shortcode, initiator: form.initiator };
+            const payload: any = { env: form.env, txType: form.txType, enabled: form.enabled, shortcode: form.shortcode, tillNumber: form.tillNumber || "", initiator: form.initiator };
             ["consumerKey", "consumerSecret", "passkey", "securityCredential"].forEach(k => { if (form[k]) payload[k] = form[k]; });
             return api.put("/integrations/mpesa/settings", payload);
         },
@@ -109,9 +109,21 @@ export default function MpesaIntegration() {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-600 mb-1">Business Shortcode (Paybill / Till)</label>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">
+                                {form.txType === "CustomerBuyGoodsOnline" ? "Head Office / Store Number" : "Business Shortcode (Paybill)"}
+                            </label>
                             <input value={form.shortcode || ""} onChange={e => set("shortcode", e.target.value)} placeholder="e.g. 174379" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm" />
+                            {form.txType === "CustomerBuyGoodsOnline" && (
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">For a Till, this is your <b>Head Office / Store number</b> (used to sign the request), not the till customers pay to.</p>
+                            )}
                         </div>
+                        {form.txType === "CustomerBuyGoodsOnline" && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Till Number</label>
+                                <input value={form.tillNumber || ""} onChange={e => set("tillNumber", e.target.value)} placeholder="e.g. 5678901" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm" />
+                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">The actual <b>Till number</b> customers pay to (PartyB). Leave blank only if it's the same as the store number.</p>
+                            </div>
+                        )}
                         {secretField("consumerKey", "Consumer Key", !!settings?.consumerKeyMask)}
                         {secretField("consumerSecret", "Consumer Secret", !!settings?.consumerSecretSet)}
                         {secretField("passkey", "Lipa na M-PESA Passkey", !!settings?.passkeySet)}

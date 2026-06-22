@@ -13,7 +13,8 @@ export interface MpesaConfig {
     base: string;
     key: string;
     secret: string;
-    shortcode: string;
+    shortcode: string;              // Paybill number, OR a Till's Head Office/Store number
+    tillNumber?: string;            // Till/Buy Goods only: the actual till number (PartyB)
     passkey: string;
     txType: string;                 // CustomerPayBillOnline | CustomerBuyGoodsOnline
     initiator?: string;             // for Transaction Status / B2C
@@ -45,6 +46,7 @@ export const resolveMpesaConfig = async (db: Db): Promise<MpesaConfig> => {
         key: s.consumerKey || ig.consumerKey || process.env.MPESA_CONSUMER_KEY || '',
         secret: s.consumerSecret || ig.consumerSecret || process.env.MPESA_CONSUMER_SECRET || '',
         shortcode: s.shortcode || ig.shortCode || ig.shortcode || process.env.MPESA_SHORTCODE || '',
+        tillNumber: s.tillNumber || ig.tillNumber || process.env.MPESA_TILL_NUMBER || '',
         passkey: s.passkey || ig.passkey || process.env.MPESA_PASSKEY || '',
         txType: s.txType || ig.txType || process.env.MPESA_TX_TYPE || 'CustomerPayBillOnline',
         initiator: s.initiator || ig.initiator || process.env.MPESA_INITIATOR || '',
@@ -111,10 +113,15 @@ export async function stkPush(c: MpesaConfig, { phone, amount, accountRef, descr
     // Till/Buy Goods→CustomerBuyGoodsOnline. A mismatch is the usual cause of
     // Daraja's "unresolved reason type" error.
     const txType = (c.txType || 'CustomerPayBillOnline').trim();
+    const isBuyGoods = txType === 'CustomerBuyGoodsOnline';
+    // For Buy Goods/Till: BusinessShortCode + password use the Head Office/Store
+    // number (c.shortcode), while PartyB is the actual Till number. If no separate
+    // till number is set, fall back to the shortcode (works when they're the same).
+    const partyB = (isBuyGoods && c.tillNumber) ? c.tillNumber.trim() : c.shortcode;
     const payload = {
         BusinessShortCode: c.shortcode, Password: password, Timestamp: ts, TransactionType: txType,
         Amount: Math.max(1, Math.round(amount)), PartyA: msisdn,
-        PartyB: c.shortcode, PhoneNumber: msisdn,
+        PartyB: partyB, PhoneNumber: msisdn,
         CallBackURL: callbackUrl, AccountReference: String(accountRef || 'Fees').slice(0, 12), TransactionDesc: (description || 'Fees payment').slice(0, 20),
     };
     const { ok, status, data } = await daraja(c, '/mpesa/stkpush/v1/processrequest', payload);
