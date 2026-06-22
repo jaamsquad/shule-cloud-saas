@@ -5,6 +5,43 @@ import { creditWallet } from '../services/wallet.service';
 
 const router = Router();
 
+// Finalize a school's subscription when its STK payment completes.
+async function handleSubscriptionCallback(meta: any, stk: any) {
+    const pay = await meta.collection('subscription_payments').findOne({ checkoutRequestId: stk.CheckoutRequestID });
+    if (!pay) { console.warn('[M-PESA] callback for unknown checkoutRequestId:', stk.CheckoutRequestID); return; }
+    const { ObjectId } = await import('mongodb');
+
+    if (Number(stk.ResultCode) === 0) {
+        const m = parseStkCallback(stk);
+        const upd = await meta.collection('subscription_payments').updateOne(
+            { _id: pay._id, status: { $ne: 'completed' } },
+            { $set: { status: 'completed', mpesaReceipt: m.mpesaReceiptNumber, completedAt: new Date() } },
+        );
+        if (upd.modifiedCount > 0) {
+            const plan = await meta.collection('Plan').findOne({ _id: new ObjectId(String(pay.planId)) });
+            const durationDays = Number(plan?.durationDays) > 0 ? Number(plan.durationDays) : 30;
+            const graceDays = Number(plan?.graceDays) >= 0 ? Number(plan.graceDays) : 0;
+            const expiresAt = new Date(Date.now() + durationDays * 86400000);
+            const graceUntil = new Date(expiresAt.getTime() + graceDays * 86400000);
+            const tenantId = new ObjectId(String(pay.tenantId));
+            await meta.collection('TenantSubscription').updateOne(
+                { tenantId },
+                { $set: { tenantId, planId: pay.planId, planName: pay.planName, amount: pay.amount, status: 'active', expiresAt, graceUntil, mpesaReceipt: m.mpesaReceiptNumber, updatedAt: new Date() }, $unset: { pendingPlanId: '', pendingPlanName: '' } },
+                { upsert: true },
+            );
+            await meta.collection('Tenant').updateOne(
+                { _id: tenantId },
+                { $set: { planId: pay.planId, plan: pay.planName, enabledModules: plan?.modules || [], status: 'active', updatedAt: new Date() } },
+            );
+            console.log('[M-PESA] subscription activated:', pay.planName, 'for tenant', String(pay.tenantId));
+        }
+    } else {
+        await meta.collection('subscription_payments').updateOne(
+            { _id: pay._id }, { $set: { status: 'failed', resultDesc: stk.ResultDesc, completedAt: new Date() } },
+        );
+    }
+}
+
 // ─── STK Push callback ──────────────────────────────────────────────────────────
 // Answers at both /mpesa/callback (configured URL) and /mpesa/stk-callback (alias).
 router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
@@ -16,7 +53,11 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
         console.log('[M-PESA] STK callback:', JSON.stringify({ id: stk.CheckoutRequestID, code: stk.ResultCode, desc: stk.ResultDesc }));
         const meta = getMetaDb();
         const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId: stk.CheckoutRequestID });
-        if (!txn) { console.warn('[M-PESA] callback for unknown checkoutRequestId:', stk.CheckoutRequestID); return; }
+        if (!txn) {
+            // Not a fee/wallet payment — maybe a school subscription payment.
+            await handleSubscriptionCallback(meta, stk);
+            return;
+        }
 
         if (Number(stk.ResultCode) === 0) {
             const m = parseStkCallback(stk);

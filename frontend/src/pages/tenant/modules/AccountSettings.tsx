@@ -1,5 +1,5 @@
-import { Settings, RefreshCcw, Eye, Lock, Trash2, Check, EyeOff, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Settings, RefreshCcw, Eye, Lock, Trash2, Check, EyeOff, Loader2, X, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -43,14 +43,40 @@ export default function AccountSettings() {
         queryKey: ["tenant_subscription"],
         queryFn: async () => { try { return (await api.get("/auth/tenant/subscription")).data; } catch { return { plans: [], current: null }; } },
     });
+    // Subscription payment modal state.
+    const [payModal, setPayModal] = useState<null | { stage: "sending" | "waiting" | "success" | "failed"; message: string; plan?: string; receipt?: string }>(null);
+    const payPollRef = useRef<any>(null);
+
+    const pollSub = (cid: string, attempt: number) => {
+        if (attempt > 50) { setPayModal(m => m && { ...m, stage: "failed", message: "We didn't get a confirmation. If you paid, your plan will activate shortly — no need to pay again." }); return; }
+        payPollRef.current = setTimeout(async () => {
+            try {
+                const r = await api.get(`/auth/tenant/subscribe/status?checkoutRequestId=${encodeURIComponent(cid)}`);
+                const st = r.data?.status;
+                if (st === "completed") { setPayModal(m => m && { ...m, stage: "success", message: "Your plan is now active.", receipt: r.data?.receipt, plan: r.data?.plan }); queryClient.invalidateQueries({ queryKey: ["tenant_subscription"] }); return; }
+                if (st === "failed") { setPayModal(m => m && { ...m, stage: "failed", message: r.data?.message || "Payment was cancelled or failed." }); return; }
+            } catch { /* transient — keep polling */ }
+            pollSub(cid, attempt + 1);
+        }, 3000);
+    };
+
+    const closePayModal = () => { if (payPollRef.current) clearTimeout(payPollRef.current); setPayModal(null); };
+
     const subscribe = useMutation({
         mutationFn: async (planId: string) => api.post("/auth/tenant/subscribe", { planId, phone: payPhone }),
+        onMutate: () => setPayModal({ stage: "sending", message: "Sending M-PESA request…" }),
         onSuccess: (res: any) => {
-            if (res.data?.activated) toast.success(res.data.message || "Subscribed");
-            else toast.info(res.data?.message || "Check your phone to complete the M-PESA payment.");
-            queryClient.invalidateQueries({ queryKey: ["tenant_subscription"] });
+            if (res.data?.activated) {
+                setPayModal({ stage: "success", message: res.data.message || "Your plan is now active." });
+                queryClient.invalidateQueries({ queryKey: ["tenant_subscription"] });
+            } else if (res.data?.checkoutRequestId) {
+                setPayModal({ stage: "waiting", message: res.data.message || "Enter your M-PESA PIN on your phone to complete." });
+                pollSub(res.data.checkoutRequestId, 0);
+            } else {
+                setPayModal({ stage: "failed", message: res.data?.message || "Could not start the payment." });
+            }
         },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to subscribe"),
+        onError: (e: any) => setPayModal({ stage: "failed", message: e.response?.data?.message || "Failed to subscribe" }),
     });
     const ksh = (n: any) => `KSh ${Number(n || 0).toLocaleString()}`;
 
@@ -139,6 +165,7 @@ export default function AccountSettings() {
     const isFree = subStatus === "FREE";
 
     return (
+        <>
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center">
             <div className="p-6 pt-10 w-full max-w-5xl mt-6">
                 
@@ -347,5 +374,45 @@ export default function AccountSettings() {
                 </div>
             </div>
         </div>
+
+        {/* Subscription M-PESA payment modal with spinner */}
+        {payModal && (
+            <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="h-1.5 bg-gradient-to-r from-[#5C67F2] to-indigo-500" />
+                    <div className="p-7 text-center">
+                        {payModal.stage === "success" ? (
+                            <>
+                                <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4"><Check className="w-9 h-9 text-white" /></div>
+                                <h3 className="text-xl font-black text-slate-800 mb-1">Payment Received!</h3>
+                                <p className="text-slate-500 text-sm mb-3">{payModal.message}{payModal.plan ? ` (${payModal.plan})` : ""}</p>
+                                {payModal.receipt && (
+                                    <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-2 mb-5">
+                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">M-PESA Code</p>
+                                        <p className="text-base font-black text-emerald-700 tracking-wider">{payModal.receipt}</p>
+                                    </div>
+                                )}
+                                <button onClick={closePayModal} className="w-full py-3 bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-lg">Done</button>
+                            </>
+                        ) : payModal.stage === "failed" ? (
+                            <>
+                                <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3"><AlertTriangle className="w-7 h-7 text-rose-500" /></div>
+                                <h3 className="text-lg font-black text-slate-800 mb-1">Payment not completed</h3>
+                                <p className="text-slate-500 text-xs mb-5">{payModal.message}</p>
+                                <button onClick={closePayModal} className="w-full py-2.5 bg-slate-100 text-slate-600 font-bold text-xs rounded-lg">Close</button>
+                            </>
+                        ) : (
+                            <>
+                                <Loader2 className="w-12 h-12 animate-spin text-[#5C67F2] mx-auto mb-4" />
+                                <h3 className="text-lg font-black text-slate-800 mb-1">{payModal.stage === "sending" ? "Starting payment…" : "Check your phone"}</h3>
+                                <p className="text-slate-500 text-sm">{payModal.message}</p>
+                                <p className="text-[11px] text-slate-400 mt-3">Detecting your M-PESA payment — this can take up to 2 minutes. Please don't close this window.</p>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 }

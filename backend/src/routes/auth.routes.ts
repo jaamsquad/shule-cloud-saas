@@ -2460,4 +2460,30 @@ router.post('/tenant/subscribe', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Poll the status of a subscription payment (for the spinner modal).
+router.get('/tenant/subscribe/status', async (req, res) => {
+    try {
+        const meta = getMetaDb();
+        const cid = String(req.query.checkoutRequestId || '');
+        if (!cid) return res.json({ status: 'unknown' });
+        const pay = await meta.collection('subscription_payments').findOne({ checkoutRequestId: cid });
+        if (!pay) return res.json({ status: 'unknown' });
+        if (pay.status === 'completed') return res.json({ status: 'completed', receipt: pay.mpesaReceipt, plan: pay.planName });
+        if (pay.status === 'failed') return res.json({ status: 'failed', message: pay.resultDesc || 'Payment failed or cancelled.' });
+        // Still pending — ask Daraja directly (covers a missed callback).
+        try {
+            const { stkQuery } = await import('../services/mpesa.service');
+            const cfg = await resolveMpesaConfig(meta);
+            const q: any = await stkQuery(cfg, cid);
+            const code = Number(q.ResultCode);
+            const stillProcessing = code === 1037 || /processing|being processed|500\.001\.1001/i.test(String(q.ResultDesc || ''));
+            if (!isNaN(code) && code !== 0 && !stillProcessing) {
+                await meta.collection('subscription_payments').updateOne({ _id: pay._id }, { $set: { status: 'failed', resultDesc: q.ResultDesc } });
+                return res.json({ status: 'failed', message: q.ResultDesc });
+            }
+        } catch { /* keep pending */ }
+        res.json({ status: 'pending' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 export default router;

@@ -631,7 +631,7 @@ export const setPublicSettings = async (req: Request, res: Response) => {
 };
 
 // ─── Platform M-PESA (Daraja) settings — owner-level, for subscription billing ─
-const MPESA_FIELDS = ['env', 'consumerKey', 'consumerSecret', 'shortcode', 'passkey', 'txType', 'initiator', 'securityCredential', 'callbackBase', 'enabled'];
+const MPESA_FIELDS = ['env', 'consumerKey', 'consumerSecret', 'shortcode', 'tillNumber', 'passkey', 'txType', 'initiator', 'securityCredential', 'callbackBase', 'enabled'];
 
 export const getPlatformMpesa = async (req: Request, res: Response) => {
     if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
@@ -643,6 +643,7 @@ export const getPlatformMpesa = async (req: Request, res: Response) => {
             consumerKey: s.consumerKey || '',
             consumerSecret: s.consumerSecret ? '••••••••' : '',
             shortcode: s.shortcode || '',
+            tillNumber: s.tillNumber || '',
             passkey: s.passkey ? '••••••••' : '',
             txType: s.txType || 'CustomerPayBillOnline',
             initiator: s.initiator || '',

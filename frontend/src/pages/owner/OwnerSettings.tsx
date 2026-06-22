@@ -32,7 +32,7 @@ export default function OwnerSettings() {
         queryKey: ["owner_mpesa"],
         queryFn: async () => { try { return (await api.get("/owner/mpesa-settings")).data; } catch { return {}; } },
     });
-    const [mp, setMp] = useState<any>({ env: "sandbox", consumerKey: "", consumerSecret: "", shortcode: "", passkey: "", txType: "CustomerPayBillOnline", callbackBase: "", enabled: true });
+    const [mp, setMp] = useState<any>({ env: "sandbox", consumerKey: "", consumerSecret: "", shortcode: "", tillNumber: "", passkey: "", txType: "CustomerPayBillOnline", callbackBase: "", enabled: true });
     useEffect(() => { if (mpesa) setMp((p: any) => ({ ...p, ...mpesa })); }, [mpesa]);
     const saveMpesa = useMutation({
         mutationFn: async () => api.post("/owner/mpesa-settings", mp),
@@ -92,7 +92,8 @@ export default function OwnerSettings() {
                             <option value="sandbox">Sandbox</option><option value="production">Production</option>
                         </select>
                     </div>
-                    {mpField("shortcode", "Shortcode / Paybill")}
+                    {mpField("shortcode", mp.txType === "CustomerBuyGoodsOnline" ? "Head Office / Store Number" : "Shortcode / Paybill")}
+                    {mp.txType === "CustomerBuyGoodsOnline" && mpField("tillNumber", "Till Number (customers pay to)")}
                     {mpField("consumerKey", "Consumer Key")}
                     {mpField("consumerSecret", "Consumer Secret", "password")}
                     {mpField("passkey", "Passkey", "password")}
