@@ -1021,14 +1021,36 @@ router.post('/staff-portal/leave-requests', async (req, res) => {
         const { type, startDate, endDate, reason } = req.body || {};
         if (!type || !startDate || !endDate) return res.status(400).json({ message: 'Leave type and dates are required' });
         const days = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
+        // Route the leave to the staff member's reporting officer (reportsTo) first.
+        let supervisor: any = null;
+        if (me.staff.reportsTo) supervisor = await db.collection('staff').findOne({ _id: new ObjectId(String(me.staff.reportsTo)) }).catch(() => null);
         const doc = {
             staffId: me.id, staffName: me.name,
             designation: me.staff.designation || me.staff.role || '',
             type, startDate: new Date(startDate), endDate: new Date(endDate), days,
             reason: reason || '', status: 'pending',
+            supervisorId: supervisor ? String(supervisor._id) : null,
+            supervisorName: supervisor ? (supervisor.employeeName || supervisor.name) : '',
             createdAt: new Date(), updatedAt: new Date(),
         };
         const r = await db.collection('staff_leave_requests').insertOne(doc);
+
+        // Email the supervisor so they get the leave request first (best-effort).
+        if (supervisor?.email) {
+            try {
+                const { sendEmail } = await import('../services/communications.service');
+                const fmt = (d: any) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                const html = `<div style="font-family:Arial,sans-serif;color:#1e293b">
+                    <h2 style="color:#5C67F2">New leave request needs your approval</h2>
+                    <p><b>${me.name}</b> has applied for leave and reports to you:</p>
+                    <p style="font-size:15px"><b>${type}</b> — ${fmt(startDate)} to ${fmt(endDate)} (${days} day${days > 1 ? 's' : ''})</p>
+                    ${reason ? `<blockquote style="border-left:3px solid #5C67F2;padding-left:12px;color:#475569">${reason}</blockquote>` : ''}
+                    <p>Open the staff/admin portal to approve or reject it.</p>
+                    <p style="color:#94a3b8;font-size:12px">Sent automatically by ShuleCloud.</p>
+                </div>`;
+                await sendEmail(db, { to: [supervisor.email], subject: `Leave request from ${me.name} (${type})`, html });
+            } catch { /* email optional */ }
+        }
         res.status(201).json({ ...doc, _id: r.insertedId });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

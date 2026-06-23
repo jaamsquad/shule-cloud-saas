@@ -100,6 +100,18 @@ async function notifyAdmins(req: Request, requestId: string, number: string, tit
     await notify(req, { requestId, toRole: 'admin', kind: 'monitor', title, body, number });
 }
 
+/** Email a staff member (best-effort — never throws). Looks up their email by id. */
+async function emailStaff(req: Request, staffId: string | null | undefined, subject: string, bodyHtml: string) {
+    if (!staffId) return;
+    try {
+        const s = await db(req).collection('staff').findOne({ _id: oid(staffId) }).catch(() => null);
+        const email = s?.email;
+        if (!email) return;
+        const html = `<div style="font-family:Arial,sans-serif;color:#1e293b">${bodyHtml}<p style="color:#94a3b8;font-size:12px">Sent automatically by ShuleCloud Request Management.</p></div>`;
+        await sendEmail(db(req), { to: [email], subject, html });
+    } catch { /* email optional */ }
+}
+
 /** Resolve a forward target ("Procurement Office" | a staffId) to a route descriptor. */
 function parseTarget(target: string, targetUserId?: string) {
     if (targetUserId) return { kind: 'user' as const, userId: targetUserId, office: '' };
@@ -189,8 +201,19 @@ router.post('/requests', async (req, res) => {
         await pushAudit(req, id, me, 'create', '', doc.status, b.comments || '');
         if (submit) {
             await pushHistory(req, id, me, 'submit', STATUS.DRAFT, STATUS.SUBMITTED, supervisor ? `Sent to ${doc.currentOwnerName}` : 'Sent to Administration');
-            if (supervisor) await notify(req, { requestId: id, number, toId: String(supervisor._id), kind: 'assigned', title: `New request ${number}`, body: `${me.name} submitted "${b.title}"` });
-            else await notify(req, { requestId: id, number, toOffice: 'Administration', kind: 'assigned', title: `New request ${number}`, body: `${me.name} submitted "${b.title}" (no supervisor set)` });
+            if (supervisor) {
+                await notify(req, { requestId: id, number, toId: String(supervisor._id), kind: 'assigned', title: `New request ${number}`, body: `${me.name} submitted "${b.title}"` });
+                // Email the supervisor so they get it first, even when offline.
+                await emailStaff(req, String(supervisor._id),
+                    `New request ${number} needs your approval`,
+                    `<h2 style="color:#5C67F2">New request awaiting your approval</h2>
+                     <p><b>${me.name}</b>${me.department ? ` (${me.department})` : ''} submitted a request that reports to you:</p>
+                     <p style="font-size:15px"><b>${b.title}</b> — ${b.category}, priority ${doc.priority}${doc.estimatedCost ? `, est. KES ${doc.estimatedCost.toLocaleString()}` : ''}</p>
+                     ${b.description ? `<blockquote style="border-left:3px solid #5C67F2;padding-left:12px;color:#475569">${b.description}</blockquote>` : ''}
+                     <p>Open it in your portal to Approve, Reject or Forward.</p>`);
+            } else {
+                await notify(req, { requestId: id, number, toOffice: 'Administration', kind: 'assigned', title: `New request ${number}`, body: `${me.name} submitted "${b.title}" (no supervisor set)` });
+            }
             await notifyAdmins(req, id, number, `Request ${number} submitted`, `${me.name}: ${b.title}`);
         }
         res.status(201).json({ ...doc, _id: r.insertedId });
@@ -437,8 +460,13 @@ router.post('/requests/:id/resubmit', async (req, res) => {
         await db(req).collection('requests').updateOne({ _id: r._id }, { $set: set });
         await pushHistory(req, req.params.id, me, 'resubmit', r.status, STATUS.SUBMITTED, `Resubmitted to ${set.currentOwnerName || set.currentOffice}`);
         await pushAudit(req, req.params.id, me, 'resubmit', r.status, STATUS.SUBMITTED, req.body?.comment || '');
-        if (set.currentOwnerId) await notify(req, { requestId: req.params.id, number: r.number, toId: set.currentOwnerId, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
-        else await notify(req, { requestId: req.params.id, number: r.number, toOffice: set.currentOffice, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
+        if (set.currentOwnerId) {
+            await notify(req, { requestId: req.params.id, number: r.number, toId: set.currentOwnerId, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
+            await emailStaff(req, set.currentOwnerId, `Request ${r.number} resubmitted with updates`,
+                `<h2 style="color:#5C67F2">A request was resubmitted to you</h2><p><b>${me.name}</b> updated and resubmitted <b>"${r.title}"</b>. Open it in your portal to review.</p>`);
+        } else {
+            await notify(req, { requestId: req.params.id, number: r.number, toOffice: set.currentOffice, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
+        }
         await notifyAdmins(req, req.params.id, r.number, `Request ${r.number} resubmitted`, r.title);
         res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
