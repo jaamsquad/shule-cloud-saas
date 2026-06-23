@@ -556,21 +556,26 @@ export default function StudentsReportCard() {
                 </html>
             `;
         } else {
-            // annual_split_panel — when several exams are combined, show each exam's
-            // real score in the term columns; otherwise show the single score.
-            const examList = report.examList || [];
-            const e1 = examList[0]?.id, e2 = examList[1]?.id;
+            // annual_split_panel — one column per included exam (no empty columns),
+            // plus an Average column only when more than one exam is combined.
+            const examList: any[] = report.examList && report.examList.length ? report.examList : [{ id: "_only", name: report.examName || "Marks" }];
+            const showAvg = examList.length > 1;
+            const examCols = examList.map(e => `<th>${e.name}</th>`).join("");
+            const avgCol = showAvg ? `<th>Average</th>` : "";
+            const blankCols = examList.map(() => `<td style="text-align: center; padding: 12px;">-</td>`).join("");
+
             const leftRows = report.subjects.map((s: any) => {
                 const per = s.perExam || {};
-                const t1 = e1 != null && per[e1] != null ? per[e1] : (s.scoreDisplay === "-" ? "-" : s.score);
-                const t2 = e2 != null && per[e2] != null ? per[e2] : "";
-                const avg = s.scoreDisplay === "-" ? "-" : s.score;  // real subject average %
+                const cells = examList.map(e => {
+                    const v = e.id === "_only" ? (s.scoreDisplay === "-" ? "-" : s.score) : (per[e.id] != null ? per[e.id] : "-");
+                    return `<td style="text-align: center; padding: 10px;">${v}</td>`;
+                }).join("");
+                const avg = showAvg ? `<td style="text-align: center; font-weight: bold; color: #4F46E5; background: #EEF2FF; padding: 10px;">${s.scoreDisplay === "-" ? "-" : s.score}</td>` : "";
                 return `
                     <tr>
                         <td style="text-align: left; font-weight: 600; padding: 10px 12px;">${s.subjectName}</td>
-                        <td style="text-align: center; padding: 10px;">${t1}</td>
-                        <td style="text-align: center; padding: 10px;">${t2}</td>
-                        <td style="text-align: center; font-weight: bold; color: #4F46E5; background: #EEF2FF; padding: 10px;">${avg}</td>
+                        ${cells}
+                        ${avg}
                     </tr>
                 `;
             }).join("");
@@ -642,25 +647,24 @@ export default function StudentsReportCard() {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th style="text-align: left; width: 45%;">Subjects</th>
-                                            <th>First Term</th>
-                                            <th>Second Term</th>
-                                            <th>Average</th>
+                                            <th style="text-align: left; width: 40%;">Subjects</th>
+                                            ${examCols}
+                                            ${avgCol}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         ${leftRows}
                                         <tr style="background: #F8FAFC; font-weight: bold; border-top: 2px solid #4F46E5;">
                                             <td style="padding: 12px; text-align: left;">TOTAL MARKS</td>
-                                            <td style="text-align: center; padding: 12px;">-</td>
-                                            <td style="text-align: center; padding: 12px;">-</td>
-                                            <td style="text-align: center; padding: 12px; font-size: 13px; color: #4F46E5;">${report.totalMarks}</td>
+                                            ${showAvg
+                                                ? `${blankCols}<td style="text-align: center; padding: 12px; font-size: 13px; color: #4F46E5;">${report.totalMarks}</td>`
+                                                : `<td style="text-align: center; padding: 12px; font-size: 13px; color: #4F46E5;">${report.totalMarks}</td>`}
                                         </tr>
                                         <tr style="background: #EEF2FF; font-weight: bold;">
-                                            <td style="padding: 12px; text-align: left; color: #4F46E5;">PERCENTAGE / GPA</td>
-                                            <td style="text-align: center; padding: 12px;">-</td>
-                                            <td style="text-align: center; padding: 12px;">-</td>
-                                            <td style="text-align: center; padding: 12px; font-size: 14px; color: #4F46E5;">${report.meanScore ?? 0}%</td>
+                                            <td style="padding: 12px; text-align: left; color: #4F46E5;">PERCENTAGE / MEAN</td>
+                                            ${showAvg
+                                                ? `${blankCols}<td style="text-align: center; padding: 12px; font-size: 14px; color: #4F46E5;">${report.meanScore ?? 0}%</td>`
+                                                : `<td style="text-align: center; padding: 12px; font-size: 14px; color: #4F46E5;">${report.meanScore ?? 0}%</td>`}
                                         </tr>
                                     </tbody>
                                 </table>
