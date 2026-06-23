@@ -253,9 +253,12 @@ export function openPrintDoc(opts: OutputOpts = {}) {
 export async function printElementToPdf(
     el: HTMLElement | null,
     title: string,
-    opts: { fileName?: string; landscape?: boolean } = {},
+    opts: { fileName?: string; landscape?: boolean; always?: boolean } = {},
 ): Promise<void> {
-    if (!isMobileApp()) { try { window.print(); } catch { /* noop */ } return; }
+    // `always` → produce a downloadable PDF on every platform (used by explicit
+    // "Get PDF / Download" buttons). Otherwise only the mobile app gets a PDF and
+    // desktop uses native print (which respects @media print).
+    if (!opts.always && !isMobileApp()) { try { window.print(); } catch { /* noop */ } return; }
     if (!el) { try { window.print(); } catch { /* noop */ } return; }
     try {
         const landscape = opts.landscape ?? el.scrollWidth > el.scrollHeight;

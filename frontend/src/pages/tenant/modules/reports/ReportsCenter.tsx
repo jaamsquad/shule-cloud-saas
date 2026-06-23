@@ -13,7 +13,6 @@ const CATEGORIES: Category[] = [
   { key: "Academic", icon: GraduationCap, color: "#2563EB", reports: [
     { label: "Students Report Cards", path: "/reports/report-cards" },
     { label: "Student Progress Report", path: "/reports/student-progress" },
-    { label: "Exam Analysis", path: "/exams" },
     { label: "Subject Performance", path: "/reports/computed/subject-performance" }, { label: "Class Performance", path: "/reports/computed/class-performance" },
     { label: "Grade Distribution", path: "/reports/computed/grade-distribution" }, { label: "Mark Sheets", path: "/reports/computed/mark-sheets" },
     { label: "CBC Competency Report", path: "/reports/computed/cbc-competency" }, { label: "Mean Score Trends", path: "/reports/computed/mean-score-trends" },

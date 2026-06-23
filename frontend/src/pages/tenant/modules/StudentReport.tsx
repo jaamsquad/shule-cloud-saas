@@ -3,13 +3,14 @@ import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, Tre
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
-import { openPrintDoc } from "@/lib/pdfDoc";
+import { openPrintDoc, printElementToPdf } from "@/lib/pdfDoc";
 
 export default function StudentReport() {
     const { id } = useParams();
+    const reportRef = useRef<HTMLDivElement>(null);
     const { items: students, isLoading } = useItems("students");
     const { items: allSubjects } = useItems("subjects");
     const { items: classes } = useItems("classes");
@@ -218,12 +219,13 @@ export default function StudentReport() {
                         - Student Report
                     </span>
                 </div>
-                <button className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
+                <button onClick={() => printElementToPdf(reportRef.current, `Student Report — ${student?.studentName || student?.firstName || "Student"}`, { fileName: `Student-Report-${student?.registrationNo || student?.admissionNo || ""}`, always: true })}
+                    className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
                     <FileText className="w-3.5 h-3.5" /> Get PDF
                 </button>
             </div>
 
-            <div className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">
+            <div ref={reportRef} className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">
                 
                 {/* Left Column - Profile Details */}
                 <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-6">
