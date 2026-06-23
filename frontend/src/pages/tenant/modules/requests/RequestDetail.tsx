@@ -17,12 +17,13 @@ export default function RequestDetail() {
     const { data: r, isLoading } = useQuery({ queryKey: ["request", id], queryFn: () => reqApi.get(id) });
     const { data: offices = [] } = useQuery({ queryKey: ["req_offices"], queryFn: reqApi.offices });
     const { data: supervisors = [] } = useQuery({ queryKey: ["req_supervisors_d"], queryFn: reqApi.supervisors });
-    const { data: me } = useQuery({ queryKey: ["req_stats_me"], queryFn: reqApi.stats });
 
     const [comment, setComment] = useState("");
     const [forwardTo, setForwardTo] = useState("");
     const [forwardUser, setForwardUser] = useState("");
     const [newComment, setNewComment] = useState("");
+    // Requester's edit form (only used while the request is returned/draft).
+    const [edit, setEdit] = useState<any>(null);
 
     const refresh = () => { qc.invalidateQueries({ queryKey: ["request", id] }); qc.invalidateQueries({ queryKey: ["requests"] }); qc.invalidateQueries({ queryKey: ["req_count"] }); };
     const act = (fn: () => Promise<any>, ok: string) => { fn().then(() => { toast.success(ok); setComment(""); setForwardTo(""); setForwardUser(""); refresh(); }).catch((e: any) => toast.error(e?.response?.data?.message || "Action failed")); };
@@ -34,14 +35,16 @@ export default function RequestDetail() {
     const stage = (a: string) => reqApi.stage(id, a, { comment });
     const complete = useMutation({ mutationFn: () => reqApi.complete(id, comment) });
     const postComment = useMutation({ mutationFn: () => reqApi.comment(id, newComment), onSuccess: () => { setNewComment(""); refresh(); } });
+    const saveEdit = useMutation({ mutationFn: () => reqApi.update(id, edit), onSuccess: () => { toast.success("Saved"); setEdit(null); refresh(); }, onError: (e: any) => toast.error(e?.response?.data?.message || "Save failed") });
+    const resubmit = useMutation({ mutationFn: () => reqApi.resubmit(id, comment), onSuccess: () => { toast.success("Resubmitted"); setComment(""); refresh(); }, onError: (e: any) => toast.error(e?.response?.data?.message || "Failed") });
 
     if (isLoading || !r) return <div className="flex-1 flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
 
-    const office = (me?.office || "").toLowerCase();
+    const v = r.viewer || ({} as any);
+    const office = (v.office || "").toLowerCase();
     const isProcurement = /procure/.test(office);
     const isFinance = /finance/.test(office);
-    const closed = ["Completed", "Rejected", "Cancelled"].includes(r.status);
-    const canAct = !closed; // backend is the source of truth; UI offers actions for open requests
+    const canAct = !!v.canAct;
 
     const printRequest = () => {
         const body = `
@@ -127,6 +130,37 @@ export default function RequestDetail() {
 
                 {/* Side: timeline + actions */}
                 <div className="space-y-5">
+                    {/* Requester: returned for more info → edit & resubmit */}
+                    {v.canResubmit && (
+                        <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5">
+                            <h3 className="text-sm font-black text-amber-800 mb-1">Returned for more information</h3>
+                            {r.infoNote && <p className="text-xs text-amber-700 mb-3">"{r.infoNote}"</p>}
+                            {!edit ? (
+                                <button onClick={() => setEdit({ title: r.title, description: r.description, quantity: r.quantity, estimatedCost: r.estimatedCost, priority: r.priority })}
+                                    className="w-full h-10 rounded-lg border border-amber-300 text-amber-800 font-bold text-sm mb-2">Edit request</button>
+                            ) : (
+                                <div className="space-y-2 mb-3">
+                                    <input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} placeholder="Title" className="inp" />
+                                    <textarea value={edit.description || ""} onChange={e => setEdit({ ...edit, description: e.target.value })} rows={2} placeholder="Description" className="inp" />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input type="number" value={edit.quantity ?? ""} onChange={e => setEdit({ ...edit, quantity: Number(e.target.value) })} placeholder="Qty" className="inp" />
+                                        <input type="number" value={edit.estimatedCost ?? ""} onChange={e => setEdit({ ...edit, estimatedCost: Number(e.target.value) })} placeholder="Est. cost" className="inp" />
+                                    </div>
+                                    <button onClick={() => saveEdit.mutate()} className="w-full h-9 rounded-lg bg-amber-500 text-white font-bold text-sm">Save changes</button>
+                                </div>
+                            )}
+                            <textarea value={comment} onChange={e => setComment(e.target.value)} rows={2} placeholder="Note to the approver (optional)…" className="inp mb-2" />
+                            <button onClick={() => resubmit.mutate()} className="w-full h-10 rounded-lg text-white font-bold text-sm" style={{ background: PURPLE }}>Resubmit Request</button>
+                        </div>
+                    )}
+
+                    {/* Requester just viewing (no approver controls). */}
+                    {v.isRequester && !v.canResubmit && !canAct && (
+                        <div className="bg-white rounded-2xl border border-slate-100 p-5 text-sm text-slate-500">
+                            This is your request. You'll be notified as it moves through approval. Approver actions appear only for whoever it's assigned to.
+                        </div>
+                    )}
+
                     {canAct && (
                         <div className="bg-white rounded-2xl border border-slate-100 p-5">
                             <h3 className="text-sm font-black text-slate-700 mb-3">Take action</h3>

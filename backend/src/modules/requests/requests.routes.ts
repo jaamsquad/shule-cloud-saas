@@ -17,6 +17,7 @@ import { Router, Request, Response } from 'express';
 import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { getMetaDb } from '../../lib/mongodb';
+import { sendEmail } from '../../services/communications.service';
 
 const router = Router();
 const db = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -248,13 +249,24 @@ router.get('/requests/:id', async (req, res) => {
         db(req).collection('request_comments').find({ requestId: req.params.id }).sort({ at: 1 }).toArray(),
         db(req).collection('request_activity_logs').find({ requestId: req.params.id }).sort({ at: 1 }).toArray(),
     ]);
+    // Who is looking? Drives which controls the UI shows.
+    const isRequester = !!me.staffId && r.requesterId === me.staffId;
+    const ownsByUser = !!me.staffId && r.currentOwnerId === me.staffId;
+    const ownsByOffice = !!me.office && new RegExp(`^${me.office}$`, 'i').test(r.currentOffice || '');
+    const closed = [STATUS.COMPLETED, STATUS.REJECTED, STATUS.CANCELLED].includes(r.status);
+    // An approver may act only if the request currently rests with them (and they
+    // are not merely the requester viewing their own request), or if they're admin.
+    const canAct = !closed && ((ownsByUser || ownsByOffice) && !isRequester || (me.isAdmin && (ownsByUser || ownsByOffice)));
+    const canEdit = isRequester && (r.status === STATUS.DRAFT || r.status === STATUS.WAIT_INFO);
+    const canResubmit = isRequester && r.status === STATUS.WAIT_INFO;
+
     // Mark as seen by the current owner (first time they open it).
-    if (r.status === STATUS.SUBMITTED && (r.currentOwnerId === me.staffId || (me.office && new RegExp(`^${me.office}$`, 'i').test(r.currentOffice || '')))) {
+    if (r.status === STATUS.SUBMITTED && (ownsByUser || ownsByOffice) && !isRequester) {
         await db(req).collection('requests').updateOne({ _id: r._id }, { $set: { status: STATUS.SEEN, updatedAt: new Date() } });
         await pushHistory(req, req.params.id, me, 'seen', STATUS.SUBMITTED, STATUS.SEEN);
         r.status = STATUS.SEEN;
     }
-    res.json({ ...r, history, comments, audit });
+    res.json({ ...r, history, comments, audit, viewer: { isRequester, isAdmin: me.isAdmin, office: me.office, canAct, canEdit, canResubmit } });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -264,11 +276,23 @@ async function loadOwn(req: Request): Promise<any> {
     return db(req).collection('requests').findOne({ _id: oid(req.params.id) });
 }
 
+/** Approver actions require the request to currently rest with the actor (or admin).
+ *  The requester acting on their own request is rejected. Returns true if allowed. */
+function mayAct(r: any, me: Actor): boolean {
+    if (me.isAdmin) return true;
+    const isRequester = !!me.staffId && r.requesterId === me.staffId;
+    if (isRequester) return false;
+    const ownsByUser = !!me.staffId && r.currentOwnerId === me.staffId;
+    const ownsByOffice = !!me.office && new RegExp(`^${me.office}$`, 'i').test(r.currentOffice || '');
+    return ownsByUser || ownsByOffice;
+}
+
 // Approve (with comment) and optionally forward in the same step.
 router.post('/requests/:id/approve', async (req, res) => {
     try {
         const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
         const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
         const from = r.status;
         await addComment(req, req.params.id, me, req.body?.comment || '');
 
@@ -309,6 +333,7 @@ router.post('/requests/:id/reject', async (req, res) => {
     try {
         const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
         const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
         const reason = String(req.body?.reason || req.body?.comment || '').trim();
         if (!reason) return res.status(400).json({ message: 'A rejection reason is required' });
         await addComment(req, req.params.id, me, reason);
@@ -326,6 +351,7 @@ router.post('/requests/:id/forward', async (req, res) => {
     try {
         const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
         const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
         const target = req.body?.forwardTo; if (!target && !req.body?.forwardUserId) return res.status(400).json({ message: 'Choose where to forward' });
         const t = parseTarget(target, req.body?.forwardUserId);
         await addComment(req, req.params.id, me, req.body?.comment || '');
@@ -350,17 +376,70 @@ router.post('/requests/:id/forward', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Request more information (back to requester, keeps ownership context).
+// Request more information (returns to requester — editable, must be resubmitted).
 router.post('/requests/:id/request-info', async (req, res) => {
     try {
         const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
         const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
         const note = String(req.body?.comment || '').trim(); if (!note) return res.status(400).json({ message: 'Say what information you need' });
         await addComment(req, req.params.id, me, note);
-        await db(req).collection('requests').updateOne({ _id: r._id }, { $set: { status: STATUS.WAIT_INFO, updatedAt: new Date() } });
-        await pushHistory(req, req.params.id, me, 'request_info', r.status, STATUS.WAIT_INFO, note);
+        // Hand the request back to the requester so they can edit & resubmit. Remember
+        // where to return it to (this approver) so resubmit routes straight back.
+        await db(req).collection('requests').updateOne({ _id: r._id }, { $set: {
+            status: STATUS.WAIT_INFO, updatedAt: new Date(), editable: true, infoNote: note,
+            returnedBy: { id: me.staffId, name: me.name, office: me.office },
+            currentOwnerId: r.requesterId, currentOwnerName: r.requesterName, currentOffice: '',
+        } });
+        await pushHistory(req, req.params.id, me, 'request_info', r.status, STATUS.WAIT_INFO, `Returned for more info: ${note}`);
         await pushAudit(req, req.params.id, me, 'request_info', r.status, STATUS.WAIT_INFO, note);
-        await notify(req, { requestId: req.params.id, number: r.number, toId: r.requesterId, kind: 'info', title: `More info needed on ${r.number}`, body: note });
+        await notify(req, { requestId: req.params.id, number: r.number, toId: r.requesterId, kind: 'info', title: `${r.number} returned for more information`, body: note });
+
+        // Email the requester (best-effort — never fails the request).
+        try {
+            const requester = r.requesterId ? await db(req).collection('staff').findOne({ _id: oid(r.requesterId) }).catch(() => null) : null;
+            const email = requester?.email;
+            if (email) {
+                const html = `<div style="font-family:Arial,sans-serif;color:#1e293b">
+                    <h2 style="color:#5C67F2">Request ${r.number} needs more information</h2>
+                    <p>Hello ${r.requesterName || ''},</p>
+                    <p><b>${me.name}</b>${me.office ? ` (${me.office})` : ''} has returned your request <b>"${r.title}"</b> and asked for more information:</p>
+                    <blockquote style="border-left:3px solid #5C67F2;padding-left:12px;color:#475569">${note}</blockquote>
+                    <p>Please open the request in your portal, update it, and resubmit.</p>
+                    <p style="color:#94a3b8;font-size:12px">Sent automatically by ShuleCloud Request Management.</p>
+                </div>`;
+                await sendEmail(db(req), { to: [email], subject: `Action needed: Request ${r.number} returned for more info`, html });
+            }
+        } catch { /* email optional */ }
+
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Requester resubmits a returned request → back to the approver who returned it.
+router.post('/requests/:id/resubmit', async (req, res) => {
+    try {
+        const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
+        const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (r.requesterId !== me.staffId && !me.isAdmin) return res.status(403).json({ message: 'Only the requester can resubmit' });
+        if (r.status !== STATUS.WAIT_INFO && r.status !== STATUS.DRAFT) return res.status(409).json({ message: 'This request is not awaiting resubmission' });
+        await addComment(req, req.params.id, me, req.body?.comment || 'Resubmitted with updates');
+
+        // Route back to whoever returned it; else to the reporting officer.
+        const back = r.returnedBy;
+        const set: any = { status: STATUS.SUBMITTED, updatedAt: new Date(), editable: false };
+        if (back?.id) { set.currentOwnerId = back.id; set.currentOwnerName = back.name; set.currentOffice = back.office || ''; }
+        else if (back?.office) { set.currentOwnerId = null; set.currentOwnerName = ''; set.currentOffice = back.office; }
+        else {
+            const sup = me.reportsTo ? await db(req).collection('staff').findOne({ _id: oid(me.reportsTo) }).catch(() => null) : null;
+            set.currentOwnerId = sup ? String(sup._id) : null; set.currentOwnerName = sup ? (sup.employeeName || sup.name) : ''; set.currentOffice = sup ? '' : 'Administration';
+        }
+        await db(req).collection('requests').updateOne({ _id: r._id }, { $set: set });
+        await pushHistory(req, req.params.id, me, 'resubmit', r.status, STATUS.SUBMITTED, `Resubmitted to ${set.currentOwnerName || set.currentOffice}`);
+        await pushAudit(req, req.params.id, me, 'resubmit', r.status, STATUS.SUBMITTED, req.body?.comment || '');
+        if (set.currentOwnerId) await notify(req, { requestId: req.params.id, number: r.number, toId: set.currentOwnerId, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
+        else await notify(req, { requestId: req.params.id, number: r.number, toOffice: set.currentOffice, kind: 'assigned', title: `${r.number} resubmitted`, body: r.title });
+        await notifyAdmins(req, req.params.id, r.number, `Request ${r.number} resubmitted`, r.title);
         res.json({ ok: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -383,6 +462,7 @@ router.post('/requests/:id/stage/:action', async (req, res) => {
     try {
         const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
         const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+        if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
         const to = STAGE_ACTIONS[req.params.action]; if (!to) return res.status(400).json({ message: 'Unknown action' });
         await addComment(req, req.params.id, me, req.body?.comment || '');
         const set: any = { status: to, updatedAt: new Date() };
@@ -400,6 +480,7 @@ router.post('/requests/:id/stage/:action', async (req, res) => {
 router.post('/requests/:id/complete', async (req, res) => {
     const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
     const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
+    if (!mayAct(r, me)) return res.status(403).json({ message: 'This request is not assigned to you.' });
     await addComment(req, req.params.id, me, req.body?.comment || '');
     await db(req).collection('requests').updateOne({ _id: r._id }, { $set: { status: STATUS.COMPLETED, completedAt: new Date(), updatedAt: new Date(), currentOffice: '', currentOwnerId: null } });
     await pushHistory(req, req.params.id, me, 'complete', r.status, STATUS.COMPLETED, req.body?.comment || '');
@@ -420,8 +501,11 @@ router.post('/requests/:id/cancel', async (req, res) => {
 router.put('/requests/:id', async (req, res) => {
     const me = await actor(req); if (!me) return res.status(401).json({ message: 'Not authenticated' });
     const r = await loadOwn(req); if (!r) return res.status(404).json({ message: 'Not found' });
-    // Only the requester may edit, and only while a draft / awaiting info.
+    // Only the requester may edit, and only while a draft / returned for info.
+    // Once submitted (or further along), the request is locked from edits.
     if (r.requesterId !== me.staffId && !me.isAdmin) return res.status(403).json({ message: 'Not allowed' });
+    const editable = r.status === STATUS.DRAFT || r.status === STATUS.WAIT_INFO;
+    if (!editable && !me.isAdmin) return res.status(409).json({ message: 'This request has been submitted and can no longer be edited.' });
     const set: any = { updatedAt: new Date() };
     ['title', 'description', 'category', 'priority', 'quantity', 'estimatedCost', 'comments', 'attachments', 'department'].forEach(k => { if (req.body[k] !== undefined) set[k] = req.body[k]; });
     await db(req).collection('requests').updateOne({ _id: r._id }, { $set: set });

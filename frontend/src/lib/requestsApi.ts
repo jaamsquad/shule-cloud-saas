@@ -41,13 +41,17 @@ export const reqApi = {
     mine: (params?: any) => api.get("/requests/mine", { params }).then(r => r.data as RequestDoc[]),
     inbox: (params?: any) => api.get("/requests/inbox", { params }).then(r => r.data as RequestDoc[]),
     all: (params?: any) => api.get("/requests/all", { params }).then(r => r.data as RequestDoc[]),
-    get: (id: string) => api.get(`/requests/${id}`).then(r => r.data as RequestDoc & { history: TimelineEntry[]; comments: CommentEntry[]; audit: any[] }),
+    get: (id: string) => api.get(`/requests/${id}`).then(r => r.data as RequestDoc & {
+        history: TimelineEntry[]; comments: CommentEntry[]; audit: any[]; infoNote?: string;
+        viewer: { isRequester: boolean; isAdmin: boolean; office: string; canAct: boolean; canEdit: boolean; canResubmit: boolean };
+    }),
 
     // actions
     approve: (id: string, body: { comment?: string; forwardTo?: string; forwardUserId?: string }) => api.post(`/requests/${id}/approve`, body).then(r => r.data),
     reject: (id: string, reason: string) => api.post(`/requests/${id}/reject`, { reason }).then(r => r.data),
     forward: (id: string, body: { forwardTo?: string; forwardUserId?: string; comment?: string }) => api.post(`/requests/${id}/forward`, body).then(r => r.data),
     requestInfo: (id: string, comment: string) => api.post(`/requests/${id}/request-info`, { comment }).then(r => r.data),
+    resubmit: (id: string, comment?: string) => api.post(`/requests/${id}/resubmit`, { comment }).then(r => r.data),
     comment: (id: string, text: string) => api.post(`/requests/${id}/comment`, { text }).then(r => r.data),
     stage: (id: string, action: string, body: any = {}) => api.post(`/requests/${id}/stage/${action}`, body).then(r => r.data),
     complete: (id: string, comment?: string) => api.post(`/requests/${id}/complete`, { comment }).then(r => r.data),
