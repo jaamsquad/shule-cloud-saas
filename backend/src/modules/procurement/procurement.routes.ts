@@ -43,6 +43,11 @@ function crud(coll: string, prefix?: string, afterCreate?: (req: Request, doc: a
     });
 }
 
+// Purchase Requests & Purchase Orders. (The header once claimed these were served
+// by the Expense module, but only procurement_suppliers is — so without these two
+// every save/list here returned "Endpoint not found". Registered properly now.)
+crud('procurement_pr', 'PR');
+crud('procurement_po', 'PO');
 crud('procurement_quotations', 'RFQ');
 crud('procurement_contracts', 'CON');
 crud('procurement_tenders', 'TND');

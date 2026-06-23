@@ -6,10 +6,16 @@ import { toast } from "sonner";
 import ExpCrud from "../expense/ExpCrud";
 import { proc, ksh, toCSV, download } from "./procApi";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
+import api from "@/lib/api";
 
 const ACCENT = "#0E7490";
 const toData = (o: Record<string, number> = {}) => Object.entries(o).map(([name, value]) => ({ name, value }));
 const useSuppliers = () => { const { data = [] } = useQuery({ queryKey: ["exp", "procurement_suppliers"], queryFn: () => proc.list("procurement_suppliers") }); return data.map((s: any) => s.name).filter(Boolean); };
+// Real departments for the Request/PO forms (so it's a dropdown, not free text).
+const useDepartments = () => {
+    const { data = [] } = useQuery({ queryKey: ["proc_departments"], queryFn: async () => { const r = await api.get("/departments"); return Array.isArray(r.data) ? r.data : []; } });
+    return data.map((d: any) => d.name).filter(Boolean);
+};
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export function ProcDashboard() {
@@ -48,14 +54,16 @@ function SupplierPerformance() {
 
 // ── Shared CRUD pages (reuse ExpCrud against shared collections) ──────────────
 export function RequestsPage() {
+    const departments = useDepartments();
     return <ExpCrud collection="procurement_pr" title="Purchase Requests" addLabel="New Request" numberLabel="Request No"
-        fields={[{ k: "date", label: "Request Date", type: "date" }, { k: "department", label: "Department", required: true }, { k: "requestedBy", label: "Requested By" }, { k: "priority", label: "Priority", type: "select", options: ["Low", "Medium", "High", "Urgent"] }, { k: "requiredDate", label: "Required Date", type: "date" }, { k: "budgetCode", label: "Budget Code" }, { k: "items", label: "Items Requested", type: "textarea" }, { k: "quantity", label: "Quantity", type: "number" }, { k: "estimatedCost", label: "Estimated Total Cost", type: "money" }, { k: "justification", label: "Justification", type: "textarea" }, { k: "status", label: "Status", type: "select", options: ["Draft", "Submitted", "Approved", "Purchase Order", "Goods Received", "Invoice", "Payment", "Completed"] }, { k: "attachment", label: "Attachment", type: "file" }]}
+        fields={[{ k: "date", label: "Request Date", type: "date" }, { k: "department", label: "Department", type: "select", options: () => departments, required: true }, { k: "requestedBy", label: "Requested By" }, { k: "priority", label: "Priority", type: "select", options: ["Low", "Medium", "High", "Urgent"] }, { k: "requiredDate", label: "Required Date", type: "date" }, { k: "budgetCode", label: "Budget Code" }, { k: "items", label: "Items Requested", type: "textarea" }, { k: "quantity", label: "Quantity", type: "number" }, { k: "estimatedCost", label: "Estimated Total Cost", type: "money" }, { k: "justification", label: "Justification", type: "textarea" }, { k: "status", label: "Status", type: "select", options: ["Draft", "Submitted", "Approved", "Purchase Order", "Goods Received", "Invoice", "Payment", "Completed"] }, { k: "attachment", label: "Attachment", type: "file" }]}
         columns={[{ k: "date", label: "Date" }, { k: "department", label: "Department" }, { k: "estimatedCost", label: "Est. Cost", type: "money" }, { k: "priority", label: "Priority", type: "badge" }, { k: "status", label: "Status", type: "badge" }]} />;
 }
 export function OrdersPage() {
     const suppliers = useSuppliers();
+    const departments = useDepartments();
     return <ExpCrud collection="procurement_po" title="Purchase Orders" addLabel="New PO" numberLabel="PO No" printable totalKey="totalCost"
-        fields={[{ k: "date", label: "Date", type: "date" }, { k: "supplier", label: "Supplier", type: "select", options: () => suppliers, required: true }, { k: "department", label: "Department" }, { k: "items", label: "Items", type: "textarea" }, { k: "quantity", label: "Quantity", type: "number" }, { k: "unitPrice", label: "Unit Cost", type: "money" }, { k: "taxes", label: "Taxes", type: "money" }, { k: "totalCost", label: "Total Cost", type: "money" }, { k: "deliveryAddress", label: "Delivery Address" }, { k: "expectedDelivery", label: "Expected Delivery", type: "date" }, { k: "paymentTerms", label: "Payment Terms" }, { k: "status", label: "Delivery Status", type: "select", options: ["Draft", "Sent", "Partial", "Delivered", "Cancelled"] }]}
+        fields={[{ k: "date", label: "Date", type: "date" }, { k: "supplier", label: "Supplier", type: "select", options: () => suppliers, required: true }, { k: "department", label: "Department", type: "select", options: () => departments }, { k: "items", label: "Items", type: "textarea" }, { k: "quantity", label: "Quantity", type: "number" }, { k: "unitPrice", label: "Unit Cost", type: "money" }, { k: "taxes", label: "Taxes", type: "money" }, { k: "totalCost", label: "Total Cost", type: "money" }, { k: "deliveryAddress", label: "Delivery Address" }, { k: "expectedDelivery", label: "Expected Delivery", type: "date" }, { k: "paymentTerms", label: "Payment Terms" }, { k: "status", label: "Delivery Status", type: "select", options: ["Draft", "Sent", "Partial", "Delivered", "Cancelled"] }]}
         columns={[{ k: "date", label: "Date" }, { k: "supplier", label: "Supplier" }, { k: "totalCost", label: "Total", type: "money" }, { k: "expectedDelivery", label: "Delivery" }, { k: "status", label: "Status", type: "badge" }]} searchKeys={["number", "supplier"]} />;
 }
 export function SuppliersPage() {

@@ -2,9 +2,10 @@
  * Expense Management module.
  *
  * Owns: expenses, expense_categories, budgets, expense_payments, recurring_expenses.
- * Shares (read/write) with Procurement: procurement_suppliers, procurement_pr,
- * procurement_po. Auto-posts journal entries to the Accounting ledger when an
- * expense is approved (see postExpenseJournal).
+ * Shares (read/write) with Procurement: procurement_suppliers (registered here).
+ * procurement_pr / procurement_po CRUD live in the Procurement module.
+ * Auto-posts journal entries to the Accounting ledger when an expense is approved
+ * (see postExpenseJournal).
  *
  * Everything is soft-deleted, audit-logged, and uses auto-generated numbers.
  */
