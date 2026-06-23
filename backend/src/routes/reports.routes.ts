@@ -40,6 +40,36 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const examName = examDocs.map((e: any) => e.examName || e.name).filter(Boolean).join(' + ') || '—';
         const isAnnual = examIds.length > 1;
 
+        // ── Real attendance (student_attendance) summarised per student ──────────────
+        const studentIdStrs = students.map((s: any) => s._id.toString());
+        const attRecords = studentIdStrs.length
+            ? await db.collection('student_attendance').find({ studentId: { $in: studentIdStrs } }).toArray().catch(() => [])
+            : [];
+        const attBy: Record<string, { present: number; total: number }> = {};
+        for (const a of attRecords) {
+            const k = String(a.studentId);
+            const rec = attBy[k] || (attBy[k] = { present: 0, total: 0 });
+            rec.total++;
+            if (/present|late/i.test(String(a.status || ''))) rec.present++;
+        }
+
+        // ── Personality profile (behaviour_ratings + behaviour_traits) ──────────────
+        const traits = await db.collection('behaviour_traits').find({}).sort({ order: 1 }).toArray().catch(() => []);
+        const traitName: Record<string, string> = {};
+        traits.forEach((t: any) => { traitName[t._id.toString()] = t.name; });
+        const ratings = await db.collection('behaviour_ratings').find({}).toArray().catch(() => []);
+        const ratingGrade: Record<number, string> = { 5: 'A+', 4: 'A', 3: 'B+', 2: 'C', 1: 'D' };
+        const personalityBy: Record<string, { trait: string; grade: string }[]> = {};
+        for (const r of ratings) {
+            const k = String(r.student_id);
+            const name = traitName[String(r.trait_id)];
+            if (!name) continue;
+            (personalityBy[k] = personalityBy[k] || []).push({
+                trait: name,
+                grade: r.grade || ratingGrade[Number(r.rating)] || String(r.rating ?? '-'),
+            });
+        }
+
         const gradeFor = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E';
 
         const reportCards = students.map((student: any) => {
@@ -121,7 +151,12 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 hasMarks: gradedCount > 0,
                 rank: "—",
                 rankNum: 0,
-                attendanceSummary: { presentDays: 0, totalDays: 0, percentage: "—" },
+                attendanceSummary: (() => {
+                    const a = attBy[sid];
+                    if (!a || a.total === 0) return { presentDays: 0, totalDays: 0, percentage: "—" };
+                    return { presentDays: a.present, totalDays: a.total, percentage: `${Math.round((a.present / a.total) * 100)}%` };
+                })(),
+                personality: personalityBy[sid] || [],
                 teacherRemarks: "",
                 principalRemarks: "",
             };

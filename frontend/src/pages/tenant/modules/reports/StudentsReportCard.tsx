@@ -62,6 +62,7 @@ export default function StudentsReportCard() {
     const handlePrint = (report: any) => {
         const schoolLogo = profileData?.logo || "";
         const schoolName = profileData?.name || report.schoolName || 'ShuleCloud International Academy';
+        const schoolAddress = [profileData?.address || profileData?.location, profileData?.city || profileData?.county, profileData?.phone, profileData?.email].filter(Boolean).join(" · ");
         const template = profileData?.reportTemplate || 'cherith_termly';
 
         const logoHtml = schoolLogo
@@ -574,6 +575,13 @@ export default function StudentsReportCard() {
                 `;
             }).join("");
 
+            // Real personality profile (behaviours module) + attendance.
+            const personalityRows = (report.personality && report.personality.length)
+                ? report.personality.map((p: any) => `<div class="panel-row"><span>${p.trait}</span><span style="font-weight:bold; color:#4F46E5;">${p.grade}</span></div>`).join("")
+                : `<div class="panel-row" style="color:#94a3b8">No behaviour ratings recorded</div>`;
+            const att = report.attendanceSummary || {};
+            const attText = att.totalDays > 0 ? `${att.presentDays} / ${att.totalDays} Days Present (${att.percentage})` : "No attendance records";
+
             htmlContent = `
                 <!DOCTYPE html>
                 <html lang="en">
@@ -616,7 +624,7 @@ export default function StudentsReportCard() {
                             <div>${logoHtml}</div>
                             <div class="header-center">
                                 <h1 class="school-title">${schoolName}</h1>
-                                <div class="school-addr">421, Common Street, Somewheretown, Wondercity, India</div>
+                                <div class="school-addr">${schoolAddress || ""}</div>
                                 <div class="report-badge">Annual Report Card</div>
                             </div>
                             <div class="crest" style="background: #0F172A;">★</div>
@@ -625,7 +633,7 @@ export default function StudentsReportCard() {
                         <div class="student-bar">
                             <div class="bar-item"><span class="bar-label">Admission No</span><span class="bar-val">${report.admNo}</span></div>
                             <div class="bar-item"><span class="bar-label">Name of the Student</span><span class="bar-val">${report.studentName}</span></div>
-                            <div class="bar-item"><span class="bar-label">Roll Number</span><span class="bar-val">01</span></div>
+                            <div class="bar-item"><span class="bar-label">Position</span><span class="bar-val">${report.rank || "—"}</span></div>
                             <div class="bar-item"><span class="bar-label">Class & Stream</span><span class="bar-val">${report.className}</span></div>
                         </div>
 
@@ -668,23 +676,17 @@ export default function StudentsReportCard() {
                             <div>
                                 <div class="panel-box">
                                     <div class="panel-title">Personality Profile</div>
-                                    <div class="panel-row"><span>Application in studies</span><span style="font-weight:bold; color:#4F46E5;">A+</span></div>
-                                    <div class="panel-row"><span>Attitude towards elders</span><span style="font-weight:bold; color:#4F46E5;">A</span></div>
-                                    <div class="panel-row"><span>Attitude towards peers</span><span style="font-weight:bold; color:#4F46E5;">A+</span></div>
-                                    <div class="panel-row"><span>Conduct in class</span><span style="font-weight:bold; color:#4F46E5;">A+</span></div>
-                                    <div class="panel-row"><span>Discipline & Punctuality</span><span style="font-weight:bold; color:#4F46E5;">A</span></div>
+                                    ${personalityRows}
                                 </div>
 
                                 <div class="att-box">
-                                    <div style="font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Annual Attendance</div>
-                                    184 / 200 Days Present (92%)
+                                    <div style="font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">Attendance</div>
+                                    ${attText}
                                 </div>
 
                                 <div class="remarks-box">
                                     <div class="remarks-head">Class Teacher's Remarks</div>
-                                    <div style="color: #475569; font-style: italic;">
-                                        "${report.teacherRemarks || 'Amit is an enthusiastic learner who actively participates in classroom discussions. Excellent conduct and dedication to studies.'}"
-                                    </div>
+                                    <div style="color: #475569; font-style: italic;">${report.teacherRemarks ? `"${report.teacherRemarks}"` : "________________________________________"}</div>
                                 </div>
                             </div>
                         </div>
