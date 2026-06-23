@@ -69,7 +69,14 @@ export default function AddEmployee() {
         specializedSubjects: [] as string[],
         roles: [] as string[], portalAccess: "both", landingPage: "",
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
+        department: "", reportsTo: "",
         kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: ""
+    });
+
+    // Eligible supervisors for the "Reports To" routing field (other staff).
+    const { data: supervisors = [] } = useQuery({
+        queryKey: ["req_supervisors"],
+        queryFn: async () => { try { return (await api.get("/requests/supervisors")).data as any[]; } catch { return []; } },
     });
 
     const toggleRole = (r: string) =>
@@ -117,6 +124,8 @@ export default function AddEmployee() {
             salary:              existingStaff.salary || "",
             address:             existingStaff.address || "",
             specializedSubjects: existingStaff.specializedSubjects || [],
+            department:          existingStaff.department || "",
+            reportsTo:           existingStaff.reportsTo ? String(existingStaff.reportsTo) : "",
             experience:          existingStaff.experience || "",
             nationalId:          existingStaff.nationalId || "",
             religion:            existingStaff.religion || "",
@@ -470,6 +479,18 @@ export default function AddEmployee() {
                                     <InputField name="email" value={formData.email} onChange={handleChange} label="Email Address*" placeholder="email@school.com" required />
                                     <SelectField name="designation" value={formData.designation} onChange={handleChange} label="Employee Role*" placeholder="Select Role*" required
                                         options={roleOptions} />
+                                    {/* Reports To — first approver for this employee's requests. */}
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[11px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">Reports To (Supervisor)</div>
+                                        <select name="reportsTo" value={formData.reportsTo} onChange={handleChange}
+                                            className="w-full h-12 px-5 bg-white border border-[#5C67F2]/40 rounded-full text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#5C67F2]">
+                                            <option value="">— Select supervisor —</option>
+                                            {supervisors.filter((s: any) => s._id !== id).map((s: any) => (
+                                                <option key={s._id} value={s._id}>{s.name}{s.role ? ` – ${s.role}` : ""}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <InputField name="department" value={formData.department} onChange={handleChange} label="Department" placeholder="e.g. Sciences" color="gray" />
                                     <InputField name="nationalId" value={formData.nationalId} onChange={handleChange} label="National ID / Passport*" placeholder="ID or Passport Number" required />
                                     <DateField name="dob" value={formData.dob} onChange={handleChange} label="Date of Birth*" required />
                                     <SelectField name="gender" value={formData.gender} onChange={handleChange} label="Gender*" placeholder="Select Gender" required options={['Male','Female','Other']} />

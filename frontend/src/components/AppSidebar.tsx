@@ -125,6 +125,20 @@ export const navItems: NavItem[] = [
       { label: "TSC Reports", path: "/tsc/reports" },
       { label: "TSC Settings", path: "/tsc/settings" },
   ] },
+  { label: "Requests", icon: ClipboardList, moduleKey: "employees", children: [
+      { label: "Dashboard", path: "/requests" },
+      { label: "Create Request", path: "/requests/new" },
+      { label: "My Requests", path: "/requests/mine" },
+      { label: "New Requests", path: "/requests/inbox" },
+      { label: "Pending Approvals", path: "/requests/pending" },
+      { label: "Approved", path: "/requests/approved" },
+      { label: "Rejected", path: "/requests/rejected" },
+      { label: "Purchase Requests", path: "/requests/purchases" },
+      { label: "Expense Requests", path: "/requests/expenses" },
+      { label: "All Requests", path: "/requests/all" },
+      { label: "Completed", path: "/requests/completed" },
+      { label: "Request Settings", path: "/requests/settings" },
+  ] },
   { label: "Accounts", icon: Wallet, moduleKey: "accounts", children: [
       { label: "Chart Of Account", path: "/accounts/chart" },
       { label: "Add Income", path: "/accounts/income" },
@@ -496,7 +510,16 @@ export default function AppSidebar() {
       queryFn: async () => { try { return (await api.get("/tsc/leave-requests/pending-count")).data?.count || 0; } catch { return 0; } },
       refetchInterval: 60000,
   });
-  const badgeFor = (path: string): number => (path === "/tsc/leave" ? (pendingLeave || 0) : 0);
+  // New requests awaiting the current user → badge on "New Requests".
+  const { data: reqCount } = useQuery({
+      queryKey: ["req_count"],
+      queryFn: async () => { try { return (await api.get("/requests/notifications/count")).data || { inbox: 0, unread: 0 }; } catch { return { inbox: 0, unread: 0 }; } },
+      refetchInterval: 30000,
+  });
+  const badgeFor = (path: string): number =>
+      path === "/tsc/leave" ? (pendingLeave || 0)
+      : path === "/requests/inbox" ? (reqCount?.inbox || 0)
+      : 0;
 
   const isDark = theme?.sidebarBackground === "dark";
   const activeBg = theme?.activeItemBackground || "bg-[#5C67F2]";

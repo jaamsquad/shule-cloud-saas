@@ -37,6 +37,7 @@ import expenseRoutes from './modules/expense/expense.routes';
 import cbcRoutes from './modules/cbc/cbc.routes';
 import procurementRoutes from './modules/procurement/procurement.routes';
 import accountingRoutes from './modules/accounting/accounting.routes';
+import requestsRoutes from './modules/requests/requests.routes';
 import blogRoutes from './routes/blog.routes';
 import smsRoutes from './routes/sms.routes';
 import liveClassRoutes from './modules/liveclass/liveclass.routes';
@@ -306,6 +307,7 @@ app.use('/api/v1', expenseRoutes);        // Expense Management
 app.use('/api/v1', cbcRoutes);            // CBC Assessment
 app.use('/api/v1', procurementRoutes);    // Procurement (shares suppliers/PR/PO with Expense)
 app.use('/api/v1', accountingRoutes);     // Accounting / General Ledger
+app.use('/api/v1', requestsRoutes);       // Request Management & Approval Workflow
 app.use('/api/v1', blogRoutes);           // Blog (super-owner admin + public)
 app.use('/api/v1', smsRoutes);            // SMS gateway (school admin + Android app)
 app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton)

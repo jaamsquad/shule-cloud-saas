@@ -351,6 +351,9 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
+import CreateRequest from "./pages/tenant/modules/requests/CreateRequest";
+import RequestDetail from "./pages/tenant/modules/requests/RequestDetail";
+import { RequestsDashboard, MyRequests, InboxNew, PendingApprovals, ApprovedRequests, RejectedRequests, CompletedRequests, AllRequests, PendingRequests, PurchaseRequestsInbox, ExpenseRequestsInbox, RequestsSettings } from "./pages/tenant/modules/requests/RequestsPages";
 import StaffRoles from "./pages/tenant/modules/roles/StaffRoles";
 import AttendanceScanner from "./pages/tenant/modules/AttendanceScanner";
 import PublicApplication from "./pages/public/PublicApplication";
@@ -593,6 +596,21 @@ const App = () => {
               <Route path="/settings/term-settings" element={<AcademicTermSettings />} />
               <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
               <Route path="/departments" element={<DepartmentManagement />} />
+              {/* Request Management & Approval Workflow */}
+              <Route path="/requests" element={<RequestsDashboard />} />
+              <Route path="/requests/new" element={<CreateRequest />} />
+              <Route path="/requests/mine" element={<MyRequests />} />
+              <Route path="/requests/inbox" element={<InboxNew />} />
+              <Route path="/requests/pending" element={<PendingApprovals />} />
+              <Route path="/requests/approved" element={<ApprovedRequests />} />
+              <Route path="/requests/rejected" element={<RejectedRequests />} />
+              <Route path="/requests/completed" element={<CompletedRequests />} />
+              <Route path="/requests/all" element={<AllRequests />} />
+              <Route path="/requests/admin-pending" element={<PendingRequests />} />
+              <Route path="/requests/purchases" element={<PurchaseRequestsInbox />} />
+              <Route path="/requests/expenses" element={<ExpenseRequestsInbox />} />
+              <Route path="/requests/settings" element={<RequestsSettings />} />
+              <Route path="/requests/:id" element={<RequestDetail />} />
               <Route path="/staff-roles" element={<StaffRoles />} />
               <Route path="/attendance-scanner" element={<AttendanceScanner />} />
               <Route path="/cafeteria/meal-service" element={<MealService />} />
