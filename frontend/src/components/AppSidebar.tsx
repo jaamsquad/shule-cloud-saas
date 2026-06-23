@@ -275,6 +275,7 @@ export const navItems: NavItem[] = [
       { label: "Student Progress Report", path: "/reports/student-progress" },
       { label: "Accounts Report", path: "/reports/accounts" },
       { label: "Customised Reports", path: "/reports/custom" },
+      { label: "Blank Forms", path: "/blank-forms" },
   ] },
   { label: "NEMIS Assistant", icon: Landmark, moduleKey: "nemis", children: [
       { label: "Dashboard", path: "/nemis" },

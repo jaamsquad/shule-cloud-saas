@@ -351,6 +351,7 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
+import BlankForms from "./pages/tenant/modules/forms/BlankForms";
 import CreateRequest from "./pages/tenant/modules/requests/CreateRequest";
 import RequestDetail from "./pages/tenant/modules/requests/RequestDetail";
 import { RequestsDashboard, MyRequests, InboxNew, PendingApprovals, ApprovedRequests, RejectedRequests, CompletedRequests, AllRequests, PendingRequests, PurchaseRequestsInbox, ExpenseRequestsInbox, RequestsSettings } from "./pages/tenant/modules/requests/RequestsPages";
@@ -596,6 +597,7 @@ const App = () => {
               <Route path="/settings/term-settings" element={<AcademicTermSettings />} />
               <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
               <Route path="/departments" element={<DepartmentManagement />} />
+              <Route path="/blank-forms" element={<BlankForms />} />
               {/* Request Management & Approval Workflow */}
               <Route path="/requests" element={<RequestsDashboard />} />
               <Route path="/requests/new" element={<CreateRequest />} />
