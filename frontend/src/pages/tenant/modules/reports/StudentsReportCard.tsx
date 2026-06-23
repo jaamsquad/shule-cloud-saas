@@ -16,7 +16,8 @@ import {
 
 export default function StudentsReportCard() {
     const [selectedClass, setSelectedClass] = useState("");
-    const [selectedExam, setSelectedExam] = useState("");
+    // Multiple exams can be combined (annual report). Empty = none selected.
+    const [selectedExamIds, setSelectedExamIds] = useState<string[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [activeReport, setActiveReport] = useState<any>(null);
 
@@ -44,10 +45,10 @@ export default function StudentsReportCard() {
 
     // Fetch report cards data
     const { data: reportCards = [], isLoading } = useQuery({
-        queryKey: ["reports_report_cards", selectedClass, selectedExam],
+        queryKey: ["reports_report_cards", selectedClass, selectedExamIds],
         queryFn: async () => {
             const res = await api.get("/reports/report-cards", {
-                params: { class_id: selectedClass || undefined, exam_id: selectedExam || undefined }
+                params: { class_id: selectedClass || undefined, exam_id: selectedExamIds.join(",") || undefined }
             });
             return res.data?.data || [];
         }
@@ -554,12 +555,15 @@ export default function StudentsReportCard() {
                 </html>
             `;
         } else {
-            // annual_split_panel
+            // annual_split_panel — when several exams are combined, show each exam's
+            // real score in the term columns; otherwise show the single score.
+            const examList = report.examList || [];
+            const e1 = examList[0]?.id, e2 = examList[1]?.id;
             const leftRows = report.subjects.map((s: any) => {
-                const numericScore = Number(s.score) || 0;
-                const t1 = Math.round(numericScore * 0.95);
-                const t2 = numericScore;
-                const avg = Math.round((t1 + t2) / 2);
+                const per = s.perExam || {};
+                const t1 = e1 != null && per[e1] != null ? per[e1] : (s.scoreDisplay === "-" ? "-" : s.score);
+                const t2 = e2 != null && per[e2] != null ? per[e2] : "";
+                const avg = s.scoreDisplay === "-" ? "-" : s.score;  // real subject average %
                 return `
                     <tr>
                         <td style="text-align: left; font-weight: 600; padding: 10px 12px;">${s.subjectName}</td>
@@ -742,30 +746,47 @@ export default function StudentsReportCard() {
                         ))}
                     </select>
 
-                    <select 
-                        value={selectedExam} 
-                        onChange={e => setSelectedExam(e.target.value)}
+                    <select
+                        value=""
+                        onChange={e => { const id = e.target.value; if (id && !selectedExamIds.includes(id)) setSelectedExamIds([...selectedExamIds, id]); }}
                         className="h-11 px-4 bg-slate-50 border border-slate-200/60 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-indigo-500 transition-colors"
                     >
-                        <option value="">All Exams</option>
-                        {exams.map((e: any) => (
+                        <option value="">+ Add exam…</option>
+                        {exams.filter((e: any) => !selectedExamIds.includes(e._id)).map((e: any) => (
                             <option key={e._id} value={e._id}>{e.name}</option>
                         ))}
                     </select>
 
-                    <Button 
+                    <Button
                         variant="outline"
                         className="h-11 bg-indigo-600 hover:bg-indigo-700 text-white border-none font-bold text-xs gap-2 rounded-xl shadow-lg shadow-indigo-100"
                     >
-                        <Filter className="w-4 h-4" /> Filter Reports
+                        <Filter className="w-4 h-4" /> {selectedExamIds.length > 1 ? "Annual Report" : "Filter Reports"}
                     </Button>
                 </div>
             </div>
 
+            {/* Selected exams (add one or more — multiple = combined Annual report) */}
+            {selectedExamIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-slate-400 uppercase">{selectedExamIds.length > 1 ? "Annual (combined):" : "Exam:"}</span>
+                    {selectedExamIds.map(id => {
+                        const ex = exams.find((e: any) => e._id === id);
+                        return (
+                            <span key={id} className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 rounded-full pl-3 pr-2 py-1 text-xs font-bold">
+                                {ex?.name || "Exam"}
+                                <button onClick={() => setSelectedExamIds(selectedExamIds.filter(x => x !== id))} className="text-indigo-400 hover:text-indigo-700">×</button>
+                            </span>
+                        );
+                    })}
+                    <button onClick={() => setSelectedExamIds([])} className="text-xs font-bold text-slate-400 hover:text-rose-500">Clear</button>
+                </div>
+            )}
+
             {/* Prompt to pick an exam — marks/mean/rank are exam-specific */}
-            {!selectedExam && (
+            {selectedExamIds.length === 0 && (
                 <div className="bg-amber-50 border border-amber-100 rounded-2xl px-5 py-3 text-sm text-amber-700 font-bold">
-                    Select an exam above to load real marks, mean scores and class ranks. Without an exam, no scores are shown.
+                    Add one or more exams above to load real marks, mean scores and class ranks. Selecting several combines them into an annual report. Without an exam, no scores are shown.
                 </div>
             )}
 

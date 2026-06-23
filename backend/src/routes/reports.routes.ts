@@ -25,78 +25,82 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const activeYear = year || currentPeriodObj?.academicYear || new Date().getFullYear();
 
         const students = await db.collection('students').find(query).toArray();
-        // Only load marks for the chosen exam. Without an exam there's nothing to grade.
-        const marks = exam_id ? await db.collection('marks').find({ examId: String(exam_id) }).toArray() : [];
-        let examDoc: any = null;
-        if (exam_id) { try { examDoc = await db.collection('exams').findOne({ _id: new ObjectId(exam_id as string) }); } catch { /* */ } }
+
+        // `exam_id` may be a single id or a comma-separated list (annual report = the
+        // selected exams combined). Marks live in `exam_marks`
+        // (fields: studentId, subjectId, subjectName, examId, marksObtained, totalMarks).
+        const examIds: string[] = String(exam_id || '').split(',').map(s => s.trim()).filter(Boolean);
+        const marks = examIds.length
+            ? await db.collection('exam_marks').find({ examId: { $in: examIds } }).toArray()
+            : [];
+        const examDocs = examIds.length
+            ? await db.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray()
+            : [];
         const allSubjects = await db.collection('subjects').find({}).toArray();
-        const examName = examDoc?.name || "—";
+        const examName = examDocs.map((e: any) => e.examName || e.name).filter(Boolean).join(' + ') || '—';
+        const isAnnual = examIds.length > 1;
+
+        const gradeFor = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E';
 
         const reportCards = students.map((student: any) => {
-            const studentMarks = marks.filter((m: any) => m.studentId === student._id.toString() || m.studentId === student.admNo || m.studentId === student.registrationNo);
-            const studentClassName = student.studentClass || student.className || "General Class";
-            
-            // Find subjects assigned to this student's class
-            let assignedSubjects = allSubjects.filter((sub: any) => 
-                sub.classId === student.classId || 
-                sub.className === studentClassName || 
+            const sid = student._id.toString();
+            const studentMarks = marks.filter((m: any) =>
+                String(m.studentId) === sid || m.studentId === student.admNo || m.studentId === student.registrationNo);
+            const studentClassName = student.studentClass || student.className || student.currentClass || "General Class";
+
+            // Subjects assigned to this student's class (fallback to all subjects).
+            let assignedSubjects = allSubjects.filter((sub: any) =>
+                sub.classId === student.classId ||
+                sub.className === studentClassName ||
                 sub.class === studentClassName ||
                 sub.levelName === studentClassName ||
-                (sub.levelName && studentClassName.toLowerCase().includes(sub.levelName.toLowerCase())) ||
-                (sub.className && studentClassName.toLowerCase().includes(sub.className.toLowerCase()))
+                (sub.levelName && String(studentClassName).toLowerCase().includes(String(sub.levelName).toLowerCase())) ||
+                (sub.className && String(studentClassName).toLowerCase().includes(String(sub.className).toLowerCase()))
             );
+            if (assignedSubjects.length === 0 && allSubjects.length > 0) assignedSubjects = allSubjects;
 
-            if (assignedSubjects.length === 0 && allSubjects.length > 0) {
-                assignedSubjects = allSubjects; // Fallback to all institution subjects if no specific class match
-            }
+            // If a student has marks for subjects not in the assigned list, include those too.
+            const subjectKeys = new Set(assignedSubjects.map((s: any) => (s.name || s.subjectName || '').toLowerCase().trim()));
+            const extraFromMarks = Array.from(new Set(studentMarks.map((m: any) => (m.subjectName || '').toLowerCase().trim())))
+                .filter(n => n && !subjectKeys.has(n));
 
-            let totalMarks = 0;
-            let subjectsList: any[] = [];
-
-            if (assignedSubjects.length > 0) {
-                subjectsList = assignedSubjects.map((sub: any) => {
-                    const markObj = studentMarks.find((m: any) => m.subjectId === sub._id.toString() || m.subjectName === (sub.name || sub.subjectName));
-                    const score = markObj ? Number(markObj.marks || markObj.score || 0) : 0;
-                    totalMarks += score;
-                    let grade = 'E';
-                    if (score >= 80) grade = 'A';
-                    else if (score >= 70) grade = 'B';
-                    else if (score >= 60) grade = 'C';
-                    else if (score >= 50) grade = 'D';
-                    else if (score === 0) grade = '-';
-
-                    return {
-                        subjectName: sub.name || sub.subjectName || "General Subject",
-                        score: markObj ? score : 0,
-                        scoreDisplay: markObj ? score : "-",
-                        grade,
-                        remarks: markObj ? (score >= 70 ? "Excellent performance" : "Fair effort") : "No marks entered"
-                    };
+            let totalPct = 0;
+            const subjectsList = [
+                ...assignedSubjects.map((sub: any) => ({ name: sub.name || sub.subjectName || 'Subject', id: sub._id.toString() })),
+                ...extraFromMarks.map(n => ({ name: studentMarks.find((m: any) => (m.subjectName || '').toLowerCase().trim() === n)?.subjectName || n, id: '' })),
+            ].map(sub => {
+                // All marks for this subject across the chosen exams.
+                const subMarks = studentMarks.filter((m: any) =>
+                    (sub.id && String(m.subjectId) === sub.id) ||
+                    (m.subjectName || '').toLowerCase().trim() === sub.name.toLowerCase().trim());
+                // Average the per-exam percentages (handles different max marks per exam).
+                const pcts = subMarks.map((m: any) => {
+                    const max = Number(m.totalMarks) || 100;
+                    const got = Number(m.marksObtained ?? m.marks ?? m.score ?? 0);
+                    return max > 0 ? (got / max) * 100 : 0;
                 });
-            } else if (studentMarks.length > 0) {
-                subjectsList = studentMarks.map((m: any) => {
-                    const score = Number(m.marks || m.score || 0);
-                    totalMarks += score;
-                    let grade = 'E';
-                    if (score >= 80) grade = 'A';
-                    else if (score >= 70) grade = 'B';
-                    else if (score >= 60) grade = 'C';
-                    else if (score >= 50) grade = 'D';
+                const hasMark = subMarks.length > 0;
+                const avgPct = hasMark ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : 0;
+                if (hasMark) totalPct += avgPct;
 
-                    return {
-                        subjectName: m.subjectName || m.subjectId || "General Subject",
-                        score,
-                        scoreDisplay: score,
-                        grade,
-                        remarks: score >= 70 ? "Excellent performance" : "Fair effort"
-                    };
-                });
-            }
+                // Per-exam scores for the "term" columns (annual layout).
+                const perExam: Record<string, number> = {};
+                subMarks.forEach((m: any) => { perExam[String(m.examId)] = Number(m.marksObtained ?? m.marks ?? m.score ?? 0); });
 
-            // Real mean = average of the subjects that actually have a mark.
+                return {
+                    subjectName: sub.name,
+                    score: avgPct,
+                    scoreDisplay: hasMark ? avgPct : "-",
+                    perExam,
+                    grade: hasMark ? gradeFor(avgPct) : '-',
+                    remarks: hasMark ? (avgPct >= 70 ? "Excellent" : avgPct >= 50 ? "Good" : "Needs improvement") : "No marks entered",
+                };
+            });
+
             const gradedCount = subjectsList.filter(s => s.scoreDisplay !== "-").length;
-            const meanScore = gradedCount > 0 ? totalMarks / gradedCount : 0;     // 0–100 average %
-            const gpa = gradedCount > 0 ? (meanScore / 20).toFixed(2) : "0.00";  // simple 4.0-style scale
+            const meanScore = gradedCount > 0 ? totalPct / gradedCount : 0;       // average % across graded subjects
+            const totalMarks = Math.round(totalPct);                              // sum of subject %s (used for ranking)
+            const gpa = gradedCount > 0 ? (meanScore / 20).toFixed(2) : "0.00";
 
             return {
                 studentId: student._id,
@@ -104,7 +108,8 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 admNo: student.admNo || student.registrationNo || `BS${student._id.toString().slice(-4).toUpperCase()}`,
                 photo: student.avatar || student.photo || student.studentPhoto || student.image || "",
                 className: studentClassName,
-                examName,
+                examName, isAnnual,
+                examList: examDocs.map((e: any) => ({ id: e._id.toString(), name: e.examName || e.name })),
                 term: activeTerm,
                 year: activeYear,
                 subjects: subjectsList,
@@ -114,7 +119,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 meanScore: Number(meanScore.toFixed(1)),
                 gpa,
                 hasMarks: gradedCount > 0,
-                rank: "—",  // filled in by the ranking pass below
+                rank: "—",
                 rankNum: 0,
                 attendanceSummary: { presentDays: 0, totalDays: 0, percentage: "—" },
                 teacherRemarks: "",
@@ -141,7 +146,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             byClass[key].filter(r => !r.hasMarks).forEach(r => { r.rank = "—"; r.rankNum = 0; });
         }
 
-        res.json({ data: reportCards, examSelected: !!exam_id, examName });
+        res.json({ data: reportCards, examSelected: examIds.length > 0, examCount: examIds.length, examName });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
