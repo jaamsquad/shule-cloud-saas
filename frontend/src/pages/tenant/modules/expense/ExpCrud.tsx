@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Loader2, Trash2, Pencil, X, Search, Upload, Printer } from "lucide-react";
+import { Plus, Loader2, Trash2, Pencil, X, Search, Upload, Printer, Eye, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { exp, ksh } from "./expenseApi";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
@@ -25,6 +25,7 @@ export default function ExpCrud({
     const [editId, setEditId] = useState<string | null>(null);
     const [form, setForm] = useState<Record<string, any>>({});
     const [saving, setSaving] = useState(false);
+    const [viewRow, setViewRow] = useState<any | null>(null);
 
     const opts = (f: Fld) => (typeof f.options === "function" ? f.options() : f.options) || [];
     const sKeys = searchKeys || columns.map(c => c.k);
@@ -47,6 +48,30 @@ export default function ExpCrud({
     const del = async (id: string) => { if (!confirm("Delete this record? (soft delete — recoverable)")) return; await exp.remove(collection, id); qc.invalidateQueries({ queryKey: ["exp", collection] }); toast.success("Deleted"); };
 
     const cell = (r: any, c: Col) => c.type === "money" ? ksh(r[c.k]) : c.type === "badge" ? <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{r[c.k] || "—"}</span> : (r[c.k] ?? "—");
+
+    // Open a stored file (base64 data-URI or URL) in a viewer. Data-URIs are turned
+    // into a blob URL so the browser/WebView opens them reliably (incl. PDFs/images).
+    const openFile = (value: string, name = "attachment") => {
+        try {
+            if (!value) return;
+            if (value.startsWith("data:")) {
+                const [meta, b64] = value.split(",");
+                const mime = (meta.match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+                const bin = atob(b64); const arr = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                const url = URL.createObjectURL(new Blob([arr], { type: mime }));
+                const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener";
+                a.download = name; a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 4000);
+            } else {
+                window.open(value, "_blank");
+            }
+        } catch { toast.error("Could not open file"); }
+    };
+    // Fields that hold a file (declared file type) or look like an attachment.
+    const fileFields = fields.filter(f => f.type === "file").map(f => f.k);
+    const isFileVal = (v: any) => typeof v === "string" && (v.startsWith("data:") || /^https?:\/\//.test(v));
+    const fmtVal = (f: Fld, v: any) => v == null || v === "" ? "—" : f.type === "money" ? ksh(v) : f.type === "date" ? new Date(v).toLocaleDateString("en-GB") : String(v);
 
     const print = () => {
         const head = columns.map(c => `<th>${c.label}</th>`).join("");
@@ -74,7 +99,7 @@ export default function ExpCrud({
                                 <tr key={r._id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                     {numberLabel && <td className="px-4 py-3 font-bold text-slate-700">{r.number || "—"}</td>}
                                     {columns.map(c => <td key={c.k} className="px-4 py-3 text-slate-600">{cell(r, c)}</td>)}
-                                    <td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => openEdit(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-[#B45309] flex items-center justify-center"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
+                                    <td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => setViewRow(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-400 hover:text-sky-600 flex items-center justify-center" title="View"><Eye className="w-3.5 h-3.5" /></button><button onClick={() => openEdit(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-[#B45309] flex items-center justify-center" title="Edit"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
                                 </tr>
                             ))}
                             {filtered.length === 0 && <tr><td colSpan={columns.length + 2} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">No records</td></tr>}
@@ -109,6 +134,57 @@ export default function ExpCrud({
                     </div>
                 </div>
             )}
+
+            {/* View (read-only) details, with viewable attachments */}
+            {viewRow && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setViewRow(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="font-black text-slate-800">{title} — {viewRow.number || "Details"}</h2>
+                            <button onClick={() => setViewRow(null)}><X className="w-4 h-4 text-slate-500" /></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                            {numberLabel && (
+                                <Detail label={numberLabel} value={viewRow.number || "—"} />
+                            )}
+                            {fields.map(f => {
+                                const v = viewRow[f.k];
+                                const isFile = fileFields.includes(f.k) || isFileVal(v);
+                                return (
+                                    <div key={f.k} className={f.type === "textarea" || isFile ? "col-span-2" : ""}>
+                                        <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">{f.label}</span>
+                                        {isFile && isFileVal(v) ? (
+                                            <button onClick={() => openFile(v, viewRow[`${f.k}Name`] || f.label)} className="mt-1 inline-flex items-center gap-1.5 bg-sky-50 text-sky-700 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-sky-100">
+                                                <Paperclip className="w-3.5 h-3.5" /> {viewRow[`${f.k}Name`] || "Open attachment"}
+                                            </button>
+                                        ) : (
+                                            <span className="text-sm font-bold text-slate-700 break-words whitespace-pre-wrap">{fmtVal(f, v)}</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {/* Any extra attachment-looking fields not declared in `fields` */}
+                            {Object.keys(viewRow).filter(k => !fields.some(f => f.k === k) && !["_id", "createdAt", "updatedAt", "deletedAt", "number", "__v"].includes(k) && isFileVal(viewRow[k])).map(k => (
+                                <div key={k} className="col-span-2">
+                                    <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">{k}</span>
+                                    <button onClick={() => openFile(viewRow[k], viewRow[`${k}Name`] || k)} className="mt-1 inline-flex items-center gap-1.5 bg-sky-50 text-sky-700 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-sky-100">
+                                        <Paperclip className="w-3.5 h-3.5" /> {viewRow[`${k}Name`] || "Open attachment"}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-2 mt-6">
+                            <button onClick={() => setViewRow(null)} className="flex-1 h-10 border border-slate-200 rounded-xl text-sm font-bold text-slate-600">Close</button>
+                            <button onClick={() => { const r = viewRow; setViewRow(null); openEdit(r); }} className="flex-1 h-10 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2" style={{ background: ACCENT }}><Pencil className="w-4 h-4" /> Edit</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
+}
+
+function Detail({ label, value }: { label: string; value: any }) {
+    return <div><span className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">{label}</span><span className="text-sm font-bold text-slate-700">{value}</span></div>;
 }

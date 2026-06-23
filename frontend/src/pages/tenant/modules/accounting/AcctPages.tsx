@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, Plus, Trash2, X, CheckCircle2, Download, Printer, AlertTriangle } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, X, CheckCircle2, Download, Printer, AlertTriangle, Eye, Pencil, Paperclip } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { toast } from "sonner";
 import { acct, ksh, toCSV, download } from "./acctApi";
@@ -40,7 +40,20 @@ export function CrudPage({ collection, title, addLabel, fields, columns }: { col
     const qc = useQueryClient();
     const { data: rows = [], isLoading } = useQuery({ queryKey: ["acct", collection], queryFn: () => acct.list(collection) });
     const [open, setOpen] = useState(false); const [editId, setEditId] = useState<string | null>(null); const [form, setForm] = useState<Record<string, any>>({}); const [saving, setSaving] = useState(false);
+    const [viewRow, setViewRow] = useState<any | null>(null);
     const opts = (f: any) => (typeof f.options === "function" ? f.options() : f.options) || [];
+    const isFileVal = (v: any) => typeof v === "string" && (v.startsWith("data:") || /^https?:\/\//.test(v));
+    const fmtVal = (f: any, v: any) => v == null || v === "" ? "—" : f.type === "money" ? ksh(v) : f.type === "date" ? new Date(v).toLocaleDateString("en-GB") : String(v);
+    const openFile = (value: string, name = "attachment") => {
+        try {
+            if (!value) return;
+            if (value.startsWith("data:")) {
+                const [meta, b64] = value.split(","); const mime = (meta.match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+                const bin = atob(b64); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                const url = URL.createObjectURL(new Blob([arr], { type: mime })); const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+            } else window.open(value, "_blank");
+        } catch { toast.error("Could not open file"); }
+    };
     const save = async () => { setSaving(true); try { if (editId) await acct.update(collection, editId, form); else await acct.add(collection, form); toast.success(editId ? "Updated" : "Saved"); setOpen(false); qc.invalidateQueries({ queryKey: ["acct", collection] }); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } finally { setSaving(false); } };
     const del = async (id: string) => { if (!confirm("Delete?")) return; try { await acct.remove(collection, id); qc.invalidateQueries({ queryKey: ["acct", collection] }); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } };
     return (
@@ -49,11 +62,28 @@ export function CrudPage({ collection, title, addLabel, fields, columns }: { col
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
                 {isLoading ? <div className="py-12 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#047857]" /></div> : (
                     <table className="w-full text-sm"><thead><tr className="bg-slate-50 text-slate-400 text-[11px] uppercase">{columns.map(c => <th key={c.k} className="text-left px-4 py-3 font-black">{c.label}</th>)}<th className="px-4 py-3" /></tr></thead>
-                        <tbody>{rows.map((r: any) => <tr key={r._id} className="border-b border-slate-50"><>{columns.map(c => <td key={c.k} className="px-4 py-3 text-slate-600">{c.type === "money" ? ksh(r[c.k]) : (r[c.k] ?? "—")}</td>)}</><td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => { setEditId(r._id); setForm({ ...r }); setOpen(true); }} className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-[#047857] flex items-center justify-center text-xs">✎</button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button></div></td></tr>)}{rows.length === 0 && <tr><td colSpan={columns.length + 1} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">No records</td></tr>}</tbody>
+                        <tbody>{rows.map((r: any) => <tr key={r._id} className="border-b border-slate-50"><>{columns.map(c => <td key={c.k} className="px-4 py-3 text-slate-600">{c.type === "money" ? ksh(r[c.k]) : (r[c.k] ?? "—")}</td>)}</><td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => setViewRow(r)} className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-sky-600 flex items-center justify-center" title="View"><Eye className="w-3.5 h-3.5" /></button><button onClick={() => { setEditId(r._id); setForm({ ...r }); setOpen(true); }} className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-[#047857] flex items-center justify-center" title="Edit"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button></div></td></tr>)}{rows.length === 0 && <tr><td colSpan={columns.length + 1} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">No records</td></tr>}</tbody>
                     </table>
                 )}
             </div>
             {open && <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} /><div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between mb-4"><h2 className="font-black text-slate-800">{editId ? "Edit" : addLabel}</h2><button onClick={() => setOpen(false)}><X className="w-4 h-4 text-slate-500" /></button></div><div className="grid grid-cols-2 gap-3">{fields.map(f => <div key={f.k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{f.label}</label>{f.type === "select" ? <select value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white"><option value="">Select…</option>{opts(f).map((o: string) => <option key={o}>{o}</option>)}</select> : <input type={f.type === "number" || f.type === "money" ? "number" : f.type === "date" ? "date" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: (f.type === "number" || f.type === "money") ? Number(e.target.value) : e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#047857]" />}</div>)}</div><div className="flex gap-2 mt-5"><button onClick={() => setOpen(false)} className="flex-1 h-10 border border-slate-200 rounded-xl text-sm font-bold text-slate-600">Cancel</button><button onClick={save} disabled={saving} className="flex-1 h-10 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50" style={{ background: ACCENT }}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button></div></div></div>}
+
+            {viewRow && <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/40" onClick={() => setViewRow(null)} /><div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4"><h2 className="font-black text-slate-800">{title} — Details</h2><button onClick={() => setViewRow(null)}><X className="w-4 h-4 text-slate-500" /></button></div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    {fields.map(f => { const v = viewRow[f.k]; return (
+                        <div key={f.k} className={isFileVal(v) ? "col-span-2" : ""}>
+                            <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">{f.label}</span>
+                            {isFileVal(v) ? <button onClick={() => openFile(v, viewRow[`${f.k}Name`] || f.label)} className="mt-1 inline-flex items-center gap-1.5 bg-sky-50 text-sky-700 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-sky-100"><Paperclip className="w-3.5 h-3.5" /> {viewRow[`${f.k}Name`] || "Open attachment"}</button>
+                            : <span className="text-sm font-bold text-slate-700 break-words whitespace-pre-wrap">{fmtVal(f, v)}</span>}
+                        </div>
+                    ); })}
+                    {Object.keys(viewRow).filter(k => !fields.some(f => f.k === k) && !["_id", "createdAt", "updatedAt", "deletedAt", "number", "__v"].includes(k) && isFileVal(viewRow[k])).map(k => (
+                        <div key={k} className="col-span-2"><span className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">{k}</span><button onClick={() => openFile(viewRow[k], viewRow[`${k}Name`] || k)} className="mt-1 inline-flex items-center gap-1.5 bg-sky-50 text-sky-700 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-sky-100"><Paperclip className="w-3.5 h-3.5" /> {viewRow[`${k}Name`] || "Open attachment"}</button></div>
+                    ))}
+                </div>
+                <div className="flex gap-2 mt-6"><button onClick={() => setViewRow(null)} className="flex-1 h-10 border border-slate-200 rounded-xl text-sm font-bold text-slate-600">Close</button><button onClick={() => { const r = viewRow; setViewRow(null); setEditId(r._id); setForm({ ...r }); setOpen(true); }} className="flex-1 h-10 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2" style={{ background: ACCENT }}><Pencil className="w-4 h-4" /> Edit</button></div>
+            </div></div>}
         </div>
     );
 }
