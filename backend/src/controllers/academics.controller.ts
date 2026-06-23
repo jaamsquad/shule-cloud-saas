@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { syncParentToStudents, syncStudentToParents } from '../services/parent-student-sync.service';
+import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -53,7 +54,13 @@ export const bulkCreate = (collectionName: string) => async (req: Request, res: 
 export const getItem = (collectionName: string) => async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const item = await db.collection(collectionName).findOne({ _id: new ObjectId(req.params.id) });
+        let q: any = { _id: new ObjectId(req.params.id) };
+        // Enforce data-access scope on direct fetches too (no URL-guessing around it).
+        if (collectionName === 'students' || collectionName === 'staff') {
+            const scope = await resolveScope(req, db);
+            q = mergeFilter(q, scopeForCollection(collectionName, scope));
+        }
+        const item = await db.collection(collectionName).findOne(q);
         if (!item) return res.status(404).json({ message: 'Item not found' });
         res.json(item);
     } catch (error: any) {
@@ -120,7 +127,15 @@ export const getItems = (collectionName: string) => async (req: Request, res: Re
             }
         });
 
-        const items = await db.collection(collectionName).find(query).toArray();
+        // Data Access Control: scope students/staff to what this user may see.
+        // Computed server-side from the authenticated user — clients can't widen it.
+        let finalQuery = query;
+        if (collectionName === 'students' || collectionName === 'staff') {
+            const scope = await resolveScope(req, db);
+            finalQuery = mergeFilter(query, scopeForCollection(collectionName, scope));
+        }
+
+        const items = await db.collection(collectionName).find(finalQuery).toArray();
         res.json(items);
     } catch (error: any) {
         console.error(`[Controller] Error fetching ${collectionName}:`, error.message);
@@ -165,6 +180,16 @@ export const updateItem = (collectionName: string) => async (req: Request, res: 
         // Two-way parent ↔ student sync on save.
         if (collectionName === 'parents') { const p = await db.collection('parents').findOne({ _id: new ObjectId(id) }); if (p) syncParentToStudents(db, p).catch(() => {}); }
         if (collectionName === 'students') { const s = await db.collection('students').findOne({ _id: new ObjectId(id) }); if (s) syncStudentToParents(db, id, s).catch(() => {}); }
+        // Audit data-access / reporting-officer changes (Data Access Control logging).
+        if (collectionName === 'staff' && (req.body.dataAccess !== undefined || req.body.reportsTo !== undefined)) {
+            const actor = (req as any).tenantContext?.user || {};
+            await db.collection('permission_logs').insertOne({
+                userId: id, changedBy: actor.staffId || actor.name || 'admin', changedByName: actor.name || 'Administrator',
+                action: req.body.dataAccess !== undefined ? 'update_data_access' : 'change_reporting_officer',
+                dataAccess: req.body.dataAccess ?? null, reportsTo: req.body.reportsTo ?? null,
+                ip: req.ip || req.headers['x-forwarded-for'] || '', createdAt: new Date(),
+            }).catch(() => {});
+        }
         res.json({ message: 'Item updated' });
     } catch (error) {
         res.status(500).json({ message: 'Error updating item', error });

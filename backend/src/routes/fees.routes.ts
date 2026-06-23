@@ -3,6 +3,7 @@ import { getMetaDb } from '../lib/mongodb';
 import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
+import { accessibleStudentIds } from '../lib/dataScope';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Build a fee-invoice email (inline-styled HTML for email clients).
@@ -2139,6 +2140,10 @@ router.get('/schools/:sid/fees/defaulters', async (req: Request, res: Response) 
                 status: days_overdue > 0 ? 'OVERDUE' : doc.status
             };
         }));
+
+        // Data Access Control: drop defaulters whose student is outside this user's scope.
+        const allowedIds = await accessibleStudentIds(req, db);
+        if (allowedIds) defaulters = defaulters.filter(d => allowedIds.has(String(d.student_id)));
 
         if (min_days_overdue) {
             const days = parseInt(min_days_overdue as string) || 0;

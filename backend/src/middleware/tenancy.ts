@@ -9,6 +9,7 @@ export interface TenantContext {
     tenantSubdomain: string;
     databaseName: string;   // e.g. "egertondb"
     subscription: any | null;
+    user?: { staffId: string | null; role: string; name: string } | null;
 }
 
 declare global {
@@ -114,6 +115,7 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
         //   2. tenantId (always set) — compare against this school's tenant._id
         // Either mismatch means the token was issued by a different school → 403.
         const authHeader = (req as any).headers.authorization;
+        let decodedUser: any = null;
         if (authHeader?.startsWith('Bearer ')) {
             try {
                 const jwtLib = require('jsonwebtoken');
@@ -121,6 +123,7 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
                     authHeader.split(' ')[1],
                     process.env.JWT_SECRET || 'secret'
                 );
+                decodedUser = decoded;
 
                 let blocked = false;
                 let reason  = '';
@@ -166,6 +169,12 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
             tenantSubdomain: subdomain,
             databaseName,
             subscription,
+            // The authenticated user (if any) — drives data-access scoping downstream.
+            user: decodedUser ? {
+                staffId: decodedUser.staffId || null,
+                role: decodedUser.role || '',
+                name: decodedUser.name || '',
+            } : null,
         };
 
         console.log(`[Tenancy] Institution: "${subdomain}" → DB: "${databaseName}"`);

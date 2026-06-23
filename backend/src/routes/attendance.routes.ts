@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
+import { resolveScope, mergeFilter } from '../lib/dataScope';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -48,17 +49,20 @@ router.get('/schools/:sid/attendance/students', async (req: Request, res: Respon
 
         const db = getRequestDb(req);
 
-        // Find students in class
-        const students = await db.collection('students').find({
+        // Data Access Control: only students this user may see.
+        const scope = await resolveScope(req, db);
+        const classFilter = {
             $or: [
                 { classId: class_id },
                 { studentClass: class_id },
                 { 'class._id': class_id }
             ]
-        }).toArray();
+        };
+        // Find students in class
+        const students = await db.collection('students').find(mergeFilter(classFilter, scope.studentFilter)).toArray();
 
-        // If no students found by exact ID, fallback to finding all students to prevent empty UI
-        const activeStudents = students.length > 0 ? students : await db.collection('students').find({}).toArray();
+        // If no students found by exact ID, fallback to all (still scoped) to prevent empty UI
+        const activeStudents = students.length > 0 ? students : await db.collection('students').find(scope.isAdmin ? {} : scope.studentFilter).toArray();
 
         // Fetch attendance records for this date and class
         const query: any = { schoolId, classId: class_id, date: date as string };

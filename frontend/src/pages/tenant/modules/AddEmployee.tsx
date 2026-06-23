@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import api from "@/lib/api";
+import DataAccessSection from "./DataAccessSection";
 import { toast } from "sonner";
 import { SCHOOL_ROLES, SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
 import { groupDashboardOptions } from "@/components/AppSidebar";
@@ -70,6 +71,7 @@ export default function AddEmployee() {
         roles: [] as string[], portalAccess: "both", landingPage: "",
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
         department: "", reportsTo: "",
+        dataAccess: { studentScope: "all", staffScope: "all" } as any,
         kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: ""
     });
 
@@ -126,6 +128,7 @@ export default function AddEmployee() {
             specializedSubjects: existingStaff.specializedSubjects || [],
             department:          existingStaff.department || "",
             reportsTo:           existingStaff.reportsTo ? String(existingStaff.reportsTo) : "",
+            dataAccess:          existingStaff.dataAccess || { studentScope: "all", staffScope: "all" },
             experience:          existingStaff.experience || "",
             nationalId:          existingStaff.nationalId || "",
             religion:            existingStaff.religion || "",
@@ -565,6 +568,10 @@ export default function AddEmployee() {
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                    <div className="border border-[#5C67F2]/20 rounded-2xl p-4 bg-[#5C67F2]/[0.03]">
+                                        <label className="block text-xs font-black text-[#5C67F2] uppercase tracking-wide mb-3">Data Access (which students & staff this user can see)</label>
+                                        <DataAccessSection value={formData.dataAccess} onChange={(da) => setFormData(p => ({ ...p, dataAccess: da }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 mb-2">Default Landing Page</label>
