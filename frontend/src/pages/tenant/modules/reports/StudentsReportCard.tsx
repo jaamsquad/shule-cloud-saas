@@ -151,10 +151,10 @@ export default function StudentsReportCard() {
                                 <div class="grid-item"><span class="grid-label">Admission No.</span><span class="grid-value">${report.admNo}</span></div>
                                 <div class="grid-item"><span class="grid-label">Class / Grade</span><span class="grid-value">${report.className}</span></div>
                                 <div class="grid-item"><span class="grid-label">Academic Session</span><span class="grid-value">${report.term} ${report.year}</span></div>
-                                <div class="grid-item"><span class="grid-label">Class Population</span><span class="grid-value">35</span></div>
-                                <div class="grid-item"><span class="grid-label">Subjects on Offer</span><span class="grid-value">${report.subjects?.length || 10}</span></div>
-                                <div class="grid-item"><span class="grid-label">Average Mark</span><span class="grid-value">${report.gpa || '85.4'}%</span></div>
-                                <div class="grid-item"><span class="grid-label">Position</span><span class="grid-value">${report.rank || '3rd'}</span></div>
+                                <div class="grid-item"><span class="grid-label">Subjects on Offer</span><span class="grid-value">${report.subjects?.length || 0}</span></div>
+                                <div class="grid-item"><span class="grid-label">Total Marks</span><span class="grid-value">${report.totalMarks ?? 0}</span></div>
+                                <div class="grid-item"><span class="grid-label">Average Mark</span><span class="grid-value">${report.meanScore ?? 0}%</span></div>
+                                <div class="grid-item"><span class="grid-label">Position</span><span class="grid-value">${report.rank || '—'}</span></div>
                             </div>
                         </div>
 
@@ -537,8 +537,8 @@ export default function StudentsReportCard() {
 
                         <div class="summary-banner">
                             <div>Overall Marks: <span class="highlight">${report.totalMarks} / ${report.subjects?.length ? report.subjects.length * 100 : 700}</span></div>
-                            <div>Percentage: <span class="highlight">${report.gpa || '85.4'}%</span></div>
-                            <div>Position: <span class="highlight">${report.rank || '2nd'}</span></div>
+                            <div>Percentage: <span class="highlight">${report.meanScore ?? 0}%</span></div>
+                            <div>Position: <span class="highlight">${report.rank || '—'}</span></div>
                         </div>
 
                         <div class="remarks-bar">
@@ -648,7 +648,7 @@ export default function StudentsReportCard() {
                                             <td style="padding: 12px; text-align: left; color: #4F46E5;">PERCENTAGE / GPA</td>
                                             <td style="text-align: center; padding: 12px;">-</td>
                                             <td style="text-align: center; padding: 12px;">-</td>
-                                            <td style="text-align: center; padding: 12px; font-size: 14px; color: #4F46E5;">${report.gpa || '85.4'}%</td>
+                                            <td style="text-align: center; padding: 12px; font-size: 14px; color: #4F46E5;">${report.meanScore ?? 0}%</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -762,6 +762,13 @@ export default function StudentsReportCard() {
                 </div>
             </div>
 
+            {/* Prompt to pick an exam — marks/mean/rank are exam-specific */}
+            {!selectedExam && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl px-5 py-3 text-sm text-amber-700 font-bold">
+                    Select an exam above to load real marks, mean scores and class ranks. Without an exam, no scores are shown.
+                </div>
+            )}
+
             {/* Content List */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <Table>
@@ -790,7 +797,7 @@ export default function StudentsReportCard() {
                                     <TableCell className="px-6 text-xs font-semibold text-indigo-600">{r.examName}</TableCell>
                                     <TableCell className="px-6 text-center">
                                         <Badge className="bg-indigo-50 text-indigo-700 border border-indigo-200 font-black text-xs px-2.5 py-1 rounded-lg shadow-none">
-                                            {r.gpa}
+                                            {r.hasMarks ? `${r.meanScore}% · ${r.gpa}` : "No marks"}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="px-6 text-center font-bold text-slate-700 text-xs">{r.rank}</TableCell>

@@ -21,10 +21,12 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const activeYear = year || currentPeriodObj?.academicYear || new Date().getFullYear();
 
         const students = await db.collection('students').find(query).toArray();
-        const marks = await db.collection('marks').find({ examId: exam_id }).toArray();
-        const exams = await db.collection('exams').find({ _id: new ObjectId(exam_id as string) }).toArray();
+        // Only load marks for the chosen exam. Without an exam there's nothing to grade.
+        const marks = exam_id ? await db.collection('marks').find({ examId: String(exam_id) }).toArray() : [];
+        let examDoc: any = null;
+        if (exam_id) { try { examDoc = await db.collection('exams').findOne({ _id: new ObjectId(exam_id as string) }); } catch { /* */ } }
         const allSubjects = await db.collection('subjects').find({}).toArray();
-        const examName = exams.length > 0 ? exams[0].name : "Term Examination";
+        const examName = examDoc?.name || "—";
 
         const reportCards = students.map((student: any) => {
             const studentMarks = marks.filter((m: any) => m.studentId === student._id.toString() || m.studentId === student.admNo || m.studentId === student.registrationNo);
@@ -87,38 +89,55 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 });
             }
 
-            const activeSubjectsCount = subjectsList.filter(s => s.scoreDisplay !== "-").length;
-            const gpa = activeSubjectsCount > 0 ? (totalMarks / activeSubjectsCount / 20).toFixed(2) : "0.00";
+            // Real mean = average of the subjects that actually have a mark.
+            const gradedCount = subjectsList.filter(s => s.scoreDisplay !== "-").length;
+            const meanScore = gradedCount > 0 ? totalMarks / gradedCount : 0;     // 0–100 average %
+            const gpa = gradedCount > 0 ? (meanScore / 20).toFixed(2) : "0.00";  // simple 4.0-style scale
 
             return {
                 studentId: student._id,
                 studentName: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || "Student",
                 admNo: student.admNo || student.registrationNo || `BS${student._id.toString().slice(-4).toUpperCase()}`,
-                photo: student.avatar || student.photo || student.studentPhoto || student.image || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
+                photo: student.avatar || student.photo || student.studentPhoto || student.image || "",
                 className: studentClassName,
                 examName,
                 term: activeTerm,
                 year: activeYear,
-                subjects: subjectsList.length > 0 ? subjectsList : [
-                    { subjectName: "Mathematics", score: 85, scoreDisplay: 85, grade: "A", remarks: "Excellent" },
-                    { subjectName: "English Language", score: 78, scoreDisplay: 78, grade: "B", remarks: "Good effort" },
-                    { subjectName: "Science", score: 92, scoreDisplay: 92, grade: "A", remarks: "Outstanding" },
-                    { subjectName: "Social Studies", score: 65, scoreDisplay: 65, grade: "C", remarks: "Satisfactory" }
-                ],
-                totalMarks: subjectsList.length > 0 ? totalMarks : 320,
-                gpa: subjectsList.length > 0 ? gpa : "3.85",
-                rank: "1st out of 45",
-                attendanceSummary: {
-                    presentDays: 58,
-                    totalDays: 60,
-                    percentage: "96.7%"
-                },
-                teacherRemarks: "An outstanding student with exemplary behavior and dedication.",
-                principalRemarks: "Promoted to the next academic level. Keep up the excellent work."
+                subjects: subjectsList,
+                subjectsCount: subjectsList.length,
+                gradedCount,
+                totalMarks,
+                meanScore: Number(meanScore.toFixed(1)),
+                gpa,
+                hasMarks: gradedCount > 0,
+                rank: "—",  // filled in by the ranking pass below
+                rankNum: 0,
+                attendanceSummary: { presentDays: 0, totalDays: 0, percentage: "—" },
+                teacherRemarks: "",
+                principalRemarks: "",
             };
         });
 
-        res.json({ data: reportCards });
+        // ── Rank each student within their CLASS by total marks (graded only). ──
+        const byClass: Record<string, any[]> = {};
+        for (const rc of reportCards) {
+            const key = rc.className || "General";
+            (byClass[key] = byClass[key] || []).push(rc);
+        }
+        for (const key of Object.keys(byClass)) {
+            const graded = byClass[key].filter(r => r.hasMarks).sort((a, b) => b.totalMarks - a.totalMarks);
+            const size = graded.length;
+            graded.forEach((r, i) => {
+                const pos = i + 1;
+                const suffix = pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th";
+                r.rankNum = pos;
+                r.rank = `${pos}${suffix} out of ${size}`;
+            });
+            // Ungraded students get no rank.
+            byClass[key].filter(r => !r.hasMarks).forEach(r => { r.rank = "—"; r.rankNum = 0; });
+        }
+
+        res.json({ data: reportCards, examSelected: !!exam_id, examName });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
