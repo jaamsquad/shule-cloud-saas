@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Save, Printer, Download, Clock, CheckCircle2, FileText, Truck, PackageCheck, Wallet, Users, FileSignature, Search, AlertTriangle } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Loader2, Save, Printer, Download, Clock, CheckCircle2, FileText, Truck, PackageCheck, Wallet, Users, FileSignature, Search, AlertTriangle, ShoppingCart } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
 import ExpCrud from "../expense/ExpCrud";
@@ -53,11 +53,30 @@ function SupplierPerformance() {
 }
 
 // ── Shared CRUD pages (reuse ExpCrud against shared collections) ──────────────
+function ConvertToPO({ row, refresh }: { row: any; refresh: () => void }) {
+    const convert = useMutation({
+        mutationFn: () => proc.convertToPO(row._id),
+        onSuccess: (d: any) => { toast.success(`Purchase Order ${d.poNumber} created`); refresh(); },
+        onError: (e: any) => toast.error(e?.response?.data?.message || "Could not convert"),
+    });
+    // Only offer it for an approved PR that hasn't already been converted.
+    const approved = String(row.status || "").toLowerCase() === "approved" && !row.poNumber;
+    if (row.poNumber) return <span className="text-[10px] font-black text-emerald-600 px-2">→ {row.poNumber}</span>;
+    if (!approved) return null;
+    return (
+        <button onClick={() => convert.mutate()} disabled={convert.isPending}
+            className="h-7 px-2.5 rounded-lg bg-[#0E7490] text-white text-[11px] font-bold flex items-center gap-1 disabled:opacity-50" title="Create Purchase Order from this request">
+            {convert.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingCart className="w-3.5 h-3.5" />} Convert to PO
+        </button>
+    );
+}
+
 export function RequestsPage() {
     const departments = useDepartments();
     return <ExpCrud collection="procurement_pr" title="Purchase Requests" addLabel="New Request" numberLabel="Request No"
         fields={[{ k: "date", label: "Request Date", type: "date" }, { k: "department", label: "Department", type: "select", options: () => departments, required: true }, { k: "requestedBy", label: "Requested By" }, { k: "priority", label: "Priority", type: "select", options: ["Low", "Medium", "High", "Urgent"] }, { k: "requiredDate", label: "Required Date", type: "date" }, { k: "budgetCode", label: "Budget Code" }, { k: "items", label: "Items Requested", type: "textarea" }, { k: "quantity", label: "Quantity", type: "number" }, { k: "estimatedCost", label: "Estimated Total Cost", type: "money" }, { k: "justification", label: "Justification", type: "textarea" }, { k: "status", label: "Status", type: "select", options: ["Draft", "Submitted", "Approved", "Purchase Order", "Goods Received", "Invoice", "Payment", "Completed"] }, { k: "attachment", label: "Attachment", type: "file" }]}
-        columns={[{ k: "date", label: "Date" }, { k: "department", label: "Department" }, { k: "estimatedCost", label: "Est. Cost", type: "money" }, { k: "priority", label: "Priority", type: "badge" }, { k: "status", label: "Status", type: "badge" }]} />;
+        columns={[{ k: "date", label: "Date" }, { k: "department", label: "Department" }, { k: "estimatedCost", label: "Est. Cost", type: "money" }, { k: "priority", label: "Priority", type: "badge" }, { k: "status", label: "Status", type: "badge" }]}
+        rowAction={(row, refresh) => <ConvertToPO row={row} refresh={refresh} />} />;
 }
 export function OrdersPage() {
     const suppliers = useSuppliers();

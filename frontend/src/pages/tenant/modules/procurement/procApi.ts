@@ -9,6 +9,7 @@ export const proc = {
     settings: () => api.get("/procurement/settings").then(r => r.data),
     setSettings: (b: any) => api.patch("/procurement/settings", b).then(r => r.data),
     list: (col: string) => api.get(`/${col}`).then(r => r.data),
+    convertToPO: (prId: string) => api.post(`/procurement_pr/${prId}/convert-to-po`).then(r => r.data),
 };
 export const ksh = (n: any) => `KSh ${(Number(n) || 0).toLocaleString()}`;
 export function toCSV(headers: string[], rows: any[][]): string { const esc = (v: any) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }; return [headers.join(","), ...rows.map(r => r.map(esc).join(","))].join("\n"); }

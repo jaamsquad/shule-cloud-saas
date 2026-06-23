@@ -12,10 +12,11 @@ const ACCENT = "#B45309";
 
 // Reusable searchable list + add/edit modal backed by a soft-delete collection.
 export default function ExpCrud({
-    collection, title, fields, columns, addLabel = "Add", searchKeys, totalKey, numberLabel, printable,
+    collection, title, fields, columns, addLabel = "Add", searchKeys, totalKey, numberLabel, printable, rowAction,
 }: {
     collection: string; title: string; fields: Fld[]; columns: Col[]; addLabel?: string;
     searchKeys?: string[]; totalKey?: string; numberLabel?: string; printable?: boolean;
+    rowAction?: (row: any, refresh: () => void) => React.ReactNode;
 }) {
     const qc = useQueryClient();
     const school = useSchoolBrand();
@@ -99,7 +100,7 @@ export default function ExpCrud({
                                 <tr key={r._id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                     {numberLabel && <td className="px-4 py-3 font-bold text-slate-700">{r.number || "—"}</td>}
                                     {columns.map(c => <td key={c.k} className="px-4 py-3 text-slate-600">{cell(r, c)}</td>)}
-                                    <td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => setViewRow(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-400 hover:text-sky-600 flex items-center justify-center" title="View"><Eye className="w-3.5 h-3.5" /></button><button onClick={() => openEdit(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-[#B45309] flex items-center justify-center" title="Edit"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
+                                    <td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end items-center">{rowAction && rowAction(r, () => qc.invalidateQueries({ queryKey: ["exp", collection] }))}<button onClick={() => setViewRow(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-sky-50 text-slate-400 hover:text-sky-600 flex items-center justify-center" title="View"><Eye className="w-3.5 h-3.5" /></button><button onClick={() => openEdit(r)} className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-[#B45309] flex items-center justify-center" title="Edit"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 flex items-center justify-center" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
                                 </tr>
                             ))}
                             {filtered.length === 0 && <tr><td colSpan={columns.length + 2} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">No records</td></tr>}

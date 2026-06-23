@@ -51,6 +51,31 @@ crud('procurement_po', 'PO');
 crud('procurement_quotations', 'RFQ');
 crud('procurement_contracts', 'CON');
 crud('procurement_tenders', 'TND');
+// Convert an (approved) Purchase Request into a Purchase Order in one click.
+router.post('/procurement_pr/:id/convert-to-po', async (req, res) => {
+    try {
+        const pr = await db(req).collection('procurement_pr').findOne({ _id: oid(req.params.id)! });
+        if (!pr) return res.status(404).json({ message: 'Purchase request not found' });
+        if (pr.poNumber) return res.status(409).json({ message: `Already converted to ${pr.poNumber}` });
+        const poNumber = await nextNumber(req, 'procurement_po', 'PO');
+        const po = {
+            number: poNumber, sourcePrId: String(pr._id), sourcePrNumber: pr.number,
+            date: new Date().toISOString().slice(0, 10),
+            supplier: pr.supplier || req.body?.supplier || '',
+            department: pr.department || '', items: pr.items || pr.title || '',
+            quantity: num(pr.quantity), unitPrice: 0,
+            totalCost: num(pr.estimatedCost), taxes: 0,
+            deliveryAddress: '', paymentTerms: '', status: 'Draft',
+            createdBy: user(req), createdAt: new Date(),
+        };
+        const r = await db(req).collection('procurement_po').insertOne(po);
+        // Link the PR + advance its status so it's clear it's been ordered.
+        await db(req).collection('procurement_pr').updateOne({ _id: pr._id }, { $set: { poNumber, poId: String(r.insertedId), status: 'Purchase Order', updatedAt: new Date() } });
+        await audit(req, 'convert_pr_to_po', String(pr._id), { poNumber });
+        res.status(201).json({ ok: true, poNumber, poId: r.insertedId });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Goods received → bump inventory (pos_products) on create.
 crud('procurement_grn', 'GRN', async (req, doc) => {
     try {
