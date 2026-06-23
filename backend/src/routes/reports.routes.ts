@@ -13,7 +13,11 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const { class_id, exam_id, term, year, student_id } = req.query;
 
         const query: any = {};
-        if (class_id) query.studentClass = class_id;
+        // The class dropdown sends the class NAME (e.g. "FORM 1 East"); students may
+        // store it under any of these fields, so match broadly.
+        if (class_id) query.$or = [
+            { studentClass: class_id }, { className: class_id }, { currentClass: class_id }, { classId: class_id },
+        ];
         if (student_id) query._id = new ObjectId(student_id as string);
 
         const currentPeriodObj = await db.collection('periods').findOne({ isCurrent: true });
@@ -885,11 +889,15 @@ router.get('/reports/shared/classes', async (req: Request, res: Response) => {
 router.get('/reports/shared/exams', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const exams = await db.collection('exams').find({}).toArray();
-        const data = exams.length > 0 ? exams : [
-            { _id: new ObjectId(), name: "Mid Term Exam Term 1 2026", term: "Term 1", academicYear: "2026" },
-            { _id: new ObjectId(), name: "End Term Exam Term 1 2026", term: "Term 1", academicYear: "2026" }
-        ];
+        const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
+        // Exams are stored with `examName` (not `name`), so the dropdown was blank.
+        // Normalize to always provide a display `name`.
+        const data = exams.map((e: any) => {
+            const label = e.examName || e.name || e.title
+                || [e.type, e.term, e.academicYear].filter(Boolean).join(' ')
+                || 'Exam';
+            return { ...e, _id: e._id, name: label, examName: e.examName || label };
+        });
         res.json(data);
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
