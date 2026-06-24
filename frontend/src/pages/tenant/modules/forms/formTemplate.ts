@@ -35,9 +35,25 @@ export interface FormTemplate {
     showPhoto?: boolean;     // header passport photo box
     footerNote?: string;
     fields: FormField[];
+    layout?: FormLayout;     // page positioning / spacing controls
     createdAt?: string;
     updatedAt?: string;
 }
+
+export interface FormLayout {
+    headerAlign?: "left" | "center" | "right";   // school name/contacts alignment
+    logoPosition?: "left" | "center" | "right";  // where the logo sits in the header
+    photoPosition?: "left" | "right";            // which side the header photo box sits
+    margin?: number;                              // page margin in mm (all sides)
+    columnGap?: number;                           // horizontal gap between field columns (px)
+    rowGap?: number;                              // vertical gap between rows (px)
+    columns?: 1 | 2;                              // field grid columns
+}
+
+export const DEFAULT_LAYOUT: Required<FormLayout> = {
+    headerAlign: "left", logoPosition: "left", photoPosition: "right",
+    margin: 14, columnGap: 18, rowGap: 12, columns: 2,
+};
 
 export const FIELD_LABELS: Record<FieldType, string> = {
     text: "Short answer line",
@@ -101,11 +117,33 @@ function renderField(f: FormField): string {
 
 /** Build the full A4 HTML document for a template, with the school header defaults. */
 export function renderFormHtml(t: FormTemplate, school: SchoolBrand): string {
+    const L = { ...DEFAULT_LAYOUT, ...(t.layout || {}) };
     const contacts = [school.address, school.phone, school.email].filter(Boolean).map(esc).join(" &middot; ");
-    const logo = school.logo ? `<img src="${school.logo}" style="height:60px;width:auto;object-fit:contain" />` : "";
+    const logoImg = school.logo ? `<img src="${school.logo}" style="height:60px;width:auto;object-fit:contain" />` : "";
     const photoBox = t.showPhoto
-        ? `<div style="width:90px;height:108px;border:1.4px dashed #94a3b8;border-radius:4px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;color:#94a3b8;font-weight:700">AFFIX<br/>PHOTO</div>`
+        ? `<div style="width:90px;height:108px;border:1.4px dashed #94a3b8;border-radius:4px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:9px;color:#94a3b8;font-weight:700;flex:0 0 auto">AFFIX<br/>PHOTO</div>`
         : "";
+
+    // School-info block, aligned per layout.
+    const infoBlock = `<div style="flex:1;text-align:${L.headerAlign}">
+        <h1>${esc(school.name)}</h1>
+        ${contacts ? `<div class="sub">${contacts}</div>` : ""}
+      </div>`;
+    // Logo cell only when not centered (centered logo is placed inside the info flow).
+    const logoCell = logoImg ? `<div style="flex:0 0 auto">${logoImg}</div>` : "";
+
+    // Header layout: order logo / info / photo per the chosen positions.
+    let headerInner: string;
+    if (L.logoPosition === "center") {
+        headerInner = `<div style="flex:1;text-align:center">${logoImg}<h1>${esc(school.name)}</h1>${contacts ? `<div class="sub">${contacts}</div>` : ""}</div>`;
+        headerInner = L.photoPosition === "left" ? `${photoBox}${headerInner}` : `${headerInner}${photoBox}`;
+    } else {
+        const left = L.logoPosition === "left" ? logoCell : "";
+        const right = L.logoPosition === "right" ? logoCell : "";
+        const parts = [left, infoBlock, right].filter(Boolean);
+        headerInner = L.photoPosition === "left" ? `${photoBox}${parts.join("")}` : `${parts.join("")}${photoBox}`;
+    }
+
     const meta = [
         t.reference ? `Ref: ${esc(t.reference)}` : "",
         t.version ? `Version: ${esc(t.version)}` : "",
@@ -113,11 +151,12 @@ export function renderFormHtml(t: FormTemplate, school: SchoolBrand): string {
         `Issued: ${new Date().toLocaleDateString("en-GB")}`,
     ].filter(Boolean).join(" &nbsp;|&nbsp; ");
 
-    const body = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 18px">${t.fields.map(renderField).join("")}</div>`;
+    const gridCols = L.columns === 1 ? "1fr" : "1fr 1fr";
+    const body = `<div style="display:grid;grid-template-columns:${gridCols};gap:${L.rowGap}px ${L.columnGap}px">${t.fields.map(renderField).join("")}</div>`;
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(t.title || t.name)}</title>
     <style>
-      @page { size: A4 portrait; margin: 14mm; }
+      @page { size: A4 portrait; margin: ${L.margin}mm; }
       *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; box-sizing:border-box; }
       body{ font-family: Arial, Helvetica, sans-serif; color:#1e293b; margin:0; font-size:11px; }
       .hdr{ display:flex; align-items:flex-start; gap:14px; border-bottom:2.5px solid #1e293b; padding-bottom:10px; }
@@ -125,17 +164,10 @@ export function renderFormHtml(t: FormTemplate, school: SchoolBrand): string {
       .hdr .sub{ font-size:10px; color:#64748b; margin-top:2px; }
       .title{ text-align:center; font-size:15px; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin:14px 0 4px; }
       .meta{ text-align:center; font-size:9.5px; color:#64748b; margin-bottom:14px; }
-      .ft{ position:fixed; bottom:6mm; left:14mm; right:14mm; display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:4px; }
+      .ft{ position:fixed; bottom:6mm; left:${L.margin}mm; right:${L.margin}mm; display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:4px; }
     </style></head>
     <body>
-      <div class="hdr">
-        ${logo ? `<div>${logo}</div>` : ""}
-        <div style="flex:1">
-          <h1>${esc(school.name)}</h1>
-          ${contacts ? `<div class="sub">${contacts}</div>` : ""}
-        </div>
-        ${photoBox}
-      </div>
+      <div class="hdr">${headerInner}</div>
       <div class="title">${esc(t.title || t.name)}</div>
       ${meta ? `<div class="meta">${meta}</div>` : ""}
       ${t.description ? `<div style="font-size:10px;color:#475569;margin-bottom:12px">${esc(t.description)}</div>` : ""}

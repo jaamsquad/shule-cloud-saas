@@ -52,21 +52,7 @@ const CREATE_PATHS = new Set<string>([
 
 export const navItems: NavItem[] = [
   { label: "Dashboard", icon: Home, path: "/dashboard", moduleKey: "dashboard" },
-  { label: "General Settings", icon: Settings, moduleKey: "settings", children: [
-      { label: "Institute Profile", path: "/settings/profile" },
-      { label: "Learning Periods", path: "/academics/periods" },
-      { label: "Academic Term Settings", path: "/settings/term-settings" },
-      { label: "Fees Particulars", path: "/settings/fees-particulars" },
-      { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
-      { label: "Discount Type", path: "/settings/discount-type", locked: true },
-      { label: "Rules & Regulations", path: "/settings/rules" },
-      { label: "Marks Grading", path: "/settings/grading" },
-      { label: "Curriculum Settings", path: "/settings/curriculum" },
-      { label: "Report Card Templates", path: "/settings/report-templates" },
-      { label: "Theme & Language", path: "/settings/theme" },
-      { label: "Account Settings", path: "/settings/account" },
-      { label: "Log out", path: "/logout" },
-  ] },
+  
   {
     label: "Classes", icon: LayoutTemplate, moduleKey: "classes", children: [
       { label: "All Classes", path: "/classes" },
@@ -264,19 +250,7 @@ export const navItems: NavItem[] = [
       { label: "Meeting Management", path: "/secretary/meetings" },
       { label: "Secretary Reports", path: "/secretary/reports" },
   ] },
-  { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
-      { label: "Reports Center", path: "/reports" },
-      { label: "Students Report Card", path: "/reports/report-cards" },
-      { label: "Students Info Report", path: "/reports/students-info" },
-      { label: "Parents Info Report", path: "/reports/parents-info" },
-      { label: "Students Monthly Attendance", path: "/reports/attendance/monthly-students" },
-      { label: "Staff Monthly Attendance", path: "/reports/attendance/monthly-staff" },
-      { label: "Fee Collection Report", path: "/reports/fee-collection" },
-      { label: "Student Progress Report", path: "/reports/student-progress" },
-      { label: "Accounts Report", path: "/reports/accounts" },
-      { label: "Customised Reports", path: "/reports/custom" },
-      { label: "Blank Forms", path: "/blank-forms" },
-  ] },
+  
   { label: "NEMIS Assistant", icon: Landmark, moduleKey: "nemis", children: [
       { label: "Dashboard", path: "/nemis" },
       { label: "Student Validation", path: "/nemis/validation" },
@@ -332,11 +306,7 @@ export const navItems: NavItem[] = [
       { label: "Affective Report", path: "/behaviour/reports/affective" },
       { label: "Psychomotor Report", path: "/behaviour/reports/psychomotor" }
   ] },
-  { label: "Certificates", icon: Award, moduleKey: "certificates", children: [
-      { label: "Generate Certificate", path: "/certificates/generate" },
-      { label: "Saved Certificates", path: "/certificates/saved" },
-      { label: "Certificate Templates", path: "/certificates/templates" }
-  ] },
+  
   { label: "Hostel", icon: Building2, moduleKey: "hostel", children: [
       { label: "Dashboard", path: "/hostel/dashboard" },
       { label: "Rooms & Blocks", path: "/hostel/rooms" },
@@ -364,16 +334,7 @@ export const navItems: NavItem[] = [
       { label: "New Order", path: "/pos-admin/new-order" },
       { label: "All Orders", path: "/pos-admin/orders" },
   ] },
-  { label: "Communications", icon: MessageSquare, moduleKey: "communications", children: [
-      { label: "Announcements", path: "/communications/announcements" },
-      { label: "Bulk SMS", path: "/communications/sms" },
-      { label: "Email Broadcast", path: "/communications/email" },
-      { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },
-      { label: "WhatsApp Integration", path: "/communications/whatsapp-integration" },
-      { label: "Report Notifications", path: "/communications/notifications" },
-      { label: "Communication Settings", path: "/communications/preferences" },
-      { label: "Gateway Settings", path: "/integrations" },
-  ] },
+  
   { label: "Live Class & LMS", icon: Video, moduleKey: "live_class", children: [
       { label: "Live Classes", path: "/live-classes" },
       { label: "Live Class Settings", path: "/live-classes/settings" },
@@ -404,6 +365,49 @@ export const navItems: NavItem[] = [
   { label: "Class Tests", icon: FileText, moduleKey: "exams", children: [
       { label: "Manage Test Marks", path: "/tests/marks" },
       { label: "Test Result", path: "/tests/results" }
+  ] },
+  { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
+      { label: "Reports Center", path: "/reports" },
+      { label: "Students Report Card", path: "/reports/report-cards" },
+      { label: "Students Info Report", path: "/reports/students-info" },
+      { label: "Parents Info Report", path: "/reports/parents-info" },
+      { label: "Students Monthly Attendance", path: "/reports/attendance/monthly-students" },
+      { label: "Staff Monthly Attendance", path: "/reports/attendance/monthly-staff" },
+      { label: "Fee Collection Report", path: "/reports/fee-collection" },
+      { label: "Student Progress Report", path: "/reports/student-progress" },
+      { label: "Accounts Report", path: "/reports/accounts" },
+      { label: "Customised Reports", path: "/reports/custom" },
+      { label: "Blank Forms", path: "/blank-forms" },
+  ] },
+  { label: "Communications", icon: MessageSquare, moduleKey: "communications", children: [
+      { label: "Announcements", path: "/communications/announcements" },
+      { label: "Bulk SMS", path: "/communications/sms" },
+      { label: "Email Broadcast", path: "/communications/email" },
+      { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },
+      { label: "WhatsApp Integration", path: "/communications/whatsapp-integration" },
+      { label: "Report Notifications", path: "/communications/notifications" },
+      { label: "Communication Settings", path: "/communications/preferences" },
+      { label: "Gateway Settings", path: "/integrations" },
+  ] },
+  { label: "Certificates", icon: Award, moduleKey: "certificates", children: [
+      { label: "Generate Certificate", path: "/certificates/generate" },
+      { label: "Saved Certificates", path: "/certificates/saved" },
+      { label: "Certificate Templates", path: "/certificates/templates" }
+  ] },
+  { label: "General Settings", icon: Settings, moduleKey: "settings", children: [
+      { label: "Institute Profile", path: "/settings/profile" },
+      { label: "Learning Periods", path: "/academics/periods" },
+      { label: "Academic Term Settings", path: "/settings/term-settings" },
+      { label: "Fees Particulars", path: "/settings/fees-particulars" },
+      { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
+      { label: "Discount Type", path: "/settings/discount-type", locked: true },
+      { label: "Rules & Regulations", path: "/settings/rules" },
+      { label: "Marks Grading", path: "/settings/grading" },
+      { label: "Curriculum Settings", path: "/settings/curriculum" },
+      { label: "Report Card Templates", path: "/settings/report-templates" },
+      { label: "Theme & Language", path: "/settings/theme" },
+      { label: "Account Settings", path: "/settings/account" },
+      { label: "Log out", path: "/logout" },
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
       // Owner-gated via plan modules; Roles is always available (no planModule).

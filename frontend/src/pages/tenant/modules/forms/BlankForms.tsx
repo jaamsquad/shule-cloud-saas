@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
-import { FormTemplate, FormField, FieldType, FIELD_LABELS, newField, uid, renderFormHtml } from "./formTemplate";
+import { FormTemplate, FormField, FieldType, FormLayout, DEFAULT_LAYOUT, FIELD_LABELS, newField, uid, renderFormHtml } from "./formTemplate";
 
 const PURPLE = "#5C67F2";
 const ADD_TYPES: FieldType[] = ["section", "text", "date", "lines", "checkbox", "signature", "photo", "spacer"];
@@ -84,6 +84,8 @@ function Builder({ template, onClose, onSave, saving, addTypes, onPreview }: { t
     const addField = (type: FieldType) => setT(p => ({ ...p, fields: [...p.fields, newField(type)] }));
     const removeField = (id: string) => setT(p => ({ ...p, fields: p.fields.filter(f => f.id !== id) }));
     const move = (i: number, dir: -1 | 1) => setT(p => { const arr = [...p.fields]; const j = i + dir; if (j < 0 || j >= arr.length) return p; [arr[i], arr[j]] = [arr[j], arr[i]]; return { ...p, fields: arr }; });
+    const L = { ...DEFAULT_LAYOUT, ...(t.layout || {}) };
+    const setLayout = (patch: Partial<FormLayout>) => setT(p => ({ ...p, layout: { ...DEFAULT_LAYOUT, ...(p.layout || {}), ...patch } }));
 
     const canSave = t.name.trim() && t.fields.length > 0;
 
@@ -110,6 +112,42 @@ function Builder({ template, onClose, onSave, saving, addTypes, onPreview }: { t
                         <label className="flex items-center gap-2 text-sm font-bold text-slate-600 mt-6"><input type="checkbox" checked={!!t.showPhoto} onChange={e => set({ showPhoto: e.target.checked })} /> Header passport-photo box</label>
                     </div>
                     <Field label="Instructions / description (optional)"><textarea value={t.description || ""} onChange={e => set({ description: e.target.value })} rows={2} className="inp" /></Field>
+
+                    {/* Layout & spacing */}
+                    <div className="border border-slate-100 rounded-xl p-4 bg-slate-50/40">
+                        <h3 className="text-sm font-black text-slate-700 mb-3">Layout & Spacing</h3>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                            <Field label="School info align">
+                                <select value={L.headerAlign} onChange={e => setLayout({ headerAlign: e.target.value as any })} className="inp">
+                                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                                </select>
+                            </Field>
+                            <Field label="Logo position">
+                                <select value={L.logoPosition} onChange={e => setLayout({ logoPosition: e.target.value as any })} className="inp">
+                                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                                </select>
+                            </Field>
+                            <Field label="Photo box side">
+                                <select value={L.photoPosition} onChange={e => setLayout({ photoPosition: e.target.value as any })} className="inp">
+                                    <option value="left">Left</option><option value="right">Right</option>
+                                </select>
+                            </Field>
+                            <Field label="Field columns">
+                                <select value={L.columns} onChange={e => setLayout({ columns: Number(e.target.value) as 1 | 2 })} className="inp">
+                                    <option value={1}>Single column</option><option value={2}>Two columns</option>
+                                </select>
+                            </Field>
+                            <Field label={`Page margin: ${L.margin}mm`}>
+                                <input type="range" min={6} max={30} value={L.margin} onChange={e => setLayout({ margin: Number(e.target.value) })} className="w-full" />
+                            </Field>
+                            <Field label={`Row spacing: ${L.rowGap}px`}>
+                                <input type="range" min={4} max={40} value={L.rowGap} onChange={e => setLayout({ rowGap: Number(e.target.value) })} className="w-full" />
+                            </Field>
+                            <Field label={`Column gap: ${L.columnGap}px`}>
+                                <input type="range" min={8} max={48} value={L.columnGap} onChange={e => setLayout({ columnGap: Number(e.target.value) })} className="w-full" />
+                            </Field>
+                        </div>
+                    </div>
 
                     {/* Fields */}
                     <div>
