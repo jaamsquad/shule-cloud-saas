@@ -125,12 +125,12 @@ export const navItems: NavItem[] = [
       { label: "Completed", path: "/requests/completed" },
       { label: "Request Settings", path: "/requests/settings" },
   ] },
-  { label: "Accounts", icon: Wallet, moduleKey: "accounts", children: [
-      { label: "Chart Of Account", path: "/accounts/chart" },
-      { label: "Add Income", path: "/accounts/income" },
-      { label: "Add Expense", path: "/accounts/expense" },
-      { label: "Account Statement", path: "/accounts/statement" },
-  ] },
+  // { label: "Accounts", icon: Wallet, moduleKey: "accounts", children: [
+  //     { label: "Chart Of Account", path: "/accounts/chart" },
+  //     { label: "Add Income", path: "/accounts/income" },
+  //     { label: "Add Expense", path: "/accounts/expense" },
+  //     { label: "Account Statement", path: "/accounts/statement" },
+  // ] },
   { label: "Expense Management", icon: Wallet, moduleKey: "expenses", children: [
       { label: "Dashboard", path: "/expense" },
       { label: "Expenses", path: "/expense/list" },

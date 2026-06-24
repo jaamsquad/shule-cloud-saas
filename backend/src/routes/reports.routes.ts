@@ -6,6 +6,51 @@ const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
 
+// Merged Income & Expense rows (the old report read an empty `transactions`
+// collection). Combines manual income, expenses, and fee payments into one ledger.
+router.get('/reports/income-expense-rows', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const [income, expenses, payments] = await Promise.all([
+            db.collection('income').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
+            db.collection('expenses').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
+            db.collection('payments').find({ is_voided: { $ne: true } }).toArray().catch(() => []),
+        ]);
+        const rows = [
+            ...income.map((i: any) => ({ date: i.date || i.createdAt, type: 'Income', category: i.category || i.source || 'Income', description: i.title || i.description || '', amount: Number(i.amount ?? i.total ?? 0) })),
+            ...payments.map((p: any) => ({ date: p.payment_date || p.createdAt, type: 'Income', category: 'Fees', description: `Fee payment ${p.receipt_no || ''}${p.studentName ? ' — ' + p.studentName : ''}`.trim(), amount: Number(p.amount ?? 0) })),
+            ...expenses.map((e: any) => ({ date: e.date || e.createdAt, type: 'Expense', category: e.category || 'Expense', description: e.title || e.description || '', amount: Number(e.totalAmount ?? e.amount ?? 0) })),
+        ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Outstanding balances with the student name resolved (invoices store student_id,
+// not studentName) — that's why the report showed "—".
+router.get('/reports/outstanding-balances-rows', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const invoices = await db.collection('invoices').find({}).sort({ createdAt: -1 }).limit(2000).toArray().catch(() => []);
+        const studentIds = Array.from(new Set(invoices.map((i: any) => String(i.student_id || i.studentId || '')).filter(Boolean)));
+        const students = studentIds.length
+            ? await db.collection('students').find({ _id: { $in: studentIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray().catch(() => [])
+            : [];
+        const byId: Record<string, any> = {};
+        students.forEach((s: any) => { byId[String(s._id)] = s; });
+        const rows = invoices.map((i: any) => {
+            const s = byId[String(i.student_id || i.studentId)] || {};
+            return {
+                studentName: i.studentName || s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || '—',
+                className: s.studentClass || s.className || s.currentClass || i.className || '—',
+                invoiceNo: i.number || i.invoice_no || String(i._id).slice(-6),
+                balance: Number(i.balance ?? ((i.total_due ?? i.total ?? 0) - (i.amount_paid ?? 0))),
+                status: i.status || 'UNPAID',
+            };
+        });
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // 1. GET /api/v1/reports/report-cards
 router.get('/reports/report-cards', async (req: Request, res: Response) => {
     try {

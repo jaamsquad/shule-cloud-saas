@@ -31,7 +31,7 @@ export const REPORT_REGISTRY: Record<string, Cfg> = {
   "sms-logs":           { title: "SMS Logs", collection: "sms_logs", columns: [{ key: "to", label: "Recipient" }, { key: "message", label: "Message" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Sent", type: "date" }] },
   "email-logs":         { title: "Email Logs", collection: "email_logs", columns: [{ key: "to", label: "Recipient" }, { key: "subject", label: "Subject" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Sent", type: "date" }] },
   "announcements":      { title: "Announcements", collection: "announcements", columns: [{ key: "title", label: "Title" }, { key: "audience", label: "Audience" }, { key: "createdAt", label: "Date", type: "date" }] },
-  "outstanding-balances": { title: "Outstanding Balances", collection: "invoices", columns: [{ key: "studentName", label: "Student" }, { key: "invoice_no", label: "Invoice" }, { key: "total_due", label: "Due", type: "money" }, { key: "status", label: "Status" }] },
+  "outstanding-balances": { title: "Outstanding Balances", collection: "reports/outstanding-balances-rows", columns: [{ key: "studentName", label: "Student" }, { key: "className", label: "Class" }, { key: "invoiceNo", label: "Invoice" }, { key: "balance", label: "Balance", type: "money" }, { key: "status", label: "Status" }] },
   "audit-trail":        { title: "Audit Trail", collection: "audit_logs", columns: [{ key: "action", label: "Action" }, { key: "collection", label: "Entity" }, { key: "userId", label: "User" }, { key: "createdAt", label: "When", type: "date" }] },
   "login-history":      { title: "Login History", collection: "login_logs", columns: [{ key: "userName", label: "User" }, { key: "role", label: "Role" }, { key: "ip", label: "IP" }, { key: "createdAt", label: "When", type: "date" }] },
 
@@ -45,7 +45,7 @@ export const REPORT_REGISTRY: Record<string, Cfg> = {
   "absentees":          { title: "Absentee Report", collection: "attendance", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
 
   // ── Finance ───────────────────────────────────────────────────────────────
-  "income-expense":     { title: "Income & Expense", collection: "transactions", columns: [{ key: "date", label: "Date", type: "date" }, { key: "type", label: "Type" }, { key: "category", label: "Category" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", type: "money" }] },
+  "income-expense":     { title: "Income & Expense", collection: "reports/income-expense-rows", columns: [{ key: "date", label: "Date", type: "date" }, { key: "type", label: "Type" }, { key: "category", label: "Category" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", type: "money" }] },
   "mpesa-recon":        { title: "M-PESA Reconciliation", collection: "mpesa_c2b_payments", columns: [{ key: "TransID", label: "Receipt" }, { key: "BillRefNumber", label: "Account" }, { key: "MSISDN", label: "Phone" }, { key: "TransAmount", label: "Amount", type: "money" }, { key: "receivedAt", label: "Received", type: "date" }] },
 
   // ── HR & Payroll ──────────────────────────────────────────────────────────

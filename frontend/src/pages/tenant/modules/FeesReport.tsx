@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
     Home, Download, Landmark, TrendingUp,
     ChevronRight, ArrowLeft, Search, Loader2, Sparkles
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
+import { printElementToPdf } from "@/lib/pdfDoc";
 
 // ── Safe value helpers — guarantee no field access ever throws ────────────────
 const num = (v: any): number => {
@@ -19,6 +19,7 @@ const arr = <T,>(v: any): T[] => (Array.isArray(v) ? v : []);
 const clampPct = (v: any) => Math.max(0, Math.min(100, num(v)));
 
 export default function FeesReport() {
+    const reportRef = useRef<HTMLDivElement>(null);
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [selectedClassName, setSelectedClassName] = useState<string>("");
     const [classSearchQuery, setClassSearchQuery] = useState("");
@@ -86,12 +87,10 @@ export default function FeesReport() {
     }));
 
     const handleExport = () => {
-        try {
-            toast.info("Preparing PDF report for download...");
-            window.open(`${API_ORIGIN}/api/v1/schools/default/fees/report/export`, "_blank");
-        } catch {
-            toast.error("Export failed");
-        }
+        // Generate the PDF from the on-page report (works on web + the mobile app),
+        // instead of opening a backend URL the WebView blocks.
+        toast.info("Preparing PDF…");
+        printElementToPdf(reportRef.current, "Fees Report", { fileName: "Fees-Report", landscape: true, always: true });
     };
 
     // SVG chart geometry — all inputs are guaranteed-finite numbers.
@@ -126,7 +125,7 @@ export default function FeesReport() {
                 </button>
             </div>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
+            <div ref={reportRef} className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
 
                 {/* Header title */}
                 <div className="mb-10">
