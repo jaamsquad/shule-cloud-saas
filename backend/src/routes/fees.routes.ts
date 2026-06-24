@@ -4,7 +4,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase } from '../services/mpesa.service';
+import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, stkPush, isMpesaConfigured, checkStkAndComplete } from '../services/mpesa.service';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
@@ -278,6 +278,53 @@ router.get('/fees/till-transactions/verify-status', async (req: Request, res: Re
         if (!v) return res.json({ status: 'pending' });
         res.json({ status: v.valid ? 'valid' : 'invalid', amount: v.amount, payerName: v.payerName, phone: v.phone, resultDesc: v.resultDesc });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Staff-initiated STK Push (Collect Fees page) ──────────────────────────────
+// Sends the M-PESA prompt to a parent's phone for a specific invoice. Works for
+// both Paybill and Till (Buy Goods) — stkPush picks the right TransactionType
+// and PartyB from the school's M-PESA settings. The payment auto-applies when
+// Safaricom confirms (via the STK callback), so the clerk just waits/polls.
+router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { invoice_id, invoiceId, studentId, phone, amount } = req.body || {};
+        const invId = invoice_id || invoiceId;
+        const amt = Number(amount) || 0;
+        if (!phone || amt <= 0) return res.status(400).json({ message: 'A phone number and a valid amount are required.' });
+
+        const cfg = await resolveMpesaConfig(db);
+        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not set up for this school yet (Settings → M-PESA Integration).' });
+        if (!cfg.callbackBase) return res.status(400).json({ message: 'M-PESA callback URL is not configured by the operator.' });
+
+        // Resolve the student (for account reference + records).
+        let student: any = null;
+        try {
+            if (studentId && ObjectId.isValid(String(studentId))) student = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) });
+            if (!student && invId) { const inv = await db.collection('invoices').findOne({ _id: new ObjectId(String(invId)) }); if (inv?.studentId && ObjectId.isValid(String(inv.studentId))) student = await db.collection('students').findOne({ _id: new ObjectId(String(inv.studentId)) }); }
+        } catch { /* ignore */ }
+        const regNo = student?.registrationNo || student?.admNo || 'Fees';
+
+        const r = await stkPush(cfg, {
+            phone, amount: amt, accountRef: regNo, description: 'School fees',
+            callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+        });
+        await getMetaDb().collection('mpesa_transactions').insertOne({
+            checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose: 'fees',
+            tenantDbName: (req as any).tenantContext?.databaseName, studentId: student ? String(student._id) : undefined,
+            studentName: student?.studentName, registrationNo: regNo, invoiceId: invId || null,
+            amount: amt, phone, status: 'pending', applied: false, createdAt: new Date(),
+        });
+        res.json({ ok: true, checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Prompt sent — ask the parent to enter their M-PESA PIN.' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// Poll an STK push: returns whether the parent completed it (and applies it).
+router.get('/schools/:sid/payments/stk-status', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        res.json(await checkStkAndComplete(db, String(req.query.checkoutRequestId || '')));
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 // M-PESA TransTime is "YYYYMMDDHHmmss" — convert to a Date.

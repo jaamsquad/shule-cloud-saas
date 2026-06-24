@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { 
-    Home, Search, User, CreditCard, Calendar, Check, 
-    Loader2, AlertCircle, Sparkles, Printer, FileText, X
+import {
+    Home, Search, User, CreditCard, Calendar, Check,
+    Loader2, AlertCircle, Sparkles, Printer, FileText, X, Smartphone
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -20,6 +20,10 @@ export default function CollectFees() {
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
     const [remarks, setRemarks] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // STK Push (send M-PESA prompt to a phone)
+    const [stkPhone, setStkPhone] = useState("");
+    const [stkBusy, setStkBusy] = useState(false);
+    const [stkMsg, setStkMsg] = useState("");
 
     const queryClient = useQueryClient();
 
@@ -121,6 +125,51 @@ export default function CollectFees() {
             toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    // Send an M-PESA STK push to the parent's phone, then poll until they pay.
+    // Works for both Paybill and Till (the backend picks the right type). On
+    // success the payment is applied automatically — we just refresh.
+    const handleStkPush = async () => {
+        if (!selectedStudent || !selectedInvoice || !amount) { toast.error("Select an invoice and amount first"); return; }
+        const phone = stkPhone.trim();
+        if (!/^(0|254|\+254)?(7|1)\d{8}$/.test(phone.replace(/\s/g, ""))) { toast.error("Enter a valid Safaricom number, e.g. 07XXXXXXXX"); return; }
+        const payVal = parseFloat(amount);
+        if (payVal <= 0 || payVal > selectedInvoice.balance) { toast.error("Enter a valid amount within the balance"); return; }
+
+        setStkBusy(true);
+        setStkMsg("Sending prompt to the phone…");
+        try {
+            const r = await api.post("/schools/default/payments/stk", {
+                invoice_id: selectedInvoice.id || selectedInvoice._id,
+                studentId: selectedStudent._id, phone, amount: payVal,
+            });
+            const checkoutRequestId = r.data?.checkoutRequestId;
+            setStkMsg(r.data?.message || "Prompt sent. Waiting for the parent to enter their PIN…");
+            toast.success("STK prompt sent to " + phone);
+            if (!checkoutRequestId) { setStkBusy(false); return; }
+
+            // Poll for up to ~90s.
+            for (let i = 0; i < 30; i++) {
+                await new Promise(res => setTimeout(res, 3000));
+                const s = (await api.get("/schools/default/payments/stk-status", { params: { checkoutRequestId } })).data;
+                if (s.status === "completed") {
+                    toast.success("Payment received and applied 🎉");
+                    setStkMsg(""); setStkPhone(""); setAmount(""); setSelectedInvoice(null);
+                    refetchSummary();
+                    queryClient.invalidateQueries({ queryKey: ["recent_payments_dashboard"] });
+                    setStkBusy(false);
+                    return;
+                }
+                if (s.status === "failed") { toast.error(s.message || "The customer did not complete the payment."); setStkMsg(""); setStkBusy(false); return; }
+            }
+            setStkMsg("Still waiting — if the parent paid, it will appear shortly under Till / Paybill Transactions.");
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || "Could not send STK push");
+            setStkMsg("");
+        } finally {
+            setStkBusy(false);
         }
     };
 
@@ -345,6 +394,34 @@ export default function CollectFees() {
                                                     placeholder="Optional notes..."
                                                 />
                                             </div>
+
+                                            {/* M-PESA STK Push — send the prompt to a phone (Paybill or Till) */}
+                                            {method === "MPESA" && (
+                                                <div className="md:col-span-2 p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 space-y-3">
+                                                    <div className="flex items-center gap-2 text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                                                        <Smartphone className="w-3.5 h-3.5" /> Send M-PESA Prompt (STK Push)
+                                                    </div>
+                                                    <div className="flex flex-col sm:flex-row gap-2">
+                                                        <input
+                                                            type="tel"
+                                                            value={stkPhone}
+                                                            onChange={(e) => setStkPhone(e.target.value)}
+                                                            placeholder="Parent phone e.g. 0712345678"
+                                                            className="flex-1 h-11 px-4 bg-white border border-emerald-100 rounded-xl focus:outline-none focus:border-emerald-500 text-xs font-bold text-slate-700"
+                                                        />
+                                                        <button
+                                                            onClick={handleStkPush}
+                                                            disabled={stkBusy || !amount}
+                                                            className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 whitespace-nowrap"
+                                                        >
+                                                            {stkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Smartphone className="w-4 h-4" />}
+                                                            Send Prompt
+                                                        </button>
+                                                    </div>
+                                                    {stkMsg && <p className="text-[11px] font-bold text-emerald-700 flex items-center gap-1.5"><Loader2 className={`w-3 h-3 ${stkBusy ? "animate-spin" : "hidden"}`} />{stkMsg}</p>}
+                                                    <p className="text-[10px] text-slate-400 font-bold">The parent enters their PIN on their phone; the payment is captured and applied automatically. Or use the button below to record a payment already made (M-PESA code, cash, cheque…).</p>
+                                                </div>
+                                            )}
 
                                             {/* Action Button */}
                                             <div className="md:col-span-2 pt-4">
