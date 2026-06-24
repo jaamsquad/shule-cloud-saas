@@ -145,40 +145,53 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
         const cfg = await resolveMpesaConfig(tenantDb).catch(() => null as any);
-        // This school's identifiers: the paybill/store number and the till number.
         const codes = [cfg?.shortcode, cfg?.tillNumber].map((v: any) => String(v || '').trim()).filter(Boolean);
-        if (!codes.length) {
-            return res.json({ data: [], summary: { count: 0, total: 0 }, configured: false, message: 'No M-PESA Paybill/Till configured for this school.' });
-        }
-
-        const meta = getMetaDb();
-        const q: any = { BusinessShortCode: { $in: codes } };
         const { code, phone, name, from, to } = req.query as any;
-        if (code) q.TransID = { $regex: String(code).trim(), $options: 'i' };
-        if (phone) q.MSISDN = { $regex: String(phone).replace(/\D/g, ''), $options: 'i' };
-        if (name) {
-            const n = String(name).trim();
-            q.$or = [
-                { FirstName: { $regex: n, $options: 'i' } },
-                { MiddleName: { $regex: n, $options: 'i' } },
-                { LastName: { $regex: n, $options: 'i' } },
-            ];
-        }
-        if (from || to) { q.receivedAt = {}; if (from) q.receivedAt.$gte = new Date(from); if (to) { const d = new Date(to); d.setHours(23, 59, 59); q.receivedAt.$lte = d; } }
+        const fromD = from ? new Date(from) : null;
+        const toD = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59); return d; })() : null;
 
-        const rows = await meta.collection('mpesa_c2b_payments').find(q).sort({ receivedAt: -1 }).limit(2000).toArray().catch(() => []);
-        const data = rows.map((r: any) => ({
-            code: r.TransID || '',
-            phone: r.MSISDN || '',
-            name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
-            account: r.BillRefNumber || '',
-            amount: Number(r.TransAmount) || 0,
-            shortcode: r.BusinessShortCode || '',
-            paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null),
-            transTime: r.TransTime || '',
-        }));
-        const total = data.reduce((s: number, d: any) => s + d.amount, 0);
-        res.json({ data, summary: { count: data.length, total }, configured: true, shortcodes: codes });
+        type Row = { code: string; phone: string; name: string; account: string; amount: number; shortcode: string; paidAt: any; source: string };
+        const all: Row[] = [];
+
+        // 1) Raw C2B confirmations (meta DB) for this school's shortcode/till.
+        if (codes.length) {
+            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: codes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
+            c2b.forEach((r: any) => all.push({
+                code: r.TransID || '', phone: r.MSISDN || '',
+                name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
+                account: r.BillRefNumber || '', amount: Number(r.TransAmount) || 0,
+                shortcode: r.BusinessShortCode || '', paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null), source: 'C2B',
+            }));
+        }
+
+        // 2) The tenant's applied payments (STK push, C2B and wallet flow through here).
+        //    This is where most real data lives, so the page works even without C2B URLs.
+        const pays = await tenantDb.collection('payments').find({ is_voided: { $ne: true } }).sort({ createdAt: -1 }).limit(5000).toArray().catch(() => []);
+        pays.forEach((p: any) => {
+            const m = String(p.method || p.payment_mode || '').toUpperCase();
+            if (!/MPESA|M-PESA|MOBILE|PAYBILL|TILL|WALLET/.test(m)) return;   // M-PESA / wallet only
+            all.push({
+                code: p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '',
+                phone: p.phone || '', name: p.studentName || p.payerName || '—',
+                account: p.registrationNo || p.account || '', amount: Number(p.amount) || 0,
+                shortcode: codes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA',
+            });
+        });
+
+        // Dedupe by M-PESA code (a C2B row and its applied payment can both appear).
+        const seen = new Set<string>();
+        let data = all.filter(r => { const k = (r.code || '').toUpperCase(); if (k && seen.has(k)) return false; if (k) seen.add(k); return true; });
+
+        // Apply filters in-memory (sources have different field names).
+        if (code) { const c = String(code).toLowerCase(); data = data.filter(r => r.code.toLowerCase().includes(c)); }
+        if (phone) { const ph = String(phone).replace(/\D/g, ''); data = data.filter(r => String(r.phone).replace(/\D/g, '').includes(ph)); }
+        if (name) { const n = String(name).toLowerCase(); data = data.filter(r => r.name.toLowerCase().includes(n)); }
+        if (fromD) data = data.filter(r => r.paidAt && new Date(r.paidAt) >= fromD);
+        if (toD) data = data.filter(r => r.paidAt && new Date(r.paidAt) <= toD);
+
+        data.sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
+        const total = data.reduce((s, d) => s + d.amount, 0);
+        res.json({ data, summary: { count: data.length, total }, configured: codes.length > 0, shortcodes: codes });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

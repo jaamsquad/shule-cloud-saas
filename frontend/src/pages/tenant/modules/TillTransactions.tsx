@@ -33,8 +33,8 @@ export default function TillTransactions() {
     const clear = () => { setCode(""); setPhone(""); setName(""); setFrom(""); setTo(""); setParams({}); };
 
     const exportCsv = () => {
-        const head = ["Code", "Phone", "Name", "Account", "Amount", "Paid At"];
-        const lines = rows.map(r => [r.code, r.phone, r.name, r.account, r.amount, fmt(r.paidAt)]);
+        const head = ["Code", "Phone", "Name", "Account", "Amount", "Source", "Paid At"];
+        const lines = rows.map(r => [r.code, r.phone, r.name, r.account, r.amount, r.source, fmt(r.paidAt)]);
         const csv = [head, ...lines].map(row => row.map((c: any) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
         const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const a = document.createElement("a"); a.href = url; a.download = "Till-Transactions.csv"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
@@ -87,10 +87,12 @@ export default function TillTransactions() {
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
                 {isLoading ? (
                     <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>
-                ) : data && !data.configured ? (
-                    <div className="py-16 text-center text-slate-400"><Smartphone className="w-10 h-10 mx-auto mb-2" /><p className="font-bold">{data.message || "No M-PESA Till/Paybill configured."}</p><p className="text-sm">Set it up under Settings → M-PESA Integration.</p></div>
                 ) : rows.length === 0 ? (
-                    <div className="py-16 text-center text-slate-400"><p className="font-bold">No transactions found</p></div>
+                    <div className="py-16 text-center text-slate-400">
+                        <Smartphone className="w-10 h-10 mx-auto mb-2" />
+                        <p className="font-bold">No transactions found</p>
+                        {data && !data.configured && <p className="text-sm">No M-PESA Paybill/Till configured — set it up under Settings → M-PESA Integration.</p>}
+                    </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -100,16 +102,18 @@ export default function TillTransactions() {
                                 <th className="text-left px-4 py-3 font-black">Name</th>
                                 <th className="text-left px-4 py-3 font-black">Account</th>
                                 <th className="text-right px-4 py-3 font-black">Amount</th>
+                                <th className="text-left px-4 py-3 font-black">Source</th>
                                 <th className="text-left px-4 py-3 font-black">Paid At</th>
                             </tr></thead>
                             <tbody>
                                 {rows.map((r, i) => (
                                     <tr key={r.code + i} className="border-b border-slate-50 hover:bg-slate-50/60">
-                                        <td className="px-4 py-3 font-mono text-xs font-bold text-[#0E7490]">{r.code}</td>
-                                        <td className="px-4 py-3 text-slate-600">{r.phone}</td>
+                                        <td className="px-4 py-3 font-mono text-xs font-bold text-[#0E7490]">{r.code || "—"}</td>
+                                        <td className="px-4 py-3 text-slate-600">{r.phone || "—"}</td>
                                         <td className="px-4 py-3 font-bold text-slate-700">{r.name}</td>
                                         <td className="px-4 py-3 text-slate-500">{r.account || "—"}</td>
                                         <td className="px-4 py-3 text-right font-black text-emerald-700">{ksh(r.amount)}</td>
+                                        <td className="px-4 py-3"><span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{r.source || "M-PESA"}</span></td>
                                         <td className="px-4 py-3 text-slate-400 text-xs">{fmt(r.paidAt)}</td>
                                     </tr>
                                 ))}
