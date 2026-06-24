@@ -241,6 +241,45 @@ router.post('/fees/till-transactions/apply', async (req: Request, res: Response)
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ── Verify a Till payment code with Safaricom (async) ─────────────────────────
+// Fires a Daraja Transaction Status query. Safaricom posts the verdict to our
+// result callback (stored in mpesa_code_verifications). The UI then polls
+// /fees/till-transactions/verify-status. Requires Initiator + SecurityCredential.
+router.post('/fees/till-transactions/verify', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const mpesaCode = String(req.body?.code || '').trim().toUpperCase();
+        if (!/^[A-Z0-9]{8,15}$/.test(mpesaCode)) return res.status(400).json({ message: 'Enter a valid M-PESA code first.' });
+
+        // Already known (recorded earlier, or a prior verification)?
+        const already = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode }, { transactionId: mpesaCode }] });
+        if (already) return res.json({ status: 'recorded', amount: already.amount, message: `Already recorded (receipt ${already.receipt_no}).` });
+
+        const cfg = await resolveMpesaConfig(db);
+        if (!cfg.initiator || !cfg.securityCredential) {
+            return res.json({ status: 'unavailable', message: 'Automatic verification needs an API Initiator + Security Credential (Settings → M-PESA → Reconciliation). You can still record the payment manually from the SMS.' });
+        }
+        if (!platformCallbackBase()) return res.json({ status: 'unavailable', message: 'Platform callback URL is not configured by the operator.' });
+
+        const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+        // Clear any stale verdict for this code, then query.
+        await getMetaDb().collection('mpesa_code_verifications').deleteOne({ code: mpesaCode }).catch(() => { });
+        await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till code verification' });
+        res.json({ status: 'checking', message: 'Checking with Safaricom… this can take a few seconds.' });
+    } catch (e: any) { res.status(400).json({ status: 'error', message: e.message }); }
+});
+
+// Poll the verdict Safaricom posted back for a code.
+router.get('/fees/till-transactions/verify-status', async (req: Request, res: Response) => {
+    try {
+        const mpesaCode = String(req.query.code || '').trim().toUpperCase();
+        if (!mpesaCode) return res.status(400).json({ message: 'code required' });
+        const v = await getMetaDb().collection('mpesa_code_verifications').findOne({ code: mpesaCode });
+        if (!v) return res.json({ status: 'pending' });
+        res.json({ status: v.valid ? 'valid' : 'invalid', amount: v.amount, payerName: v.payerName, phone: v.phone, resultDesc: v.resultDesc });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // M-PESA TransTime is "YYYYMMDDHHmmss" — convert to a Date.
 function parseMpesaTime(t: string): Date | null {
     const m = String(t || '').match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);

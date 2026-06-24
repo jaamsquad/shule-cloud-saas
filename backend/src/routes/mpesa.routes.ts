@@ -129,7 +129,32 @@ router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, r
 router.post(['/mpesa/transaction-status/result', '/pesa/transaction-status/result'], async (req, res) => {
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     try {
-        await getMetaDb().collection('mpesa_status_results').insertOne({ ...req.body, receivedAt: new Date() });
+        const meta = getMetaDb();
+        await meta.collection('mpesa_status_results').insertOne({ ...req.body, receivedAt: new Date() });
+
+        // Parse the verdict and store it keyed by the M-PESA code so the UI can poll.
+        const r = req.body?.Result || {};
+        const params: any[] = r.ResultParameters?.ResultParameter || [];
+        const pick = (k: string) => params.find(p => p.Key === k)?.Value;
+        const code = String(pick('ReceiptNo') || pick('TransactionID') || pick('OriginalTransactionID') || '').toUpperCase();
+        if (code) {
+            const valid = Number(r.ResultCode) === 0;
+            await meta.collection('mpesa_code_verifications').updateOne(
+                { code },
+                {
+                    $set: {
+                        code, valid,
+                        resultCode: Number(r.ResultCode),
+                        resultDesc: r.ResultDesc || '',
+                        amount: Number(pick('Amount')) || undefined,
+                        payerName: pick('DebitPartyName') || pick('CreditPartyName') || undefined,
+                        phone: String(pick('DebitPartyName') || '').match(/2547\d{8}/)?.[0] || undefined,
+                        receivedAt: new Date(),
+                    },
+                },
+                { upsert: true },
+            );
+        }
     } catch (e) { console.error('[M-PESA] txn-status result error:', e); }
 });
 
