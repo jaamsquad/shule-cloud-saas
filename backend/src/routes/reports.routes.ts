@@ -106,15 +106,28 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         // Chronological order of exams: by year then term number then start date.
         const termNum = (s: string) => { const m = String(s || '').match(/(\d+)/); return m ? Number(m[1]) : (/first/i.test(s) ? 1 : /second/i.test(s) ? 2 : /third/i.test(s) ? 3 : 99); };
         const examOrder = (e: any) => `${String(e.academicYear || '').padStart(4, '0')}-${String(termNum(e.term)).padStart(2, '0')}-${e.startDate ? new Date(e.startDate).getTime() : 0}`;
-        // Level prefix from a class name: "Form 1"→F1, "Grade 2"→G2, "PP1"→P1, else first letter+number.
-        const levelLabel = (className: string) => {
+        // Parse a class name into a { prefix:'F'|'G'|'P'|'C', num } so we can shift
+        // the level back to the form/grade the student was in at an earlier year.
+        const parseLevel = (className: string): { prefix: string; num: number } | null => {
             const c = String(className || '');
-            const f = c.match(/form\s*(\d+)/i); if (f) return `F${f[1]}`;
-            const g = c.match(/grade\s*(\d+)/i); if (g) return `G${g[1]}`;
-            const pp = c.match(/pp\s*(\d+)/i); if (pp) return `P${pp[1]}`;
-            const cl = c.match(/class\s*(\d+)/i); if (cl) return `C${cl[1]}`;
-            const any = c.match(/([a-z])\D*(\d+)/i); if (any) return `${any[1].toUpperCase()}${any[2]}`;
-            return c.slice(0, 4) || '—';
+            const f = c.match(/form\s*(\d+)/i); if (f) return { prefix: 'F', num: Number(f[1]) };
+            const g = c.match(/grade\s*(\d+)/i); if (g) return { prefix: 'G', num: Number(g[1]) };
+            const pp = c.match(/pp\s*(\d+)/i); if (pp) return { prefix: 'P', num: Number(pp[1]) };
+            const cl = c.match(/class\s*(\d+)/i); if (cl) return { prefix: 'C', num: Number(cl[1]) };
+            const any = c.match(/([a-z])\D*(\d+)/i); if (any) return { prefix: any[1].toUpperCase(), num: Number(any[2]) };
+            return null;
+        };
+        // The level at a given exam year: shift the CURRENT level back by the number
+        // of years between the current year and the exam year (one level per year).
+        // e.g. Form 4 in 2026, exam in 2023 → Form 1. Clamps at 1.
+        const currentYearNum = Number(activeYear) || new Date().getFullYear();
+        const levelAtYear = (currentClassName: string, examYear: any): string => {
+            const lv = parseLevel(currentClassName);
+            const ey = Number(examYear);
+            if (!lv) return String(currentClassName || '').slice(0, 4) || '—';
+            if (!ey || !currentYearNum) return `${lv.prefix}${lv.num}`;
+            const shifted = Math.max(1, lv.num - (currentYearNum - ey));
+            return `${lv.prefix}${shifted}`;
         };
         // The cutoff: latest selected exam (so the trend runs "up to the current exam").
         const selectedOrders = examIds.map(id => examById[id]).filter(Boolean).map(examOrder).sort();
@@ -220,15 +233,22 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 const pct = max > 0 ? (Number(m.marksObtained ?? m.marks ?? m.score ?? 0) / max) * 100 : 0;
                 const k = String(m.examId); (byExam[k] ||= { sum: 0, n: 0 }); byExam[k].sum += pct; byExam[k].n++;
             });
-            const trend = Object.keys(byExam)
+            const trendRaw = Object.keys(byExam)
                 .map(eid => { const ex = examById[eid]; return { eid, ex, mean: Math.round(byExam[eid].sum / byExam[eid].n) }; })
                 .filter(t => t.ex)
                 .sort((a, b) => examOrder(a.ex).localeCompare(examOrder(b.ex)))
                 .map(t => ({
-                    label: `${levelLabel(studentClassName)}T${termNum(t.ex.term)}`,
+                    label: `${levelAtYear(studentClassName, t.ex.academicYear)}T${termNum(t.ex.term)}`,
                     exam: t.ex.examName || t.ex.name || 'Exam',
                     mean: t.mean,
                 }));
+            // If two points still share a label (same level+term — e.g. a CAT and an
+            // End-Term in the same term), disambiguate with a #2, #3 suffix.
+            const seenLabel: Record<string, number> = {};
+            const trend = trendRaw.map(t => {
+                const n = (seenLabel[t.label] = (seenLabel[t.label] || 0) + 1);
+                return n > 1 ? { ...t, label: `${t.label}·${n}` } : t;
+            });
 
             return {
                 studentId: student._id,

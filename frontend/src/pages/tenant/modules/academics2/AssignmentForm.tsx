@@ -1,9 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Home, Check, Loader2, ArrowLeft } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+
+// Module-level field (stable identity → inputs keep focus while typing).
+function AssignField({ label, field, type = "text", options, textarea, col, form, setForm }: { label: string; field: string; type?: string; options?: string[]; textarea?: boolean; col?: number; form: any; setForm: (f: any) => void }) {
+    return (
+        <div className={`relative ${col === 2 ? "col-span-2" : ""}`}>
+            <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{label}</div>
+            {type === "select" ? (
+                <select value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                    {(options || []).map((o: string) => <option key={o}>{o}</option>)}
+                </select>
+            ) : textarea ? (
+                <textarea value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} rows={4} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+            ) : (
+                <input type={type} value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+            )}
+        </div>
+    );
+}
 
 export default function AssignmentForm() {
     const { id } = useParams<{ id?: string }>();
@@ -39,19 +57,11 @@ export default function AssignmentForm() {
         saveMut.mutate({ ...form, subjectName: subj?.name || subj?.subjectName || form.subjectName, className: cls?.className || cls?.name || form.className, totalMarks: Number(form.totalMarks) || 100 });
     };
 
-    const Field = ({ label, field, type = "text", options, textarea, col }: any) => (
-        <div className={`relative ${col === 2 ? "col-span-2" : ""}`}>
-            <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{label}</div>
-            {type === "select" ? (
-                <select value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                    {options.map((o: string) => <option key={o}>{o}</option>)}
-                </select>
-            ) : textarea ? (
-                <textarea value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} rows={4} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
-            ) : (
-                <input type={type} value={(form as any)[field]} onChange={e => setForm({ ...form, [field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-            )}
-        </div>
+    // Stable wrapper around the module-level AssignField so typed inputs keep focus.
+    const Field = useCallback(
+        (props: { label: string; field: string; type?: string; options?: string[]; textarea?: boolean; col?: number }) =>
+            <AssignField {...props} form={form} setForm={setForm} />,
+        [form],
     );
 
     return (

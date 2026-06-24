@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
     Home, Plus, Trash2, Edit3, Loader2, AlertCircle,
     CheckCircle2, X, Save, Eye, EyeOff, Upload,
@@ -7,6 +7,38 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+
+// Module-level field component (stable identity → inputs keep focus while typing).
+export interface FFFieldProps {
+    label: string; value: string; onChange: (v: string) => void;
+    placeholder?: string; required?: boolean; secret?: boolean;
+    secretKey?: string; hint?: string; mono?: boolean; colSpan?: number;
+    showKeys: Record<string, boolean>; toggleKey: (k: string) => void;
+}
+function FFField({ label, value, onChange, placeholder = "", required = false, secret = false, secretKey = "", hint = "", mono = false, colSpan = 1, showKeys, toggleKey }: FFFieldProps) {
+    return (
+        <div className={colSpan === 2 ? "col-span-2" : ""}>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                {label}{required && <span className="text-red-400 ml-1">*</span>}
+            </label>
+            <div className="relative">
+                <input
+                    type={secret && !showKeys[secretKey] ? "password" : "text"}
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    className={`w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] placeholder:text-slate-200 transition-all ${secret ? "pr-10" : ""} ${mono ? "font-mono" : ""}`}
+                />
+                {secret && (
+                    <button type="button" onClick={() => toggleKey(secretKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-[#5C67F2] transition-colors">
+                        {showKeys[secretKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                )}
+            </div>
+            {hint && <p className="text-[10px] text-slate-300 font-medium mt-1.5 leading-relaxed">{hint}</p>}
+        </div>
+    );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface BankAccount {
@@ -271,38 +303,14 @@ export default function AccountsForFeesInvoice() {
     const isSaving = saveGateway.isPending;
 
     // ─── Reusable sub-components ──────────────────────────────────────────────
-    const Field = ({
-        label, value, onChange, placeholder = "", required = false,
-        secret = false, secretKey = "", hint = "", mono = false, colSpan = 1
-    }: {
-        label: string; value: string; onChange: (v: string) => void;
-        placeholder?: string; required?: boolean; secret?: boolean;
-        secretKey?: string; hint?: string; mono?: boolean; colSpan?: number;
-    }) => (
-        <div className={colSpan === 2 ? "col-span-2" : ""}>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                {label}{required && <span className="text-red-400 ml-1">*</span>}
-            </label>
-            <div className="relative">
-                <input
-                    type={secret && !showKeys[secretKey] ? "password" : "text"}
-                    value={value}
-                    onChange={e => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    className={`w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] placeholder:text-slate-200 transition-all ${secret ? "pr-10" : ""} ${mono ? "font-mono" : ""}`}
-                />
-                {secret && (
-                    <button
-                        type="button"
-                        onClick={() => toggleKey(secretKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-[#5C67F2] transition-colors"
-                    >
-                        {showKeys[secretKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                )}
-            </div>
-            {hint && <p className="text-[10px] text-slate-300 font-medium mt-1.5 leading-relaxed">{hint}</p>}
-        </div>
+    // Stable wrapper around the module-level FFField (defined outside this function
+    // so its identity never changes — otherwise React remounts the <input> on every
+    // keystroke and it loses focus). useCallback keeps the same reference across
+    // renders; it only changes when showKeys actually changes.
+    const Field = useCallback(
+        (props: Omit<FFFieldProps, "showKeys" | "toggleKey">) =>
+            <FFField {...props} showKeys={showKeys} toggleKey={toggleKey} />,
+        [showKeys],
     );
 
     const Toggle = ({ label, desc, value, onChange }: {

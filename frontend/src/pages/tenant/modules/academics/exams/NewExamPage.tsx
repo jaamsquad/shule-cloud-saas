@@ -8,6 +8,18 @@ import { toast } from "sonner";
 const EXAM_TYPES = ["End Term", "Mid Term", "Opening / Opener", "CAT", "Assignment", "Mock", "KCSE", "KCPE", "Practical", "Oral", "Internal", "Other"];
 const EXAM_MODES = ["Regular", "Special", "Make-up", "Remedial"];
 
+// Defined OUTSIDE the page component so its identity is stable across renders.
+// (Defining it inside caused inputs to lose focus after every keystroke, because
+// React remounted the whole subtree — including the <input> — on each render.)
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{label}</label>
+            {children}
+        </div>
+    );
+}
+
 export default function NewExamPage() {
     const navigate = useNavigate();
     const { id } = useParams<{ id?: string }>();
@@ -155,13 +167,6 @@ export default function NewExamPage() {
 
     const f = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
         setForm(prev => ({ ...prev, [key]: e.target.value }));
-
-    const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-        <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{label}</label>
-            {children}
-        </div>
-    );
 
     const inputCls = "w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 bg-white focus:outline-none focus:border-[#5C67F2] transition-colors";
     const selectCls = inputCls + " appearance-none cursor-pointer";
