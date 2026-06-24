@@ -28,26 +28,41 @@ function collectStyles(): string {
     return links.join("\n") + `<style>${css}</style>`;
 }
 
-/** Print-specific layout: A4 portrait, cards centred, never split across a page. */
-const PRINT_CSS = `
-  @page { size: A4 portrait; margin: 10mm; }
+export interface PrintLayout {
+    orientation?: "portrait" | "landscape";
+    columns?: number;     // cards across the page
+    gapMm?: number;       // gap between cards (mm)
+    marginMm?: number;    // page margin (mm)
+    scale?: number;       // shrink/grow cards to fit (1 = 100%)
+}
+const DEFAULT_LAYOUT: Required<PrintLayout> = { orientation: "portrait", columns: 2, gapMm: 8, marginMm: 10, scale: 1 };
+
+/** Print-specific layout built from the chosen options. Cards never split a page. */
+function buildPrintCss(L: Required<PrintLayout>): string {
+    return `
+  @page { size: A4 ${L.orientation}; margin: ${L.marginMm}mm; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
   html, body { background: #fff !important; margin: 0; padding: 0; }
   .print-sheet {
-    display: flex; flex-wrap: wrap; gap: 8mm;
-    justify-content: center; align-content: flex-start; padding: 4mm;
+    display: grid;
+    grid-template-columns: repeat(${L.columns}, 1fr);
+    gap: ${L.gapMm}mm;
+    justify-items: center; align-content: flex-start;
+    padding: 2mm;
   }
   .print-sheet > * {
     margin: 0 !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+    ${L.scale !== 1 ? `transform: scale(${L.scale}); transform-origin: top center;` : ""}
   }
   /* Strip on-screen-only effects so cards sit flat & crisp on paper. */
   .print-sheet * { animation: none !important; transition: none !important; }
-  .print-sheet .group { box-shadow: 0 0 0 1px #e5e7eb !important; transform: none !important; }
+  .print-sheet .group { box-shadow: 0 0 0 1px #e5e7eb !important; ${L.scale === 1 ? "transform: none !important;" : ""} }
   /* Hide any control overlays (per-card print buttons, hover actions). */
   .print-sheet [data-no-print], .print-sheet .print\\:hidden { display: none !important; }
 `;
+}
 
 /** Wait until every <img> inside a root has loaded (or errored), so nothing prints blank. */
 function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
@@ -64,8 +79,9 @@ function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
 }
 
 /** Build the hidden iframe, drop the cards in, wait for images, print, then remove. */
-function printNodes(cards: HTMLElement[], title = "ID Cards"): void {
+function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): void {
     if (!cards.length) { alert("No cards available to print."); return; }
+    const L = { ...DEFAULT_LAYOUT, ...layout };
 
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
@@ -82,7 +98,7 @@ function printNodes(cards: HTMLElement[], title = "ID Cards"): void {
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
         ${collectStyles()}
-        <style>${PRINT_CSS}</style>
+        <style>${buildPrintCss(L)}</style>
         </head><body></body></html>`);
     doc.body.appendChild(sheet);
     doc.close();
@@ -103,17 +119,22 @@ function printNodes(cards: HTMLElement[], title = "ID Cards"): void {
  * Print every card matched by `selector` (e.g. ".id-card" inside the grid).
  * Excludes elements flagged with [data-no-print].
  */
-export function printAllCards(selector: string): void {
+export function printAllCards(selector: string, layout: PrintLayout = {}): void {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(el => !el.hasAttribute("data-no-print"));
-    printNodes(cards, "ID Cards");
+    printNodes(cards, "ID Cards", layout);
+}
+
+/** How many cards a given selector currently has (for the modal's summary). */
+export function countCards(selector: string): number {
+    return Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(el => !el.hasAttribute("data-no-print")).length;
 }
 
 /**
  * Print a single card. Pass the card element itself, or any element inside it —
  * we walk up to the nearest `.id-card`.
  */
-export function printSingleCard(elementInsideCard: HTMLElement | null): void {
+export function printSingleCard(elementInsideCard: HTMLElement | null, layout: PrintLayout = {}): void {
     if (!elementInsideCard) { alert("No card to print."); return; }
     const card = elementInsideCard.closest<HTMLElement>(".id-card") || elementInsideCard;
-    printNodes([card], "ID Card");
+    printNodes([card], "ID Card", { columns: 1, ...layout });
 }

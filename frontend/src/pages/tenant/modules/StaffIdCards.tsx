@@ -2,13 +2,15 @@ import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcod
 import { useState } from "react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
-import { printAllCards, printSingleCard } from "./printCards";
+import { printSingleCard, countCards } from "./printCards";
+import PrintCardsModal from "./PrintCardsModal";
 import { useSchoolBrand } from "@/lib/printDoc";
 
 export default function StaffIdCards() {
     const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("staffCardStyle") || "Landscape");
     const { items: staffMembers, isLoading, updateItem } = useItems("staff");
     const brand = useSchoolBrand();
+    const [printModal, setPrintModal] = useState(false);
     const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
 
@@ -76,7 +78,7 @@ export default function StaffIdCards() {
                     ))}
                     
                     <button
-                        onClick={() => printAllCards(".id-card")}
+                        onClick={() => setPrintModal(true)}
                         className="h-10 px-6 rounded-xl font-bold text-sm bg-[#FF9A5A] text-white shadow-lg shadow-orange-100 flex items-center gap-2 ml-auto hover:scale-105 transition-all"
                     >
                         <Printer className="w-4 h-4" /> Print All Cards
@@ -109,6 +111,7 @@ export default function StaffIdCards() {
                     </div>
                 )}
             </div>
+            <PrintCardsModal open={printModal} onClose={() => setPrintModal(false)} selector=".id-card" total={countCards(".id-card")} />
         </div>
     );
 }

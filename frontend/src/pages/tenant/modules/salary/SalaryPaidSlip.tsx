@@ -2,93 +2,112 @@ import { useState } from "react";
 import { Home, Search, Calendar, Printer, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { toast } from "sonner";
-import { openPrintDoc } from "@/lib/pdfDoc";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
+import { useSchoolBrand } from "@/lib/printDoc";
+
+// Convert a number to words (whole KES) for the professional amount-in-words line.
+const ONES = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
+const TENS = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"];
+function threeDigit(n: number): string { let s = ""; if (n >= 100) { s += ONES[Math.floor(n / 100)] + " HUNDRED "; n %= 100; } if (n >= 20) { s += TENS[Math.floor(n / 10)] + " "; n %= 10; } if (n > 0) s += ONES[n] + " "; return s.trim(); }
+function inWords(amount: number): string { let n = Math.floor(amount); if (n === 0) return "ZERO"; const units = ["", "THOUSAND", "MILLION", "BILLION"]; const g: number[] = []; while (n > 0) { g.push(n % 1000); n = Math.floor(n / 1000); } const parts: string[] = []; for (let i = g.length - 1; i >= 0; i--) { if (!g[i]) continue; parts.push(`${threeDigit(g[i])}${units[i] ? " " + units[i] : ""}`); } return parts.join(" ").trim(); }
 
 function printSlip(run: any, institute: any) {
-    const schoolName = institute?.schoolName || institute?.name || "School Name";
+    const schoolName = (institute?.name || institute?.schoolName || "School").toUpperCase();
     const address = institute?.address || "";
     const phone = institute?.phone || "";
     const email = institute?.email || "";
     const logo = institute?.logo || null;
-    const win = openPrintDoc();
-    if (!win) { toast.error("Allow popups to print salary slips"); return; }
+    const slipNo = `PS-${String(run.month || "").replace("-", "")}-${String(run._id || "").slice(-5).toUpperCase()}`;
+    const fmt = (n: any) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const allowancesRows = (run.allowances || [])
-        .map((a: any) => `<tr><td>${a.name}</td><td class="amt">+ ${Number(a.amount).toLocaleString()}</td></tr>`)
-        .join("");
+    const earnRows = [
+        `<tr><td>Basic Salary</td><td class="amt">${fmt(run.basicSalary)}</td></tr>`,
+        ...(run.allowances || []).map((a: any) => `<tr><td>${a.name}</td><td class="amt">${fmt(a.amount)}</td></tr>`),
+    ].join("");
+    const dedRows = (run.deductions || []).length
+        ? (run.deductions || []).map((d: any) => `<tr><td>${d.name}</td><td class="amt">${fmt(d.amount)}</td></tr>`).join("")
+        : `<tr><td style="color:#94a3b8">No deductions</td><td class="amt">0.00</td></tr>`;
 
-    const deductionRows = (run.deductions || [])
-        .map((d: any) => `<tr><td>${d.name}</td><td class="amt red">- ${Number(d.amount).toLocaleString()}</td></tr>`)
-        .join("");
-
-    win.document.write(`<!DOCTYPE html><html><head>
+    const html = `<!DOCTYPE html><html><head>
         <title>Salary Slip — ${run.staffName} — ${run.month}</title>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; padding: 48px; max-width: 680px; margin: 0 auto; color: #1e293b; font-size: 13px; }
-            .institute { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #5C67F2; padding-bottom: 20px; margin-bottom: 8px; }
-            .institute img { width: 64px; height: 64px; object-fit: contain; border-radius: 8px; }
-            .institute-info { flex: 1; }
-            .institute-name { font-size: 20px; font-weight: 900; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; }
-            .institute-sub { font-size: 10px; color: #94a3b8; margin-top: 3px; }
-            .slip-title { text-align: center; padding: 12px 0 20px; }
-            .slip-title h2 { color: #5C67F2; font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; }
-            .slip-title p { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-top: 3px; }
-            .info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f8fafc; padding: 16px 20px; border-radius: 8px; margin-bottom: 24px; }
-            .info-item label { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 2px; }
-            .info-item span { font-size: 12px; font-weight: 800; color: #1e293b; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-            th { background: #5C67F2; color: white; padding: 10px 14px; font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; text-align: left; }
-            td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; }
-            .amt { text-align: right; font-weight: 700; }
-            .red { color: #ef4444; }
-            .net-row { background: #eff6ff; }
-            .net-row td { padding: 14px; font-weight: 900; font-size: 15px; color: #5C67F2; border: none; }
-            .net-row .amt { font-size: 18px; }
-            .footer { text-align: center; margin-top: 48px; font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
-            @media print { @page { margin: 20mm; } }
+            @page { size: A4 portrait; margin: 14mm; }
+            *{ margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            body{ font-family:'Segoe UI', Arial, sans-serif; color:#1e293b; font-size:12px; }
+            .doc{ border:1.5px solid #cbd5e1; border-radius:6px; overflow:hidden; }
+            .head{ display:flex; align-items:center; gap:16px; padding:18px 24px; border-bottom:3px solid #1e3a8a; }
+            .head img{ width:64px; height:64px; object-fit:contain; }
+            .crest{ width:60px; height:60px; border-radius:50%; background:#1e3a8a; color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; }
+            .sname{ font-size:22px; font-weight:900; color:#1e3a8a; letter-spacing:.5px; }
+            .scontact{ font-size:10px; color:#64748b; margin-top:3px; }
+            .ribbon{ background:#1e3a8a; color:#fff; text-align:center; padding:8px; font-weight:800; letter-spacing:4px; text-transform:uppercase; font-size:13px; }
+            .meta{ display:flex; justify-content:space-between; padding:10px 24px; background:#f8fafc; font-size:10px; color:#475569; border-bottom:1px solid #e2e8f0; }
+            .info{ display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; padding:18px 24px; }
+            .info label{ display:block; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#94a3b8; }
+            .info span{ font-size:13px; font-weight:800; color:#0f172a; }
+            .cols{ display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid #e2e8f0; }
+            .cols > div{ padding:0; }
+            .cols > div:first-child{ border-right:1px solid #e2e8f0; }
+            table{ width:100%; border-collapse:collapse; }
+            th{ background:#eef2ff; color:#1e3a8a; padding:9px 16px; font-size:10px; text-transform:uppercase; letter-spacing:1px; text-align:left; border-bottom:1px solid #e2e8f0; }
+            td{ padding:8px 16px; border-bottom:1px solid #f1f5f9; }
+            .amt{ text-align:right; font-weight:700; }
+            tfoot td{ background:#f8fafc; font-weight:900; border-top:2px solid #1e3a8a; }
+            .net{ display:flex; justify-content:space-between; align-items:center; padding:16px 24px; background:#1e3a8a; color:#fff; }
+            .net .lbl{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:2px; }
+            .net .val{ font-size:22px; font-weight:900; }
+            .words{ padding:10px 24px; font-size:11px; color:#475569; font-style:italic; border-bottom:1px solid #e2e8f0; }
+            .sign{ display:flex; justify-content:space-between; padding:36px 24px 18px; }
+            .sign .line{ border-top:1.4px solid #334155; width:200px; padding-top:5px; text-align:center; font-size:10px; font-weight:700; color:#334155; }
+            .foot{ text-align:center; padding:10px; font-size:9px; color:#94a3b8; background:#f8fafc; letter-spacing:1px; }
         </style>
     </head><body>
-        <div class="institute">
-            ${logo ? `<img src="${logo}" alt="logo" />` : ""}
-            <div class="institute-info">
-                <div class="institute-name">${schoolName}</div>
-                <div class="institute-sub">
-                    ${[address, phone, email].filter(Boolean).join(" &nbsp;·&nbsp; ")}
+        <div class="doc">
+            <div class="head">
+                ${logo ? `<img src="${logo}" alt="logo" />` : `<div class="crest">${schoolName[0] || "S"}</div>`}
+                <div style="flex:1">
+                    <div class="sname">${schoolName}</div>
+                    <div class="scontact">${[address, phone, email].filter(Boolean).join(" &nbsp;·&nbsp; ")}</div>
                 </div>
             </div>
+            <div class="ribbon">Salary Pay Slip</div>
+            <div class="meta"><span>Slip No: <b>${slipNo}</b></span><span>Pay Period: <b>${run.month || "—"}</b></span><span>Issued: <b>${new Date().toLocaleDateString("en-GB")}</b></span></div>
+            <div class="info">
+                <div><label>Employee Name</label><span>${run.staffName || "—"}</span></div>
+                <div><label>Designation</label><span>${run.designation || "—"}</span></div>
+                <div><label>Payment Method</label><span>${run.paymentMethod || "—"}</span></div>
+                <div><label>Payment Date</label><span>${run.paymentDate || "—"}</span></div>
+                <div><label>Reference</label><span>${run.paymentReference || "—"}</span></div>
+                <div><label>Status</label><span>${run.status || "—"}</span></div>
+            </div>
+            <div class="cols">
+                <div>
+                    <table>
+                        <thead><tr><th>Earnings</th><th class="amt">KSh</th></tr></thead>
+                        <tbody>${earnRows}</tbody>
+                        <tfoot><tr><td>Gross Salary</td><td class="amt">${fmt(run.grossSalary)}</td></tr></tfoot>
+                    </table>
+                </div>
+                <div>
+                    <table>
+                        <thead><tr><th>Deductions</th><th class="amt">KSh</th></tr></thead>
+                        <tbody>${dedRows}</tbody>
+                        <tfoot><tr><td>Total Deductions</td><td class="amt">${fmt(run.totalDeductions)}</td></tr></tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="words"><b>Net pay in words:</b> KENYA SHILLINGS ${inWords(Number(run.netSalary || 0))} ONLY</div>
+            <div class="net"><span class="lbl">Net Salary Payable</span><span class="val">KSh ${fmt(run.netSalary)}</span></div>
+            <div class="sign">
+                <div class="line">Prepared By</div>
+                <div class="line">Approved By</div>
+                <div class="line">Employee Signature</div>
+            </div>
+            <div class="foot">This is a computer-generated salary slip and is valid without a signature.</div>
         </div>
-        <div class="slip-title">
-            <h2>Salary Slip</h2>
-            <p>Pay Period: ${run.month}</p>
-        </div>
-        <div class="info">
-            <div class="info-item"><label>Employee Name</label><span>${run.staffName || "—"}</span></div>
-            <div class="info-item"><label>Designation</label><span>${run.designation || "—"}</span></div>
-            <div class="info-item"><label>Payment Method</label><span>${run.paymentMethod || "—"}</span></div>
-            <div class="info-item"><label>Payment Date</label><span>${run.paymentDate || "—"}</span></div>
-            <div class="info-item"><label>Reference</label><span>${run.paymentReference || "—"}</span></div>
-            <div class="info-item"><label>Status</label><span>${run.status || "—"}</span></div>
-        </div>
-        <table>
-            <tr><th>Earnings</th><th style="text-align:right">Amount (KSh)</th></tr>
-            <tr><td>Basic Salary</td><td class="amt">${Number(run.basicSalary || 0).toLocaleString()}</td></tr>
-            ${allowancesRows}
-            <tr style="font-weight:700;background:#f8fafc"><td>Gross Salary</td><td class="amt">${Number(run.grossSalary || 0).toLocaleString()}</td></tr>
-        </table>
-        <table>
-            <tr><th>Deductions</th><th style="text-align:right">Amount (KSh)</th></tr>
-            ${deductionRows}
-            <tr style="font-weight:700;background:#fff5f5"><td style="color:#ef4444">Total Deductions</td><td class="amt red">${Number(run.totalDeductions || 0).toLocaleString()}</td></tr>
-        </table>
-        <table>
-            <tr class="net-row"><td>NET SALARY</td><td class="amt">KSh ${Number(run.netSalary || 0).toLocaleString()}</td></tr>
-        </table>
-        <div class="footer">This is a computer-generated salary slip — no signature required</div>
-        <script>window.onload = function() { window.print(); }</script>
-    </body></html>`);
-    win.document.close();
+        <script>window.onload = () => window.print();</script>
+    </body></html>`;
+    void outputHtmlDoc(`Salary Slip — ${run.staffName}`, html, { fileName: `Salary-Slip-${run.staffName || ""}-${run.month || ""}` });
 }
 
 export default function SalaryPaidSlip() {
@@ -98,13 +117,8 @@ export default function SalaryPaidSlip() {
     const [monthFilter, setMonthFilter] = useState(defaultMonth);
     const [searchQuery, setSearchQuery] = useState("");
 
-    const { data: instituteData } = useQuery({
-        queryKey: ["tenant_profile"],
-        queryFn: async () => {
-            const r = await api.get("/tenant_profile");
-            return Array.isArray(r.data) ? r.data[0] : r.data;
-        },
-    });
+    // Real school details for the slip header (the same source the rest of the app uses).
+    const instituteData = useSchoolBrand();
 
     const { data: allRuns = [], isLoading, refetch } = useQuery({
         queryKey: ["salary_paid_slips", monthFilter],
