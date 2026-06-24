@@ -4,7 +4,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, stkPush, isMpesaConfigured, checkStkAndComplete } from '../services/mpesa.service';
+import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
@@ -324,6 +324,90 @@ router.get('/schools/:sid/payments/stk-status', requireRole('ADMIN'), async (req
     try {
         const db = getRequestDb(req);
         res.json(await checkStkAndComplete(db, String(req.query.checkoutRequestId || '')));
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// ── Pull / sync transactions from Safaricom ───────────────────────────────────
+// Fetches every payment to the school's shortcode for a date range via the Pull
+// Transactions API, upserts them into mpesa_c2b_payments (so they show on the
+// Till Transactions page), and auto-matches each to a student by account number.
+router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const cfg = await resolveMpesaConfig(db);
+        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
+
+        // Default to the last 7 days if no range supplied.
+        const { from, to } = req.body || {};
+        const end = to ? new Date(to) : new Date();
+        const start = from ? new Date(from) : new Date(Date.now() - 7 * 24 * 3600 * 1000);
+        end.setHours(23, 59, 59);
+        const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+
+        const meta = getMetaDb();
+        let offset = 0, imported = 0, matched = 0, pages = 0;
+        const codeSet = [cfg.shortcode, cfg.tillNumber].map(v => String(v || '').trim()).filter(Boolean);
+
+        // Page through results (Pull returns batches; advance OffSetValue until empty).
+        while (pages < 20) {
+            const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset);
+            // Response[0] is the array of transaction objects.
+            const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
+            if (!batch.length) break;
+            pages++;
+            for (const t of batch) {
+                const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
+                if (!transId) continue;
+                const amount = Number(t.amount ?? t.transactionAmount ?? t.TransAmount) || 0;
+                const msisdn = String(t.msisdn || t.MSISDN || t.phoneNumber || '');
+                const acct = String(t.billReferenceNumber || t.BillRefNumber || t.accountReference || '');
+                const when = t.trxDate || t.transactionDate || t.TransTime;
+                const upd = await meta.collection('mpesa_c2b_payments').updateOne(
+                    { TransID: transId },
+                    { $setOnInsert: {
+                        TransID: transId, BusinessShortCode: codeSet[0] || cfg.shortcode,
+                        TransAmount: amount, MSISDN: msisdn, BillRefNumber: acct,
+                        FirstName: t.firstName || t.FirstName || '', MiddleName: '', LastName: t.lastName || t.LastName || '',
+                        receivedAt: when ? new Date(when) : new Date(), source: 'pull',
+                    } },
+                    { upsert: true },
+                );
+                if (upd.upsertedCount) {
+                    imported++;
+                    // Auto-match by account number → apply to the student's fees.
+                    if (acct) {
+                        try {
+                            const stu = await db.collection('students').findOne({ $or: [{ registrationNo: acct }, { admNo: acct }] });
+                            if (stu) {
+                                const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode: transId }, { transactionId: transId }] });
+                                if (!dup) { await applyMpesaPayment(db, { studentId: String(stu._id), studentName: stu.studentName, registrationNo: acct, amount, receipt: transId, phone: msisdn }); matched++; }
+                            }
+                        } catch { /* skip match */ }
+                    }
+                }
+            }
+            offset += batch.length;
+        }
+        res.json({ ok: true, imported, matched, message: imported ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.` : 'No new transactions found for that period.' });
+    } catch (e: any) {
+        const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Settings → M-PESA).` : e.message;
+        res.status(400).json({ message: msg });
+    }
+});
+
+// One-time Pull API registration for the school's shortcode.
+router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const cfg = await resolveMpesaConfig(db);
+        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'Configure your M-PESA credentials first.' });
+        if (!platformCallbackBase()) return res.status(400).json({ message: 'Platform callback URL is not configured by the operator.' });
+        const nominated = String(req.body?.nominatedNumber || '').replace(/\D/g, '');
+        if (!/^2547\d{8}$/.test(nominated) && !/^07\d{8}$/.test(nominated)) return res.status(400).json({ message: 'Provide the nominated phone number registered on the M-PESA org portal (e.g. 0712345678).' });
+        const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+        const result = await registerPullUrl(cfg, `${base}/pesa/pull/result`, nominated.startsWith('07') ? '254' + nominated.slice(1) : nominated);
+        await db.collection('mpesa_settings').updateOne({}, { $set: { pullRegistered: true, pullRegisteredAt: new Date(), pullNominatedNumber: nominated } }, { upsert: true });
+        res.json({ ok: true, result, message: 'Pull API registered — you can now Sync transactions from Safaricom.' });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 

@@ -160,4 +160,11 @@ router.post(['/mpesa/transaction-status/result', '/pesa/transaction-status/resul
 
 router.post(['/mpesa/timeout', '/pesa/timeout'], (_req, res) => res.json({ ResultCode: 0, ResultDesc: 'Accepted' }));
 
+// ─── Pull Transactions result callback ─────────────────────────────────────────
+// Safaricom posts pull results here too; we store them for audit/debugging.
+router.post(['/mpesa/pull/result', '/pesa/pull/result'], async (req, res) => {
+    res.json({ ResponseCode: 0, ResponseMessage: 'Accepted' });
+    try { await getMetaDb().collection('mpesa_pull_results').insertOne({ ...req.body, receivedAt: new Date() }); } catch (e) { console.error('[M-PESA] pull result error:', e); }
+});
+
 export default router;

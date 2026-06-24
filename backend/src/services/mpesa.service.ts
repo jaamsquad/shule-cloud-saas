@@ -165,6 +165,31 @@ export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, con
     return data;
 }
 
+// ─── Pull Transactions API ─────────────────────────────────────────────────────
+// Lets a merchant retrieve the list of completed payments to their shortcode for
+// a date range — the proper way to reconcile till/paybill payments that did not
+// arrive via the C2B callback. Must be registered once before querying.
+
+/** One-time registration of the shortcode for the Pull API. */
+export async function registerPullUrl(c: MpesaConfig, callbackUrl: string, nominatedNumber: string) {
+    const { ok, status, data } = await daraja(c, '/pulltransactions/v1/register', {
+        ShortCode: c.shortcode, RequestType: 'Pull', NominatedNumber: nominatedNumber, CallBackURL: callbackUrl,
+    });
+    // "already registered" is a success state.
+    if (!ok && !/already.*register/i.test(JSON.stringify(data || ''))) throw new Error(data?.errorMessage || data?.ResponseDescription || `Pull register failed (HTTP ${status})`);
+    return data;
+}
+
+/** Query transactions to the shortcode between two dates (YYYY-MM-DD HH:mm:ss). */
+export async function pullTransactions(c: MpesaConfig, startDate: string, endDate: string, offset = 0) {
+    const { ok, status, data } = await daraja(c, '/pulltransactions/v1/query', {
+        ShortCode: c.shortcode, StartDate: startDate, EndDate: endDate, OffSetValue: String(offset),
+    });
+    if (!ok) throw new Error(data?.errorMessage || data?.ResponseDescription || `Pull query failed (HTTP ${status})`);
+    // Response shape: { ResponseCode, ResponseMessage, Response: [ [ {transactionId, trxDate, msisdn, amount, ...} ] ] }
+    return data;
+}
+
 // Initiate an STK push for a wallet top-up or fee payment and store the txn.
 export async function initiateStkTopup(db: Db, opts: { tenantDbName: string; studentId: string; phone: string; amount: number; purpose?: 'wallet' | 'fees'; accountRef?: string; studentName?: string; registrationNo?: string; invoiceId?: string }) {
     const cfg = await resolveMpesaConfig(db);

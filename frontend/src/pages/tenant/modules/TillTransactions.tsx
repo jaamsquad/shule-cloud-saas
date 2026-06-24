@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle } from "lucide-react";
+import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle, DownloadCloud } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -37,6 +37,13 @@ export default function TillTransactions() {
     // Did any directly-paid (C2B) transaction come through?
     const hasC2B = rows.some(r => r.source === "C2B");
 
+    // Pull/reconcile transactions straight from Safaricom for the chosen range.
+    const sync = useMutation({
+        mutationFn: async () => (await api.post("/fees/till-transactions/sync", { from: from || undefined, to: to || undefined })).data,
+        onSuccess: (d: any) => { toast.success(d.message || "Synced."); qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Sync failed."),
+    });
+
     const apply = () => setParams({
         ...(code && { code }), ...(phone && { phone }), ...(name && { name }),
         ...(from && { from }), ...(to && { to }),
@@ -68,6 +75,7 @@ export default function TillTransactions() {
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={() => setShowApply(true)} className="h-10 px-4 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Record Till Payment</button>
+                    <button onClick={() => sync.mutate()} disabled={sync.isPending} className="h-10 px-4 rounded-xl bg-[#0E7490] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50" title="Pull transactions from Safaricom for the selected date range (defaults to last 7 days)">{sync.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />} Sync from Safaricom</button>
                     <button onClick={() => refetch()} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5">{isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Refresh</button>
                     <button onClick={exportCsv} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> CSV</button>
                     <button onClick={printList} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">Print / PDF</button>

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
     ArrowLeft, Check, Loader2, ExternalLink, RefreshCw, CheckCircle2,
     XCircle, AlertCircle, Eye, EyeOff, Copy, ChevronRight, Settings,
-    Zap, BookOpen, Info, TestTube, Plug
+    Zap, BookOpen, Info, TestTube, Plug, DownloadCloud
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -39,6 +39,8 @@ export default function IntegrationDetail() {
         queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
         enabled: isDaraja,
     });
+    const [pullNumber, setPullNumber] = useState("");
+    const [registeringPull, setRegisteringPull] = useState(false);
     const registerC2B = async () => {
         if (dirty) { toast.error("Save your credentials first, then register."); return; }
         setRegistering(true);
@@ -52,6 +54,20 @@ export default function IntegrationDetail() {
             toast.error(e.response?.data?.message || "Registration failed");
         } finally {
             setRegistering(false);
+        }
+    };
+    const registerPull = async () => {
+        if (dirty) { toast.error("Save your credentials first, then register."); return; }
+        if (!pullNumber.trim()) { toast.error("Enter the nominated phone number from your M-PESA org portal."); return; }
+        setRegisteringPull(true);
+        try {
+            const r = await api.post("/integrations/mpesa/register-pull", { nominatedNumber: pullNumber.trim() });
+            toast.success(r.data?.message || "Pull API registered.");
+            qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Pull registration failed");
+        } finally {
+            setRegisteringPull(false);
         }
     };
 
@@ -352,6 +368,35 @@ export default function IntegrationDetail() {
                                 <p className="text-[11px] text-gray-400 font-medium mt-3 leading-relaxed">
                                     Note: Safaricom only delivers these notifications in <b>Production</b>. Paybills deliver C2B reliably; many Till / Buy-Goods shortcodes do not.
                                     Save your credentials (and set Environment to <b>production</b>) before registering.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Pull Transactions — reconcile by fetching a date range from Safaricom */}
+                        {isDaraja && (
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+                                <h2 className="text-sm font-black text-gray-800 mb-2 flex items-center gap-2">
+                                    <DownloadCloud className="w-4 h-4 text-[#0E7490]" /> Reconcile Transactions (Pull API)
+                                </h2>
+                                <p className="text-xs text-gray-500 font-medium mb-3 leading-relaxed">
+                                    A backup that <b>pulls</b> any payments to your Till/Paybill that didn't arrive via callback. Register once, then use
+                                    the <b>Sync from Safaricom</b> button on the Till Transactions page to fetch a date range.
+                                </p>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <input value={pullNumber} onChange={e => setPullNumber(e.target.value)} placeholder="Nominated phone e.g. 0712345678"
+                                        className="h-10 px-3 border border-gray-200 rounded-xl text-sm w-56 focus:outline-none focus:border-[#0E7490]" />
+                                    <button onClick={registerPull} disabled={registeringPull}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0E7490] hover:bg-[#0b5e74] text-white font-bold text-sm rounded-xl transition-all shadow-sm disabled:opacity-50">
+                                        {registeringPull ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
+                                        {registeringPull ? "Registering…" : "Register Pull API"}
+                                    </button>
+                                    {mpesaStatus?.pullRegistered && (
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600"><CheckCircle2 className="w-4 h-4" /> Pull registered</span>
+                                    )}
+                                </div>
+                                <p className="text-[11px] text-gray-400 font-medium mt-3 leading-relaxed">
+                                    The <b>nominated number</b> must be an operator phone registered on your M-PESA org portal. Pull API is a separate Daraja product —
+                                    activate it for your shortcode on the Daraja portal if registration is rejected.
                                 </p>
                             </div>
                         )}
