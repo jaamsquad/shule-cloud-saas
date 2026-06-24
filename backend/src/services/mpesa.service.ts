@@ -180,10 +180,12 @@ export async function registerPullUrl(c: MpesaConfig, callbackUrl: string, nomin
     return data;
 }
 
-/** Query transactions to the shortcode between two dates (YYYY-MM-DD HH:mm:ss). */
-export async function pullTransactions(c: MpesaConfig, startDate: string, endDate: string, offset = 0) {
+/** Query transactions to a shortcode between two dates (YYYY-MM-DD HH:mm:ss).
+ * Pass `shortCode` to query a specific number (e.g. a Till's PartyB); defaults
+ * to the config shortcode. */
+export async function pullTransactions(c: MpesaConfig, startDate: string, endDate: string, offset = 0, shortCode?: string) {
     const { ok, status, data } = await daraja(c, '/pulltransactions/v1/query', {
-        ShortCode: c.shortcode, StartDate: startDate, EndDate: endDate, OffSetValue: String(offset),
+        ShortCode: shortCode || c.shortcode, StartDate: startDate, EndDate: endDate, OffSetValue: String(offset),
     });
     if (!ok) throw new Error(data?.errorMessage || data?.ResponseDescription || `Pull query failed (HTTP ${status})`);
     // Response shape: { ResponseCode, ResponseMessage, Response: [ [ {transactionId, trxDate, msisdn, amount, ...} ] ] }

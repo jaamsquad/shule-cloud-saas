@@ -349,16 +349,28 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
         const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
         const meta = getMetaDb();
-        let offset = 0, imported = 0, matched = 0, pages = 0;
+        let imported = 0, matched = 0;
+        // For a Till, the money lands on the till number (PartyB), not the store
+        // number — query the till first, then fall back to the store/shortcode.
+        const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
+        const candidates = Array.from(new Set([
+            ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+            String(cfg.shortcode).trim(),
+            ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+        ].filter(Boolean)));
         const codeSet = [cfg.shortcode, cfg.tillNumber].map(v => String(v || '').trim()).filter(Boolean);
 
-        // Page through results (Pull returns batches; advance OffSetValue until empty).
-        while (pages < 20) {
-            const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset);
+        // Try each candidate number; use the first that returns transactions.
+        let queriedCode = candidates[0];
+        let totalSeen = 0;
+        for (const sc of candidates) {
+            let offset = 0, pages = 0, seenHere = 0;
+            while (pages < 20) {
+            const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset, sc);
             // Response[0] is the array of transaction objects.
             const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
             if (!batch.length) break;
-            pages++;
+            pages++; seenHere += batch.length;
             for (const t of batch) {
                 const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
                 if (!transId) continue;
@@ -391,15 +403,18 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
                 }
             }
             offset += batch.length;
+            }
+            queriedCode = sc;
+            totalSeen += seenHere;
+            if (seenHere > 0) break;   // found data on this number; stop trying others
         }
-        const totalSeen = offset; // total rows Safaricom returned across pages
         res.json({
-            ok: true, imported, matched, totalSeen, shortcode: cfg.shortcode, from: fmt(start), to: fmt(end),
+            ok: true, imported, matched, totalSeen, shortcode: queriedCode, triedCodes: candidates, from: fmt(start), to: fmt(end),
             message: imported
                 ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.`
                 : totalSeen
                     ? `Safaricom returned ${totalSeen} transaction(s) but all were already recorded.`
-                    : `Safaricom returned no transactions to shortcode ${cfg.shortcode} for that period. Check that this is the exact shortcode the money was paid to, and widen the date range.`,
+                    : `Safaricom returned no transactions for number(s) ${candidates.join(', ')} in that period. For a Till, money lands on the till number (not the store number) — make sure the Till Number is filled in M-PESA settings, and widen the date range.`,
         });
     } catch (e: any) {
         const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Settings → M-PESA).` : e.message;
