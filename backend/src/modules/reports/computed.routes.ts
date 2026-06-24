@@ -82,10 +82,32 @@ router.get('/reports/computed/grade-distribution', async (req, res) => {
 
 router.get('/reports/computed/mark-sheets', async (req, res) => {
     try {
-        const all = await marks(req);
+        const classId = String(req.query.class_id || '').trim();
+        const examId = String(req.query.exam_id || '').trim();
+        // Both class and exam must be chosen — no data otherwise.
+        if (!classId || !examId) {
+            return res.json({ title: 'Mark Sheets', requires: ['class', 'exam'], rows: [],
+                columns: [{ key: 'position', label: 'Pos' }, { key: 'student', label: 'Student' }, { key: 'class', label: 'Class' }, { key: 'subjects', label: 'Subjects' }, { key: 'total', label: 'Total' }, { key: 'mean', label: 'Mean %' }, { key: 'grade', label: 'Grade' }],
+                message: 'Select both a class and an exam to view the mark sheet.' });
+        }
+
+        // Resolve the class name (students store the name, not the id).
+        const classDoc = await db(req).collection('classes').findOne({ _id: (() => { try { return new (require('mongodb').ObjectId)(classId); } catch { return classId; } })() }).catch(() => null);
+        const className = classDoc?.name || classDoc?.levelName || classDoc?.className || '';
+
+        // The class's own grading scale, else the global one.
+        const gradeRec = await db(req).collection('grading_criteria').findOne({ classId }).catch(() => null)
+            || await db(req).collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null);
+        const bands = ((gradeRec?.grades || []) as any[]).map(g => ({ grade: g.grade, from: Number(g.from ?? 0), upto: Number(g.upto ?? 100) }));
+        const gradeFor = (pct: number) => bands.length ? (bands.find(b => pct >= b.from && pct <= b.upto)?.grade || gradeOf(pct)) : gradeOf(pct);
+
+        // Marks for this exam, scoped to the class's students.
+        const all = (await marks(req)).filter((m: any) =>
+            String(m.examId) === examId && (!className || String(m.className).toLowerCase() === className.toLowerCase()));
+
         const byStudent: Record<string, { name: string; cls: string; sum: number; out: number; subs: number }> = {};
-        all.forEach((m: any) => { const k = m.studentId || m.studentName; (byStudent[k] ||= { name: m.studentName, cls: m.className || '', sum: 0, out: 0, subs: 0 }); byStudent[k].sum += num(m.marksObtained); byStudent[k].out += num(m.totalMarks); byStudent[k].subs++; });
-        const rows = Object.values(byStudent).map(s => { const pct = s.out ? s.sum / s.out * 100 : 0; return { student: s.name, class: s.cls, subjects: s.subs, total: `${s.sum}/${s.out}`, mean: Math.round(pct * 10) / 10, grade: gradeOf(pct) }; }).sort((a, b) => b.mean - a.mean).map((r, i) => ({ position: i + 1, ...r }));
+        all.forEach((m: any) => { const k = m.studentId || m.studentName; (byStudent[k] ||= { name: m.studentName, cls: m.className || className, sum: 0, out: 0, subs: 0 }); byStudent[k].sum += num(m.marksObtained); byStudent[k].out += num(m.totalMarks); byStudent[k].subs++; });
+        const rows = Object.values(byStudent).map(s => { const pct = s.out ? s.sum / s.out * 100 : 0; return { student: s.name, class: s.cls, subjects: s.subs, total: `${s.sum}/${s.out}`, mean: Math.round(pct * 10) / 10, grade: gradeFor(pct) }; }).sort((a, b) => b.mean - a.mean).map((r, i) => ({ position: i + 1, ...r }));
         res.json({ title: 'Mark Sheets', columns: [{ key: 'position', label: 'Pos' }, { key: 'student', label: 'Student' }, { key: 'class', label: 'Class' }, { key: 'subjects', label: 'Subjects' }, { key: 'total', label: 'Total' }, { key: 'mean', label: 'Mean %' }, { key: 'grade', label: 'Grade' }], rows });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

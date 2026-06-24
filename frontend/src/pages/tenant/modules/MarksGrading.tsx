@@ -1,8 +1,9 @@
-import { Home, Plus, Minus, Check, RefreshCcw, Loader2 } from "lucide-react";
+import { Home, Plus, Minus, Check, RefreshCcw, Loader2, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface GradeTier {
     grade: string;
@@ -14,6 +15,13 @@ interface GradeTier {
 export default function MarksGrading() {
     const [activeTab, setActiveTab] = useState("Marks Grading");
     const queryClient = useQueryClient();
+    const { permissions, isAdmin } = usePermissions();
+    // Only authorized users may edit grading (admins or exams/settings managers).
+    const canEdit = isAdmin || (permissions || []).some((p: string) => p === "*" || p === "exams.manage" || p === "settings.manage");
+
+    // "" = Global scale; otherwise a class-specific scale.
+    const [classId, setClassId] = useState("");
+    const { data: classes = [] } = useQuery({ queryKey: ["grading_classes"], queryFn: async () => { try { return (await api.get("/classes")).data || []; } catch { return []; } } });
 
     // Grades State
     const [grades, setGrades] = useState<GradeTier[]>([
@@ -33,12 +41,14 @@ export default function MarksGrading() {
         minSubjects: 1
     });
 
-    // Fetch existing configuration
+    // Fetch the grading record for the current scope (a class's, or the global one).
     const { data: existingConfig, isLoading } = useQuery({
-        queryKey: ["grading_criteria"],
+        queryKey: ["grading_criteria", classId],
         queryFn: async () => {
             const r = await api.get("/grading_criteria");
-            return r.data?.[0]; // Assuming one global config
+            const all = Array.isArray(r.data) ? r.data : [];
+            if (classId) return all.find((c: any) => c.classId === classId) || null;
+            return all.find((c: any) => !c.classId) || all[0] || null;
         }
     });
 
@@ -81,8 +91,9 @@ export default function MarksGrading() {
             } else {
                 await api.post("/grading_criteria", payload);
             }
-            // 2) Mirror the scale into curriculum_settings so the Curriculum
-            //    Settings → Grading Scale tab shows the same data.
+            // 2) Mirror the GLOBAL scale into curriculum_settings (per-class scales
+            //    are independent and aren't mirrored).
+            if (payload.classId) return;
             try {
                 const scale = payload.grades.map((g: GradeTier) => ({
                     grade: g.grade,
@@ -102,16 +113,19 @@ export default function MarksGrading() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["grading_criteria"] });
             queryClient.invalidateQueries({ queryKey: ["curriculum_settings"] });
-            toast.success("Grading configuration saved successfully");
+            toast.success(classId ? "Class grading saved" : "Global grading saved");
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to save configuration")
     });
 
     const handleSave = () => {
+        if (!canEdit) return toast.error("You are not authorized to edit grading.");
         saveMutation.mutate({
             grades,
             failCriteria,
-            type: "Global"
+            classId: classId || undefined,
+            className: classId ? (classes.find((c: any) => String(c._id) === classId)?.name || "") : "",
+            type: classId ? "Class" : "Global",
         });
     };
 
@@ -152,6 +166,20 @@ export default function MarksGrading() {
                 <span className="text-gray-500 font-medium">
                     - Exam Grading
                 </span>
+            </div>
+
+            {/* Scope selector + edit-lock notice */}
+            <div className="px-6 -mt-1 mb-1 max-w-5xl flex flex-wrap items-center gap-3">
+                <span className="text-xs font-black text-slate-500 uppercase tracking-wide">Grading scope</span>
+                <select value={classId} onChange={e => setClassId(e.target.value)}
+                    className="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]">
+                    <option value="">All Classes (Global)</option>
+                    {classes.map((c: any) => <option key={c._id} value={String(c._id)}>{c.name || c.levelName || "Class"}</option>)}
+                </select>
+                <span className="text-[11px] text-slate-400">{classId ? "Editing this class's own grading scale." : "Editing the global scale used by classes without their own."}</span>
+                {!canEdit && (
+                    <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-black text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-3 py-1.5"><Lock className="w-3.5 h-3.5" /> View only — you can't edit grading</span>
+                )}
             </div>
 
             <div className="p-6 pt-0 mt-4 max-w-5xl">
@@ -259,7 +287,7 @@ export default function MarksGrading() {
                                 <div className="flex justify-center mt-6">
                                     <button 
                                         onClick={handleSave}
-                                        disabled={saveMutation.isPending}
+                                        disabled={saveMutation.isPending || !canEdit}
                                         className="h-12 px-10 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-md flex items-center gap-2 transition-colors disabled:opacity-50"
                                     >
                                         {saveMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
@@ -346,7 +374,7 @@ export default function MarksGrading() {
                             <div className="flex justify-center">
                                 <button 
                                     onClick={handleSave}
-                                    disabled={saveMutation.isPending}
+                                    disabled={saveMutation.isPending || !canEdit}
                                     className="h-12 px-10 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-md flex items-center gap-2 transition-colors disabled:opacity-50"
                                 >
                                     {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}

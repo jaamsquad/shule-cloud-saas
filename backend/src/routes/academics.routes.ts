@@ -509,6 +509,28 @@ const COLLECTION_MODULE: Record<string, string> = {
     router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
 });
 
+// Effective grading scale for a class: the class-specific grading_criteria if one
+// exists, otherwise the global (classId-less) record. Used by report cards / mark
+// sheets so each class can have its own grading or share one global scale.
+router.get('/grading-scale', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const classId = String(req.query.classId || '').trim();
+        let rec: any = null;
+        if (classId) rec = await db.collection('grading_criteria').findOne({ classId }).catch(() => null);
+        let scope: 'class' | 'global' = 'class';
+        if (!rec) { rec = await db.collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null); scope = 'global'; }
+        if (!rec) rec = await db.collection('grading_criteria').findOne({}).catch(() => null);
+        const grades = (rec?.grades || rec?.gradingScale || []).map((g: any) => ({
+            grade: g.grade ?? g.name ?? g.label ?? '',
+            from: Number(g.from ?? g.minPercent ?? g.min ?? 0),
+            upto: Number(g.upto ?? g.maxPercent ?? g.max ?? 100),
+            remark: g.remark ?? g.status ?? g.label ?? '',
+        })).sort((a: any, b: any) => b.upto - a.upto);
+        res.json({ scope: rec ? scope : 'none', classId: classId || null, grades, passMark: Number(rec?.failCriteria?.overallPercent ?? rec?.passMark ?? 50) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Bulk-create hostel beds (the generic CRUD has no /:col/bulk route).
 router.post('/hostel_beds/bulk', async (req, res) => {
     try {

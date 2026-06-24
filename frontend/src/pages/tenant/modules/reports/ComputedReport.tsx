@@ -24,24 +24,35 @@ const ENDPOINT: Record<string, string> = {
 
 // Marks-based reports that should offer an exam filter.
 const EXAM_FILTERABLE = new Set(["subject-performance", "class-performance", "grade-distribution", "mark-sheets", "cbc-competency", "mean-score-trends"]);
+// Reports that REQUIRE both a class and an exam before showing data.
+const CLASS_REQUIRED = new Set(["mark-sheets"]);
 
 export default function ComputedReport() {
     const { key = "" } = useParams();
     const endpoint = ENDPOINT[key];
     const showExamFilter = EXAM_FILTERABLE.has(key);
+    const showClassFilter = CLASS_REQUIRED.has(key);
     const [examId, setExamId] = useState("");   // "" = All Exams
+    const [classId, setClassId] = useState(""); // required for mark-sheets
 
-    // Exam list for the dropdown (only fetched for marks-based reports).
+    // Exam + class lists for the dropdowns (only fetched when relevant).
     const { data: exams = [] } = useQuery({
         queryKey: ["reports_shared_exams"],
         queryFn: async () => (await api.get("/reports/shared/exams")).data,
         enabled: showExamFilter,
     });
+    const { data: classList = [] } = useQuery({
+        queryKey: ["reports_shared_classes_cr"],
+        queryFn: async () => { try { return (await api.get("/classes")).data || []; } catch { return []; } },
+        enabled: showClassFilter,
+    });
 
+    // For class-required reports, don't query until both class + exam are chosen.
+    const ready = !showClassFilter || (!!classId && !!examId);
     const { data, isLoading } = useQuery({
-        queryKey: ["computed_report", key, examId],
-        queryFn: async () => (await api.get(`/reports/computed/${endpoint}`, { params: examId ? { exam_id: examId } : {} })).data,
-        enabled: !!endpoint,
+        queryKey: ["computed_report", key, examId, classId],
+        queryFn: async () => (await api.get(`/reports/computed/${endpoint}`, { params: { ...(examId ? { exam_id: examId } : {}), ...(classId ? { class_id: classId } : {}) } })).data,
+        enabled: !!endpoint && ready,
     });
     const { data: schoolRaw } = useQuery({ queryKey: ["tenant_profile_global"], queryFn: async () => (await api.get("/auth/tenant/profile")).data });
     const school = Array.isArray(schoolRaw) ? schoolRaw[0] : (schoolRaw || {});
@@ -73,9 +84,15 @@ export default function ComputedReport() {
                         <h1 className="text-2xl font-black text-slate-900">{data?.title}</h1>
                     </div>
                     <div className="flex items-center gap-2">
+                        {showClassFilter && (
+                            <select value={classId} onChange={e => setClassId(e.target.value)} className="h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#2563EB]">
+                                <option value="">Select Class…</option>
+                                {classList.map((c: any) => <option key={c._id} value={String(c._id)}>{c.name || c.levelName || "Class"}</option>)}
+                            </select>
+                        )}
                         {showExamFilter && (
                             <select value={examId} onChange={e => setExamId(e.target.value)} className="h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#2563EB]">
-                                <option value="">All Exams</option>
+                                <option value="">{showClassFilter ? "Select Exam…" : "All Exams"}</option>
                                 {exams.map((e: any) => <option key={e._id} value={e._id}>{e.name}</option>)}
                             </select>
                         )}
@@ -105,6 +122,12 @@ export default function ComputedReport() {
                                 <BarChart data={chart.data}><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} /><Tooltip /><Bar dataKey="value" fill={BLUE} radius={[6, 6, 0, 0]} /></BarChart>
                             )}
                         </ResponsiveContainer>
+                    </div>
+                )}
+
+                {showClassFilter && !ready && (
+                    <div className="bg-amber-50 border border-amber-100 rounded-2xl px-5 py-3 mb-5 text-sm text-amber-700 font-bold">
+                        Select both a class and an exam above to load the mark sheet.
                     </div>
                 )}
 
