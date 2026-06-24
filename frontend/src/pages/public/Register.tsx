@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { GraduationCap, Eye, EyeOff, User, Lock, Mail, ArrowRight, ShieldCheck, Globe, Building2 } from "lucide-react";
+import { GraduationCap, Eye, EyeOff, User, Lock, Mail, ArrowRight, Globe, Building2, Phone, Clock, ShieldCheck, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+
+type Step = "form" | "otp" | "waiting";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -18,12 +20,16 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("form");
+  const [otp, setOtp] = useState("");
+  const [activationCode, setActivationCode] = useState("");
 
   const [formData, setFormData] = useState({
     schoolName: "",
     subdomain: "",
     adminName: "",
     adminEmail: "",
+    adminPhone: "",
     password: "",
     confirmPassword: "",
   });
@@ -39,24 +45,47 @@ export default function Register() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    if (!formData.subdomain) {
-        toast.error("Subdomain is required");
-        return;
-    }
+    if (formData.password !== formData.confirmPassword) { toast.error("Passwords do not match"); return; }
+    if (!formData.subdomain) { toast.error("Subdomain is required"); return; }
     setIsLoading(true);
     try {
       await api.post("/onboard/register-tenant", formData);
-      toast.success("School account created successfully!");
-      navigate("/login"); // Navigate to login after registration
+      toast.success("Verification code sent to your email.");
+      setStep("otp");
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Registration failed.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const verifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await api.post("/onboard/verify-email", { subdomain: formData.subdomain, otp });
+      toast.success("Email verified!");
+      setStep("waiting");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Verification failed.");
+    } finally { setIsLoading(false); }
+  };
+
+  const resendOtp = async () => {
+    try { await api.post("/onboard/resend-otp", { subdomain: formData.subdomain }); toast.success("New code sent."); }
+    catch (err: any) { toast.error(err?.response?.data?.message || "Could not resend."); }
+  };
+
+  const activate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await api.post("/onboard/activate", { subdomain: formData.subdomain, code: activationCode });
+      toast.success("Account activated! You can now log in.");
+      navigate("/login");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Invalid activation code.");
+    } finally { setIsLoading(false); }
   };
 
   return (
@@ -80,7 +109,8 @@ export default function Register() {
             <h2 className="text-base font-bold text-[#5C67F2]">Create Account.</h2>
           </div>
 
-          {/* Form */}
+          {/* Step 1 — Registration form */}
+          {step === "form" && (
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -127,6 +157,18 @@ export default function Register() {
                   type="email"
                   placeholder="Email Address"
                   value={formData.adminEmail}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="relative group">
+                <Phone className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2] transition-colors" />
+                <input
+                  id="adminPhone"
+                  placeholder="Phone (e.g. +2547…)"
+                  value={formData.adminPhone}
                   onChange={handleChange}
                   className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-4 focus:outline-none focus:border-[#5C67F2] transition-all text-xs text-gray-700 font-medium"
                   required
@@ -180,6 +222,43 @@ export default function Register() {
               <ArrowRight className="w-4 h-4" /> {isLoading ? "CREATING..." : "Sign Up"}
             </button>
           </form>
+          )}
+
+          {/* Step 2 — Email OTP verification */}
+          {step === "otp" && (
+            <form onSubmit={verifyOtp} className="space-y-4">
+              <div className="flex items-center gap-2 text-[#5C67F2]"><ShieldCheck className="w-5 h-5" /><h3 className="font-black text-sm">Verify your email</h3></div>
+              <p className="text-[11px] text-gray-500">We sent a 6-digit code to <b>{formData.adminEmail}</b>. Enter it below.</p>
+              <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="● ● ● ● ● ●" inputMode="numeric"
+                className="w-full text-center tracking-[0.5em] text-lg font-black bg-transparent border-b-2 border-gray-300 py-2 focus:outline-none focus:border-[#5C67F2]" autoFocus />
+              <button type="submit" disabled={isLoading || otp.length < 6} className="w-full h-11 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+                <ShieldCheck className="w-4 h-4" /> {isLoading ? "VERIFYING…" : "Verify Email"}
+              </button>
+              <button type="button" onClick={resendOtp} className="w-full text-[11px] font-bold text-gray-500 flex items-center justify-center gap-1.5"><RefreshCw className="w-3 h-3" /> Resend code</button>
+            </form>
+          )}
+
+          {/* Step 3 — Waiting for review + activation code */}
+          {step === "waiting" && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
+                <Clock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <h3 className="font-black text-amber-800 text-sm">Waiting for Review</h3>
+                <p className="text-[11px] text-amber-700 mt-1">Your email is verified. A ShuleCloud administrator is reviewing your registration and will issue an <b>activation code</b> (by email or directly to you).</p>
+              </div>
+              <form onSubmit={activate} className="space-y-3">
+                <div className="relative group">
+                  <KeyRound className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#5C67F2]" />
+                  <input value={activationCode} onChange={e => setActivationCode(e.target.value.toUpperCase())} placeholder="Activation code (e.g. SCH-4827)"
+                    className="w-full bg-transparent border-b border-gray-300 py-2 pl-7 pr-2 focus:outline-none focus:border-[#5C67F2] text-sm font-bold tracking-wide text-gray-700" />
+                </div>
+                <button type="submit" disabled={isLoading || !activationCode} className="w-full h-11 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold rounded-lg shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+                  <ArrowRight className="w-4 h-4" /> {isLoading ? "ACTIVATING…" : "Activate Account"}
+                </button>
+              </form>
+              <p className="text-[10px] text-gray-400 text-center">Don't have a code yet? It will be provided once your school is reviewed.</p>
+            </div>
+          )}
 
           <div className="text-center pt-1">
             <Link to="/login" className="text-[11px] font-black text-gray-800 hover:text-[#5C67F2] transition-colors">

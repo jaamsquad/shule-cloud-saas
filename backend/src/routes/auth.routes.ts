@@ -198,7 +198,20 @@ router.post('/smart-login', async (req, res) => {
 
         if (subdomain) {
             const t = await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
-            if (t) { loadTenant(t); isSubdomainExplicit = true; }
+            if (t) {
+                // Block login for schools still under review (registered but not activated).
+                if (t.status && t.status !== 'active') {
+                    return res.status(403).json({
+                        code: 'TENANT_PENDING',
+                        status: t.status,
+                        emailVerified: !!t.emailVerified,
+                        message: t.status === 'pending'
+                            ? 'Your school account is awaiting review/activation. Please complete email verification and enter your activation code.'
+                            : `Your school account is ${t.status}. Contact ShuleCloud support.`,
+                    });
+                }
+                loadTenant(t); isSubdomainExplicit = true;
+            }
         }
 
         // Dev / bare-localhost fallback — only when no subdomain was provided

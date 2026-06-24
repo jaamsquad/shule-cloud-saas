@@ -61,6 +61,10 @@ function buildPrintCss(L: Required<PrintLayout>): string {
   .print-sheet .group { box-shadow: 0 0 0 1px #e5e7eb !important; ${L.scale === 1 ? "transform: none !important;" : ""} }
   /* Hide any control overlays (per-card print buttons, hover actions). */
   .print-sheet [data-no-print], .print-sheet .print\\:hidden { display: none !important; }
+  /* Hide photo-upload affordances (the camera icon overlays) and file inputs. */
+  .print-sheet label:has(input[type="file"]),
+  .print-sheet input[type="file"],
+  .print-sheet button { display: none !important; }
 `;
 }
 
@@ -93,7 +97,14 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
 
     const sheet = document.createElement("div");
     sheet.className = "print-sheet";
-    cards.forEach(c => sheet.appendChild(c.cloneNode(true) as HTMLElement));
+    cards.forEach(c => {
+        const clone = c.cloneNode(true) as HTMLElement;
+        // Strip interactive/upload affordances from the clone (camera icons, file
+        // inputs, buttons) so they never appear on the printed card.
+        clone.querySelectorAll('[data-no-print], button, input[type="file"]').forEach(el => el.remove());
+        clone.querySelectorAll("label").forEach(l => { if (l.querySelector('input[type="file"]')) l.remove(); });
+        sheet.appendChild(clone);
+    });
 
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>

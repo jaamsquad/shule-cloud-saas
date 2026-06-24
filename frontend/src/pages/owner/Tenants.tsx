@@ -130,9 +130,17 @@ export default function OwnerTenants() {
                                         </code>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge className={t.status === 'active' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}>
-                                            {t.status}
+                                        <Badge className={t.status === 'active' ? 'bg-success/10 text-success' : t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-destructive/10 text-destructive'}>
+                                            {t.status === 'pending' ? 'Awaiting Review' : t.status}
                                         </Badge>
+                                        {t.status === 'pending' && t.activationCode && (
+                                            <div className="mt-1 text-[11px]">
+                                                <span className="text-muted-foreground">Code: </span>
+                                                <code className="font-black text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded cursor-pointer" title="Click to copy — give this to the school"
+                                                    onClick={() => { navigator.clipboard?.writeText(t.activationCode); toast.success("Activation code copied"); }}>{t.activationCode}</code>
+                                                {!t.emailVerified && <span className="ml-1 text-[10px] text-slate-400">(email not verified)</span>}
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="text-sm">{t.subscription?.plan?.name || 'No Plan'}</div>
