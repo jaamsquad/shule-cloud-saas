@@ -47,8 +47,6 @@ export const INTEGRATIONS_CONFIG = [
             { label: "Till Number",        field: "tillNumber",     masked: false, placeholder: "e.g. 5678901", hint: "Till/Buy Goods only — the till customers pay to. Leave blank for Paybill." },
             { label: "Passkey",            field: "passkey",        masked: true,  hint: "From Safaricom business portal — must match this shortcode" },
             { label: "Environment",        field: "environment",    type: "select", options: ["sandbox", "production"] },
-            { label: "API Initiator",      field: "initiator",      masked: false, placeholder: "e.g. apiuser", hint: "Reconciliation only — API operator username from your M-PESA org portal" },
-            { label: "Security Credential", field: "securityCredential", masked: true, hint: "Reconciliation only — encrypted from the org-portal certificate. Enables Verify & Sync (Pull)" },
         ],
     },
     {

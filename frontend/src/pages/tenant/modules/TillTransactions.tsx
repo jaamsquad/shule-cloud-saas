@@ -182,44 +182,12 @@ function ApplyTillPayment({ onClose, onDone }: { onClose: () => void; onDone: ()
     const [phone, setPhone] = useState("");
     const [q, setQ] = useState("");
     const [student, setStudent] = useState<any>(null);
-    // Verification against Safaricom (async). null = not attempted.
-    const [verify, setVerify] = useState<null | { state: "checking" | "valid" | "invalid" | "unavailable" | "recorded"; message?: string; amount?: number; payerName?: string }>(null);
 
     const { data: students = [] } = useQuery<any[]>({
         queryKey: ["students"],
         queryFn: async () => (await api.get("/students")).data || [],
     });
 
-    // Ask Safaricom whether this code is a real, completed payment, then poll for the verdict.
-    const runVerify = async () => {
-        const c = code.trim().toUpperCase();
-        if (!/^[A-Z0-9]{8,15}$/.test(c)) { toast.error("Enter a valid M-PESA code first."); return; }
-        setVerify({ state: "checking", message: "Checking with Safaricom…" });
-        try {
-            const r = (await api.post("/fees/till-transactions/verify", { code: c })).data;
-            if (r.status === "checking") {
-                // Poll the verdict for ~40s.
-                for (let i = 0; i < 13; i++) {
-                    await new Promise(res => setTimeout(res, 3000));
-                    const s = (await api.get("/fees/till-transactions/verify-status", { params: { code: c } })).data;
-                    if (s.status === "valid") {
-                        if (s.amount) setAmount(String(s.amount));
-                        if (s.phone && !phone) setPhone(s.phone);
-                        setVerify({ state: "valid", amount: s.amount, payerName: s.payerName, message: s.resultDesc });
-                        return;
-                    }
-                    if (s.status === "invalid") { setVerify({ state: "invalid", message: s.resultDesc || "Safaricom could not find this code." }); return; }
-                }
-                setVerify({ state: "checking", message: "Still waiting on Safaricom — you can record it manually from the SMS." });
-            } else if (r.status === "recorded") {
-                setVerify({ state: "recorded", message: r.message, amount: r.amount });
-            } else {
-                setVerify({ state: "unavailable", message: r.message });
-            }
-        } catch (e: any) {
-            setVerify({ state: "unavailable", message: e.response?.data?.message || "Verification failed." });
-        }
-    };
     const matches = useMemo(() => {
         const s = q.trim().toLowerCase();
         if (!s) return [];
@@ -251,29 +219,8 @@ function ApplyTillPayment({ onClose, onDone }: { onClose: () => void; onDone: ()
                     <p className="text-xs text-slate-500 leading-relaxed">Paste the M-PESA code from the customer's confirmation SMS, enter the amount, and choose the student. It will be applied to their outstanding fees.</p>
                     <div>
                         <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">M-PESA Code</label>
-                        <div className="flex gap-2">
-                            <input value={code} onChange={e => { setCode(e.target.value.toUpperCase()); setVerify(null); }} placeholder="e.g. SLJ7ABC123" maxLength={15}
-                                className="flex-1 h-11 px-3 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:outline-none focus:border-emerald-500" />
-                            <button onClick={runVerify} disabled={verify?.state === "checking" || !code.trim()}
-                                className="h-11 px-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-sm flex items-center gap-1.5 disabled:opacity-50">
-                                {verify?.state === "checking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Verify
-                            </button>
-                        </div>
-                        {verify && (
-                            <div className={`mt-2 text-xs font-medium rounded-lg px-3 py-2 flex items-start gap-1.5 ${
-                                verify.state === "valid" ? "bg-emerald-50 text-emerald-700"
-                                : verify.state === "invalid" ? "bg-red-50 text-red-700"
-                                : verify.state === "checking" ? "bg-slate-50 text-slate-500"
-                                : "bg-amber-50 text-amber-700"}`}>
-                                {verify.state === "valid" ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : verify.state === "invalid" ? <X className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />}
-                                <span>
-                                    {verify.state === "valid" && <>Verified by Safaricom{verify.amount ? ` · KSh ${Number(verify.amount).toLocaleString()}` : ""}{verify.payerName ? ` · ${verify.payerName}` : ""}.</>}
-                                    {verify.state === "invalid" && (verify.message || "Safaricom could not find this code.")}
-                                    {verify.state === "checking" && (verify.message || "Checking…")}
-                                    {(verify.state === "unavailable" || verify.state === "recorded") && verify.message}
-                                </span>
-                            </div>
-                        )}
+                        <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="e.g. SLJ7ABC123" maxLength={15}
+                            className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:outline-none focus:border-emerald-500" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
