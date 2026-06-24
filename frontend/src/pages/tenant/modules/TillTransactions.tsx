@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Smartphone, Search, X, Download, RefreshCw } from "lucide-react";
+import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
@@ -23,8 +24,15 @@ export default function TillTransactions() {
         queryKey: ["till_transactions", params],
         queryFn: async () => (await api.get("/fees/till-transactions", { params })).data,
     });
+    // M-PESA integration status — to explain WHY direct till payments may be missing.
+    const { data: mpesa } = useQuery({
+        queryKey: ["mpesa_settings"],
+        queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
+    });
     const rows: any[] = data?.data || [];
     const summary = data?.summary || { count: 0, total: 0 };
+    // Did any directly-paid (C2B) transaction come through?
+    const hasC2B = rows.some(r => r.source === "C2B");
 
     const apply = () => setParams({
         ...(code && { code }), ...(phone && { phone }), ...(name && { name }),
@@ -67,6 +75,28 @@ export default function TillTransactions() {
                 <div className="bg-white rounded-2xl border border-slate-100 p-4"><div className="text-2xl font-black text-slate-800">{summary.count}</div><div className="text-[11px] font-bold text-slate-400">Transactions</div></div>
                 <div className="bg-white rounded-2xl border border-slate-100 p-4"><div className="text-2xl font-black text-emerald-600">{ksh(summary.total)}</div><div className="text-[11px] font-bold text-slate-400">Total Received</div></div>
             </div>
+
+            {/* Direct-payment (C2B) capture status — explains why manual till payments may be missing */}
+            {mpesa && !hasC2B && (
+                mpesa.registered ? (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-5 flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="text-sm text-emerald-800">
+                            <p className="font-bold">Direct payment capture is ON.</p>
+                            <p className="text-emerald-700/80 mt-0.5">Your C2B URLs are registered with Safaricom, so payments made directly to your {mpesa.txType === "CustomerBuyGoodsOnline" ? "Till" : "Paybill"} will appear here automatically. If a recent one is missing, it can take a moment — hit Refresh. (Note: Safaricom only sends these notifications in <b>Production</b>, and many <b>Till/Buy-Goods</b> shortcodes don't deliver C2B — Paybills do.)</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-5 flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-sm text-amber-800">
+                            <p className="font-bold">Payments made directly to your Till/Paybill aren't being captured yet.</p>
+                            <p className="text-amber-700/80 mt-0.5">To pull in transactions customers make on their own phones (Lipa na M-PESA → Paybill/Buy Goods), you must register your C2B notification URLs with Safaricom — one click.</p>
+                            <Link to="/integrations/daraja" className="inline-flex items-center gap-1.5 mt-2 h-9 px-4 rounded-xl bg-amber-600 text-white font-bold text-xs">Go to M-PESA Integration → Register C2B URLs</Link>
+                        </div>
+                    </div>
+                )
+            )}
 
             {/* Filters */}
             <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-5">
