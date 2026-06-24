@@ -1,8 +1,9 @@
 import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcode, GraduationCap, X, RotateCcw } from "lucide-react";
-import { IdCardPrintStyle } from "./idCardPrint";
+import { printAllCards, printSingleCard } from "./printCards";
 import { useState, useEffect } from "react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
+import { useSchoolBrand } from "@/lib/printDoc";
 
 // ── Layout config (persisted, applied live to the cards) ──────────────────────
 type CardLayout = {
@@ -38,6 +39,7 @@ const loadLayout = (): CardLayout => {
 export default function StudentIdCards() {
     const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("studentCardStyle") || "Landscape");
     const { items: students, isLoading, updateItem } = useItems("students");
+    const brand = useSchoolBrand();
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
 
@@ -51,12 +53,6 @@ export default function StudentIdCards() {
     const isWide = (s: string) => s === "Landscape" || s === "Classic Navy";
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("studentCardStyle", s); };
 
-    const [printOnlyId, setPrintOnlyId] = useState<string | null>(null);
-    const printOne = (id: string) => {
-        setPrintOnlyId(id);
-        document.body.classList.add("print-single");
-        setTimeout(() => { window.print(); document.body.classList.remove("print-single"); setPrintOnlyId(null); }, 80);
-    };
 
     const selectedStudent = students?.find((s: any) => s._id === selectedStudentId) || students?.[0];
 
@@ -82,7 +78,6 @@ export default function StudentIdCards() {
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
-            <IdCardPrintStyle />
             {/* Header Area */}
             <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm z-10 m-4 rounded-xl flex-wrap gap-4">
                 <div className="flex items-center flex-1">
@@ -123,7 +118,7 @@ export default function StudentIdCards() {
                     ))}
 
                     <button
-                        onClick={() => window.print()}
+                        onClick={() => printAllCards(".id-card")}
                         className="h-10 px-6 rounded-xl font-bold text-sm bg-[#FF9A5A] text-white shadow-lg shadow-orange-100 flex items-center gap-2 ml-auto hover:scale-105 transition-all"
                     >
                         <Printer className="w-4 h-4" /> Print All Cards
@@ -139,12 +134,12 @@ export default function StudentIdCards() {
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {students && students.length > 0 ? (
                             students.map((student: any) => (
-                                <div key={student._id} className={`flex justify-center relative group/card ${printOnlyId === student._id ? "print-target" : ""}`}>
-                                    <button onClick={() => printOne(student._id)} title="Print this card"
+                                <div key={student._id} className="id-card flex justify-center relative group/card">
+                                    <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
                                         className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
                                         <Printer className="w-4 h-4" />
                                     </button>
-                                    <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} />
+                                    <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
                                 </div>
                             ))
                         ) : (
@@ -264,7 +259,10 @@ function CustomizePanel({ layout, setL, setField, onReset, onClose }: {
     );
 }
 
-function IdCard({ student, onUpload, isUploading, activeStyle, layout }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, layout: CardLayout }) {
+function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, layout: CardLayout, brand?: { name: string; logo: string } }) {
+    // School name & logo default to the real institution profile (override via layout.schoolName).
+    const schoolName = layout.schoolName || brand?.name || "Student Identity Card";
+    const schoolLogo = brand?.logo || "";
     const photo = student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto;
     const regNo = student.registrationNo || student.admNo || "—";
     const accent = layout.accent;
@@ -295,9 +293,11 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout }: { stude
                     )}
                     {/* Header */}
                     <div className="flex items-center gap-3 px-5 py-3">
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(layout.schoolName || student.studentClass || "S")[0]}</div>
+                        {schoolLogo
+                            ? <img src={schoolLogo} alt="" className="w-9 h-9 rounded-full object-contain bg-white border border-slate-100" />
+                            : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(schoolName || student.studentClass || "S")[0]}</div>}
                         <div className="flex-1">
-                            <div className="font-black text-[15px]" style={{ color: NAVY }}>{layout.schoolName || "Student Identity Card"}</div>
+                            <div className="font-black text-[15px] leading-tight" style={{ color: NAVY }}>{schoolName}</div>
                             <div className="text-[9px] font-bold tracking-wider text-slate-500">{(student.studentClass || layout.cardTitle).toUpperCase()}</div>
                         </div>
                         <span className="text-[10px] font-black text-white px-2.5 py-1 rounded-full" style={{ background: NAVY }}>{student.admissionDate ? String(student.admissionDate).slice(0, 4) : new Date().getFullYear()}</span>

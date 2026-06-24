@@ -2,24 +2,19 @@ import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcod
 import { useState } from "react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
-import { IdCardPrintStyle } from "./idCardPrint";
+import { printAllCards, printSingleCard } from "./printCards";
+import { useSchoolBrand } from "@/lib/printDoc";
 
 export default function StaffIdCards() {
     const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("staffCardStyle") || "Landscape");
     const { items: staffMembers, isLoading, updateItem } = useItems("staff");
+    const brand = useSchoolBrand();
     const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
 
     const styles = ["Landscape", "Professional", "Corporate", "Minimal", "Default"];
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("staffCardStyle", s); };
 
-    const [printOnlyId, setPrintOnlyId] = useState<string | null>(null);
-    const printOne = (id: string) => {
-        setPrintOnlyId(id);
-        document.body.classList.add("print-single");
-        setTimeout(() => { window.print(); document.body.classList.remove("print-single"); setPrintOnlyId(null); }, 80);
-    };
-    
     const selectedStaff = staffMembers?.find((s: any) => s._id === selectedStaffId) || staffMembers?.[0];
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,7 +39,6 @@ export default function StaffIdCards() {
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
-            <IdCardPrintStyle />
             {/* Header Area */}
             <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm z-10 m-4 rounded-xl flex-wrap gap-4">
                 <div className="flex items-center flex-1">
@@ -81,8 +75,8 @@ export default function StaffIdCards() {
                         </button>
                     ))}
                     
-                    <button 
-                        onClick={() => window.print()}
+                    <button
+                        onClick={() => printAllCards(".id-card")}
                         className="h-10 px-6 rounded-xl font-bold text-sm bg-[#FF9A5A] text-white shadow-lg shadow-orange-100 flex items-center gap-2 ml-auto hover:scale-105 transition-all"
                     >
                         <Printer className="w-4 h-4" /> Print All Cards
@@ -98,12 +92,12 @@ export default function StaffIdCards() {
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeStyle === "Landscape" ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {staffMembers && staffMembers.length > 0 ? (
                             staffMembers.map((staff: any) => (
-                                <div key={staff._id} className={`flex justify-center relative group/card ${printOnlyId === staff._id ? "print-target" : ""}`}>
-                                    <button onClick={() => printOne(staff._id)} title="Print this card"
+                                <div key={staff._id} className="id-card flex justify-center relative group/card">
+                                    <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
                                         className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
                                         <Printer className="w-4 h-4" />
                                     </button>
-                                    <IdCard staff={staff} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} />
+                                    <IdCard staff={staff} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} brand={brand} />
                                 </div>
                             ))
                         ) : (
@@ -119,7 +113,9 @@ export default function StaffIdCards() {
     );
 }
 
-function IdCard({ staff, onUpload, isUploading, activeStyle }: { staff: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string }) {
+function IdCard({ staff, onUpload, isUploading, activeStyle, brand }: { staff: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, brand?: { name: string; logo: string } }) {
+    const schoolName = brand?.name || "";
+    const schoolLogo = brand?.logo || "";
     const staffNameParts = staff.fullName ? staff.fullName.split(' ') : ['Staff', 'Member'];
     const staffId = staff.employeeId || staff.nationalId || `STF-${staff._id?.substring(0, 5)}`;
     
@@ -284,7 +280,10 @@ function IdCard({ staff, onUpload, isUploading, activeStyle }: { staff: any, onU
                 </div>
                 {/* Right info */}
                 <div className="flex-1 p-6 flex flex-col">
-                    <div className="flex items-center gap-2 mb-1"><Briefcase className="w-4 h-4 text-[#5C67F2]" /><span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-[0.2em]">Staff Identity Card</span></div>
+                    <div className="flex items-center gap-2 mb-1">
+                        {schoolLogo ? <img src={schoolLogo} alt="" className="w-5 h-5 rounded object-contain" /> : <Briefcase className="w-4 h-4 text-[#5C67F2]" />}
+                        <span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-[0.2em] truncate">{schoolName || "Staff Identity Card"}</span>
+                    </div>
                     <h3 className="font-black text-slate-900 text-xl leading-tight">{name}</h3>
                     <div className="mt-4 space-y-2 text-xs flex-1">
                         {[["ID No", staffId], ["Department", staff.department || "Staff"], ["Joined", staff.joiningDate || new Date().toLocaleDateString()]].map(([k, v]) => (

@@ -1,0 +1,119 @@
+// Robust ID-card printing — shared by the Student and Staff ID pages.
+//
+// Approach: instead of fighting the live DOM with @media-print visibility hacks
+// (which leave artifacts and print before images load), we render ONLY the cards
+// into a hidden same-origin <iframe>, copy the page's stylesheets so the cards look
+// identical, wait for every image (logos, QR codes, barcodes) to finish loading,
+// then call print() on the iframe and clean up. No sidebar, navbar, buttons or any
+// other UI is included — only the cards. Works in Chrome, Edge and Firefox, and in
+// the in-app WebView (no popup window, so no popup blockers).
+
+/** Collect the current document's CSS (inline <style> + linked stylesheets) so the
+ *  cloned cards keep their exact look. We inline rules where readable and fall back
+ *  to <link> tags for cross-origin sheets the browser won't let us read. */
+function collectStyles(): string {
+    let css = "";
+    const links: string[] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+        try {
+            const rules = (sheet as CSSStyleSheet).cssRules;
+            for (const rule of Array.from(rules)) css += rule.cssText + "\n";
+        } catch {
+            // Cross-origin sheet — can't read its rules; re-link it instead.
+            if (sheet.href) links.push(`<link rel="stylesheet" href="${sheet.href}">`);
+        }
+    }
+    // Also carry over any <style> tags (Vite injects component styles as these).
+    for (const tag of Array.from(document.querySelectorAll("style"))) css += tag.textContent + "\n";
+    return links.join("\n") + `<style>${css}</style>`;
+}
+
+/** Print-specific layout: A4 portrait, cards centred, never split across a page. */
+const PRINT_CSS = `
+  @page { size: A4 portrait; margin: 10mm; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+  html, body { background: #fff !important; margin: 0; padding: 0; }
+  .print-sheet {
+    display: flex; flex-wrap: wrap; gap: 8mm;
+    justify-content: center; align-content: flex-start; padding: 4mm;
+  }
+  .print-sheet > * {
+    margin: 0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  /* Strip on-screen-only effects so cards sit flat & crisp on paper. */
+  .print-sheet * { animation: none !important; transition: none !important; }
+  .print-sheet .group { box-shadow: 0 0 0 1px #e5e7eb !important; transform: none !important; }
+  /* Hide any control overlays (per-card print buttons, hover actions). */
+  .print-sheet [data-no-print], .print-sheet .print\\:hidden { display: none !important; }
+`;
+
+/** Wait until every <img> inside a root has loaded (or errored), so nothing prints blank. */
+function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
+    const imgs = Array.from(root.querySelectorAll("img"));
+    if (!imgs.length) return Promise.resolve();
+    return Promise.race([
+        Promise.all(imgs.map(img =>
+            img.complete && img.naturalWidth > 0
+                ? Promise.resolve()
+                : new Promise<void>(res => { img.addEventListener("load", () => res(), { once: true }); img.addEventListener("error", () => res(), { once: true }); }),
+        )).then(() => undefined),
+        new Promise<void>(res => setTimeout(res, timeoutMs)),
+    ]);
+}
+
+/** Build the hidden iframe, drop the cards in, wait for images, print, then remove. */
+function printNodes(cards: HTMLElement[], title = "ID Cards"): void {
+    if (!cards.length) { alert("No cards available to print."); return; }
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) { iframe.remove(); alert("Could not open the print view."); return; }
+
+    const sheet = document.createElement("div");
+    sheet.className = "print-sheet";
+    cards.forEach(c => sheet.appendChild(c.cloneNode(true) as HTMLElement));
+
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+        ${collectStyles()}
+        <style>${PRINT_CSS}</style>
+        </head><body></body></html>`);
+    doc.body.appendChild(sheet);
+    doc.close();
+
+    // Print only after images (logos/QR/barcodes) have loaded — never blank pages.
+    waitForImages(doc).then(() => {
+        const win = iframe.contentWindow!;
+        win.focus();
+        win.print();
+        // Clean up shortly after the print dialog is dismissed.
+        const cleanup = () => setTimeout(() => iframe.remove(), 500);
+        win.addEventListener("afterprint", cleanup, { once: true });
+        setTimeout(cleanup, 60000); // safety net if afterprint never fires
+    });
+}
+
+/**
+ * Print every card matched by `selector` (e.g. ".id-card" inside the grid).
+ * Excludes elements flagged with [data-no-print].
+ */
+export function printAllCards(selector: string): void {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(el => !el.hasAttribute("data-no-print"));
+    printNodes(cards, "ID Cards");
+}
+
+/**
+ * Print a single card. Pass the card element itself, or any element inside it —
+ * we walk up to the nearest `.id-card`.
+ */
+export function printSingleCard(elementInsideCard: HTMLElement | null): void {
+    if (!elementInsideCard) { alert("No card to print."); return; }
+    const card = elementInsideCard.closest<HTMLElement>(".id-card") || elementInsideCard;
+    printNodes([card], "ID Card");
+}
