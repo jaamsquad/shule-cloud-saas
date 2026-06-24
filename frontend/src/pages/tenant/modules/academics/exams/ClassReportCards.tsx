@@ -71,16 +71,18 @@ export default function ClassReportCards() {
     const { data: tenantProfile } = useQuery<any>({ queryKey: ["tenant_profile_global"], queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
     const { data: periods = [] } = useQuery<any[]>({ queryKey: ["periods"], queryFn: async () => (await api.get("/academics/periods")).data || [] });
 
-    // All subjects for the class
+    // Subjects ASSIGNED to the class (set in Assign Subjects). Report cards show
+    // only these — never the whole subjects collection.
     const { data: classSubjects = [] } = useQuery<any[]>({
         queryKey: ["subjects_for_class", selectedClass?._id],
         queryFn: async () => {
-            const name = selectedClass?.levelName || selectedClass?.name || "";
+            if (!selectedClass) return [];
+            if (Array.isArray(selectedClass.subjects) && selectedClass.subjects.length > 0) {
+                return selectedClass.subjects.map((s: any) => ({ _id: s.subjectId || s._id, name: s.subjectName || s.name, subjectName: s.subjectName || s.name }));
+            }
+            const name = selectedClass.levelName || selectedClass.name || "";
             const r = await api.get(`/subjects?className=${encodeURIComponent(name)}`);
-            const byClass = Array.isArray(r.data) ? r.data : [];
-            if (byClass.length > 0) return byClass;
-            const all = await api.get("/subjects");
-            return Array.isArray(all.data) ? all.data : [];
+            return Array.isArray(r.data) ? r.data : [];
         },
         enabled: !!selectedClass,
     });

@@ -121,18 +121,22 @@ export default function ResultCard() {
         queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
     });
 
-    // ── ALL subjects for the selected class (to show "-" for unscored) ────────
+    // ── Subjects ASSIGNED to the selected class (to show "-" for unscored) ────
+    // Authoritative source = class.subjects (set in Assign Subjects). Only these
+    // subjects appear on the report card — never the whole subjects collection.
     const { data: classSubjects = [] } = useQuery<any[]>({
         queryKey: ["subjects_for_class", selectedClass?._id, selectedClass?.levelName],
         queryFn: async () => {
             if (!selectedClass) return [];
+            // 1) The class's own assigned subjects.
+            if (Array.isArray(selectedClass.subjects) && selectedClass.subjects.length > 0) {
+                return selectedClass.subjects.map((s: any) => ({ _id: s.subjectId || s._id, name: s.subjectName || s.name, subjectName: s.subjectName || s.name }));
+            }
+            // 2) Fall back to subjects tagged with this class name (legacy data).
             const name = selectedClass.levelName || selectedClass.name || "";
             const r = await api.get(`/subjects?className=${encodeURIComponent(name)}`);
             const byClass = Array.isArray(r.data) ? r.data : [];
-            if (byClass.length > 0) return byClass;
-            // fallback: all subjects
-            const all = await api.get("/subjects");
-            return Array.isArray(all.data) ? all.data : [];
+            return byClass;
         },
         enabled: !!selectedClass,
     });

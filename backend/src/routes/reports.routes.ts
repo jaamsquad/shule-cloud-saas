@@ -37,6 +37,20 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             ? await db.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray()
             : [];
         const allSubjects = await db.collection('subjects').find({}).toArray();
+        // Subjects assigned to each class (class.subjects = [{subjectId, subjectName}]).
+        // This is the authoritative per-class subject list — report cards must show
+        // ONLY these, never the whole subjects collection.
+        const classDocs = await db.collection('classes').find({}).toArray().catch(() => []);
+        const classSubjectsByName: Record<string, { name: string; id: string }[]> = {};
+        const classSubjectsById: Record<string, { name: string; id: string }[]> = {};
+        for (const c of classDocs) {
+            const list = Array.isArray(c.subjects)
+                ? c.subjects.map((s: any) => ({ name: s.subjectName || s.name || '', id: String(s.subjectId || s._id || '') })).filter((s: any) => s.name)
+                : [];
+            const nameKey = String(c.name || c.levelName || c.className || '').toLowerCase().trim();
+            if (nameKey) classSubjectsByName[nameKey] = list;
+            classSubjectsById[String(c._id)] = list;
+        }
         const examName = examDocs.map((e: any) => e.examName || e.name).filter(Boolean).join(' + ') || '—';
         const isAnnual = examIds.length > 1;
 
@@ -78,27 +92,20 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 String(m.studentId) === sid || m.studentId === student.admNo || m.studentId === student.registrationNo);
             const studentClassName = student.studentClass || student.className || student.currentClass || "General Class";
 
-            // Subjects assigned to this student's class (fallback to all subjects).
-            let assignedSubjects = allSubjects.filter((sub: any) =>
-                sub.classId === student.classId ||
-                sub.className === studentClassName ||
-                sub.class === studentClassName ||
-                sub.levelName === studentClassName ||
-                (sub.levelName && String(studentClassName).toLowerCase().includes(String(sub.levelName).toLowerCase())) ||
-                (sub.className && String(studentClassName).toLowerCase().includes(String(sub.className).toLowerCase()))
-            );
-            if (assignedSubjects.length === 0 && allSubjects.length > 0) assignedSubjects = allSubjects;
-
-            // If a student has marks for subjects not in the assigned list, include those too.
-            const subjectKeys = new Set(assignedSubjects.map((s: any) => (s.name || s.subjectName || '').toLowerCase().trim()));
-            const extraFromMarks = Array.from(new Set(studentMarks.map((m: any) => (m.subjectName || '').toLowerCase().trim())))
-                .filter(n => n && !subjectKeys.has(n));
+            // ONLY the subjects assigned to this student's class. Resolve by the
+            // student's classId first, else by class name. No all-subjects fallback.
+            let assignedSubjects = classSubjectsById[String(student.classId)]
+                || classSubjectsByName[String(studentClassName).toLowerCase().trim()]
+                || [];
+            // Legacy fallback: if the class has no assigned subjects, derive the list
+            // from this student's own marks (still NOT the whole subjects collection).
+            if (assignedSubjects.length === 0) {
+                assignedSubjects = Array.from(new Set(studentMarks.map((m: any) => (m.subjectName || '').trim()).filter(Boolean)))
+                    .map(name => ({ name, id: '' }));
+            }
 
             let totalPct = 0;
-            const subjectsList = [
-                ...assignedSubjects.map((sub: any) => ({ name: sub.name || sub.subjectName || 'Subject', id: sub._id.toString() })),
-                ...extraFromMarks.map(n => ({ name: studentMarks.find((m: any) => (m.subjectName || '').toLowerCase().trim() === n)?.subjectName || n, id: '' })),
-            ].map(sub => {
+            const subjectsList = assignedSubjects.map(sub => {
                 // All marks for this subject across the chosen exams.
                 const subMarks = studentMarks.filter((m: any) =>
                     (sub.id && String(m.subjectId) === sub.id) ||
