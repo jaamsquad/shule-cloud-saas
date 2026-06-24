@@ -310,7 +310,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                 {/* FRONT */}
                 <div className="w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden relative">
                     {layout.showPhoto && (
-                        <label className="absolute top-3 right-3 cursor-pointer z-20"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-8 h-8 bg-white/90 rounded-lg border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: NAVY }}><Camera className="w-4 h-4" /></div></label>
+                        <label data-no-print className="absolute top-3 right-3 cursor-pointer z-20 print:hidden"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-8 h-8 bg-white/90 rounded-lg border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: NAVY }}><Camera className="w-4 h-4" /></div></label>
                     )}
                     {/* Header */}
                     <div className="flex items-center gap-3 px-5 py-3">
@@ -330,12 +330,12 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                                 {isUploading ? <Loader2 className="w-7 h-7 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : "PHOTO"}
                             </div>
                         )}
-                        <div className="flex-1">
-                            <div className="text-[19px] font-black leading-tight">{student.studentName || "Student"}</div>
-                            <div className="text-[12px] mb-3" style={{ color: "#9db6da" }}>{student.gender || ""}</div>
+                        <div className="flex-1" style={{ color: "#ffffff" }}>
+                            <div className="text-[19px] font-black leading-tight" style={{ color: "#ffffff" }}>{student.studentName || student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student"}</div>
+                            <div className="text-[12px] mb-3" style={{ color: "#dbe7f5" }}>{student.gender || ""}</div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
                                 {rows.map(([l, v]) => (
-                                    <div key={l}><div className="text-[8px] font-bold tracking-wide uppercase" style={{ color: "#6f8db8" }}>{l}</div><div className="text-[12px] font-black">{v}</div></div>
+                                    <div key={l}><div className="text-[8px] font-bold tracking-wide uppercase" style={{ color: "#c7d6ea" }}>{l}</div><div className="text-[12px] font-black" style={{ color: "#ffffff" }}>{v}</div></div>
                                 ))}
                             </div>
                         </div>
@@ -364,7 +364,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
         return (
             <div className="w-[520px] h-[330px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative flex group">
                 {layout.showPhoto && (
-                    <label className="absolute top-3 right-3 cursor-pointer z-20"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-9 h-9 bg-white/80 rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}><Camera className="w-4 h-4" /></div></label>
+                    <label data-no-print className="absolute top-3 right-3 cursor-pointer z-20 print:hidden"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-9 h-9 bg-white/80 rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}><Camera className="w-4 h-4" /></div></label>
                 )}
                 {/* Left colored panel */}
                 <div className="w-[185px] flex flex-col items-center justify-center p-5 relative" style={{ background: `linear-gradient(to bottom, ${accent}, #0A1B3F)` }}>
@@ -418,7 +418,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                 {layout.schoolName && <div className="absolute top-3 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] z-20">{layout.schoolName}</div>}
                 {/* Image Upload Label */}
                 {layout.showPhoto && (
-                    <label className="absolute top-4 cursor-pointer hover:scale-110 transition-transform">
+                    <label data-no-print className="absolute top-4 cursor-pointer hover:scale-110 transition-transform print:hidden">
                         <input type="file" className="hidden" onChange={onUpload} accept="image/*" />
                         <div className="w-10 h-10 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}>
                             <Camera className="w-5 h-5" />
