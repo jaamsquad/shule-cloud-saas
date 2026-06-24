@@ -4,6 +4,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
+import { resolveMpesaConfig } from '../services/mpesa.service';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
@@ -135,6 +136,58 @@ const requireRole = (minRole: 'STUDENT' | 'TEACHER' | 'ADMIN' | 'SUPERADMIN') =>
 const getSchoolId = (req: Request) => {
     return req.tenantContext?.tenantId || req.params.sid || 'default_school';
 };
+
+// ── M-PESA Till/Paybill transactions ──────────────────────────────────────────
+// All C2B payments received on THIS school's Till/Paybill (Safaricom confirmation
+// callbacks are stored in the meta DB as mpesa_c2b_payments). Filterable by the
+// M-PESA code (TransID), payer phone (MSISDN) or payer name.
+router.get('/fees/till-transactions', async (req: Request, res: Response) => {
+    try {
+        const tenantDb = getRequestDb(req);
+        const cfg = await resolveMpesaConfig(tenantDb).catch(() => null as any);
+        // This school's identifiers: the paybill/store number and the till number.
+        const codes = [cfg?.shortcode, cfg?.tillNumber].map((v: any) => String(v || '').trim()).filter(Boolean);
+        if (!codes.length) {
+            return res.json({ data: [], summary: { count: 0, total: 0 }, configured: false, message: 'No M-PESA Paybill/Till configured for this school.' });
+        }
+
+        const meta = getMetaDb();
+        const q: any = { BusinessShortCode: { $in: codes } };
+        const { code, phone, name, from, to } = req.query as any;
+        if (code) q.TransID = { $regex: String(code).trim(), $options: 'i' };
+        if (phone) q.MSISDN = { $regex: String(phone).replace(/\D/g, ''), $options: 'i' };
+        if (name) {
+            const n = String(name).trim();
+            q.$or = [
+                { FirstName: { $regex: n, $options: 'i' } },
+                { MiddleName: { $regex: n, $options: 'i' } },
+                { LastName: { $regex: n, $options: 'i' } },
+            ];
+        }
+        if (from || to) { q.receivedAt = {}; if (from) q.receivedAt.$gte = new Date(from); if (to) { const d = new Date(to); d.setHours(23, 59, 59); q.receivedAt.$lte = d; } }
+
+        const rows = await meta.collection('mpesa_c2b_payments').find(q).sort({ receivedAt: -1 }).limit(2000).toArray().catch(() => []);
+        const data = rows.map((r: any) => ({
+            code: r.TransID || '',
+            phone: r.MSISDN || '',
+            name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
+            account: r.BillRefNumber || '',
+            amount: Number(r.TransAmount) || 0,
+            shortcode: r.BusinessShortCode || '',
+            paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null),
+            transTime: r.TransTime || '',
+        }));
+        const total = data.reduce((s: number, d: any) => s + d.amount, 0);
+        res.json({ data, summary: { count: data.length, total }, configured: true, shortcodes: codes });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// M-PESA TransTime is "YYYYMMDDHHmmss" — convert to a Date.
+function parseMpesaTime(t: string): Date | null {
+    const m = String(t || '').match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    1. FEE STRUCTURES ENDPOINTS
