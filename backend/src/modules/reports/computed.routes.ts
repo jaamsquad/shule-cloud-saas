@@ -19,8 +19,12 @@ const gradeOf = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 
 // marksObtained/totalMarks). They don't carry className, so enrich each mark with
 // the student's class + name. Falls back to the legacy v2 collection if present.
 const marks = async (req: Request) => {
-    let all = await db(req).collection('exam_marks').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
-    if (!all.length) all = await db(req).collection('student_exam_marks_v2').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+    // Optional exam filter — ?exam_id=<id>. Absent / empty = all exams.
+    const examId = String((req.query.exam_id as string) || '').trim();
+    const examFilter: any = { deletedAt: { $exists: false } };
+    if (examId) examFilter.examId = examId;
+    let all = await db(req).collection('exam_marks').find(examFilter).toArray().catch(() => []);
+    if (!all.length && !examId) all = await db(req).collection('student_exam_marks_v2').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
     if (!all.length) return all;
 
     // Build a studentId → {class, name} map once.

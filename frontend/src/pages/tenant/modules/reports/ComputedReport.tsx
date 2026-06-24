@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Printer, ArrowLeft, Loader2, FileBarChart } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -21,13 +22,25 @@ const ENDPOINT: Record<string, string> = {
     "ministry-data": "ministry-data",
 };
 
+// Marks-based reports that should offer an exam filter.
+const EXAM_FILTERABLE = new Set(["subject-performance", "class-performance", "grade-distribution", "mark-sheets", "cbc-competency", "mean-score-trends"]);
+
 export default function ComputedReport() {
     const { key = "" } = useParams();
     const endpoint = ENDPOINT[key];
+    const showExamFilter = EXAM_FILTERABLE.has(key);
+    const [examId, setExamId] = useState("");   // "" = All Exams
+
+    // Exam list for the dropdown (only fetched for marks-based reports).
+    const { data: exams = [] } = useQuery({
+        queryKey: ["reports_shared_exams"],
+        queryFn: async () => (await api.get("/reports/shared/exams")).data,
+        enabled: showExamFilter,
+    });
 
     const { data, isLoading } = useQuery({
-        queryKey: ["computed_report", key],
-        queryFn: async () => (await api.get(`/reports/computed/${endpoint}`)).data,
+        queryKey: ["computed_report", key, examId],
+        queryFn: async () => (await api.get(`/reports/computed/${endpoint}`, { params: examId ? { exam_id: examId } : {} })).data,
         enabled: !!endpoint,
     });
     const { data: schoolRaw } = useQuery({ queryKey: ["tenant_profile_global"], queryFn: async () => (await api.get("/auth/tenant/profile")).data });
@@ -59,7 +72,15 @@ export default function ComputedReport() {
                         <Link to="/reports" className="inline-flex items-center gap-1.5 text-xs font-black text-slate-400 hover:text-[#2563EB] uppercase tracking-widest mb-2"><ArrowLeft className="w-3.5 h-3.5" /> Reports Center</Link>
                         <h1 className="text-2xl font-black text-slate-900">{data?.title}</h1>
                     </div>
-                    <button onClick={print} disabled={!rows.length} className="h-10 px-5 bg-[#2563EB] hover:bg-blue-700 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md"><Printer className="w-4 h-4" /> Print / Export</button>
+                    <div className="flex items-center gap-2">
+                        {showExamFilter && (
+                            <select value={examId} onChange={e => setExamId(e.target.value)} className="h-10 px-4 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:border-[#2563EB]">
+                                <option value="">All Exams</option>
+                                {exams.map((e: any) => <option key={e._id} value={e._id}>{e.name}</option>)}
+                            </select>
+                        )}
+                        <button onClick={print} disabled={!rows.length} className="h-10 px-5 bg-[#2563EB] hover:bg-blue-700 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md"><Printer className="w-4 h-4" /> Print / Export</button>
+                    </div>
                 </div>
 
                 {cards.length > 0 && (
