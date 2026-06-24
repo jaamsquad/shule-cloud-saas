@@ -103,6 +103,8 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
         // inputs, buttons) so they never appear on the printed card.
         clone.querySelectorAll('[data-no-print], button, input[type="file"]').forEach(el => el.remove());
         clone.querySelectorAll("label").forEach(l => { if (l.querySelector('input[type="file"]')) l.remove(); });
+        // Drop images that have no usable source (they'd print as a broken icon).
+        clone.querySelectorAll("img").forEach(img => { const s = img.getAttribute("src") || ""; if (!s || s === "#" || s.startsWith("data:,")) img.remove(); });
         sheet.appendChild(clone);
     });
 

@@ -44,6 +44,14 @@ export default function StudentIdCards() {
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [printModal, setPrintModal] = useState(false);
+    const [search, setSearch] = useState("");
+    // Filter the cards shown (and therefore printed) by name / student ID / class.
+    const visibleStudents = (students || []).filter((s: any) => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return [s.studentName, s.name, `${s.firstName || ""} ${s.lastName || ""}`, s.registrationNo, s.admNo, s.studentClass, s.currentClass, s.className]
+            .filter(Boolean).some((v: any) => String(v).toLowerCase().includes(q));
+    });
 
     const [layout, setLayout] = useState<CardLayout>(loadLayout);
     const [showCustomize, setShowCustomize] = useState(false);
@@ -123,8 +131,19 @@ export default function StudentIdCards() {
                         onClick={() => setPrintModal(true)}
                         className="h-10 px-6 rounded-xl font-bold text-sm bg-[#FF9A5A] text-white shadow-lg shadow-orange-100 flex items-center gap-2 ml-auto hover:scale-105 transition-all"
                     >
-                        <Printer className="w-4 h-4" /> Print All Cards
+                        <Printer className="w-4 h-4" /> Print {search ? "Filtered" : "All"} Cards
                     </button>
+                </div>
+
+                {/* Search — filter by name, student ID or class to print specific cards */}
+                <div className="flex items-center gap-2 mb-6 print:hidden">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, student ID or class…"
+                            className="w-full h-10 pl-9 pr-9 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" />
+                        {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
+                    </div>
+                    {search && <span className="text-xs font-bold text-slate-400">{visibleStudents.length} match{visibleStudents.length === 1 ? "" : "es"}</span>}
                 </div>
 
                 {isLoading ? (
@@ -134,8 +153,8 @@ export default function StudentIdCards() {
                     </div>
                 ) : (
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
-                        {students && students.length > 0 ? (
-                            students.map((student: any) => (
+                        {visibleStudents.length > 0 ? (
+                            visibleStudents.map((student: any) => (
                                 <div key={student._id} className="id-card flex justify-center relative group/card">
                                     <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
                                         className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
@@ -242,7 +261,6 @@ function CustomizePanel({ layout, setL, setField, onReset, onClose }: {
                         <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1">Detail Fields</label>
                         <div className="divide-y divide-slate-50">
                             <Toggle label="Registration No." on={layout.fields.reg} onChange={v => setField("reg", v)} />
-                            <Toggle label="Class" on={layout.fields.class} onChange={v => setField("class", v)} />
                             <Toggle label="Gender" on={layout.fields.gender} onChange={v => setField("gender", v)} />
                             <Toggle label="Date of Admission" on={layout.fields.doa} onChange={v => setField("doa", v)} />
                         </div>
@@ -279,13 +297,13 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
     // Detail rows respecting the configured field toggles.
     const rows: [string, string][] = [];
     if (layout.fields.reg) rows.push(["Reg No", regNo]);
-    if (layout.fields.class) rows.push(["Class", student.studentClass || "—"]);
+    // Class is intentionally never shown on student ID cards.
     if (layout.fields.gender) rows.push(["Gender", student.gender || "—"]);
     if (layout.fields.doa) rows.push(["DOA", student.admissionDate || "—"]);
 
     // ── Classic Navy (the ID Card Studio design, rendered per-student) ────────
     if (activeStyle === "Classic Navy") {
-        const NAVY = "#0f2548";
+        const NAVY = accent;  // Classic Navy now follows the chosen accent colour.
         const walletQr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=${encodeURIComponent(`https://shulecloud.com/wallet/${encodeURIComponent(regNo)}`)}`;
         return (
             <div className="flex flex-col gap-4 group">
@@ -298,10 +316,10 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                     <div className="flex items-center gap-3 px-5 py-3">
                         {schoolLogo
                             ? <img src={schoolLogo} alt="" className="w-9 h-9 rounded-full object-contain bg-white border border-slate-100" />
-                            : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(schoolName || student.studentClass || "S")[0]}</div>}
+                            : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(schoolName || "S")[0]}</div>}
                         <div className="flex-1">
                             <div className="font-black text-[15px] leading-tight" style={{ color: NAVY }}>{schoolName}</div>
-                            <div className="text-[9px] font-bold tracking-wider text-slate-500">{(student.studentClass || layout.cardTitle).toUpperCase()}</div>
+                            <div className="text-[9px] font-bold tracking-wider text-slate-500">{layout.cardTitle.toUpperCase()}</div>
                         </div>
                         <span className="text-[10px] font-black text-white px-2.5 py-1 rounded-full" style={{ background: NAVY }}>{student.admissionDate ? String(student.admissionDate).slice(0, 4) : new Date().getFullYear()}</span>
                     </div>
@@ -314,7 +332,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                         )}
                         <div className="flex-1">
                             <div className="text-[19px] font-black leading-tight">{student.studentName || "Student"}</div>
-                            <div className="text-[12px] mb-3" style={{ color: "#9db6da" }}>{student.studentClass || ""}{student.gender ? ` · ${student.gender}` : ""}</div>
+                            <div className="text-[12px] mb-3" style={{ color: "#9db6da" }}>{student.gender || ""}</div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
                                 {rows.map(([l, v]) => (
                                     <div key={l}><div className="text-[8px] font-bold tracking-wide uppercase" style={{ color: "#6f8db8" }}>{l}</div><div className="text-[12px] font-black">{v}</div></div>
@@ -356,7 +374,7 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                             {isUploading ? <Loader2 className="w-8 h-8 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap className="w-12 h-12 text-white/70" />}
                         </div>
                     )}
-                    <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{student.studentClass || "Student"}</p>
+                    <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{layout.cardTitle || "Student"}</p>
                 </div>
                 {/* Right info */}
                 <div className="flex-1 p-6 flex flex-col">

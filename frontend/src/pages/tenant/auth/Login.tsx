@@ -221,6 +221,12 @@ export default function Login() {
         } catch (err: any) {
             const code = err.response?.data?.code;
             const msg  = err.response?.data?.message || "Login failed. Check your credentials.";
+            if (code === "TENANT_PENDING") {
+                // Account registered but not yet activated → waiting/activation page.
+                const sub = activeSubdomain || "";
+                navigate(`/activate?subdomain=${encodeURIComponent(sub)}&verified=${err.response?.data?.emailVerified ? "1" : "0"}`, { replace: true });
+                return;
+            }
             if (code === "CROSS_TENANT_BLOCKED") {
                 // Show a friendlier message for wrong-school attempts
                 toast.error(msg, { duration: 8000 });

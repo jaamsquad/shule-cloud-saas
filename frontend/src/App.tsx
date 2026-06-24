@@ -34,6 +34,7 @@ import Terms from "./pages/public/Terms";
 import Privacy from "./pages/public/Privacy";
 import TenantResolver from "./pages/public/TenantResolver";
 import Register from "./pages/public/Register";
+import Activate from "./pages/public/Activate";
 
 // Tenant Auth
 import Login from "./pages/tenant/auth/Login";
@@ -441,6 +442,7 @@ const App = () => {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/find-school" element={<TenantResolver />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/activate" element={<Activate />} />
             <Route path="/onboarding" element={<OnboardingWizard />} />
 
             {/* 2. SYSTEM OWNER PORTAL */}

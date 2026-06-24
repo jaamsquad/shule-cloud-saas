@@ -1,10 +1,14 @@
-import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcode, Briefcase } from "lucide-react";
-import { useState } from "react";
+import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcode, Briefcase, X } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 import { printSingleCard, countCards } from "./printCards";
 import PrintCardsModal from "./PrintCardsModal";
 import { useSchoolBrand } from "@/lib/printDoc";
+
+type StaffLayout = { accent: string; showPhoto: boolean; roundedPhoto: boolean; showSchoolName: boolean; fields: { id: boolean; department: boolean; joined: boolean; phone: boolean } };
+const DEFAULT_STAFF_LAYOUT: StaffLayout = { accent: "#5C67F2", showPhoto: true, roundedPhoto: false, showSchoolName: true, fields: { id: true, department: true, joined: true, phone: false } };
+const loadStaffLayout = (): StaffLayout => { try { return { ...DEFAULT_STAFF_LAYOUT, ...JSON.parse(localStorage.getItem("staffCardLayout") || "{}") }; } catch { return DEFAULT_STAFF_LAYOUT; } };
 
 export default function StaffIdCards() {
     const [activeStyle, setActiveStyle] = useState(() => localStorage.getItem("staffCardStyle") || "Landscape");
@@ -13,6 +17,16 @@ export default function StaffIdCards() {
     const [printModal, setPrintModal] = useState(false);
     const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [search, setSearch] = useState("");
+    const [layout, setLayout] = useState<StaffLayout>(loadStaffLayout);
+    const [showCustomize, setShowCustomize] = useState(false);
+    useEffect(() => { localStorage.setItem("staffCardLayout", JSON.stringify(layout)); }, [layout]);
+    const setLA = <K extends keyof StaffLayout>(k: K, v: StaffLayout[K]) => setLayout(p => ({ ...p, [k]: v }));
+    const setSField = (k: keyof StaffLayout["fields"], v: boolean) => setLayout(p => ({ ...p, fields: { ...p.fields, [k]: v } }));
+    const visibleStaff = (staffMembers || []).filter((s: any) => {
+        if (!search.trim()) return true; const q = search.toLowerCase();
+        return [s.employeeName, s.name, s.designation, s.role, s.department, s.staffId, s.employeeId].filter(Boolean).some((v: any) => String(v).toLowerCase().includes(q));
+    });
 
     const styles = ["Landscape", "Professional", "Corporate", "Minimal", "Default"];
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("staffCardStyle", s); };
@@ -53,7 +67,7 @@ export default function StaffIdCards() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                    <button className="h-9 px-4 flex items-center gap-2 border border-gray-200 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors text-sm font-bold text-gray-600">
+                    <button onClick={() => setShowCustomize(true)} className="h-9 px-4 flex items-center gap-2 border border-gray-200 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors text-sm font-bold text-gray-600">
                         <Settings2 className="w-4 h-4 text-gray-400" /> Customize Layout
                     </button>
                 </div>
@@ -81,8 +95,19 @@ export default function StaffIdCards() {
                         onClick={() => setPrintModal(true)}
                         className="h-10 px-6 rounded-xl font-bold text-sm bg-[#FF9A5A] text-white shadow-lg shadow-orange-100 flex items-center gap-2 ml-auto hover:scale-105 transition-all"
                     >
-                        <Printer className="w-4 h-4" /> Print All Cards
+                        <Printer className="w-4 h-4" /> Print {search ? "Filtered" : "All"} Cards
                     </button>
+                </div>
+
+                {/* Search — filter by name, role, department or staff ID */}
+                <div className="flex items-center gap-2 mb-6 print:hidden">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, role, department or staff ID…"
+                            className="w-full h-10 pl-9 pr-9 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" />
+                        {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
+                    </div>
+                    {search && <span className="text-xs font-bold text-slate-400">{visibleStaff.length} match{visibleStaff.length === 1 ? "" : "es"}</span>}
                 </div>
 
                 {isLoading ? (
@@ -92,14 +117,14 @@ export default function StaffIdCards() {
                     </div>
                 ) : (
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${activeStyle === "Landscape" ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
-                        {staffMembers && staffMembers.length > 0 ? (
-                            staffMembers.map((staff: any) => (
+                        {visibleStaff.length > 0 ? (
+                            visibleStaff.map((staff: any) => (
                                 <div key={staff._id} className="id-card flex justify-center relative group/card">
                                     <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
                                         className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
                                         <Printer className="w-4 h-4" />
                                     </button>
-                                    <IdCard staff={staff} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} brand={brand} />
+                                    <IdCard staff={staff} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} brand={brand} layout={layout} />
                                 </div>
                             ))
                         ) : (
@@ -112,12 +137,47 @@ export default function StaffIdCards() {
                 )}
             </div>
             <PrintCardsModal open={printModal} onClose={() => setPrintModal(false)} selector=".id-card" total={countCards(".id-card")} />
+            {showCustomize && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setShowCustomize(false)} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4"><h2 className="font-black text-slate-800">Customize Staff Cards</h2><button onClick={() => setShowCustomize(false)}><X className="w-5 h-5 text-slate-400" /></button></div>
+                        <div className="space-y-4">
+                            <div>
+                                <span className="block text-xs font-black text-slate-500 uppercase mb-2">Accent colour</span>
+                                <div className="flex items-center gap-2">
+                                    {["#5C67F2", "#0f2548", "#0E7490", "#B45309", "#15803d", "#9333ea"].map(c => (
+                                        <button key={c} onClick={() => setLA("accent", c)} className={`w-8 h-8 rounded-full border-2 ${layout.accent === c ? "scale-110 border-slate-900" : "border-white"}`} style={{ background: c }} />
+                                    ))}
+                                    <input type="color" value={layout.accent} onChange={e => setLA("accent", e.target.value)} className="w-9 h-9 cursor-pointer" />
+                                </div>
+                            </div>
+                            <SToggle label="Show photo" on={layout.showPhoto} onChange={v => setLA("showPhoto", v)} />
+                            <SToggle label="Rounded photo" on={layout.roundedPhoto} onChange={v => setLA("roundedPhoto", v)} />
+                            <SToggle label="Show school name" on={layout.showSchoolName} onChange={v => setLA("showSchoolName", v)} />
+                            <div className="border-t border-slate-100 pt-3">
+                                <span className="block text-xs font-black text-slate-500 uppercase mb-2">Fields</span>
+                                <SToggle label="Staff ID" on={layout.fields.id} onChange={v => setSField("id", v)} />
+                                <SToggle label="Department" on={layout.fields.department} onChange={v => setSField("department", v)} />
+                                <SToggle label="Joined date" on={layout.fields.joined} onChange={v => setSField("joined", v)} />
+                                <SToggle label="Phone" on={layout.fields.phone} onChange={v => setSField("phone", v)} />
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                                <button onClick={() => setLayout({ ...DEFAULT_STAFF_LAYOUT })} className="flex-1 h-10 border border-slate-200 rounded-xl text-sm font-bold text-slate-600">Reset</button>
+                                <button onClick={() => { setShowCustomize(false); toast.success("Layout applied"); }} className="flex-1 h-10 rounded-xl text-white font-bold text-sm" style={{ background: layout.accent }}>Done</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-function IdCard({ staff, onUpload, isUploading, activeStyle, brand }: { staff: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, brand?: { name: string; logo: string } }) {
-    const schoolName = brand?.name || "";
+function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { staff: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, brand?: { name: string; logo: string }, layout?: StaffLayout }) {
+    const L = layout || DEFAULT_STAFF_LAYOUT;
+    const accent = L.accent;
+    const schoolName = L.showSchoolName ? (brand?.name || "") : "";
     const schoolLogo = brand?.logo || "";
     const staffNameParts = staff.fullName ? staff.fullName.split(' ') : ['Staff', 'Member'];
     const staffId = staff.employeeId || staff.nationalId || `STF-${staff._id?.substring(0, 5)}`;
@@ -161,25 +221,37 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand }: { staff: a
                     <h3 className="font-black text-slate-900 text-xl tracking-wide mt-6 text-center px-4">
                         {staff.fullName || "Staff Member"}
                     </h3>
-                    <p className="text-[#5C67F2] font-bold text-sm tracking-widest uppercase mt-1">
+                    <p className="font-bold text-sm tracking-widest uppercase mt-1" style={{ color: accent }}>
                         {staff.designation || staff.role || "Employee"}
                     </p>
 
-                    <div className="w-12 h-1 bg-[#5C67F2] mt-4 mb-6 rounded-full"></div>
+                    <div className="w-12 h-1 mt-4 mb-6 rounded-full" style={{ background: accent }}></div>
 
                     <div className="w-full px-8 space-y-3">
-                        <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
-                            <span className="text-gray-400 font-medium">Department</span>
-                            <span className="font-bold text-slate-800">{staff.department || "STAFF"}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
-                            <span className="text-gray-400 font-medium">ID Number</span>
-                            <span className="font-bold text-slate-800">{staffId}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-gray-400 font-medium">Joined</span>
-                            <span className="font-bold text-slate-800">{staff.joiningDate || new Date().toLocaleDateString()}</span>
-                        </div>
+                        {L.fields.department && (
+                            <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
+                                <span className="text-gray-400 font-medium">Department</span>
+                                <span className="font-bold text-slate-800">{staff.department || "STAFF"}</span>
+                            </div>
+                        )}
+                        {L.fields.id && (
+                            <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
+                                <span className="text-gray-400 font-medium">ID Number</span>
+                                <span className="font-bold text-slate-800">{staffId}</span>
+                            </div>
+                        )}
+                        {L.fields.joined && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-400 font-medium">Joined</span>
+                                <span className="font-bold text-slate-800">{staff.joiningDate || new Date().toLocaleDateString()}</span>
+                            </div>
+                        )}
+                        {L.fields.phone && staff.phone && (
+                            <div className="flex justify-between items-center text-sm border-t border-gray-100 pt-2">
+                                <span className="text-gray-400 font-medium">Phone</span>
+                                <span className="font-bold text-slate-800">{staff.phone}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="mt-auto pb-8 flex items-center justify-center w-full gap-4 px-8">
@@ -372,5 +444,16 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand }: { staff: a
                 </div>
             </div>
         </div>
+    );
+}
+
+function SToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+    return (
+        <button type="button" onClick={() => onChange(!on)} className="w-full flex items-center justify-between py-2">
+            <span className="text-sm font-bold text-slate-600">{label}</span>
+            <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${on ? "bg-[#5C67F2]" : "bg-slate-200"}`}>
+                <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${on ? "translate-x-5" : ""}`} />
+            </span>
+        </button>
     );
 }
