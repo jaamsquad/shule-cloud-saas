@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
@@ -12,6 +13,7 @@ const fmt = (d: any) => d ? new Date(d).toLocaleString("en-GB", { day: "2-digit"
 // filterable by transaction code, payer phone, or payer name.
 export default function TillTransactions() {
     const school = useSchoolBrand();
+    const qc = useQueryClient();
     const [code, setCode] = useState("");
     const [phone, setPhone] = useState("");
     const [name, setName] = useState("");
@@ -19,6 +21,7 @@ export default function TillTransactions() {
     const [to, setTo] = useState("");
     // Applied filters (only sent to the server when "Search" is pressed).
     const [params, setParams] = useState<Record<string, string>>({});
+    const [showApply, setShowApply] = useState(false);
 
     const { data, isLoading, refetch, isFetching } = useQuery({
         queryKey: ["till_transactions", params],
@@ -64,6 +67,7 @@ export default function TillTransactions() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button onClick={() => setShowApply(true)} className="h-10 px-4 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Record Till Payment</button>
                     <button onClick={() => refetch()} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5">{isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Refresh</button>
                     <button onClick={exportCsv} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> CSV</button>
                     <button onClick={printList} className="h-10 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">Print / PDF</button>
@@ -151,6 +155,104 @@ export default function TillTransactions() {
                         </table>
                     </div>
                 )}
+            </div>
+
+            {showApply && <ApplyTillPayment onClose={() => setShowApply(false)} onDone={() => { setShowApply(false); qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch(); }} />}
+        </div>
+    );
+}
+
+// Record a payment a customer made directly to the Till (Buy Goods) by pasting
+// its M-PESA code and choosing the student. Applied to outstanding fees.
+function ApplyTillPayment({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+    const [code, setCode] = useState("");
+    const [amount, setAmount] = useState("");
+    const [phone, setPhone] = useState("");
+    const [q, setQ] = useState("");
+    const [student, setStudent] = useState<any>(null);
+
+    const { data: students = [] } = useQuery<any[]>({
+        queryKey: ["students"],
+        queryFn: async () => (await api.get("/students")).data || [],
+    });
+    const matches = useMemo(() => {
+        const s = q.trim().toLowerCase();
+        if (!s) return [];
+        return students.filter((st: any) =>
+            String(st.studentName || "").toLowerCase().includes(s) ||
+            String(st.registrationNo || st.admNo || "").toLowerCase().includes(s)
+        ).slice(0, 8);
+    }, [q, students]);
+
+    const save = useMutation({
+        mutationFn: async () => (await api.post("/fees/till-transactions/apply", {
+            code: code.trim(), amount: Number(amount), phone: phone.trim(),
+            studentId: student?._id, registrationNo: student?.registrationNo || student?.admNo,
+        })).data,
+        onSuccess: (d: any) => { toast.success(d.message || "Payment recorded."); onDone(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Could not record payment."),
+    });
+
+    const ready = code.trim() && Number(amount) > 0 && student;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <h2 className="font-black text-slate-800 flex items-center gap-2"><PlusCircle className="w-5 h-5 text-emerald-600" /> Record Till Payment</h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="p-5 space-y-3">
+                    <p className="text-xs text-slate-500 leading-relaxed">Paste the M-PESA code from the customer's confirmation SMS, enter the amount, and choose the student. It will be applied to their outstanding fees.</p>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">M-PESA Code</label>
+                        <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="e.g. SLJ7ABC123" maxLength={15}
+                            className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Amount (KSh)</label>
+                            <input value={amount} onChange={e => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder="0" inputMode="decimal"
+                                className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Payer Phone</label>
+                            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="07… (optional)"
+                                className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-emerald-500" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Student</label>
+                        {student ? (
+                            <div className="flex items-center justify-between h-11 px-3 rounded-xl border border-emerald-200 bg-emerald-50 text-sm">
+                                <span className="font-bold text-emerald-800">{student.studentName} <span className="font-mono text-emerald-600 text-xs">· {student.registrationNo || student.admNo}</span></span>
+                                <button onClick={() => { setStudent(null); setQ(""); }} className="text-emerald-600 hover:text-emerald-800"><X className="w-4 h-4" /></button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or reg/adm no…"
+                                    className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-emerald-500" />
+                                {matches.length > 0 && (
+                                    <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+                                        {matches.map((st: any) => (
+                                            <button key={st._id} onClick={() => { setStudent(st); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm flex items-center justify-between">
+                                                <span className="font-bold text-slate-700">{st.studentName}</span>
+                                                <span className="font-mono text-xs text-slate-400">{st.registrationNo || st.admNo}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
+                    <button onClick={onClose} className="h-10 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm">Cancel</button>
+                    <button onClick={() => save.mutate()} disabled={!ready || save.isPending}
+                        className="h-10 px-5 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50">
+                        {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Record & Apply
+                    </button>
+                </div>
             </div>
         </div>
     );

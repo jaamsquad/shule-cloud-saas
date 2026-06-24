@@ -125,13 +125,14 @@ router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, r
 });
 
 // ─── Transaction Status result callback (reconciliation) ───────────────────────
-router.post('/mpesa/transaction-status/result', async (req, res) => {
+// Aliased under /pesa/... too — Safaricom rejects callback URLs containing "mpesa".
+router.post(['/mpesa/transaction-status/result', '/pesa/transaction-status/result'], async (req, res) => {
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     try {
         await getMetaDb().collection('mpesa_status_results').insertOne({ ...req.body, receivedAt: new Date() });
     } catch (e) { console.error('[M-PESA] txn-status result error:', e); }
 });
 
-router.post('/mpesa/timeout', (_req, res) => res.json({ ResultCode: 0, ResultDesc: 'Accepted' }));
+router.post(['/mpesa/timeout', '/pesa/timeout'], (_req, res) => res.json({ ResultCode: 0, ResultDesc: 'Accepted' }));
 
 export default router;

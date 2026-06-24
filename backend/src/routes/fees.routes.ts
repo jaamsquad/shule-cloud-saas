@@ -4,7 +4,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig } from '../services/mpesa.service';
+import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase } from '../services/mpesa.service';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
@@ -192,6 +192,52 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
         data.sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
         const total = data.reduce((s, d) => s + d.amount, 0);
         res.json({ data, summary: { count: data.length, total }, configured: codes.length > 0, shortcodes: codes });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Apply a Till payment by its M-PESA code ───────────────────────────────────
+// For Till (Buy Goods) numbers, Safaricom does not push C2B confirmations, so a
+// clerk records the payment from the customer's M-PESA SMS: paste the code +
+// amount and choose the student. We verify against Daraja Transaction Status when
+// reconciliation credentials are configured (async, best-effort), and always
+// record + allocate the payment via the same path C2B uses.
+router.post('/fees/till-transactions/apply', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { code, amount, phone, studentId, registrationNo, invoiceId } = req.body || {};
+        const mpesaCode = String(code || '').trim().toUpperCase();
+        const amt = Number(amount) || 0;
+        if (!mpesaCode) return res.status(400).json({ message: 'M-PESA transaction code is required.' });
+        if (!/^[A-Z0-9]{8,15}$/.test(mpesaCode)) return res.status(400).json({ message: 'That does not look like a valid M-PESA code (e.g. SLJ7ABC123).' });
+        if (amt <= 0) return res.status(400).json({ message: 'Enter the amount paid.' });
+        if (!studentId && !registrationNo) return res.status(400).json({ message: 'Select the student this payment belongs to.' });
+
+        // Guard against applying the same code twice.
+        const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode }, { transactionId: mpesaCode }, { reference: mpesaCode }] });
+        if (dup) return res.status(409).json({ message: `Code ${mpesaCode} has already been recorded (receipt ${dup.receipt_no || dup._id}).` });
+
+        // Resolve the student's name for nicer records.
+        let studentName: string | undefined; let regNo = registrationNo;
+        try {
+            const q: any = studentId ? { _id: new ObjectId(String(studentId)) } : { $or: [{ registrationNo }, { admNo: registrationNo }] };
+            const stu = await db.collection('students').findOne(q);
+            if (stu) { studentName = stu.studentName; regNo = regNo || stu.registrationNo || stu.admNo; }
+        } catch { /* ignore */ }
+
+        // Best-effort Daraja verification (async — Safaricom posts the result to our
+        // ResultURL). Only attempted when reconciliation credentials exist.
+        let verification: 'queued' | 'unavailable' = 'unavailable';
+        try {
+            const cfg = await resolveMpesaConfig(db);
+            if (cfg.initiator && cfg.securityCredential && platformCallbackBase()) {
+                const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+                await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till payment verification' });
+                verification = 'queued';
+            }
+        } catch { /* verification optional — never blocks the manual record */ }
+
+        await applyMpesaPayment(db, { studentId: studentId ? String(studentId) : undefined, studentName, registrationNo: regNo, invoiceId, amount: amt, receipt: mpesaCode, phone });
+        res.json({ ok: true, message: `Payment ${mpesaCode} recorded${studentName ? ' for ' + studentName : ''} and applied to outstanding fees.`, verification });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
