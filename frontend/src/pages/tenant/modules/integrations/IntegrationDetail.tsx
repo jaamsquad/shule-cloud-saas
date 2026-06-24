@@ -43,8 +43,10 @@ export default function IntegrationDetail() {
         if (dirty) { toast.error("Save your credentials first, then register."); return; }
         setRegistering(true);
         try {
-            await api.post("/integrations/mpesa/register-urls", {});
-            toast.success("C2B URLs registered with Safaricom — direct Till/Paybill payments will now appear.");
+            const r = await api.post("/integrations/mpesa/register-urls", {});
+            toast.success(r.data?.alreadyRegistered
+                ? "C2B URLs are already registered — direct Till/Paybill payments are being captured."
+                : "C2B URLs registered with Safaricom — direct Till/Paybill payments will now appear.");
             qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
         } catch (e: any) {
             toast.error(e.response?.data?.message || "Registration failed");

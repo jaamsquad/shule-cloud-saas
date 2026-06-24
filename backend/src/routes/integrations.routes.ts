@@ -69,7 +69,15 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date() } }, { upsert: true });
         res.json({ ok: true, result });
-    } catch (e: any) { res.status(400).json({ ok: false, message: e.message }); }
+    } catch (e: any) {
+        // Safaricom only lets a shortcode register once. A repeat attempt returning
+        // "already registered" means C2B is set up — treat it as success, not an error.
+        if (/already\s*registered/i.test(e.message || '')) {
+            await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true } }, { upsert: true }).catch(() => { });
+            return res.json({ ok: true, alreadyRegistered: true, message: 'C2B URLs are already registered for this shortcode — direct payments will be captured.' });
+        }
+        res.status(400).json({ ok: false, message: e.message });
+    }
 });
 
 export default router;
