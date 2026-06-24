@@ -587,6 +587,28 @@ export default function StudentsReportCard() {
             const att = report.attendanceSummary || {};
             const attText = att.totalDays > 0 ? `${att.presentDays} / ${att.totalDays} Days Present (${att.percentage})` : "No attendance records";
 
+            // ── Performance trend: compact F1T1.. table (columns) + SVG line graph ──
+            const trend: { label: string; mean: number }[] = (report.trend && report.trend.length ? report.trend : []);
+            let trendHtml = `<div style="padding:20px;text-align:center;color:#94a3b8;font-weight:600;font-size:11px">Not enough exam history to show a trend yet.</div>`;
+            if (trend.length) {
+                // Compact table — F1T1.. as columns, means in the row below.
+                const headCells = trend.map(t => `<th style="background:#4F46E5;color:#fff;padding:6px 4px;font-size:9px;font-weight:800;text-align:center;border:1px solid #4338CA;white-space:nowrap">${t.label}</th>`).join("");
+                const meanCells = trend.map(t => `<td style="padding:6px 4px;text-align:center;font-size:11px;font-weight:800;color:#0F172A;border:1px solid #E2E8F0">${t.mean}%</td>`).join("");
+                const table = `<table style="width:100%;border-collapse:collapse;margin-bottom:10px"><thead><tr><th style="background:#475569;color:#fff;padding:6px 8px;font-size:9px;text-align:left">Exam</th>${headCells}</tr></thead><tbody><tr><td style="padding:6px 8px;font-size:9px;font-weight:700;color:#475569;border:1px solid #E2E8F0">Mean %</td>${meanCells}</tr></tbody></table>`;
+
+                // Simple SVG line graph (no external libs — prints reliably).
+                const W = 300, H = 110, padL = 24, padB = 18, padT = 8, padR = 8;
+                const n = trend.length;
+                const x = (i: number) => n <= 1 ? (padL + (W - padL - padR) / 2) : padL + (i * (W - padL - padR)) / (n - 1);
+                const y = (v: number) => padT + (100 - Math.max(0, Math.min(100, v))) * (H - padT - padB) / 100;
+                const pts = trend.map((t, i) => `${x(i)},${y(t.mean)}`).join(" ");
+                const dots = trend.map((t, i) => `<circle cx="${x(i)}" cy="${y(t.mean)}" r="3" fill="#4F46E5" /><text x="${x(i)}" y="${y(t.mean) - 6}" font-size="8" fill="#0F172A" text-anchor="middle" font-weight="700">${t.mean}</text><text x="${x(i)}" y="${H - 4}" font-size="8" fill="#64748B" text-anchor="middle" font-weight="700">${t.label}</text>`).join("");
+                const grid = [0, 25, 50, 75, 100].map(g => `<line x1="${padL}" y1="${y(g)}" x2="${W - padR}" y2="${y(g)}" stroke="#EEF2FF" stroke-width="1" /><text x="${padL - 4}" y="${y(g) + 3}" font-size="7" fill="#94A3B8" text-anchor="end">${g}</text>`).join("");
+                const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${grid}<polyline points="${pts}" fill="none" stroke="#4F46E5" stroke-width="2" />${dots}</svg>`;
+
+                trendHtml = `${table}${svg}`;
+            }
+
             htmlContent = `
                 <!DOCTYPE html>
                 <html lang="en">
@@ -670,9 +692,9 @@ export default function StudentsReportCard() {
                                 </table>
 
                                 <div class="panel-box" style="margin-bottom: 0;">
-                                    <div class="panel-title" style="background: #4F46E5;">Performance Analyzer</div>
-                                    <div style="padding: 25px; text-align: center; color: #64748B; font-weight: 600; font-size: 12px;">
-                                        ★ Consistent Academic Performance Across All Major Evaluated Disciplines ★
+                                    <div class="panel-title" style="background: #4F46E5;">Performance Trend</div>
+                                    <div style="padding: 12px 14px;">
+                                        ${trendHtml}
                                     </div>
                                 </div>
                             </div>

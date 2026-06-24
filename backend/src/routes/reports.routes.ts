@@ -97,6 +97,31 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             classSubjectsById[String(c._id)] = list;
         }
         const examName = examDocs.map((e: any) => e.examName || e.name).filter(Boolean).join(' + ') || '—';
+
+        // ── Performance trend (F1T1, F1T2, … up to the selected exam) ──────────────
+        // Build a compact label for an exam from the student's level + the exam term.
+        const allExams = await db.collection('exams').find({}).toArray().catch(() => []);
+        const examById: Record<string, any> = {};
+        allExams.forEach((e: any) => { examById[String(e._id)] = e; });
+        // Chronological order of exams: by year then term number then start date.
+        const termNum = (s: string) => { const m = String(s || '').match(/(\d+)/); return m ? Number(m[1]) : (/first/i.test(s) ? 1 : /second/i.test(s) ? 2 : /third/i.test(s) ? 3 : 99); };
+        const examOrder = (e: any) => `${String(e.academicYear || '').padStart(4, '0')}-${String(termNum(e.term)).padStart(2, '0')}-${e.startDate ? new Date(e.startDate).getTime() : 0}`;
+        // Level prefix from a class name: "Form 1"→F1, "Grade 2"→G2, "PP1"→P1, else first letter+number.
+        const levelLabel = (className: string) => {
+            const c = String(className || '');
+            const f = c.match(/form\s*(\d+)/i); if (f) return `F${f[1]}`;
+            const g = c.match(/grade\s*(\d+)/i); if (g) return `G${g[1]}`;
+            const pp = c.match(/pp\s*(\d+)/i); if (pp) return `P${pp[1]}`;
+            const cl = c.match(/class\s*(\d+)/i); if (cl) return `C${cl[1]}`;
+            const any = c.match(/([a-z])\D*(\d+)/i); if (any) return `${any[1].toUpperCase()}${any[2]}`;
+            return c.slice(0, 4) || '—';
+        };
+        // The cutoff: latest selected exam (so the trend runs "up to the current exam").
+        const selectedOrders = examIds.map(id => examById[id]).filter(Boolean).map(examOrder).sort();
+        const cutoff = selectedOrders.length ? selectedOrders[selectedOrders.length - 1] : '￿';
+        // All marks for the students in this report (for the trend), keyed by student+exam.
+        const sIds = students.map((s: any) => s._id.toString());
+        const allMarksForTrend = await db.collection('exam_marks').find({ studentId: { $in: sIds } }).toArray().catch(() => []);
         const isAnnual = examIds.length > 1;
 
         // ── Real attendance (student_attendance) summarised per student ──────────────
@@ -184,6 +209,27 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             const totalMarks = Math.round(totalPct);                              // sum of subject %s (used for ranking)
             const gpa = gradedCount > 0 ? (meanScore / 20).toFixed(2) : "0.00";
 
+            // Performance trend: this student's mean % per exam, chronologically, up
+            // to (and including) the selected exam. Labelled F1T1 / G1T1 / etc.
+            const myTrendMarks = allMarksForTrend.filter((m: any) => String(m.studentId) === sid);
+            const byExam: Record<string, { sum: number; n: number }> = {};
+            myTrendMarks.forEach((m: any) => {
+                const ex = examById[String(m.examId)]; if (!ex) return;
+                if (examOrder(ex) > cutoff) return;   // skip exams after the selected one
+                const max = Number(m.totalMarks) || 100;
+                const pct = max > 0 ? (Number(m.marksObtained ?? m.marks ?? m.score ?? 0) / max) * 100 : 0;
+                const k = String(m.examId); (byExam[k] ||= { sum: 0, n: 0 }); byExam[k].sum += pct; byExam[k].n++;
+            });
+            const trend = Object.keys(byExam)
+                .map(eid => { const ex = examById[eid]; return { eid, ex, mean: Math.round(byExam[eid].sum / byExam[eid].n) }; })
+                .filter(t => t.ex)
+                .sort((a, b) => examOrder(a.ex).localeCompare(examOrder(b.ex)))
+                .map(t => ({
+                    label: `${levelLabel(studentClassName)}T${termNum(t.ex.term)}`,
+                    exam: t.ex.examName || t.ex.name || 'Exam',
+                    mean: t.mean,
+                }));
+
             return {
                 studentId: student._id,
                 studentName: student.studentName || student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || "Student",
@@ -200,6 +246,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                 totalMarks,
                 meanScore: Number(meanScore.toFixed(1)),
                 gpa,
+                trend,
                 hasMarks: gradedCount > 0,
                 rank: "—",
                 rankNum: 0,
