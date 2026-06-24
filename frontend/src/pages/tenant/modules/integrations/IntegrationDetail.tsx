@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
     ArrowLeft, Check, Loader2, ExternalLink, RefreshCw, CheckCircle2,
     XCircle, AlertCircle, Eye, EyeOff, Copy, ChevronRight, Settings,
-    Zap, BookOpen, Info, TestTube
+    Zap, BookOpen, Info, TestTube, Plug
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -30,6 +30,28 @@ export default function IntegrationDetail() {
     const [testEmail, setTestEmail]   = useState("");
     const [activeTab, setActiveTab]   = useState<"config" | "guide" | "webhook">("config");
     const [loaded, setLoaded]         = useState(false);
+    const [registering, setRegistering] = useState(false);   // C2B URL registration (daraja only)
+
+    const isDaraja = key === "daraja";
+    // M-PESA C2B registration status (only relevant for Daraja).
+    const { data: mpesaStatus } = useQuery({
+        queryKey: ["mpesa_settings"],
+        queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
+        enabled: isDaraja,
+    });
+    const registerC2B = async () => {
+        if (dirty) { toast.error("Save your credentials first, then register."); return; }
+        setRegistering(true);
+        try {
+            await api.post("/integrations/mpesa/register-urls", {});
+            toast.success("C2B URLs registered with Safaricom — direct Till/Paybill payments will now appear.");
+            qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Registration failed");
+        } finally {
+            setRegistering(false);
+        }
+    };
 
     // ── Load saved settings ────────────────────────────────────────────────
     const { data: allSettings = [] } = useQuery({
@@ -289,6 +311,45 @@ export default function IntegrationDetail() {
                                     {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                                     {testing ? "Testing…" : `Test ${intg.name} Connection`}
                                 </button>
+                            </div>
+                        )}
+
+                        {/* C2B URL registration — captures payments made directly to the Till/Paybill */}
+                        {isDaraja && (
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+                                <h2 className="text-sm font-black text-gray-800 mb-2 flex items-center gap-2">
+                                    <Plug className="w-4 h-4 text-[#00A651]" /> Direct Till / Paybill Payments (C2B)
+                                </h2>
+                                <p className="text-xs text-gray-500 font-medium mb-3 leading-relaxed">
+                                    Register your C2B notification URLs with Safaricom so payments customers make on their own phones
+                                    (Lipa na M-PESA → Paybill / Buy Goods) are captured automatically and shown under <b>Fees → Till / Paybill Transactions</b>.
+                                </p>
+                                {mpesaStatus?.callbackBase ? (
+                                    <div className="text-[11px] font-mono text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1 mb-3 break-all">
+                                        <div>Validation:&nbsp;&nbsp;{mpesaStatus.callbackBase}/mpesa/c2b/validation</div>
+                                        <div>Confirmation: {mpesaStatus.callbackBase}/mpesa/c2b/confirmation</div>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-amber-600 font-medium mb-3 flex items-center gap-1.5">
+                                        <AlertCircle className="w-3.5 h-3.5" /> The platform callback URL isn't set by the operator yet — registration can't proceed.
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <button onClick={registerC2B} disabled={registering || !mpesaStatus?.callbackBase}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-[#00A651] hover:bg-[#008f46] text-white font-bold text-sm rounded-xl transition-all shadow-sm disabled:opacity-50">
+                                        {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />}
+                                        {registering ? "Registering…" : "Register C2B URLs"}
+                                    </button>
+                                    {mpesaStatus?.registered && (
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                                            <CheckCircle2 className="w-4 h-4" /> URLs registered
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-[11px] text-gray-400 font-medium mt-3 leading-relaxed">
+                                    Note: Safaricom only delivers these notifications in <b>Production</b>. Paybills deliver C2B reliably; many Till / Buy-Goods shortcodes do not.
+                                    Save your credentials (and set Environment to <b>production</b>) before registering.
+                                </p>
                             </div>
                         )}
 
