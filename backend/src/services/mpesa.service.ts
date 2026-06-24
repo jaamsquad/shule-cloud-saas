@@ -273,6 +273,22 @@ export async function applyMpesaPayment(db: Db, opts: { studentId?: string; stud
         phone: opts.phone, invoice_id: opts.invoiceId, status: 'Completed', createdAt: new Date(),
     }).catch(() => {});
 
+    // Auto-post to Accounting (Dr M-PESA/Wallet, Cr Fee Income) so money-in is detected.
+    try {
+        const year = new Date().getFullYear();
+        const n = await db.collection('accounting_journals').countDocuments({ number: new RegExp(`^JV-${year}-`) }).catch(() => 0);
+        await db.collection('accounting_journals').insertOne({
+            number: `JV-${year}-${String(n + 1).padStart(4, '0')}`, date: new Date(),
+            description: `Fee payment ${receiptNo}${opts.studentName ? ' — ' + opts.studentName : ''}`,
+            reference: receiptNo, source: 'fees',
+            lines: [
+                { account: method === 'WALLET' ? 'Wallet' : 'M-PESA', type: 'debit', amount },
+                { account: 'Fee Income', type: 'credit', amount },
+            ],
+            status: 'posted', createdAt: new Date(),
+        });
+    } catch { /* accounting optional */ }
+
     try {
         if (opts.invoiceId) {
             const inv = await db.collection('invoices').findOne({ _id: new ObjectId(opts.invoiceId) });

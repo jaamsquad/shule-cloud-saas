@@ -6,6 +6,29 @@ import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
+// Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
+// balance, P&L, balance sheet). Dr Cash/Bank, Cr Fee Income. Best-effort.
+async function postFeePaymentJournal(db: Db, payment: any, studentName?: string) {
+    try {
+        const year = new Date().getFullYear();
+        const n = await db.collection('accounting_journals').countDocuments({ number: new RegExp(`^JV-${year}-`) }).catch(() => 0);
+        const method = String(payment.method || '').toLowerCase();
+        const cashAcct = /cash/.test(method) ? 'Cash' : (/mpesa|m-pesa|mobile/.test(method) ? 'M-PESA' : 'Bank');
+        await db.collection('accounting_journals').insertOne({
+            number: `JV-${year}-${String(n + 1).padStart(4, '0')}`,
+            date: payment.payment_date || payment.createdAt || new Date(),
+            description: `Fee payment ${payment.receipt_no || ''}${studentName ? ' — ' + studentName : ''}`.trim(),
+            reference: payment.receipt_no || String(payment._id), source: 'fees',
+            sourceId: String(payment._id),
+            lines: [
+                { account: cashAcct, type: 'debit', amount: Number(payment.amount) || 0 },
+                { account: 'Fee Income', type: 'credit', amount: Number(payment.amount) || 0 },
+            ],
+            status: 'posted', createdAt: new Date(),
+        });
+    } catch { /* accounting optional */ }
+}
+
 // Build a fee-invoice email (inline-styled HTML for email clients).
 const invoiceEmailHtml = (inv: any, student: any, schoolName: string) => {
     const fmt = (n: number) => `KSh ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
@@ -1606,6 +1629,10 @@ router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request,
         };
 
         await db.collection('payments').insertOne(payment);
+
+        // Mirror the money-in into Accounting so every payment is detected there.
+        const stu = await db.collection('students').findOne({ _id: new ObjectId(String(invoice.student_id)) }).catch(() => null);
+        await postFeePaymentJournal(db, payment, stu?.studentName || stu?.name);
 
         // Update Invoice status and balance
         const amount_paid = invoice.amount_paid + payAmount;

@@ -14,6 +14,29 @@ import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope'
 const getRequestDb = (req: Request): Db =>
     (req as any).tenantDb || getMetaDb();
 
+// Post a simple double-entry journal for a manual Accounts income/expense entry, so
+// it appears in Accounting (ledger / trial balance / P&L / balance sheet).
+async function postAccountsJournal(db: Db, kind: 'income' | 'expenses', doc: any) {
+    try {
+        const amount = Number(doc.amount ?? doc.totalAmount ?? doc.total ?? 0);
+        if (!amount) return;
+        const year = new Date().getFullYear();
+        const n = await db.collection('accounting_journals').countDocuments({ number: new RegExp(`^JV-${year}-`) }).catch(() => 0);
+        const method = String(doc.paymentMethod || doc.method || doc.mode || '').toLowerCase();
+        const cashAcct = /cash/.test(method) ? 'Cash' : (/mpesa|m-pesa|mobile/.test(method) ? 'M-PESA' : 'Bank');
+        const lines = kind === 'income'
+            ? [{ account: cashAcct, type: 'debit', amount }, { account: doc.category || doc.source || 'Other Income', type: 'credit', amount }]
+            : [{ account: doc.category || doc.account || 'Expenses', type: 'debit', amount }, { account: cashAcct, type: 'credit', amount }];
+        await db.collection('accounting_journals').insertOne({
+            number: `JV-${year}-${String(n + 1).padStart(4, '0')}`,
+            date: doc.date || doc.createdAt || new Date(),
+            description: `${kind === 'income' ? 'Income' : 'Expense'}: ${doc.title || doc.description || doc.category || ''}`.trim(),
+            reference: doc.reference || String(doc._id), source: kind, sourceId: String(doc._id),
+            lines, status: 'posted', createdAt: new Date(),
+        });
+    } catch { /* accounting optional */ }
+}
+
 // ─── CRUD controllers ─────────────────────────────────────────────────────────
 
 export const bulkCreate = (collectionName: string) => async (req: Request, res: Response) => {
@@ -96,6 +119,11 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
         // Keep Parents module and student father/mother fields in sync.
         if (collectionName === 'parents') syncParentToStudents(db, { ...data, _id: result.insertedId }).catch(() => {});
         if (collectionName === 'students') syncStudentToParents(db, String(result.insertedId), data).catch(() => {});
+        // Auto-post Accounts module income/expense into Accounting so every money
+        // in/out is detected by the ledger, trial balance, P&L and balance sheet.
+        if (collectionName === 'income' || collectionName === 'expenses') {
+            postAccountsJournal(db, collectionName, { ...data, _id: result.insertedId }).catch(() => {});
+        }
         res.status(201).json({ id: result.insertedId, ...data });
     } catch (error) {
         res.status(500).json({ message: 'Error creating item', error });
