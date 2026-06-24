@@ -62,7 +62,11 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         const cfg = await resolveMpesaConfig(tdb(req));
         if (!cfg.callbackBase) return res.status(400).json({ message: 'Platform callback URL (MPESA_CALLBACK_URL) is not set by the operator.' });
         if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'Configure your M-PESA credentials first.' });
-        const result = await registerC2BUrls(cfg, `${cfg.callbackBase}/mpesa/c2b/validation`, `${cfg.callbackBase}/mpesa/c2b/confirmation`);
+        // Safaricom rejects any C2B URL containing the word "mpesa". Our endpoints are
+        // also served under /pesa/... for exactly this reason — use that, and strip any
+        // stray "mpesa" from the operator's callback base just in case.
+        const safeBase = cfg.callbackBase.replace(/mpesa/gi, 'pesa');
+        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date() } }, { upsert: true });
         res.json({ ok: true, result });
     } catch (e: any) { res.status(400).json({ ok: false, message: e.message }); }

@@ -326,8 +326,9 @@ export default function IntegrationDetail() {
                                 </p>
                                 {mpesaStatus?.callbackBase ? (
                                     <div className="text-[11px] font-mono text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1 mb-3 break-all">
-                                        <div>Validation:&nbsp;&nbsp;{mpesaStatus.callbackBase}/mpesa/c2b/validation</div>
-                                        <div>Confirmation: {mpesaStatus.callbackBase}/mpesa/c2b/confirmation</div>
+                                        {/* /pesa not /mpesa — Safaricom rejects URLs containing the word "mpesa" */}
+                                        <div>Validation:&nbsp;&nbsp;{mpesaStatus.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/validation</div>
+                                        <div>Confirmation: {mpesaStatus.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/confirmation</div>
                                     </div>
                                 ) : (
                                     <div className="text-xs text-amber-600 font-medium mb-3 flex items-center gap-1.5">

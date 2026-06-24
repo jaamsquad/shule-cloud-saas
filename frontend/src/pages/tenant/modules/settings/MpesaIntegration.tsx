@@ -148,8 +148,9 @@ export default function MpesaIntegration() {
                     </p>
                     {settings?.callbackBase ? (
                         <div className="text-xs font-mono text-slate-500 bg-slate-50 rounded-lg p-3 space-y-1 mb-3 break-all">
-                            <div>Validation: {settings.callbackBase}/mpesa/c2b/validation</div>
-                            <div>Confirmation: {settings.callbackBase}/mpesa/c2b/confirmation</div>
+                            {/* /pesa not /mpesa — Safaricom rejects URLs containing the word "mpesa" */}
+                            <div>Validation: {settings.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/validation</div>
+                            <div>Confirmation: {settings.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/confirmation</div>
                         </div>
                     ) : (
                         <div className="text-xs text-amber-600 mb-3 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> The platform callback URL isn't set by the operator yet.</div>
