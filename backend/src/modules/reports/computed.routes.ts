@@ -15,7 +15,34 @@ const num = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : 0
 const ksh = (n: number) => `KSh ${Math.round(n).toLocaleString()}`;
 const gradeOf = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'E';
 
-const marks = async (req: Request) => db(req).collection('student_exam_marks_v2').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+// Real exam marks live in `exam_marks` (studentId/subjectId/subjectName/examId/
+// marksObtained/totalMarks). They don't carry className, so enrich each mark with
+// the student's class + name. Falls back to the legacy v2 collection if present.
+const marks = async (req: Request) => {
+    let all = await db(req).collection('exam_marks').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+    if (!all.length) all = await db(req).collection('student_exam_marks_v2').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+    if (!all.length) return all;
+
+    // Build a studentId → {class, name} map once.
+    const students = await db(req).collection('students').find({}, { projection: { studentName: 1, name: 1, firstName: 1, lastName: 1, studentClass: 1, className: 1, currentClass: 1 } }).toArray().catch(() => []);
+    const byId: Record<string, any> = {};
+    students.forEach((s: any) => { byId[String(s._id)] = s; });
+
+    // Resolve exam names too (for the exam-comparison report).
+    const exams = await db(req).collection('exams').find({}, { projection: { examName: 1, name: 1 } }).toArray().catch(() => []);
+    const examName: Record<string, string> = {};
+    exams.forEach((e: any) => { examName[String(e._id)] = e.examName || e.name || 'Exam'; });
+
+    return all.map((m: any) => {
+        const s = byId[String(m.studentId)] || {};
+        return {
+            ...m,
+            className: m.className || s.studentClass || s.className || s.currentClass || 'Unknown',
+            studentName: m.studentName || s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student',
+            examName: m.examName || examName[String(m.examId)] || 'Exam',
+        };
+    });
+};
 
 // ── Academic ──────────────────────────────────────────────────────────────────
 router.get('/reports/computed/subject-performance', async (req, res) => {
@@ -83,9 +110,22 @@ router.get('/reports/computed/mean-score-trends', async (req, res) => {
 // ── Attendance % Summary ──────────────────────────────────────────────────────
 router.get('/reports/computed/attendance-summary', async (req, res) => {
     try {
-        const recs = await db(req).collection('attendance').find({}).toArray().catch(() => []);
+        // Student attendance is stored in `student_attendance` (studentId/classId/
+        // status/date). Fall back to the legacy `attendance` collection if empty.
+        let recs = await db(req).collection('student_attendance').find({}).toArray().catch(() => []);
+        if (!recs.length) recs = await db(req).collection('attendance').find({}).toArray().catch(() => []);
+        // Resolve class id → name and student → class for grouping.
+        const classes = await db(req).collection('classes').find({}, { projection: { name: 1, levelName: 1, className: 1 } }).toArray().catch(() => []);
+        const clsName: Record<string, string> = {};
+        classes.forEach((c: any) => { clsName[String(c._id)] = c.name || c.levelName || c.className || ''; });
+        const students = await db(req).collection('students').find({}, { projection: { studentClass: 1, className: 1, currentClass: 1 } }).toArray().catch(() => []);
+        const stuClass: Record<string, string> = {};
+        students.forEach((s: any) => { stuClass[String(s._id)] = s.studentClass || s.className || s.currentClass || ''; });
         const byClass: Record<string, { present: number; total: number }> = {};
-        recs.forEach((r: any) => { const k = r.studentClass || r.className || 'Unknown'; (byClass[k] ||= { present: 0, total: 0 }); byClass[k].total++; if (/present|late/i.test(String(r.status))) byClass[k].present++; });
+        recs.forEach((r: any) => {
+            const k = r.studentClass || r.className || clsName[String(r.classId)] || stuClass[String(r.studentId)] || 'Unknown';
+            (byClass[k] ||= { present: 0, total: 0 }); byClass[k].total++; if (/present|late/i.test(String(r.status))) byClass[k].present++;
+        });
         const rows = Object.entries(byClass).map(([cls, v]) => ({ class: cls, present: v.present, total: v.total, percent: v.total ? `${Math.round(v.present / v.total * 100)}%` : '0%' }));
         const totP = recs.filter((r: any) => /present|late/i.test(String(r.status))).length;
         res.json({ title: 'Attendance % Summary', cards: [{ label: 'Records', value: recs.length }, { label: 'Overall Present', value: recs.length ? `${Math.round(totP / recs.length * 100)}%` : '0%' }], columns: [{ key: 'class', label: 'Class' }, { key: 'present', label: 'Present' }, { key: 'total', label: 'Records' }, { key: 'percent', label: 'Attendance %' }], rows, chart: { type: 'bar', data: rows.map(r => ({ name: r.class, value: parseInt(r.percent) })) } });
