@@ -182,31 +182,37 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
     const staffNameParts = staff.fullName ? staff.fullName.split(' ') : ['Staff', 'Member'];
     const staffId = staff.employeeId || staff.nationalId || `STF-${staff._id?.substring(0, 5)}`;
     
-    // Shared components to avoid repetition
+    // Shared components to avoid repetition. Upload button hidden when photos are off.
     const UploadButton = () => (
-        <label className="absolute top-4 cursor-pointer hover:scale-110 transition-transform z-20">
+        L.showPhoto ? (
+        <label data-no-print className="absolute top-4 cursor-pointer hover:scale-110 transition-transform z-20 print:hidden">
             <input type="file" className="hidden" onChange={onUpload} accept="image/*" />
-            <div className="w-10 h-10 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm flex items-center justify-center text-[#5C67F2]">
+            <div className="w-10 h-10 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}>
                 <Camera className="w-5 h-5" />
             </div>
         </label>
+        ) : null
     );
 
     const photo = staff.avatar || staff.photo || staff.staffPhoto || staff.image || staff.profilePhoto || staff.passportPhoto;
-    const Avatar = ({ className = "w-36 h-36 bg-gray-50 rounded-full flex items-center justify-center border-[8px] border-white shadow-xl overflow-hidden ring-1 ring-gray-100" }) => (
-        <div className={className}>
+    const Avatar = ({ className = "w-36 h-36 bg-gray-50 rounded-full flex items-center justify-center border-[8px] border-white shadow-xl overflow-hidden ring-1 ring-gray-100" }) => {
+        if (!L.showPhoto) return null;
+        const cls = L.roundedPhoto ? className : className.replace(/rounded-(full|2xl|3xl|xl)/g, "rounded-2xl");
+        return (
+        <div className={cls}>
             {isUploading ? (
-                <Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" />
+                <Loader2 className="w-10 h-10 animate-spin" style={{ color: accent }} />
             ) : photo ? (
                 <img src={photo} alt="" className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-8">
                     <div className="w-12 h-12 bg-[#fcd34d] rounded-full"></div>
-                    <div className="w-24 h-16 bg-[#5C67F2] mt-2 rounded-t-[3rem]"></div>
+                    <div className="w-24 h-16 mt-2 rounded-t-[3rem]" style={{ background: accent }}></div>
                 </div>
             )}
         </div>
-    );
+        );
+    };
 
     if (activeStyle === "Professional") {
         return (
@@ -273,23 +279,40 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                 </div>
 
                 <div className="mt-4">
+                    {schoolName && <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-1" style={{ color: accent }}>{schoolName}</p>}
                     <h3 className="font-bold text-slate-900 text-2xl tracking-tight leading-tight">
                         {staff.fullName || "Staff Member"}
                     </h3>
-                    <p className="text-slate-500 font-medium text-sm mt-1 flex items-center gap-2">
+                    <p className="font-medium text-sm mt-1 flex items-center gap-2" style={{ color: accent }}>
                         <Briefcase className="w-4 h-4" /> {staff.designation || staff.role || "Employee"}
                     </p>
                 </div>
 
                 <div className="mt-10 space-y-4">
-                    <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Employee ID</p>
-                        <p className="font-semibold text-slate-900 text-lg mt-0.5">{staffId}</p>
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Department</p>
-                        <p className="font-semibold text-slate-900 text-lg mt-0.5">{staff.department || "General Staff"}</p>
-                    </div>
+                    {L.fields.id && (
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Employee ID</p>
+                            <p className="font-semibold text-slate-900 text-lg mt-0.5">{staffId}</p>
+                        </div>
+                    )}
+                    {L.fields.department && (
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Department</p>
+                            <p className="font-semibold text-slate-900 text-lg mt-0.5">{staff.department || "General Staff"}</p>
+                        </div>
+                    )}
+                    {L.fields.joined && (
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Joined</p>
+                            <p className="font-semibold text-slate-900 text-lg mt-0.5">{staff.joiningDate || new Date().toLocaleDateString()}</p>
+                        </div>
+                    )}
+                    {L.fields.phone && staff.phone && (
+                        <div>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Phone</p>
+                            <p className="font-semibold text-slate-900 text-lg mt-0.5">{staff.phone}</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-auto pt-8 border-t border-gray-100">
@@ -308,7 +331,7 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                 
                 {/* Gold Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500 rounded-bl-full opacity-20 pointer-events-none"></div>
-                <div className="absolute bottom-0 left-0 w-40 h-40 bg-[#5C67F2] rounded-tr-full opacity-20 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-40 h-40 rounded-tr-full opacity-20 pointer-events-none" style={{ background: accent }}></div>
 
                 <div className="flex flex-col items-center pt-10 relative z-10 w-full h-full">
                     <Avatar className="w-32 h-32 bg-slate-800 rounded-full flex items-center justify-center border-4 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)] overflow-hidden" />
@@ -322,14 +345,24 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                     </div>
 
                     <div className="w-full px-10 mt-10 space-y-4">
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-slate-400 font-medium uppercase text-[10px] tracking-widest">ID N°</span>
-                            <span className="font-mono text-white tracking-widest">{staffId}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                            <span className="text-slate-400 font-medium uppercase text-[10px] tracking-widest">Dept</span>
-                            <span className="font-bold text-slate-200">{staff.department || "STAFF"}</span>
-                        </div>
+                        {L.fields.id && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-widest">ID N°</span>
+                                <span className="font-mono text-white tracking-widest">{staffId}</span>
+                            </div>
+                        )}
+                        {L.fields.department && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-widest">Dept</span>
+                                <span className="font-bold text-slate-200">{staff.department || "STAFF"}</span>
+                            </div>
+                        )}
+                        {L.fields.joined && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-widest">Joined</span>
+                                <span className="font-bold text-slate-200">{staff.joiningDate || new Date().toLocaleDateString()}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="mt-auto pb-8 flex items-center justify-center w-full px-10">
@@ -348,7 +381,7 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
             <div className="w-[520px] h-[330px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative flex group">
                 <UploadButton />
                 {/* Left colored panel */}
-                <div className="w-[185px] bg-gradient-to-b from-[#5C67F2] to-[#0A1B3F] flex flex-col items-center justify-center p-5 relative">
+                <div className="w-[185px] flex flex-col items-center justify-center p-5 relative" style={{ background: `linear-gradient(to bottom, ${accent}, #0A1B3F)` }}>
                     <div className="absolute -right-5 top-0 bottom-0 w-10 bg-white/10 -skew-x-12 pointer-events-none" />
                     <Avatar className="w-28 h-28 rounded-2xl border-4 border-white/80 shadow-lg overflow-hidden flex items-center justify-center bg-white/10" />
                     <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{staff.designation || staff.role || "Staff"}</p>
@@ -356,12 +389,17 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                 {/* Right info */}
                 <div className="flex-1 p-6 flex flex-col">
                     <div className="flex items-center gap-2 mb-1">
-                        {schoolLogo ? <img src={schoolLogo} alt="" className="w-5 h-5 rounded object-contain" /> : <Briefcase className="w-4 h-4 text-[#5C67F2]" />}
-                        <span className="text-[10px] font-black text-[#5C67F2] uppercase tracking-[0.2em] truncate">{schoolName || "Staff Identity Card"}</span>
+                        {schoolLogo ? <img src={schoolLogo} alt="" className="w-5 h-5 rounded object-contain" /> : <Briefcase className="w-4 h-4" style={{ color: accent }} />}
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] truncate" style={{ color: accent }}>{schoolName || "Staff Identity Card"}</span>
                     </div>
                     <h3 className="font-black text-slate-900 text-xl leading-tight">{name}</h3>
                     <div className="mt-4 space-y-2 text-xs flex-1">
-                        {[["ID No", staffId], ["Department", staff.department || "Staff"], ["Joined", staff.joiningDate || new Date().toLocaleDateString()]].map(([k, v]) => (
+                        {([
+                            L.fields.id && ["ID No", staffId],
+                            L.fields.department && ["Department", staff.department || "Staff"],
+                            L.fields.joined && ["Joined", staff.joiningDate || new Date().toLocaleDateString()],
+                            L.fields.phone && staff.phone && ["Phone", staff.phone],
+                        ].filter(Boolean) as [string, string][]).map(([k, v]) => (
                             <div key={k} className="flex items-center"><span className="w-24 text-slate-400 font-bold uppercase text-[9px] tracking-wide">{k}</span><span className="font-bold text-slate-800">→ {v}</span></div>
                         ))}
                     </div>
@@ -404,9 +442,10 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                     <span className="text-[10px] font-black text-gray-400 tracking-[0.3em] mt-1">{staffId}</span>
                 </div>
 
+                {schoolName && <div className="text-[9px] font-black uppercase tracking-[0.2em] -mt-2 mb-1" style={{ color: accent }}>{schoolName}</div>}
                 <h3 className="font-black text-slate-900 text-lg uppercase tracking-wider mb-8 text-center px-4">
                     {staffNameParts.map((n: string, i: number) => (
-                        <span key={i} className={i === 1 ? 'text-[#5C67F2]' : ''}>{n} </span>
+                        <span key={i} style={i === 1 ? { color: accent } : {}}>{n} </span>
                     ))}
                 </h3>
 
@@ -420,20 +459,31 @@ function IdCard({ staff, onUpload, isUploading, activeStyle, brand, layout }: { 
                         
                         <div className="space-y-1.5 font-bold">
                             <div className="flex items-center gap-2 text-xs text-slate-500">
-                                <span className="w-10">Role</span> 
-                                <span className="text-slate-400">→</span> 
+                                <span className="w-10">Role</span>
+                                <span className="text-slate-400">→</span>
                                 <span className="text-slate-900 truncate max-w-[80px]">{staff.designation || staff.role || "Employee"}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                                <span className="w-10">ID</span> 
-                                <span className="text-slate-400">→</span> 
-                                <span className="text-slate-900 truncate max-w-[80px]">{staffId}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                                <span className="w-10">Joined</span> 
-                                <span className="text-slate-400">→</span> 
-                                <span className="text-slate-900">{staff.joiningDate || new Date(staff.createdAt || Date.now()).toLocaleDateString()}</span>
-                            </div>
+                            {L.fields.id && (
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span className="w-10">ID</span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="text-slate-900 truncate max-w-[80px]">{staffId}</span>
+                                </div>
+                            )}
+                            {L.fields.joined && (
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span className="w-10">Joined</span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="text-slate-900">{staff.joiningDate || new Date(staff.createdAt || Date.now()).toLocaleDateString()}</span>
+                                </div>
+                            )}
+                            {L.fields.phone && staff.phone && (
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span className="w-10">Phone</span>
+                                    <span className="text-slate-400">→</span>
+                                    <span className="text-slate-900 truncate max-w-[80px]">{staff.phone}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

@@ -82,9 +82,17 @@ export const registerTenant = async (req: Request, res: Response) => {
     try {
         const db = getDb();
 
-        // 1. Basic check
+        // 1. Basic checks — subdomain and email must be unique across the platform.
         const existing = await db.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
         if (existing) return res.status(409).json({ message: 'Subdomain already taken' });
+
+        const emailLc = String(adminEmail || '').trim().toLowerCase();
+        if (!emailLc) return res.status(400).json({ message: 'Email is required' });
+        // An email may register only ONCE — check both existing users and tenants.
+        const emailRx = new RegExp(`^${emailLc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const emailTaken = await db.collection('User').findOne({ email: emailRx })
+            || await db.collection('Tenant').findOne({ contactEmail: emailRx });
+        if (emailTaken) return res.status(409).json({ message: 'This email is already registered. Use a different email or log in.' });
 
         // 2. Fetch or Create plan
         let plan;
