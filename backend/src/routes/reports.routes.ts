@@ -6,6 +6,66 @@ const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
 
+// Student academic + fees history, grouped by each class the student was in.
+// Uses classAtTime stamped on exam_marks / invoices (falls back to the student's
+// current class for legacy records that weren't stamped).
+router.get('/reports/student-history/:studentId', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const sid = req.params.studentId;
+        const student = await db.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+        const fallbackClass = student.studentClass || student.className || student.currentClass || 'Class';
+
+        const [marks, invoices, payments, exams] = await Promise.all([
+            db.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            db.collection('invoices').find({ $or: [{ student_id: sid }, { studentId: sid }] }).toArray().catch(() => []),
+            db.collection('payments').find({ $or: [{ student_id: sid }, { studentId: sid }], is_voided: { $ne: true } }).toArray().catch(() => []),
+            db.collection('exams').find({}).toArray().catch(() => []),
+        ]);
+        const examName: Record<string, string> = {};
+        exams.forEach((e: any) => { examName[String(e._id)] = e.examName || e.name || 'Exam'; });
+
+        // Group everything by the class the record belongs to.
+        const groups: Record<string, any> = {};
+        const g = (cls: string) => (groups[cls] ||= { class: cls, exams: {}, invoiced: 0, paid: 0, balance: 0, invoices: 0 });
+
+        // Exam marks → per class → per exam mean.
+        const examAgg: Record<string, Record<string, { sum: number; n: number }>> = {};
+        marks.forEach((m: any) => {
+            const cls = m.classAtTime || fallbackClass;
+            const k = String(m.examId);
+            (examAgg[cls] ||= {}); (examAgg[cls][k] ||= { sum: 0, n: 0 });
+            const max = Number(m.totalMarks) || 100;
+            examAgg[cls][k].sum += max > 0 ? (Number(m.marksObtained ?? 0) / max) * 100 : 0;
+            examAgg[cls][k].n++;
+        });
+        Object.entries(examAgg).forEach(([cls, byExam]) => {
+            const grp = g(cls);
+            grp.exams = Object.entries(byExam).map(([eid, v]) => ({ exam: examName[eid] || 'Exam', mean: Math.round(v.sum / v.n), subjects: v.n }));
+        });
+
+        // Invoices + payments → per class fee totals.
+        invoices.forEach((inv: any) => {
+            const grp = g(inv.classAtTime || inv.className || fallbackClass);
+            grp.invoiced += Number(inv.total_due ?? inv.total ?? 0);
+            grp.paid += Number(inv.amount_paid ?? 0);
+            grp.balance += Number(inv.balance ?? 0);
+            grp.invoices++;
+        });
+        // Payments not tied to a stamped invoice still count toward the fallback class total.
+        const paidTotal = payments.reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+        const stampedPaid = Object.values(groups).reduce((s: number, x: any) => s + x.paid, 0);
+        if (paidTotal > stampedPaid) g(fallbackClass).paid += (paidTotal - stampedPaid);
+
+        const history = Object.values(groups).sort((a: any, b: any) => String(a.class).localeCompare(String(b.class)));
+        res.json({
+            student: { id: String(student._id), name: student.studentName || student.name || '', admNo: student.admNo || student.registrationNo || '', currentClass: fallbackClass },
+            history,
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Merged Income & Expense rows (the old report read an empty `transactions`
 // collection). Combines manual income, expenses, and fee payments into one ledger.
 router.get('/reports/income-expense-rows', async (req: Request, res: Response) => {
@@ -120,6 +180,11 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         // The level at a given exam year: shift the CURRENT level back by the number
         // of years between the current year and the exam year (one level per year).
         // e.g. Form 4 in 2026, exam in 2023 → Form 1. Clamps at 1.
+        // Direct label from an exact class name (used when classAtTime is recorded).
+        const levelLabelDirect = (className: string): string => {
+            const lv = parseLevel(className);
+            return lv ? `${lv.prefix}${lv.num}` : (String(className || '').slice(0, 4) || '—');
+        };
         const currentYearNum = Number(activeYear) || new Date().getFullYear();
         const levelAtYear = (currentClassName: string, examYear: any): string => {
             const lv = parseLevel(currentClassName);
@@ -225,20 +290,22 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             // Performance trend: this student's mean % per exam, chronologically, up
             // to (and including) the selected exam. Labelled F1T1 / G1T1 / etc.
             const myTrendMarks = allMarksForTrend.filter((m: any) => String(m.studentId) === sid);
-            const byExam: Record<string, { sum: number; n: number }> = {};
+            const byExam: Record<string, { sum: number; n: number; classAtTime?: string }> = {};
             myTrendMarks.forEach((m: any) => {
                 const ex = examById[String(m.examId)]; if (!ex) return;
                 if (examOrder(ex) > cutoff) return;   // skip exams after the selected one
                 const max = Number(m.totalMarks) || 100;
                 const pct = max > 0 ? (Number(m.marksObtained ?? m.marks ?? m.score ?? 0) / max) * 100 : 0;
                 const k = String(m.examId); (byExam[k] ||= { sum: 0, n: 0 }); byExam[k].sum += pct; byExam[k].n++;
+                if (m.classAtTime) byExam[k].classAtTime = m.classAtTime;   // the class the student was in for THIS exam
             });
             const trendRaw = Object.keys(byExam)
-                .map(eid => { const ex = examById[eid]; return { eid, ex, mean: Math.round(byExam[eid].sum / byExam[eid].n) }; })
+                .map(eid => { const ex = examById[eid]; return { eid, ex, mean: Math.round(byExam[eid].sum / byExam[eid].n), classAtTime: byExam[eid].classAtTime }; })
                 .filter(t => t.ex)
                 .sort((a, b) => examOrder(a.ex).localeCompare(examOrder(b.ex)))
                 .map(t => ({
-                    label: `${levelAtYear(studentClassName, t.ex.academicYear)}T${termNum(t.ex.term)}`,
+                    // Prefer the class recorded at exam time (exact); else infer from the year gap.
+                    label: `${t.classAtTime ? levelLabelDirect(t.classAtTime) : levelAtYear(studentClassName, t.ex.academicYear)}T${termNum(t.ex.term)}`,
                     exam: t.ex.examName || t.ex.name || 'Exam',
                     mean: t.mean,
                 }));

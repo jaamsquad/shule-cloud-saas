@@ -121,6 +121,21 @@ export default function ResultCard() {
         queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
     });
 
+    // ── Per-class grading scale (the authoritative one: this class's, else global)
+    const { data: classScale } = useQuery<any>({
+        queryKey: ["grading_scale", selectedClass?._id],
+        queryFn: async () => (await api.get("/grading-scale", { params: { classId: selectedClass?._id } })).data,
+        enabled: !!selectedClass,
+    });
+
+    // School profile → real curriculum name for the header.
+    const { data: schoolProfile } = useQuery<any>({
+        queryKey: ["tenant_profile_global"],
+        queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; },
+        staleTime: Infinity,
+    });
+    const curriculumName = schoolProfile?.curriculum || schoolProfile?.curriculumType || curriculumSettings?.curriculumName || curriculumSettings?.curriculumId || "Standard";
+
     // ── Subjects ASSIGNED to the selected class (to show "-" for unscored) ────
     // Authoritative source = class.subjects (set in Assign Subjects). Only these
     // subjects appear on the report card — never the whole subjects collection.
@@ -141,8 +156,11 @@ export default function ResultCard() {
         enabled: !!selectedClass,
     });
 
-    // ── Resolved grading scale: curriculum settings > grading_criteria > defaults ──
+    // ── Resolved grading scale: per-class scale > curriculum > legacy > defaults ──
     const gradingScale: Array<{ grade: string; min: number; max: number; label?: string; color?: string }> = (() => {
+        if (classScale?.grades?.length > 0) {
+            return classScale.grades.map((g: any) => ({ grade: g.grade, min: g.from, max: g.upto, label: g.remark }));
+        }
         if (curriculumSettings?.gradingScale?.length > 0) {
             return curriculumSettings.gradingScale.map((g: any) => ({ grade: g.grade, min: g.min, max: g.max, label: g.label, color: g.color }));
         }
@@ -152,7 +170,7 @@ export default function ResultCard() {
         return [];
     })();
 
-    const passMark = curriculumSettings?.passMark ?? gradingConfig?.passmark ?? 50;
+    const passMark = classScale?.passMark ?? curriculumSettings?.passMark ?? gradingConfig?.passmark ?? 50;
 
     // Helper: derive grade from percentage using resolved grading scale
     const getGradeForPct = (pct: number): string => {
@@ -546,7 +564,7 @@ export default function ResultCard() {
                                         { label: "Academic Period", value: currentPeriod ? `${currentPeriod.label} · ${currentPeriod.academicYear}` : selectedExam.academicYear || "—" },
                                         { label: "Exam", value: selectedExam.examName || selectedExam.name || "—" },
                                         { label: "Exam Date", value: examDate },
-                                        { label: "Curriculum", value: curriculumSettings?.curriculumId || "Standard" },
+                                        { label: "Curriculum", value: curriculumName },
                                         { label: "Overall Result", value: overall >= passMark ? "✅ PASSED" : "❌ FAILED" },
                                     ].map(item => (
                                         <div key={item.label}>

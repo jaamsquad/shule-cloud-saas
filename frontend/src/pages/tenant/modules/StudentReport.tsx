@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
@@ -219,10 +219,16 @@ export default function StudentReport() {
                         - Student Report
                     </span>
                 </div>
-                <button onClick={() => printElementToPdf(reportRef.current, `Student Report — ${student?.studentName || student?.firstName || "Student"}`, { fileName: `Student-Report-${student?.registrationNo || student?.admissionNo || ""}`, always: true })}
-                    className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
-                    <FileText className="w-3.5 h-3.5" /> Get PDF
-                </button>
+                <div className="flex items-center gap-2">
+                    <Link to={`/students/history/${student?._id || id}`}
+                        className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                        <Book className="w-3.5 h-3.5" /> Class History
+                    </Link>
+                    <button onClick={() => printElementToPdf(reportRef.current, `Student Report — ${student?.studentName || student?.firstName || "Student"}`, { fileName: `Student-Report-${student?.registrationNo || student?.admissionNo || ""}`, always: true })}
+                        className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
+                        <FileText className="w-3.5 h-3.5" /> Get PDF
+                    </button>
+                </div>
             </div>
 
             <div ref={reportRef} className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">

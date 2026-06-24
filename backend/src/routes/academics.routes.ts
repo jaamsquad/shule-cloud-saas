@@ -285,15 +285,30 @@ router.post('/academics/exam-marks/bulk', async (req, res) => {
         const db = getRequestDb(req);
         const { entries } = req.body;
         if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ message: 'No entries provided' });
+
+        // Stamp each mark with the student's class + academic year AT SAVE TIME, so a
+        // student's records stay attributed to the class they were in (history per class).
+        const period = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null);
+        const year = period?.academicYear || new Date().getFullYear();
+        const sIds = Array.from(new Set(entries.map((e: any) => String(e.studentId)).filter(Boolean)));
+        const studentDocs = sIds.length
+            ? await db.collection('students').find({ _id: { $in: sIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }, { projection: { studentClass: 1, className: 1, currentClass: 1, classId: 1 } }).toArray().catch(() => [])
+            : [];
+        const classByStudent: Record<string, { name: string; id: string }> = {};
+        studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || '', id: String(s.classId || '') }; });
+
         const ops = entries.map((entry: any) => {
             // Strip fields that must not appear in both $set and $setOnInsert (MongoDB conflict)
             const { _id, createdAt, __v, ...data } = entry;
+            const cls = classByStudent[String(data.studentId)] || { name: data.className || '', id: '' };
             return {
                 updateOne: {
                     filter: { studentId: data.studentId, subjectId: data.subjectId, examId: data.examId },
                     update: {
+                        // classAtTime/academicYear set only on first insert, so re-saving
+                        // marks never rewrites the historical class attribution.
                         $set: { ...data, updatedAt: new Date() },
-                        $setOnInsert: { createdAt: new Date() }   // only written on first insert
+                        $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) },
                     },
                     upsert: true
                 }

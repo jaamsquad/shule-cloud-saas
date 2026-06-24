@@ -35,6 +35,7 @@ import Privacy from "./pages/public/Privacy";
 import TenantResolver from "./pages/public/TenantResolver";
 import Register from "./pages/public/Register";
 import Activate from "./pages/public/Activate";
+import StudentHistory from "./pages/tenant/modules/students/StudentHistory";
 
 // Tenant Auth
 import Login from "./pages/tenant/auth/Login";
@@ -504,6 +505,7 @@ const App = () => {
               <Route path="/students" element={<AllStudents />} />
               <Route path="/students/new" element={<AddStudent />} />
               <Route path="/students/report/:id" element={<StudentReport />} />
+              <Route path="/students/history/:id" element={<StudentHistory />} />
               <Route path="/students/edit/:id" element={<EditStudent />} />
               <Route path="/students/admission-letter" element={<AdmissionLetter />} />
               <Route path="/students/id-cards" element={<StudentIdCards />} />

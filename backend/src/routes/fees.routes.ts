@@ -546,6 +546,12 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
             updatedAt: new Date().toISOString()
         };
 
+        // Stamp the class name the student was in when invoiced (for per-class history).
+        try {
+            const stu = await db.collection('students').findOne({ _id: new ObjectId(String(student_id)) }, { projection: { studentClass: 1, className: 1, currentClass: 1 } }).catch(() => null);
+            (invoice as any).classAtTime = stu?.studentClass || stu?.className || stu?.currentClass || '';
+        } catch { /* optional */ }
+
         await db.collection('invoices').insertOne(invoice);
         res.status(201).json({ data: invoice, meta: {}, errors: [] });
         emailInvoiceToParent(req, db, invoice, student_id);   // best-effort, after responding
