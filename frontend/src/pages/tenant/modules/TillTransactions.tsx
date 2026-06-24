@@ -40,8 +40,12 @@ export default function TillTransactions() {
     // Pull/reconcile transactions straight from Safaricom for the chosen range.
     const sync = useMutation({
         mutationFn: async () => (await api.post("/fees/till-transactions/sync", { from: from || undefined, to: to || undefined })).data,
-        onSuccess: (d: any) => { toast.success(d.message || "Synced."); qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch(); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Sync failed."),
+        onSuccess: (d: any) => {
+            if (d.imported) toast.success(d.message);
+            else toast.info(d.message || "Synced — nothing new.", { duration: 8000 });
+            qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch();
+        },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Sync failed.", { duration: 8000 }),
     });
 
     const apply = () => setParams({

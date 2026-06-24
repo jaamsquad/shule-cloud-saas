@@ -336,6 +336,10 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
         const db = getRequestDb(req);
         const cfg = await resolveMpesaConfig(db);
         if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
+        if (cfg.env !== 'production') return res.status(400).json({ message: 'Sync only works in Production. Switch Environment to production in M-PESA settings.' });
+        // The Pull API must be registered (separate Daraja product) before querying.
+        const setRow: any = (await db.collection('mpesa_settings').findOne({})) || {};
+        if (!setRow.pullRegistered) return res.status(400).json({ message: 'The Pull API is not registered yet. Go to Settings → M-PESA Integration → "Register Pull API" first (and ensure the Pull product is activated for your shortcode on the Daraja portal).' });
 
         // Default to the last 7 days if no range supplied.
         const { from, to } = req.body || {};
@@ -388,7 +392,15 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
             }
             offset += batch.length;
         }
-        res.json({ ok: true, imported, matched, message: imported ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.` : 'No new transactions found for that period.' });
+        const totalSeen = offset; // total rows Safaricom returned across pages
+        res.json({
+            ok: true, imported, matched, totalSeen, shortcode: cfg.shortcode, from: fmt(start), to: fmt(end),
+            message: imported
+                ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.`
+                : totalSeen
+                    ? `Safaricom returned ${totalSeen} transaction(s) but all were already recorded.`
+                    : `Safaricom returned no transactions to shortcode ${cfg.shortcode} for that period. Check that this is the exact shortcode the money was paid to, and widen the date range.`,
+        });
     } catch (e: any) {
         const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Settings → M-PESA).` : e.message;
         res.status(400).json({ message: msg });

@@ -26,6 +26,10 @@ router.get('/integrations/mpesa/settings', async (req, res) => {
             configured: isMpesaConfigured(cfg),
             callbackBase: cfg.callbackBase,
             registered: !!s.urlsRegistered,
+            pullRegistered: !!s.pullRegistered,
+            pullNominatedNumber: s.pullNominatedNumber || '',
+            // Reconciliation (Verify + Pull) is only possible with these set.
+            reconciliationReady: !!(cfg.initiator && cfg.securityCredential),
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
