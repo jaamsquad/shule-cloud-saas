@@ -103,21 +103,30 @@ router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, r
         const meta = getMetaDb();
         await meta.collection('mpesa_c2b_payments').insertOne({ ...p, receivedAt: new Date() });
 
-        // Best-effort: match the BillRefNumber (account = student reg no) to a student in any active tenant.
-        const ref = p.BillRefNumber;
-        if (ref) {
-            const tenants = await meta.collection('Tenant').find({ status: 'active' }).toArray();
-            for (const t of tenants) {
-                const dbName = t.databaseName; if (!dbName) continue;
-                try {
-                    const db = getTenantDb(dbName);
-                    const student = await db.collection('students').findOne({ $or: [{ registrationNo: ref }, { admNo: ref }] });
-                    if (student) {
-                        await applyMpesaPayment(db, { studentId: String(student._id), studentName: student.studentName, registrationNo: ref, amount: Number(p.TransAmount), receipt: p.TransID, phone: p.MSISDN });
-                        break;
-                    }
-                } catch { /* try next tenant */ }
-            }
+        // Auto-match to a student and apply the payment. Paybills carry the account
+        // number in BillRefNumber (= student reg/adm no). Tills (Buy Goods) usually
+        // have NO account, so fall back to matching the payer phone (MSISDN) against
+        // a student's or guardian's phone on file. Either way the payment still
+        // appears on the Till Transactions page even if no match is found.
+        const ref = String(p.BillRefNumber || '').trim();
+        const payerPhone = String(p.MSISDN || '').replace(/\D/g, '');
+        const phoneTail = payerPhone.slice(-9);   // last 9 digits, format-agnostic
+        const tenants = await meta.collection('Tenant').find({ status: 'active' }).toArray();
+        for (const t of tenants) {
+            const dbName = t.databaseName; if (!dbName) continue;
+            try {
+                const db = getTenantDb(dbName);
+                let student = ref ? await db.collection('students').findOne({ $or: [{ registrationNo: ref }, { admNo: ref }] }) : null;
+                // Fallback for Till payments without an account number → match by phone.
+                if (!student && phoneTail) {
+                    const rx = new RegExp(phoneTail + '$');
+                    student = await db.collection('students').findOne({ $or: [{ phone: rx }, { parentPhone: rx }, { guardianPhone: rx }, { 'guardian.phone': rx }] });
+                }
+                if (student) {
+                    await applyMpesaPayment(db, { studentId: String(student._id), studentName: student.studentName, registrationNo: ref || student.registrationNo || student.admNo, amount: Number(p.TransAmount), receipt: p.TransID, phone: p.MSISDN });
+                    break;
+                }
+            } catch { /* try next tenant */ }
         }
     } catch (e) {
         console.error('[M-PESA] c2b confirmation error:', e);
