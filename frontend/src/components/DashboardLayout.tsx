@@ -34,7 +34,12 @@ function useAuthGuard() {
             const urlSubdomain = ((isLocal && parts.length >= 2) || (!isLocal && parts.length >= 3)) && !reserved.has(parts[0])
                 ? parts[0]
                 : null;
-            if (urlSubdomain && payload.tenantSubdomain && payload.tenantSubdomain !== urlSubdomain) {
+            // Organization mode: when a branch was entered from the org switcher,
+            // the active-branch override scopes everything to that branch DB even
+            // though the URL stays on the org's address. Don't bounce in that case.
+            const activeBranch = localStorage.getItem("active_branch_subdomain");
+            const inOrgBranch = activeBranch && payload.tenantSubdomain && activeBranch === payload.tenantSubdomain;
+            if (!inOrgBranch && urlSubdomain && payload.tenantSubdomain && payload.tenantSubdomain !== urlSubdomain) {
                 localStorage.removeItem("auth_token");
                 localStorage.removeItem("user");
                 localStorage.removeItem("tenant");

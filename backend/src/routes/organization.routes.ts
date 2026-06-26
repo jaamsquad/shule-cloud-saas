@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
-import { getMetaDb } from '../lib/mongodb';
+import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import {
     ensureOrgIndexes, listBranches, createBranch, accessibleBranches,
     canAccessBranch, audit, ORG_ROLES, isOrgWideRole,
@@ -122,6 +122,44 @@ router.post('/org/users', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN
         });
         await audit({ organizationId: req.orgUser!.organizationId, userId: req.orgUser!.orgUserId, action: 'orguser.create', newValue: { email: lc, role }, ip: ipOf(req), device: deviceOf(req) });
         res.json({ ok: true, id: String(r.insertedId) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Enter a branch from an org session (no password) ─────────────────────────
+// Mints a valid school token for the chosen branch by matching the org user's
+// email to an existing account in that branch DB. Branches stay separate DBs;
+// the user lands in the branch app fully logged in under the same org URL.
+router.post('/org/enter-branch/:branchId', requireOrgAuth, async (req: Request, res: Response) => {
+    try {
+        const jwtLib = require('jsonwebtoken');
+        const secret = process.env.JWT_SECRET || 'secret';
+        if (!(await canAccessBranch(req.orgUser!, req.params.branchId))) return res.status(403).json({ message: 'You do not have access to that branch.' });
+        const meta = getMetaDb();
+        const branch: any = await meta.collection('Branch').findOne({ _id: new ObjectId(req.params.branchId), organizationId: req.orgUser!.organizationId });
+        if (!branch) return res.status(404).json({ message: 'Branch not found.' });
+        const email = String(req.orgUser!.email || '').toLowerCase();
+
+        // 1) Admin/User account in the meta DB scoped to this branch's tenant.
+        const tenant = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(branch.tenantId)) });
+        let user: any = null, role = 'admin', name = req.orgUser!.name, sub = '';
+        if (email) {
+            user = await meta.collection('User').findOne({ email, $or: [{ tenantId: tenant?._id }, { tenantId: String(tenant?._id) }] })
+                || await meta.collection('User').findOne({ email });
+            if (user) { role = user.role || 'admin'; name = user.name || name; sub = String(user._id); }
+        }
+        // 2) Fall back to a staff account in the branch DB by email/username.
+        if (!user && email) {
+            const db = getTenantDb(branch.databaseName);
+            const staff = await db.collection('staff').findOne({ $or: [{ email }, { portalUsername: email }] }).catch(() => null);
+            if (staff) { role = 'staff'; name = staff.employeeName || staff.name || name; sub = String(staff._id); }
+            else return res.status(404).json({ message: `No account found for ${email} in ${branch.name}. Ask a branch admin to add you.` });
+        }
+        if (!sub && req.orgUser!.role === 'ORG_OWNER') { sub = req.orgUser!.orgUserId; role = 'admin'; }   // owners always allowed
+        if (!sub) return res.status(404).json({ message: `No account found for you in ${branch.name}.` });
+
+        const token = jwtLib.sign({ sub, email, tenantId: String(tenant?._id), tenantSubdomain: branch.subdomain, role, name }, secret, { expiresIn: '7d' });
+        await audit({ organizationId: req.orgUser!.organizationId, branchId: req.params.branchId, userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: 'branch.enter', ip: ipOf(req), device: deviceOf(req) });
+        res.json({ ok: true, token, subdomain: branch.subdomain, branchName: branch.name, role, name });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

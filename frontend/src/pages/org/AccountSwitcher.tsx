@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Briefcase, Search, GraduationCap, Building2 } from "lucide-react";
+import { toast } from "sonner";
+import api from "@/lib/api";
 import {
     isOrgUser, getOrgUser, getOrgBranches, getOrgInfo, orgPrimary,
     selectBranch, selectAllBranches, canSeeAllBranches, orgLogout, type OrgBranch,
@@ -45,7 +47,23 @@ export default function AccountSwitcher() {
     const others = branches.filter(b => b.id !== primary?.id);
     const filtered = others.filter(b => b.name.toLowerCase().includes(q.trim().toLowerCase()) || b.subdomain.toLowerCase().includes(q.trim().toLowerCase()));
 
-    const enterBranch = (b: OrgBranch) => { selectBranch(b); window.location.href = "/"; };
+    // Enter a branch under the SAME URL: mint a school token by matching this
+    // org user's email to an account in the branch, store it, and open the app.
+    const [entering, setEntering] = useState("");
+    const enterBranch = async (b: OrgBranch) => {
+        setEntering(b.id);
+        try {
+            const r = (await api.post(`/org/enter-branch/${b.id}`, {})).data;
+            // Become the branch user — same URL, no password.
+            localStorage.setItem("auth_token", r.token);
+            localStorage.setItem("tenant", JSON.stringify({ subdomain: r.subdomain, name: b.name }));
+            selectBranch(b);   // scopes API calls to this branch's DB
+            window.location.href = "/dashboard";
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Could not open this branch.");
+            setEntering("");
+        }
+    };
     const enterOrg = () => { selectAllBranches(); navigate("/org/dashboard"); };
 
     return (

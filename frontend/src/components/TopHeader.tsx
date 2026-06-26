@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { navItems } from "./AppSidebar";
 import BranchSwitcher from "./BranchSwitcher";
+import TenantBranchSwitcher from "./TenantBranchSwitcher";
 
 // Flatten the sidebar nav into searchable {label, path, group} entries.
 const NAV_LINKS = navItems.flatMap((item: any) =>
@@ -218,6 +219,8 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
 
             {/* Right side Actions */}
             <div className="ml-auto flex items-center gap-4">
+                {/* In-app branch switcher (only for org-linked schools + permitted users) */}
+                <TenantBranchSwitcher />
                 {/* Vertical Divider */}
                 <div className={`w-[1px] h-8 ${isDark ? 'bg-white/10' : 'bg-gray-100'} mx-2 hidden lg:block`}></div>
 

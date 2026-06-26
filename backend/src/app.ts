@@ -104,13 +104,27 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
         // Case/space-insensitive match — stored subdomain may be "Egerton" etc.
         const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
         if (!tenant) return res.status(404).json({ message: 'School not found' });
-        // Only return public, non-sensitive fields
+
+        // If this school belongs to an organization, show the ORGANISATION's
+        // logo + name on the login page; otherwise the school's own branding.
+        let name = tenant.instituteName || tenant.name || sub;
+        let logo = tenant.logo || tenant.schoolLogo || null;
+        let tagline = tenant.tagline || null;
+        let organization: any = null;
+        if (tenant.organizationId) {
+            const org = await metaDb.collection('Organization').findOne({ _id: (await import('mongodb')).ObjectId.createFromHexString(String(tenant.organizationId)) }).catch(() => null);
+            if (org) {
+                organization = { id: String(org._id), name: org.name };
+                if (org.name) name = org.name;
+                if (org.branding?.logo) logo = org.branding.logo;
+                if (org.branding?.motto) tagline = org.branding.motto;
+            }
+        }
         res.json({
-            name:       tenant.instituteName || tenant.name || sub,
-            logo:       tenant.logo || tenant.schoolLogo || null,
+            name, logo, tagline,
             address:    tenant.address || null,
             subdomain:  tenant.subdomain,
-            tagline:    tenant.tagline || null,
+            organization,
         });
     } catch (e: any) {
         res.status(500).json({ message: e.message });

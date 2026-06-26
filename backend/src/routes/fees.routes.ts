@@ -1,5 +1,5 @@
 ﻿import { Router, Request, Response } from 'express';
-import { getMetaDb } from '../lib/mongodb';
+import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
@@ -435,6 +435,64 @@ router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (re
         const result = await registerPullUrl(cfg, `${base}/pesa/pull/result`, nominated.startsWith('07') ? '254' + nominated.slice(1) : nominated);
         await db.collection('mpesa_settings').updateOne({}, { $set: { pullRegistered: true, pullRegisteredAt: new Date(), pullNominatedNumber: nominated } }, { upsert: true });
         res.json({ ok: true, result, message: 'Pull API registered — you can now Sync transactions from Safaricom.' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// ── Org context for the CURRENT school (for the in-app branch switcher) ───────
+// Returns whether this school is part of an organization and the sibling
+// branches, so an admin can switch between branches from the normal school app.
+router.get('/org/my-context', async (req: Request, res: Response) => {
+    try {
+        const ctx = (req as any).tenantContext;
+        if (!ctx?.tenantId) return res.json({ inOrg: false });
+        const meta = getMetaDb();
+        const tenant: any = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(ctx.tenantId)) });
+        if (!tenant?.organizationId) return res.json({ inOrg: false });
+        const org = await meta.collection('Organization').findOne({ _id: new ObjectId(String(tenant.organizationId)) });
+        const branches = await meta.collection('Branch').find({ organizationId: String(tenant.organizationId), status: { $ne: 'deleted' } }).sort({ isPrimary: -1, name: 1 }).toArray();
+        // Only expose to admins (the in-app switcher is an admin convenience).
+        const role = String(ctx.user?.role || '').toLowerCase();
+        const isAdmin = /admin|owner|principal|director|bursar|super/.test(role) || !ctx.user;   // staff portal admins
+        res.json({
+            inOrg: true,
+            organization: org ? { id: String(org._id), name: org.name, branding: org.branding || null } : null,
+            currentSubdomain: tenant.subdomain,
+            canSwitch: isAdmin,
+            branches: branches.map((b: any) => ({ id: String(b._id), name: b.name, subdomain: b.subdomain, isPrimary: !!b.isPrimary, current: b.subdomain === tenant.subdomain })),
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Switch to a sibling branch from inside the school app (admin convenience).
+// Matches the current admin's email to an account in the target branch and mints
+// that branch's token — same URL, no password.
+router.post('/org/switch-branch/:branchId', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const ctx = (req as any).tenantContext;
+        const meta = getMetaDb();
+        const tenant: any = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(ctx.tenantId)) });
+        if (!tenant?.organizationId) return res.status(400).json({ message: 'This school is not part of an organization.' });
+        const branch: any = await meta.collection('Branch').findOne({ _id: new ObjectId(req.params.branchId), organizationId: String(tenant.organizationId) });
+        if (!branch) return res.status(404).json({ message: 'Branch not found in your organization.' });
+
+        const me = (req as any).user || {};
+        const email = String(me.email || me.username || '').toLowerCase();
+        const targetTenant = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(branch.tenantId)) });
+        let sub = '', role = 'admin', name = me.name;
+        if (email) {
+            const user = await meta.collection('User').findOne({ email, $or: [{ tenantId: targetTenant?._id }, { tenantId: String(targetTenant?._id) }] }) || await meta.collection('User').findOne({ email });
+            if (user) { sub = String(user._id); role = user.role || 'admin'; name = user.name || name; }
+            else {
+                const db = getTenantDb(branch.databaseName);
+                const staff = await db.collection('staff').findOne({ $or: [{ email }, { portalUsername: email }] }).catch(() => null);
+                if (staff) { sub = String(staff._id); role = 'staff'; name = staff.employeeName || staff.name || name; }
+            }
+        }
+        if (!sub) return res.status(404).json({ message: `No account for ${email || 'you'} in ${branch.name}. Ask a branch admin to add you.` });
+
+        const jwtLib = require('jsonwebtoken');
+        const token = jwtLib.sign({ sub, email, tenantId: String(targetTenant?._id), tenantSubdomain: branch.subdomain, role, name }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+        res.json({ ok: true, token, subdomain: branch.subdomain, branchName: branch.name, role, name });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
