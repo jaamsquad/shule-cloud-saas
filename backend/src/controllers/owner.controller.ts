@@ -43,6 +43,34 @@ const guard = (req: Request, res: Response, code?: string): any => {
     return claims;
 };
 
+// Record a platform-level (owner) action for the audit trail.
+export const ownerAudit = async (req: Request, action: string, entity: string, metadata: any = {}) => {
+    try {
+        const claims = ownerClaims(req);
+        await getDb().collection('owner_audit_logs').insertOne({
+            action, entity, metadata,
+            actor: claims?.name || claims?.email || claims?.role || 'owner',
+            actorRole: claims?.role || '',
+            ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || '',
+            device: String(req.headers['user-agent'] || ''),
+            createdAt: new Date(),
+        });
+    } catch { /* never block on audit */ }
+};
+
+// Read the platform audit trail.
+export const getOwnerAuditLogs = async (req: Request, res: Response) => {
+    if (!guard(req, res)) return;
+    try {
+        const { search } = req.query as any;
+        const q: any = {};
+        if (search) { const s = String(search); q.$or = [{ action: { $regex: s, $options: 'i' } }, { entity: { $regex: s, $options: 'i' } }, { actor: { $regex: s, $options: 'i' } }]; }
+        const logs = await getDb().collection('owner_audit_logs').find(q).sort({ createdAt: -1 }).limit(1000).toArray();
+        const security = logs.filter((l: any) => /suspend|delete|reset|impersonate|password/i.test(l.action)).length;
+        return res.json({ logs, total: logs.length, securityIncidents: security });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
 export const getTenants = async (req: Request, res: Response) => {
     try {
         const db = getDb();
@@ -436,6 +464,7 @@ export const assignSchoolPlan = async (req: Request, res: Response) => {
             { upsert: true },
         );
         await meta.collection('Tenant').updateOne({ _id: tid }, { $set: { planId: plan?._id || null, plan: plan?.name || null, enabledModules: plan?.modules || [], updatedAt: new Date() } });
+        await ownerAudit(req, 'school.assign_plan', `school:${req.params.id}`, { plan: plan?.name });
         return res.json({ ok: true });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
@@ -478,6 +507,7 @@ export const messageSchool = async (req: Request, res: Response) => {
         if (!result.email && !result.whatsapp) {
             return res.status(400).json({ message: `Could not deliver. ${result.errors.join('; ') || 'No contact on file.'}` });
         }
+        await ownerAudit(req, 'school.message', `school:${req.params.id}`, { channels: [result.email && 'email', result.whatsapp && 'whatsapp'].filter(Boolean) });
         return res.json({ ok: true, delivery: result });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
@@ -568,6 +598,7 @@ export const setSchoolStatus = async (req: Request, res: Response) => {
         const status = String(req.body?.status || '').toLowerCase();
         if (!['active', 'suspended', 'trial'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
         await getDb().collection('Tenant').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { status, updatedAt: new Date() } });
+        await ownerAudit(req, status === 'suspended' ? 'school.suspend' : 'school.activate', `school:${req.params.id}`, { status });
         return res.json({ ok: true, status });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
@@ -597,6 +628,7 @@ export const updateSchool = async (req: Request, res: Response) => {
             await meta.collection('Branch').updateMany({ tenantId: String(t._id) }, { $set: { subdomain: sub } }).catch(() => { });
         }
         await meta.collection('Tenant').updateOne({ _id: id }, { $set });
+        await ownerAudit(req, 'school.update', `school:${req.params.id}`, { fields: Object.keys($set).filter(k => k !== 'updatedAt') });
         // Keep the admin user's email in sync if it changed.
         if (email) {
             await meta.collection('User').updateOne({ $or: [{ tenantId: t._id }, { tenantId: String(t._id) }] }, { $set: { email: String(email).trim().toLowerCase() } }, { sort: { createdAt: 1 } as any }).catch(() => { });
@@ -631,6 +663,7 @@ export const resetSchoolPassword = async (req: Request, res: Response) => {
             const r = await notifyOwner({ email: to, phone: t.contactPhone }, 'Your ShuleCloud password was reset', html, `New password for ${t.name}: ${newPassword}`).catch(() => null);
             emailed = !!r;
         }
+        await ownerAudit(req, 'school.reset_password', `school:${req.params.id}`, { emailed, sentTo: to });
         return res.json({ ok: true, password: newPassword, emailed, sentTo: to });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
@@ -655,6 +688,7 @@ export const resetOrgPassword = async (req: Request, res: Response) => {
             const r = await notifyOwner({ email: to }, 'Your ShuleCloud organization password was reset', html, `New org password for ${org.name}: ${newPassword}`).catch(() => null);
             emailed = !!r;
         }
+        await ownerAudit(req, 'org.reset_password', `org:${req.params.id}`, { emailed, sentTo: to });
         return res.json({ ok: true, password: newPassword, emailed, sentTo: to });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };

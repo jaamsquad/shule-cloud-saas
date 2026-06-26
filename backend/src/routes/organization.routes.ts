@@ -88,13 +88,19 @@ router.get('/org/branches', requireOrgAuth, async (req: Request, res: Response) 
 });
 
 // Create a new branch (= new tenant DB) — Org Owner/Admin only.
+// Branches no longer have a user-facing subdomain: a unique internal one is
+// generated from the name. Everything is accessed under the organization URL.
 router.post('/org/branches', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN'), async (req: Request, res: Response) => {
     try {
-        const { name, subdomain } = req.body || {};
-        if (!name || !subdomain) return res.status(400).json({ message: 'Branch name and subdomain are required.' });
+        const { name } = req.body || {};
+        if (!name) return res.status(400).json({ message: 'Branch name is required.' });
         const meta = getMetaDb();
-        const sub = String(subdomain).toLowerCase().trim();
-        if (await meta.collection('Tenant').findOne({ subdomain: sub })) return res.status(409).json({ message: 'That subdomain is already taken.' });
+        // Derive a unique internal subdomain from the branch name + org slug.
+        const orgRow = await meta.collection('Organization').findOne({ _id: new ObjectId(req.orgUser!.organizationId) });
+        const slug = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 18);
+        const base = `${slug(orgRow?.name || 'org')}-${slug(name)}` || `branch-${Date.now().toString(36)}`;
+        let sub = base, n = 1;
+        while (await meta.collection('Tenant').findOne({ subdomain: sub })) { sub = `${base}-${++n}`; }
         const branch = await createBranch({ organizationId: req.orgUser!.organizationId, name, subdomain: sub });
         await audit({ organizationId: req.orgUser!.organizationId, branchId: String(branch._id), userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: 'branch.create', newValue: { name, subdomain: sub }, ip: ipOf(req), device: deviceOf(req) });
         res.json({ ok: true, branch: { id: String(branch._id), name: branch.name, subdomain: branch.subdomain } });

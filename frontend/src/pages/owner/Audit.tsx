@@ -13,7 +13,8 @@ export default function OwnerAudit() {
         queryKey: ["owner-audit"],
         queryFn: async () => {
             const res = await api.get("/owner/audit-logs");
-            return res.data;
+            // Endpoint returns { logs, total, securityIncidents }; older shape was an array.
+            return Array.isArray(res.data) ? res.data : (res.data?.logs || []);
         }
     });
 
@@ -90,8 +91,8 @@ export default function OwnerAudit() {
                                         {new Date(log.createdAt).toLocaleString()}
                                     </TableCell>
                                     <TableCell>
-                                        <div className="text-sm font-medium">{log.platformUser?.email || <span className="text-muted-foreground italic">system</span>}</div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{log.platformUser?.role || 'SYSTEM_CORE'}</div>
+                                        <div className="text-sm font-medium">{log.actor || log.platformUser?.email || <span className="text-muted-foreground italic">system</span>}</div>
+                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{log.actorRole || log.platformUser?.role || 'OWNER'}</div>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className={`text-[10px] font-mono tracking-tighter rounded-sm px-1.5 py-0 shadow-sm ${getActionColor(log.action)}`}>
