@@ -67,18 +67,25 @@ api.interceptors.response.use(
         const code   = error.response?.data?.code;
 
         if (status === 403 && code === 'TOKEN_SUBDOMAIN_MISMATCH') {
-            // Token belongs to a different school — clear session and redirect to login
+            // Organization mode: a branch session intentionally runs under the org
+            // URL with a token for the branch subdomain. Don't nuke it — send the
+            // user back to the account switcher to re-enter, not the root finder.
+            const orgToken = localStorage.getItem('org_token');
+            const activeBranch = localStorage.getItem('active_branch_subdomain');
+            if (orgToken || activeBranch) {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('active_branch_subdomain');
+                localStorage.removeItem('active_branch_id');
+                if (!window.location.pathname.startsWith('/org')) window.location.href = '/org/switch';
+                return Promise.reject(error);
+            }
+            // Standalone school: token belongs to a different school — clear and
+            // redirect to login, keeping the current subdomain (not the root).
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             localStorage.removeItem('tenant');
-            // Redirect to the root domain login so they can pick their school.
-            const { protocol, hostname } = window.location;
-            const port = window.location.port ? `:${window.location.port}` : '';
-            const rootHost = (hostname === 'localhost' || hostname.endsWith('.localhost'))
-                ? 'localhost'
-                : hostname.split('.').slice(-2).join('.');
             const msg = encodeURIComponent('Your session is not valid for this school. Please log in.');
-            window.location.href = `${protocol}//${rootHost}${port}/login?error=${msg}`;
+            window.location.href = `/login?error=${msg}`;
             return Promise.reject(error);
         }
 
