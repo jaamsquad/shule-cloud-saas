@@ -409,6 +409,7 @@ export const getSchoolDetail = async (req: Request, res: Response) => {
             subdomain: t.subdomain || '',
             email: t.email || t.contactEmail || '',
             phone: t.phone || t.contactPhone || '',
+            organizationId: t.organizationId ? String(t.organizationId) : null,
             status,
             plan: plan ? { _id: String(plan._id), name: plan.name, price: plan.price, maxStudents: plan.limits?.maxStudents ?? null, modules: plan.modules || [] } : null,
             allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: p.price })),

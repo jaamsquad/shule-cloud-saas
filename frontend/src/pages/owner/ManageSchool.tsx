@@ -85,10 +85,11 @@ export default function ManageSchool() {
         onSuccess: () => { toast.success("School details updated"); setShowEdit(false); invalidate(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
+    const [confirmOrg, setConfirmOrg] = useState(false);
     const makeOrg = useMutation({
         mutationFn: async () => (await api.post(`/owner/organizations/wrap-tenant/${id}`, {})).data,
-        onSuccess: (d: any) => { toast.success(d.reusedSchoolLogin ? "Organization created — the school admin is now the org owner (same login)." : "Organization created."); invalidate(); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+        onSuccess: (d: any) => { setConfirmOrg(false); toast.success(d.reusedSchoolLogin ? "Organization created — the school admin is now the org owner (same login)." : "Organization created."); invalidate(); },
+        onError: (e: any) => { setConfirmOrg(false); toast.error(e.response?.data?.message || "Failed"); },
     });
     const resetPw = useMutation({
         mutationFn: async (password?: string) => (await api.post(`/owner/schools/${id}/reset-password`, { password, email: true })).data,
@@ -162,7 +163,7 @@ export default function ManageSchool() {
                         </div>
                     </div>
                     {!school.organizationId && (
-                        <button onClick={() => makeOrg.mutate()} disabled={makeOrg.isPending} className="h-9 px-4 rounded-lg text-xs font-black flex items-center gap-1.5 text-white" style={{ background: PRIMARY }}>
+                        <button onClick={() => setConfirmOrg(true)} disabled={makeOrg.isPending} className="h-9 px-4 rounded-lg text-xs font-black flex items-center gap-1.5 text-white" style={{ background: PRIMARY }}>
                             {makeOrg.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} Make Organization
                         </button>
                     )}
@@ -242,6 +243,29 @@ export default function ManageSchool() {
                     </div>
                 </div>
             </div>
+
+            {/* Make Organization confirmation */}
+            {confirmOrg && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setConfirmOrg(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-5">
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3" style={{ background: `${PRIMARY}1a`, color: PRIMARY }}><Layers className="w-6 h-6" /></div>
+                            <h2 className="font-black text-slate-800 text-lg">Make “{school.name}” an organization?</h2>
+                            <ul className="text-sm text-slate-600 mt-2 space-y-1.5 list-disc list-inside">
+                                <li>This school becomes the <b>first branch</b>. Nothing is moved or deleted.</li>
+                                <li>Its admin (<b>{school.email || "school admin"}</b>) becomes the <b>organization owner</b>, using the <b>same login</b>.</li>
+                                <li>You can then add more branches under this organization.</li>
+                            </ul>
+                        </div>
+                        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+                            <button onClick={() => setConfirmOrg(false)} className="h-10 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm">Cancel</button>
+                            <button onClick={() => makeOrg.mutate()} disabled={makeOrg.isPending} className="h-10 px-5 rounded-xl text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50" style={{ background: PRIMARY }}>
+                                {makeOrg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />} Yes, make organization
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Edit details modal */}
             {showEdit && (

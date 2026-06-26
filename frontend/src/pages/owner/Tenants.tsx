@@ -125,7 +125,7 @@ export default function OwnerTenants() {
                             ) : filteredTenants.length === 0 ? (
                                 <TableRow><TableCell colSpan={6} className="text-center py-10">No schools found.</TableCell></TableRow>
                             ) : filteredTenants.map((t: any) => (
-                                <TableRow key={t.id}>
+                                <TableRow key={t.id || t._id}>
                                     <TableCell className="font-medium">{t.name}</TableCell>
                                     <TableCell>
                                         <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-primary">
@@ -158,16 +158,16 @@ export default function OwnerTenants() {
                                                 <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => navigate(`/owner/schools/${t.id}`)}>Manage School</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => navigate(`/owner/schools/${t.id || t._id}`)}>Manage School</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => { setSelectedTenant(t); setShowPlanDialog(true); }}>
                                                     <CreditCard className="w-4 h-4 mr-2" /> Change Plan
                                                 </DropdownMenuItem>
                                                 {t.status === 'active' ? (
-                                                    <DropdownMenuItem className="text-destructive" onClick={() => suspendMutation.mutate(t.id)}>
+                                                    <DropdownMenuItem className="text-destructive" onClick={() => suspendMutation.mutate(t.id || t._id)}>
                                                         <Ban className="w-4 h-4 mr-2" /> Suspend
                                                     </DropdownMenuItem>
                                                 ) : (
-                                                    <DropdownMenuItem className="text-success" onClick={() => reactivateMutation.mutate(t.id)}>
+                                                    <DropdownMenuItem className="text-success" onClick={() => reactivateMutation.mutate(t.id || t._id)}>
                                                         <RefreshCw className="w-4 h-4 mr-2" /> Reactivate
                                                     </DropdownMenuItem>
                                                 )}
@@ -194,7 +194,7 @@ export default function OwnerTenants() {
                             <div
                                 key={p.id}
                                 className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between group ${selectedTenant?.subscription?.planId === p.id ? 'border-primary bg-primary/5' : 'border-muted hover:border-primary/30'}`}
-                                onClick={() => assignPlanMutation.mutate({ tenantId: selectedTenant.id, planId: p.id })}
+                                onClick={() => assignPlanMutation.mutate({ tenantId: selectedTenant.id || selectedTenant._id, planId: p.id })}
                             >
                                 <div className="space-y-1">
                                     <p className="font-bold flex items-center gap-2">
