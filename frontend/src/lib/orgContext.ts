@@ -15,10 +15,16 @@ const KEY_BRANCHES = "org_branches";
 const KEY_ACTIVE = "active_branch_subdomain";
 const KEY_ACTIVE_ID = "active_branch_id";
 const KEY_ALL = "org_all_branches";
+const KEY_ORG = "org_info";   // { name, branding }
+
+export interface OrgBranding { logo?: string; primaryColor?: string; motto?: string }
+export interface OrgInfo { id?: string; name?: string; branding?: OrgBranding }
 
 export const isOrgUser = () => !!localStorage.getItem(KEY_TOKEN);
 export const getOrgUser = (): OrgUser | null => { try { return JSON.parse(localStorage.getItem(KEY_USER) || "null"); } catch { return null; } };
 export const getOrgBranches = (): OrgBranch[] => { try { return JSON.parse(localStorage.getItem(KEY_BRANCHES) || "[]"); } catch { return []; } };
+export const getOrgInfo = (): OrgInfo => { try { return JSON.parse(localStorage.getItem(KEY_ORG) || "{}"); } catch { return {}; } };
+export const orgPrimary = () => getOrgInfo().branding?.primaryColor || "#5C67F2";
 export const getActiveBranchId = () => localStorage.getItem(KEY_ACTIVE_ID) || "";
 export const isAllBranches = () => localStorage.getItem(KEY_ALL) === "1";
 
@@ -29,9 +35,10 @@ export async function orgLogin(email: string, password: string) {
     const { data } = await api.post("/org/auth/login", { email, password });
     localStorage.setItem(KEY_TOKEN, data.token);
     localStorage.setItem(KEY_USER, JSON.stringify(data.user));
-    // Load branches the user can access.
+    // Load branches the user can access + the org's branding.
     const me = (await api.get("/org/me")).data;
     localStorage.setItem(KEY_BRANCHES, JSON.stringify(me.branches || []));
+    if (me.organization) localStorage.setItem(KEY_ORG, JSON.stringify(me.organization));
     // Default into the first/primary branch.
     const first = (me.branches || [])[0];
     if (first) selectBranch(first);
@@ -51,5 +58,5 @@ export function selectAllBranches() {
 }
 
 export function orgLogout() {
-    [KEY_TOKEN, KEY_USER, KEY_BRANCHES, KEY_ACTIVE, KEY_ACTIVE_ID, KEY_ALL].forEach(k => localStorage.removeItem(k));
+    [KEY_TOKEN, KEY_USER, KEY_BRANCHES, KEY_ACTIVE, KEY_ACTIVE_ID, KEY_ALL, KEY_ORG].forEach(k => localStorage.removeItem(k));
 }

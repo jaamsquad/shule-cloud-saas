@@ -27,20 +27,15 @@ export default function OrgDashboard() {
         <div className="flex-1 bg-[#F8FAFC] min-h-screen p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-[#5C67F2] text-white flex items-center justify-center"><Layers className="w-6 h-6" /></div>
+                    <div className="w-11 h-11 rounded-2xl text-white flex items-center justify-center" style={{ background: "var(--org-accent, #5C67F2)" }}><Layers className="w-6 h-6" /></div>
                     <div>
                         <h1 className="text-2xl font-black text-slate-900">{user?.organizationName || "Organization"} — All Branches</h1>
                         <p className="text-sm text-slate-400">Combined view across {data?.branchCount ?? "…"} branches.</p>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Link to="/org/transfers" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><ArrowRightLeft className="w-4 h-4" /> Transfers</Link>
-                    <Link to="/org/branches" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Building2 className="w-4 h-4" /> Branches</Link>
-                    <Link to="/org/reports" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><FileBarChart className="w-4 h-4" /> Reports</Link>
-                    <Link to="/org/expenses" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Expenses</Link>
-                    <Link to="/org/users" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Users className="w-4 h-4" /> Users</Link>
-                    <Link to="/org/settings" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Settings className="w-4 h-4" /> Settings</Link>
-                    <Link to="/org/audit" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> Audit</Link>
+                    <Link to="/org/transfers" className="h-10 px-4 rounded-xl text-white font-bold text-sm flex items-center gap-1.5" style={{ background: "var(--org-accent, #5C67F2)" }}><ArrowRightLeft className="w-4 h-4" /> New Transfer</Link>
+                    <Link to="/org/branches" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Building2 className="w-4 h-4" /> Add Branch</Link>
                 </div>
             </div>
 
