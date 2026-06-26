@@ -201,7 +201,7 @@ export default function OwnerTenants() {
                                     <p className="text-xs text-muted-foreground">{p.description || "School management tier."}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-black">KES {p.priceMonthly.toLocaleString()}</p>
+                                    <p className="text-sm font-black">KES {(Number(p.priceMonthly ?? p.price ?? 0)).toLocaleString()}</p>
                                     <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">/MO</p>
                                 </div>
                             </div>
