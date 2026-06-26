@@ -291,6 +291,50 @@ router.post('/org/transfer/staff', requireOrgAuth, requireOrgRole('ORG_OWNER', '
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Student timeline (all branches attended) ─────────────────────────────────
+// Reads the transferHistory stamped on the student record (present in whichever
+// branch currently holds them) plus transfer_logs across branches.
+router.get('/org/student-timeline', requireOrgAuth, async (req: Request, res: Response) => {
+    try {
+        const { studentId, branchId } = req.query as any;
+        if (!studentId || !branchId) return res.status(400).json({ message: 'studentId and branchId are required.' });
+        if (!(await canAccessBranch(req.orgUser!, String(branchId)))) return res.status(403).json({ message: 'No access to that branch.' });
+        const db = await branchDb(req.orgUser!.organizationId, String(branchId));
+        if (!db) return res.status(404).json({ message: 'Branch not found.' });
+        const stu: any = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) });
+        if (!stu) return res.status(404).json({ message: 'Student not found.' });
+        res.json({
+            student: { id: String(stu._id), name: stu.studentName, currentBranch: stu.currentBranchName },
+            history: stu.transferHistory || [],
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Multi-branch report (pick specific branches) ─────────────────────────────
+// Generic report over a chosen subset of branches for a metric. branchIds is a
+// comma list; metric is one of enrollment|fees|finance|staff.
+router.get('/org/report', requireOrgAuth, async (req: Request, res: Response) => {
+    try {
+        const metric = String(req.query.metric || 'overview');
+        const branches = await readableBranchDbs(req.orgUser!, parseBranchIds(req));
+        const { from, to } = parseRange(req);
+        let data: any;
+        switch (metric) {
+            case 'enrollment': data = await aggregateEnrollment(branches); break;
+            case 'fees': data = await aggregateFeeCollection(branches, from, to); break;
+            case 'finance': data = await aggregateIncomeExpense(branches, from, to); break;
+            case 'staff': data = await aggregateStaff(branches); break;
+            default: data = {
+                enrollment: await aggregateEnrollment(branches),
+                fees: await aggregateFeeCollection(branches, from, to),
+                finance: await aggregateIncomeExpense(branches, from, to),
+                staff: await aggregateStaff(branches),
+            };
+        }
+        res.json({ metric, branchCount: branches.length, data });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Backfill: wrap existing standalone tenants into single-branch orgs ───────
 // Non-destructive. For every active Tenant without an organizationId, create an
 // Organization + a primary Branch pointing at that tenant's existing DB. Nothing

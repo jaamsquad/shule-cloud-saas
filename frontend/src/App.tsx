@@ -166,6 +166,8 @@ import OrgDashboard from "./pages/org/OrgDashboard";
 import OrgBranches from "./pages/org/OrgBranches";
 import OrgTransfers from "./pages/org/OrgTransfers";
 import OrgAudit from "./pages/org/OrgAudit";
+import OrgReports from "./pages/org/OrgReports";
+import OrgUsers from "./pages/org/OrgUsers";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
@@ -490,6 +492,8 @@ const App = () => {
             <Route path="/org/dashboard" element={<OrgDashboard />} />
             <Route path="/org/branches" element={<OrgBranches />} />
             <Route path="/org/transfers" element={<OrgTransfers />} />
+            <Route path="/org/reports" element={<OrgReports />} />
+            <Route path="/org/users" element={<OrgUsers />} />
             <Route path="/org/audit" element={<OrgAudit />} />
 
             {/* 3. TENANT APP (School Portal) */}
