@@ -604,6 +604,65 @@ export const updateSchool = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
+// Reset a school admin's password (optionally a supplied one, else generated)
+// and email it to the school. Updates the meta User; if the school is also an
+// org owner, the org login uses the same hash so it stays in sync.
+export const resetSchoolPassword = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.manage')) return;
+    try {
+        const meta = getDb();
+        const t: any = await meta.collection('Tenant').findOne({ _id: new ObjectId(req.params.id) });
+        if (!t) return res.status(404).json({ message: 'School not found' });
+        const bcrypt = (await import('bcrypt')).default;
+        const newPassword = String(req.body?.password || '').trim() || genPassword();
+        const hash = await bcrypt.hash(newPassword, 10);
+        const admin: any = await meta.collection('User').findOne({ $or: [{ tenantId: t._id }, { tenantId: String(t._id) }] }, { sort: { createdAt: 1 } });
+        if (admin) await meta.collection('User').updateOne({ _id: admin._id }, { $set: { passwordHash: hash, updatedAt: new Date() } });
+        // Keep an org-owner login (if any) in sync.
+        const email = (admin?.email || t.contactEmail || '').toLowerCase();
+        if (email) await meta.collection('OrgUser').updateOne({ email }, { $set: { passwordHash: hash } }).catch(() => { });
+
+        let emailed = false;
+        const to = email;
+        if (req.body?.email !== false && to) {
+            const { notifyOwner } = await import('../services/ownerNotify.service');
+            const html = `<div style="font-family:Arial,sans-serif;color:#1f2937"><h2 style="color:#534AB7">ShuleCloud — Password Reset</h2><p>The password for <b>${t.name}</b> (${t.subdomain}.shulecloud.com) has been reset.</p><p>New password: <b style="font-size:18px">${newPassword}</b></p><p style="color:#6b7280;font-size:13px">Please sign in and change it.</p></div>`;
+            const r = await notifyOwner({ email: to, phone: t.contactPhone }, 'Your ShuleCloud password was reset', html, `New password for ${t.name}: ${newPassword}`).catch(() => null);
+            emailed = !!r;
+        }
+        return res.json({ ok: true, password: newPassword, emailed, sentTo: to });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Reset an organization owner's password and email it.
+export const resetOrgPassword = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.manage')) return;
+    try {
+        const meta = getDb();
+        const org: any = await meta.collection('Organization').findOne({ _id: new ObjectId(req.params.id) });
+        if (!org) return res.status(404).json({ message: 'Organization not found' });
+        const bcrypt = (await import('bcrypt')).default;
+        const newPassword = String(req.body?.password || '').trim() || genPassword();
+        const hash = await bcrypt.hash(newPassword, 10);
+        const owner: any = await meta.collection('OrgUser').findOne({ organizationId: String(org._id), role: 'ORG_OWNER' });
+        const to = owner?.email || org.ownerEmail;
+        await meta.collection('OrgUser').updateMany({ organizationId: String(org._id), role: 'ORG_OWNER' }, { $set: { passwordHash: hash } });
+        let emailed = false;
+        if (req.body?.email !== false && to) {
+            const { notifyOwner } = await import('../services/ownerNotify.service');
+            const html = `<div style="font-family:Arial,sans-serif;color:#1f2937"><h2 style="color:#534AB7">ShuleCloud — Organization Password Reset</h2><p>The owner password for <b>${org.name}</b> has been reset.</p><p>New password: <b style="font-size:18px">${newPassword}</b></p><p style="color:#6b7280;font-size:13px">Sign in at /org/login and change it.</p></div>`;
+            const r = await notifyOwner({ email: to }, 'Your ShuleCloud organization password was reset', html, `New org password for ${org.name}: ${newPassword}`).catch(() => null);
+            emailed = !!r;
+        }
+        return res.json({ ok: true, password: newPassword, emailed, sentTo: to });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+const genPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+};
+
 // Toggle which modules a school can access (overrides the plan).
 export const setSchoolModules = async (req: Request, res: Response) => {
     if (!guard(req, res, 'schools.manage')) return;

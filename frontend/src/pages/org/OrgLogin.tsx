@@ -31,13 +31,12 @@ export default function OrgLogin() {
         e.preventDefault();
         setBusy(true);
         try {
-            const { branches } = await orgLogin(email.trim(), password);
-            toast.success("Welcome back");
-            // Land on the account switcher so the user picks a branch or the whole
-            // organisation — unless there's only a single branch and no org view.
-            navigate(branches.length > 1 ? "/org/switch" : "/org/switch");
+            await orgLogin(email.trim(), password);
+            navigate("/org/switch");
         } catch (err: any) {
-            toast.error(err.response?.data?.message || "Sign-in failed");
+            // Show a clean "wrong credentials" message (avoid leaking server text).
+            const status = err.response?.status;
+            toast.error(status === 401 ? "Wrong email or password." : (err.response?.data?.message || "Sign-in failed."));
         } finally { setBusy(false); }
     };
 

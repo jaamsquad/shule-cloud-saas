@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import {
@@ -29,6 +30,7 @@ export default function OwnerTenants() {
     const [selectedTenant, setSelectedTenant] = useState<any>(null);
     const [showPlanDialog, setShowPlanDialog] = useState(false);
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
 
     const { data: tenants = [], isLoading } = useQuery({
         queryKey: ["owner-tenants"],
@@ -57,15 +59,16 @@ export default function OwnerTenants() {
     });
 
     const suspendMutation = useMutation({
-        mutationFn: (id: string) => api.post(`/owner/tenants/${id}/suspend`),
+        mutationFn: (id: string) => api.post(`/owner/schools/${id}/status`, { status: "suspended" }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["owner-tenants"] });
             toast.success("Tenant suspended");
-        }
+        },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to suspend"),
     });
 
     const reactivateMutation = useMutation({
-        mutationFn: (id: string) => api.post(`/owner/tenants/${id}/reactivate`),
+        mutationFn: (id: string) => api.post(`/owner/schools/${id}/status`, { status: "active" }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["owner-tenants"] });
             toast.success("Tenant reactivated");
@@ -84,7 +87,7 @@ export default function OwnerTenants() {
                     <h1 className="text-2xl font-heading font-bold">Tenant Management</h1>
                     <p className="text-muted-foreground">Monitor and manage school environments across the platform.</p>
                 </div>
-                <Button className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Provision School</Button>
+                <Button className="shrink-0" onClick={() => window.open("/register", "_blank")}><Plus className="w-4 h-4 mr-2" /> Provision School</Button>
             </div>
 
             <Card>
@@ -155,7 +158,7 @@ export default function OwnerTenants() {
                                                 <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => toast.info("Details coming soon")}>View Dashboard</DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => navigate(`/owner/schools/${t.id}`)}>Manage School</DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => { setSelectedTenant(t); setShowPlanDialog(true); }}>
                                                     <CreditCard className="w-4 h-4 mr-2" /> Change Plan
                                                 </DropdownMenuItem>

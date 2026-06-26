@@ -515,12 +515,14 @@ export default function Login() {
                     </div>
                     )}
 
-                    {/* Managing several branches? Organization sign-in. */}
-                    <div className="text-center mt-2">
-                        <Link to="/org/login" className="text-[11px] font-bold text-slate-400 hover:text-[#5C67F2] transition-colors">
-                            Manage multiple branches? <span className="text-[#5C67F2] font-black">Organization sign-in →</span>
-                        </Link>
-                    </div>
+                    {/* Organization sign-in — only when this school belongs to an org. */}
+                    {schoolInfo?.organization && (
+                        <div className="text-center mt-2">
+                            <Link to="/org/login" className="text-[11px] font-bold text-slate-400 hover:text-[#5C67F2] transition-colors">
+                                Manage multiple branches? <span className="text-[#5C67F2] font-black">Organization sign-in →</span>
+                            </Link>
+                        </div>
+                    )}
                 </div>
             </div>
 

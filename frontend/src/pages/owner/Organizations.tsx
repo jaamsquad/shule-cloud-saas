@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Building2, Plus, X, Layers, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Building2, Plus, X, Layers, ExternalLink, Pencil, Trash2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -21,6 +21,12 @@ export default function Organizations() {
     const wrap = useMutation({
         mutationFn: async (tenantId: string) => (await api.post(`/owner/organizations/wrap-tenant/${tenantId}`, {})).data,
         onSuccess: () => { toast.success("Tenant wrapped into an organization"); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+
+    const resetPw = useMutation({
+        mutationFn: async ({ id, password }: { id: string; password?: string }) => (await api.post(`/owner/organizations/${id}/reset-password`, { password, email: true })).data,
+        onSuccess: (d: any) => toast.success(`New org password: ${d.password}${d.emailed ? ` · emailed to ${d.sentTo}` : ""}`, { duration: 12000 }),
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 
@@ -58,6 +64,7 @@ export default function Organizations() {
                                 <div className="w-10 h-10 rounded-xl bg-[#5C67F2]/10 text-[#5C67F2] flex items-center justify-center"><Building2 className="w-5 h-5" /></div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] font-black uppercase text-slate-400">{o.branchCount} branch{o.branchCount === 1 ? "" : "es"}</span>
+                                    <button onClick={() => { const p = prompt("New org owner password (blank = auto-generate):"); if (p !== null) resetPw.mutate({ id: o.id, password: p || undefined }); }} title="Reset password" className="text-slate-300 hover:text-amber-500"><KeyRound className="w-4 h-4" /></button>
                                     <button onClick={() => setEditOrg(o)} title="Edit" className="text-slate-300 hover:text-[#5C67F2]"><Pencil className="w-4 h-4" /></button>
                                     <button onClick={() => { if (confirm(`Delete "${o.name}"? Linked schools are preserved.`)) del.mutate({ id: o.id }); }} title="Delete" className="text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                                 </div>

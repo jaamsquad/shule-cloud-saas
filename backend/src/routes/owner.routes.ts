@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, updateSchool, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -21,6 +21,7 @@ router.get('/schools/:id', getSchoolDetail);
 router.post('/schools/:id/plan', assignSchoolPlan);
 router.post('/schools/:id/status', setSchoolStatus);
 router.patch('/schools/:id', updateSchool);
+router.post('/schools/:id/reset-password', resetSchoolPassword);
 router.post('/schools/:id/modules', setSchoolModules);
 router.post('/schools/:id/impersonate', impersonateSchool);
 router.post('/schools/:id/message', messageSchool);
@@ -121,6 +122,9 @@ router.post('/organizations/:id/branches', async (req, res) => {
         res.json({ ok: true, branch: { id: String(branch._id), name: branch.name, subdomain: branch.subdomain } });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+
+// Reset an organization owner's password (and email it).
+router.post('/organizations/:id/reset-password', resetOrgPassword);
 
 // Edit an organization (name + owner email).
 router.patch('/organizations/:id', async (req, res) => {

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     ArrowLeft, Users, Briefcase, Database, Power, LogIn, Loader2, Check, Layers,
-    Mail, MessageCircle, Send, Pencil,
+    Mail, MessageCircle, Send, Pencil, KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -90,6 +90,11 @@ export default function ManageSchool() {
         onSuccess: (d: any) => { toast.success(d.reusedSchoolLogin ? "Organization created — the school admin is now the org owner (same login)." : "Organization created."); invalidate(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
+    const resetPw = useMutation({
+        mutationFn: async (password?: string) => (await api.post(`/owner/schools/${id}/reset-password`, { password, email: true })).data,
+        onSuccess: (d: any) => { toast.success(`New password: ${d.password}${d.emailed ? ` · emailed to ${d.sentTo}` : " (email not sent)"}`, { duration: 12000 }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     // ── Message the school directly (email / WhatsApp / both) ────────────────
     const [msgChannel, setMsgChannel] = useState<"both" | "email" | "whatsapp">("email");
@@ -135,6 +140,10 @@ export default function ManageSchool() {
                         </button>
                         <button onClick={() => setShowEdit(true)} className="h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50">
                             <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        <button onClick={() => { const p = prompt("New password (leave blank to auto-generate):"); if (p !== null) resetPw.mutate(p || undefined); }} disabled={resetPw.isPending}
+                            className="h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50">
+                            {resetPw.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />} Reset Password
                         </button>
                         <button onClick={() => impersonate.mutate()} disabled={impersonate.isPending}
                             className="h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-white" style={{ background: PRIMARY }}>
