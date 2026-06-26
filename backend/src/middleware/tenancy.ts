@@ -35,6 +35,11 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
 
     let subdomain = typeof xTenant === 'string' ? xTenant.trim().toLowerCase() : null;
 
+    // Query-param fallback — needed for EventSource/SSE, which cannot set headers.
+    if (!subdomain && typeof req.query?.subdomain === 'string') {
+        subdomain = String(req.query.subdomain).trim().toLowerCase();
+    }
+
     // ── Custom domain fast-path ───────────────────────────────────────────────
     // portal.greenwoodschool.ac.ke → resolve the tenant by its custom domain and
     // continue as if requested via the school's subdomain.

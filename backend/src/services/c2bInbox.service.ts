@@ -1,6 +1,7 @@
 import { Db } from 'mongodb';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { applyMpesaPayment } from './mpesa.service';
+import { publish } from './sse.service';
 
 // ─── C2B Payment Inbox ──────────────────────────────────────────────────────────
 // Stores every C2B callback in full, identifies the receiving school by shortcode,
@@ -99,6 +100,9 @@ export async function ingestC2B(payload: any, meta2: { ip?: string; headers?: an
     const ins = await meta.collection('c2b_inbox').insertOne(doc);
     const inboxId = String(ins.insertedId);
 
+    // Push the new payment to the school's open inboxes in real time.
+    if (resolved?.tenant?.databaseName) publish(resolved.tenant.databaseName, 'payment', { ...doc, _id: inboxId });
+
     // ── Auto-match (best-effort) ──────────────────────────────────────────────
     if (resolved?.db) {
         try {
@@ -175,6 +179,9 @@ export async function allocate(inboxId: string, db: Db, student: any, opts: { au
         },
     });
 
+    // Push the status change to open inboxes.
+    publish(db.databaseName, 'update', { _id: inboxId, reconStatus: opts.auto ? 'auto_matched' : 'allocated', matchedStudentName: student.studentName });
+
     // Notify the payer/parent (SMS + in-app) — best-effort, never blocks.
     notifyAllocation(db, inbox, student).catch(() => { });
     return { ok: true };
@@ -212,5 +219,6 @@ export async function reverse(inboxId: string, db: Db, by: string, reason: strin
         { $set: { is_voided: true, voidedAt: new Date(), voidReason: reason, voidedBy: by } },
     );
     await meta.collection('c2b_inbox').updateOne({ _id: inbox._id }, { $set: { reconStatus: 'rejected', reversedAt: new Date(), reversedBy: by, reverseReason: reason } });
+    publish(db.databaseName, 'update', { _id: inboxId, reconStatus: 'rejected' });
     return { ok: true };
 }

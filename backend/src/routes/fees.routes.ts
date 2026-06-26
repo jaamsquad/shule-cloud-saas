@@ -446,6 +446,16 @@ const tenantInboxFilter = (req: any): Record<string, any> => {
     return dbName ? { tenantDbName: dbName } : { tenantDbName: '__none__' };   // no tenant → nothing
 };
 
+// Live stream of inbox events (new payments + status changes) via SSE.
+// EventSource can't set headers, so the tenant is resolved from the host/subdomain
+// by the tenancy middleware (or ?subdomain= as a dev fallback handled upstream).
+router.get('/payments/inbox/stream', async (req: Request, res: Response) => {
+    const dbName = (req as any).tenantContext?.databaseName;
+    if (!dbName) { res.status(400).end(); return; }
+    const { subscribe } = await import('../services/sse.service');
+    subscribe(dbName, res);   // keeps the connection open; cleans up on close
+});
+
 router.get('/payments/inbox', async (req: Request, res: Response) => {
     try {
         const meta = getMetaDb();
@@ -464,6 +474,36 @@ router.get('/payments/inbox', async (req: Request, res: Response) => {
         }
         const rows = await meta.collection('c2b_inbox').find(q).sort({ paidAt: -1 }).limit(1000).toArray();
         res.json({ data: rows });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Export the inbox as CSV or Excel (SpreadsheetML — opens in Excel, no extra dep).
+router.get('/payments/export', async (req: Request, res: Response) => {
+    try {
+        const meta = getMetaDb();
+        const q: any = tenantInboxFilter(req);
+        const { status, format } = req.query as any;
+        if (status && status !== 'all') q.reconStatus = status;
+        const rows = await meta.collection('c2b_inbox').find(q).sort({ paidAt: -1 }).limit(10000).toArray();
+        const cols = ['reconStatus', 'TransID', 'customerName', 'MSISDN', 'BillRefNumber', 'TransAmount', 'matchedStudentName', 'businessType', 'BusinessShortCode', 'paidAt'];
+        const head = ['Status', 'Receipt', 'Customer', 'Phone', 'Account', 'Amount', 'Matched Student', 'Source', 'Shortcode', 'Paid At'];
+        const cell = (r: any, c: string) => c === 'paidAt' ? (r.paidAt ? new Date(r.paidAt).toLocaleString('en-GB') : '') : (r[c] ?? '');
+
+        if (format === 'xlsx') {
+            // Minimal SpreadsheetML 2003 — Excel opens it natively.
+            const esc = (v: any) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const headerRow = `<Row>${head.map(h => `<Cell><Data ss:Type="String">${esc(h)}</Data></Cell>`).join('')}</Row>`;
+            const dataRows = rows.map(r => `<Row>${cols.map(c => { const v = cell(r, c); const isNum = c === 'TransAmount'; return `<Cell><Data ss:Type="${isNum ? 'Number' : 'String'}">${esc(v)}</Data></Cell>`; }).join('')}</Row>`).join('');
+            const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Payments"><Table>${headerRow}${dataRows}</Table></Worksheet></Workbook>`;
+            res.setHeader('Content-Type', 'application/vnd.ms-excel');
+            res.setHeader('Content-Disposition', 'attachment; filename="C2B-Payments.xls"');
+            return res.send(xml);
+        }
+        // CSV
+        const csv = [head, ...rows.map(r => cols.map(c => cell(r, c)))].map(row => row.map((c: any) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="C2B-Payments.csv"');
+        res.send(csv);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

@@ -1,8 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Inbox, Search, X, CheckCircle2, RotateCcw, Smartphone } from "lucide-react";
+import { Loader2, Inbox, Search, X, CheckCircle2, RotateCcw, Smartphone, Download } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
+import { currentTenantSubdomain } from "@/lib/portal";
+import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 const ksh = (n: any) => `KSh ${(Number(n) || 0).toLocaleString()}`;
 const fmt = (d: any) => d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -19,19 +22,43 @@ const STATUS: Record<string, { label: string; cls: string; dot: string }> = {
 // auto-match status, reconciliation stats and manual allocation. Live-refreshing.
 export default function PaymentInbox() {
     const qc = useQueryClient();
+    const school = useSchoolBrand();
     const [status, setStatus] = useState("all");
     const [search, setSearch] = useState("");
     const [allocFor, setAllocFor] = useState<any>(null);
 
+    const [live, setLive] = useState(false);
     const { data: recon } = useQuery({
-        queryKey: ["c2b_recon"], refetchInterval: 20000,
+        queryKey: ["c2b_recon"], refetchInterval: 60000,
         queryFn: async () => (await api.get("/payments/reconciliation")).data,
     });
     const { data, isLoading } = useQuery({
-        queryKey: ["c2b_inbox", status, search], refetchInterval: 15000,
+        queryKey: ["c2b_inbox", status, search], refetchInterval: 60000,   // slow fallback; SSE drives live
         queryFn: async () => (await api.get("/payments/inbox", { params: { status, search: search || undefined } })).data,
     });
     const rows: any[] = data?.data || [];
+
+    // ── Real-time updates via Server-Sent Events ──────────────────────────────
+    // New payments and allocation changes are pushed instantly; we refetch on
+    // each event rather than patching, to keep filters/search correct.
+    useEffect(() => {
+        const sub = currentTenantSubdomain() || localStorage.getItem("active_branch_subdomain");
+        const url = `${API_ORIGIN}/api/v1/payments/inbox/stream${sub ? `?subdomain=${encodeURIComponent(sub)}` : ""}`;
+        let es: EventSource | null = null;
+        try {
+            es = new EventSource(url);
+            es.onopen = () => setLive(true);
+            es.onerror = () => setLive(false);
+            const onEvt = (e: MessageEvent, isNew: boolean) => {
+                qc.invalidateQueries({ queryKey: ["c2b_inbox"] });
+                qc.invalidateQueries({ queryKey: ["c2b_recon"] });
+                if (isNew) { try { const d = JSON.parse(e.data); toast.success(`New payment: ${d.customerName || d.MSISDN} · KSh ${Number(d.TransAmount).toLocaleString()}`); } catch { /* ignore */ } }
+            };
+            es.addEventListener("payment", (e) => onEvt(e as MessageEvent, true));
+            es.addEventListener("update", (e) => onEvt(e as MessageEvent, false));
+        } catch { /* EventSource unsupported → polling fallback covers it */ }
+        return () => { es?.close(); setLive(false); };
+    }, [qc]);
 
     const reverse = useMutation({
         mutationFn: async (id: string) => (await api.post(`/payments/${id}/reverse`, { reason: "Manual reversal" })).data,
@@ -44,8 +71,18 @@ export default function PaymentInbox() {
             <div className="flex items-center gap-3 mb-5">
                 <div className="w-10 h-10 rounded-xl bg-[#5C67F2]/10 text-[#5C67F2] flex items-center justify-center"><Inbox className="w-5 h-5" /></div>
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">C2B Payment Inbox <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live</span></h1>
+                    <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">C2B Payment Inbox <span className={`inline-flex items-center gap-1 text-xs font-bold ${live ? "text-emerald-600" : "text-slate-400"}`}><span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} /> {live ? "Live" : "Polling"}</span></h1>
                     <p className="text-sm text-slate-400">Every M-PESA payment to your Till/Paybill, auto-matched and reconciled.</p>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                    <a href={`${API_ORIGIN}/api/v1/payments/export?format=csv&status=${status}${(currentTenantSubdomain() || localStorage.getItem("active_branch_subdomain")) ? `&subdomain=${currentTenantSubdomain() || localStorage.getItem("active_branch_subdomain")}` : ""}`} className="h-9 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> CSV</a>
+                    <a href={`${API_ORIGIN}/api/v1/payments/export?format=xlsx&status=${status}${(currentTenantSubdomain() || localStorage.getItem("active_branch_subdomain")) ? `&subdomain=${currentTenantSubdomain() || localStorage.getItem("active_branch_subdomain")}` : ""}`} className="h-9 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Download className="w-4 h-4" /> Excel</a>
+                    <button onClick={() => {
+                        const body = `<p style="font-size:12px;color:#475569">${rows.length} payments · Today ${ksh(recon?.todayCollections)} · Total ${ksh(recon?.totalCollections)}</p>
+                            <table><thead><tr><th>Status</th><th>Receipt</th><th>Customer</th><th>Phone</th><th>Account</th><th>Amount</th><th>Matched</th><th>Paid</th></tr></thead><tbody>
+                            ${rows.map(r => `<tr><td>${STATUS[r.reconStatus]?.label || r.reconStatus}</td><td>${r.TransID}</td><td>${r.customerName || "-"}</td><td>${r.MSISDN || "-"}</td><td>${r.BillRefNumber || "-"}</td><td>${ksh(r.TransAmount)}</td><td>${r.matchedStudentName || "-"}</td><td>${fmt(r.paidAt)}</td></tr>`).join("")}</tbody></table>`;
+                        printBranded(school, "C2B Payment Inbox", body, "#5C67F2");
+                    }} className="h-9 px-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">PDF / Print</button>
                 </div>
             </div>
 
