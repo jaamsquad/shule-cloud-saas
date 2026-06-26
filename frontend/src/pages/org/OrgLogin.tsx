@@ -41,8 +41,16 @@ export default function OrgLogin() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#5C67F2]/10 to-slate-50 p-4">
-            <form onSubmit={submit} className="bg-white w-full max-w-sm rounded-3xl shadow-xl border border-slate-100 p-8">
+        <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-[#5C67F2]/10 to-slate-50">
+            {/* Themed page backdrop */}
+            <div className="pointer-events-none absolute inset-0 bg-center bg-cover opacity-[0.10]"
+                style={{ backgroundImage: "url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1400&q=60')" }} />
+            {/* Org logo as a large faint watermark */}
+            {logo && (
+                <div className="pointer-events-none absolute inset-0 bg-center bg-no-repeat opacity-[0.05]"
+                    style={{ backgroundImage: `url('${logo}')`, backgroundSize: "min(55vw, 560px)" }} />
+            )}
+            <form onSubmit={submit} className="relative z-10 bg-white/95 backdrop-blur w-full max-w-sm rounded-3xl shadow-xl border border-slate-100 p-8">
                 <div className="flex flex-col items-center mb-6 text-center">
                     {logo ? (
                         <img src={logo} alt={orgName || "Organization"} className="w-16 h-16 rounded-2xl object-contain border border-slate-100 bg-white p-1 mb-3" />

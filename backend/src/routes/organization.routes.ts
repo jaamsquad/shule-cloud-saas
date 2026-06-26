@@ -131,6 +131,32 @@ router.post('/org/users', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Create an admin account for a specific branch (a school_admin in that branch's
+// tenant). The person can then log into that branch directly, and an org user
+// with this email can enter the branch from the switcher without a password.
+router.post('/org/branch-admin', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const { branchId, email, name, phone, password } = req.body || {};
+        if (!branchId || !email || !password) return res.status(400).json({ message: 'Branch, email and password are required.' });
+        if (!(await canAccessBranch(req.orgUser!, branchId))) return res.status(403).json({ message: 'No access to that branch.' });
+        const meta = getMetaDb();
+        const branch: any = await meta.collection('Branch').findOne({ _id: new ObjectId(branchId), organizationId: req.orgUser!.organizationId });
+        if (!branch) return res.status(404).json({ message: 'Branch not found.' });
+        const tenant: any = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(branch.tenantId)) });
+        const lc = String(email).trim().toLowerCase();
+        // Unique per tenant (the same email may admin different branches).
+        const existing = await meta.collection('User').findOne({ email: lc, $or: [{ tenantId: tenant._id }, { tenantId: String(tenant._id) }] });
+        if (existing) return res.status(409).json({ message: 'An admin with that email already exists in this branch.' });
+        await meta.collection('User').insertOne({
+            tenantId: tenant._id, tenantSubdomain: tenant.subdomain, email: lc,
+            passwordHash: await bcrypt.hash(String(password), 10), name: name || lc.split('@')[0],
+            phone: phone || '', role: 'school_admin', isSchoolAdmin: true, status: 'active', createdAt: new Date(),
+        });
+        await audit({ organizationId: req.orgUser!.organizationId, branchId, userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: 'branchadmin.create', newValue: { email: lc, branch: branch.name }, ip: ipOf(req), device: deviceOf(req) });
+        res.json({ ok: true, message: `Admin created for ${branch.name}.` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Enter a branch from an org session (no password) ─────────────────────────
 // Mints a valid school token for the chosen branch by matching the org user's
 // email to an existing account in that branch DB. Branches stay separate DBs;

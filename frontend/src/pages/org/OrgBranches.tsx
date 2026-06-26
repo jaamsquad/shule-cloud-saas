@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Building2, Plus, X, Star } from "lucide-react";
+import { Loader2, Building2, Plus, X, Star, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { isOrgUser } from "@/lib/orgContext";
@@ -40,6 +40,11 @@ export default function OrgBranches() {
                                 {b.isPrimary && <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-600"><Star className="w-3 h-3" /> PRIMARY</span>}
                             </div>
                             <div className="mt-3 font-black text-slate-800">{b.name}</div>
+                            {b.subdomain && (
+                                <a href={`https://${b.subdomain}.shulecloud.com`} target="_blank" rel="noreferrer" className="text-xs text-[#5C67F2] font-mono inline-flex items-center gap-1 mt-0.5 hover:underline">
+                                    {b.subdomain}.shulecloud.com <ExternalLink className="w-3 h-3" />
+                                </a>
+                            )}
                             <div className="mt-1 text-[10px] font-bold uppercase text-slate-400">{b.status}</div>
                         </div>
                     ))}
