@@ -52,6 +52,7 @@ import OwnerLogin from "./pages/owner/Login";
 import OwnerChangePassword from "./pages/owner/ChangePassword";
 import OwnerDashboard from "./pages/owner/Dashboard";
 import OwnerTenants from "./pages/owner/Tenants";
+import OwnerOrganizations from "./pages/owner/Organizations";
 import OwnerPlans from "./pages/owner/Plans";
 import OwnerAudit from "./pages/owner/Audit";
 import OwnerAnnouncements from "./pages/owner/Announcements";
@@ -468,6 +469,7 @@ const App = () => {
               <Route path="/owner/dashboard" element={<OwnerDashboard />} />
               <Route path="/owner/schools/:id" element={<ManageSchool />} />
               <Route path="/owner/tenants" element={<OwnerTenants />} />
+              <Route path="/owner/organizations" element={<OwnerOrganizations />} />
               <Route path="/owner/plans" element={<OwnerPlans />} />
               <Route path="/owner/audit" element={<OwnerAudit />} />
               <Route path="/owner/announcements" element={<OwnerAnnouncements />} />

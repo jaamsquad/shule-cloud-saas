@@ -89,6 +89,12 @@ export default function OwnerDashboard() {
       </header>
 
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        {/* Quick navigation */}
+        <div className="flex flex-wrap gap-2">
+          {[["Tenants", "/owner/tenants"], ["Organizations", "/owner/organizations"], ["Plans", "/owner/plans"], ["Billing", "/owner/billing"], ["Audit", "/owner/audit"]].map(([label, path]) => (
+            <Link key={path} to={path} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex items-center hover:border-[#534AB7] hover:text-[#534AB7] transition-colors">{label}</Link>
+          ))}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Schools"
