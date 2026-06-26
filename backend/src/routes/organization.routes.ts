@@ -335,6 +335,54 @@ router.get('/org/report', requireOrgAuth, async (req: Request, res: Response) =>
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Organization settings / branding ────────────────────────────────────────
+router.get('/org/settings', requireOrgAuth, async (req: Request, res: Response) => {
+    const org = await getMetaDb().collection('Organization').findOne({ _id: new ObjectId(req.orgUser!.organizationId) });
+    res.json({ name: org?.name, branding: org?.branding || {}, ownerEmail: org?.ownerEmail });
+});
+
+router.put('/org/settings', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const { name, branding } = req.body || {};
+        const $set: any = { updatedAt: new Date() };
+        if (name) $set.name = name;
+        if (branding && typeof branding === 'object') $set.branding = branding;   // { logo, primaryColor, motto }
+        await getMetaDb().collection('Organization').updateOne({ _id: new ObjectId(req.orgUser!.organizationId) }, { $set });
+        await audit({ organizationId: req.orgUser!.organizationId, userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: 'org.settings.update', newValue: { name, branding }, ip: ipOf(req), device: deviceOf(req) });
+        res.json({ ok: true, message: 'Organization settings saved' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Cross-branch finance: pending expenses across all branches ───────────────
+// Org Finance Manager view — every branch's pending/unapproved expenses in one
+// place, with approve/reject that writes back to the originating branch DB.
+router.get('/org/expenses/pending', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN', 'ORG_FINANCE_MANAGER'), async (req: Request, res: Response) => {
+    try {
+        const branches = await readableBranchDbs(req.orgUser!, parseBranchIds(req));
+        const all: any[] = [];
+        for (const b of branches) {
+            const rows = await b.db.collection('expenses').find({ status: { $in: ['pending', 'submitted', null] }, is_voided: { $ne: true } }).sort({ createdAt: -1 }).limit(500).toArray().catch(() => []);
+            rows.forEach((r: any) => all.push({ _id: String(r._id), branchId: b.id, branchName: b.name, description: r.description || r.title || r.category, amount: Number(r.amount) || 0, category: r.category, date: r.date || r.createdAt, status: r.status || 'pending' }));
+        }
+        all.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+        res.json({ data: all, total: all.reduce((s, e) => s + e.amount, 0) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/org/expenses/:branchId/:id/decision', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN', 'ORG_FINANCE_MANAGER'), async (req: Request, res: Response) => {
+    try {
+        const { branchId, id } = req.params;
+        const decision = String(req.body?.decision || '');   // 'approved' | 'rejected'
+        if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ message: 'decision must be approved or rejected.' });
+        if (!(await canAccessBranch(req.orgUser!, branchId))) return res.status(403).json({ message: 'No access to that branch.' });
+        const db = await branchDb(req.orgUser!.organizationId, branchId);
+        if (!db) return res.status(404).json({ message: 'Branch not found.' });
+        await db.collection('expenses').updateOne({ _id: new ObjectId(id) }, { $set: { status: decision, decidedBy: req.orgUser!.name, decidedAt: new Date() } });
+        await audit({ organizationId: req.orgUser!.organizationId, branchId, userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: `expense.${decision}`, newValue: { expenseId: id }, ip: ipOf(req), device: deviceOf(req) });
+        res.json({ ok: true, message: `Expense ${decision}.` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Backfill: wrap existing standalone tenants into single-branch orgs ───────
 // Non-destructive. For every active Tenant without an organizationId, create an
 // Organization + a primary Branch pointing at that tenant's existing DB. Nothing

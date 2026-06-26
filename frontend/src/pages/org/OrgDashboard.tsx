@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Building2, Users, GraduationCap, Wallet, TrendingUp, ArrowRightLeft, Layers, ShieldCheck } from "lucide-react";
+import { Loader2, Building2, Users, GraduationCap, Wallet, TrendingUp, ArrowRightLeft, Layers, ShieldCheck, FileBarChart, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { getOrgUser, isOrgUser } from "@/lib/orgContext";
@@ -33,9 +33,13 @@ export default function OrgDashboard() {
                         <p className="text-sm text-slate-400">Combined view across {data?.branchCount ?? "…"} branches.</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Link to="/org/transfers" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><ArrowRightLeft className="w-4 h-4" /> Transfers</Link>
                     <Link to="/org/branches" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Building2 className="w-4 h-4" /> Branches</Link>
+                    <Link to="/org/reports" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><FileBarChart className="w-4 h-4" /> Reports</Link>
+                    <Link to="/org/expenses" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Expenses</Link>
+                    <Link to="/org/users" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Users className="w-4 h-4" /> Users</Link>
+                    <Link to="/org/settings" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><Settings className="w-4 h-4" /> Settings</Link>
                     <Link to="/org/audit" className="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> Audit</Link>
                 </div>
             </div>
