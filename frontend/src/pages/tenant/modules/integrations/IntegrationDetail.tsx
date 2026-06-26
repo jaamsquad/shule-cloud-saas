@@ -46,9 +46,10 @@ export default function IntegrationDetail() {
         setRegistering(true);
         try {
             const r = await api.post("/integrations/mpesa/register-urls", {});
+            const sc = r.data?.registeredShortCode;
             toast.success(r.data?.alreadyRegistered
-                ? "C2B URLs are already registered — direct Till/Paybill payments are being captured."
-                : "C2B URLs registered with Safaricom — direct Till/Paybill payments will now appear.");
+                ? `C2B URLs already registered${sc ? ` to store number ${sc}` : ""} — direct payments are being captured.`
+                : `C2B URLs registered with Safaricom${sc ? ` to store number ${sc}` : ""} — direct payments will now appear.`);
             qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
         } catch (e: any) {
             toast.error(e.response?.data?.message || "Registration failed");
@@ -361,13 +362,16 @@ export default function IntegrationDetail() {
                                     </button>
                                     {mpesaStatus?.registered && (
                                         <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                                            <CheckCircle2 className="w-4 h-4" /> URLs registered
+                                            <CheckCircle2 className="w-4 h-4" /> URLs registered{mpesaStatus.registeredShortCode ? ` to ${mpesaStatus.registeredShortCode}` : ""}
                                         </span>
                                     )}
                                 </div>
-                                <p className="text-[11px] text-gray-400 font-medium mt-3 leading-relaxed">
-                                    Note: Safaricom only delivers these notifications in <b>Production</b>. Paybills deliver C2B reliably; many Till / Buy-Goods shortcodes do not.
-                                    Save your credentials (and set Environment to <b>production</b>) before registering.
+                                <div className="text-[11px] text-gray-500 font-medium mt-3 leading-relaxed bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                                    <b>Important (Safaricom):</b> C2B must register to your <b>Store / Till number</b>, not the Head Office number.
+                                    This uses your <b>Till Number</b> field — make sure it holds the store number Safaricom gave you (e.g. <b>6774375</b>), then register.
+                                </div>
+                                <p className="text-[11px] text-gray-400 font-medium mt-2 leading-relaxed">
+                                    Note: Safaricom only delivers these notifications in <b>Production</b>. Save your credentials (Environment = <b>production</b>) before registering.
                                 </p>
                             </div>
                         )}

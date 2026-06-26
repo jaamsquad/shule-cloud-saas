@@ -159,10 +159,14 @@ export async function transactionStatus(c: MpesaConfig, opts: { transactionId: s
     return data;
 }
 
-export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, confirmationUrl: string, responseType: 'Completed' | 'Cancelled' = 'Completed') {
-    const { ok, status, data } = await daraja(c, '/mpesa/c2b/v2/registerurl', { ShortCode: c.shortcode, ResponseType: responseType, ConfirmationURL: confirmationUrl, ValidationURL: validationUrl });
+export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, confirmationUrl: string, responseType: 'Completed' | 'Cancelled' = 'Completed', shortCode?: string) {
+    // C2B URLs must register to the STORE number (e.g. a Till's store/till number),
+    // NOT the Head Office number. Safaricom rejects/ignores registration on the HO.
+    // Caller passes the store number explicitly; default to the config shortcode.
+    const registerShortCode = String(shortCode || c.shortcode).trim();
+    const { ok, status, data } = await daraja(c, '/mpesa/c2b/v2/registerurl', { ShortCode: registerShortCode, ResponseType: responseType, ConfirmationURL: confirmationUrl, ValidationURL: validationUrl });
     if (!ok) throw new Error(data?.errorMessage || `Register URL failed (HTTP ${status})`);
-    return data;
+    return { ...data, registeredShortCode: registerShortCode };
 }
 
 // ─── Pull Transactions API ─────────────────────────────────────────────────────

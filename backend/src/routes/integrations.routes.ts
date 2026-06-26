@@ -26,6 +26,7 @@ router.get('/integrations/mpesa/settings', async (req, res) => {
             configured: isMpesaConfigured(cfg),
             callbackBase: cfg.callbackBase,
             registered: !!s.urlsRegistered,
+            registeredShortCode: s.registeredShortCode || '',
             pullRegistered: !!s.pullRegistered,
             pullNominatedNumber: s.pullNominatedNumber || '',
             // Reconciliation (Verify + Pull) is only possible with these set.
@@ -70,9 +71,13 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         // also served under /pesa/... for exactly this reason — use that, and strip any
         // stray "mpesa" from the operator's callback base just in case.
         const safeBase = cfg.callbackBase.replace(/mpesa/gi, 'pesa');
-        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`);
-        await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date() } }, { upsert: true });
-        res.json({ ok: true, result });
+        // Register against the STORE/TILL number, not the Head Office shortcode.
+        // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
+        // override via the request body (storeNumber) for edge cases.
+        const storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
+        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`, 'Completed', storeNumber);
+        await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
+        res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
         // Safaricom only lets a shortcode register once. A repeat attempt returning
         // "already registered" means C2B is set up — treat it as success, not an error.
