@@ -18,6 +18,29 @@ export default function AccountSwitcher() {
     const user = getOrgUser();
     const org = getOrgInfo();
     const branches = getOrgBranches();
+
+    // Isolation guard: the org portal must not appear on a school subdomain that
+    // doesn't belong to the org. If we're on a tenant subdomain and none of the
+    // org's branches match it, this org session doesn't belong here — bail out.
+    const host = window.location.hostname;
+    const sub = host.split(".")[0];
+    const reserved = new Set(["www", "app", "owner", "api", "localhost", "127", "org"]);
+    const onTenantSubdomain = host.includes(".") && !reserved.has(sub);
+    const belongsHere = !onTenantSubdomain || branches.some(b => b.subdomain.toLowerCase() === sub.toLowerCase());
+    if (onTenantSubdomain && !belongsHere) {
+        // Wrong place for this org — send the user to the school's normal login.
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6 text-center">
+                <p className="text-lg font-black text-slate-800">This organization isn't linked to <span style={{ color: accent }}>{sub}</span>.</p>
+                <p className="text-sm text-slate-500 mt-1 max-w-md">You're signed in to a different organization. Open the organization portal from its own address, or sign in to this school directly.</p>
+                <div className="flex gap-2 mt-5">
+                    <a href="/login" className="h-10 px-5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm flex items-center">Sign in to {sub}</a>
+                    <button onClick={() => { orgLogout(); navigate("/org/login"); }} className="h-10 px-5 rounded-xl text-white font-bold text-sm" style={{ background: accent }}>Switch organization</button>
+                </div>
+            </div>
+        );
+    }
+
     const primary = branches.find(b => b.isPrimary) || branches[0];
     const others = branches.filter(b => b.id !== primary?.id);
     const filtered = others.filter(b => b.name.toLowerCase().includes(q.trim().toLowerCase()) || b.subdomain.toLowerCase().includes(q.trim().toLowerCase()));

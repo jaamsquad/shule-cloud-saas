@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Building2, Plus, X, Layers, ExternalLink } from "lucide-react";
+import { Loader2, Building2, Plus, X, Layers, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -16,10 +16,22 @@ export default function Organizations() {
         queryFn: async () => (await api.get("/owner/organizations")).data,
     });
 
+    const [editOrg, setEditOrg] = useState<any>(null);
+
     const wrap = useMutation({
         mutationFn: async (tenantId: string) => (await api.post(`/owner/organizations/wrap-tenant/${tenantId}`, {})).data,
         onSuccess: () => { toast.success("Tenant wrapped into an organization"); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+
+    const del = useMutation({
+        mutationFn: async ({ id, force }: { id: string; force?: boolean }) => (await api.delete(`/owner/organizations/${id}${force ? "?force=1" : ""}`)).data,
+        onSuccess: (d: any) => { toast.success(d.message || "Deleted"); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); },
+        onError: (e: any, vars: any) => {
+            const msg = e.response?.data?.message || "Delete failed";
+            if (e.response?.status === 409 && confirm(`${msg}\n\nForce-delete anyway? (schools are preserved)`)) del.mutate({ id: vars.id, force: true });
+            else toast.error(msg);
+        },
     });
 
     return (
@@ -44,7 +56,11 @@ export default function Organizations() {
                         <div key={o.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
                             <div className="flex items-center justify-between">
                                 <div className="w-10 h-10 rounded-xl bg-[#5C67F2]/10 text-[#5C67F2] flex items-center justify-center"><Building2 className="w-5 h-5" /></div>
-                                <span className="text-[10px] font-black uppercase text-slate-400">{o.branchCount} branch{o.branchCount === 1 ? "" : "es"}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase text-slate-400">{o.branchCount} branch{o.branchCount === 1 ? "" : "es"}</span>
+                                    <button onClick={() => setEditOrg(o)} title="Edit" className="text-slate-300 hover:text-[#5C67F2]"><Pencil className="w-4 h-4" /></button>
+                                    <button onClick={() => { if (confirm(`Delete "${o.name}"? Linked schools are preserved.`)) del.mutate({ id: o.id }); }} title="Delete" className="text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+                                </div>
                             </div>
                             <div className="mt-3 font-black text-slate-800">{o.name}</div>
                             <div className="text-xs text-slate-400">{o.ownerEmail}</div>
@@ -64,6 +80,7 @@ export default function Organizations() {
 
             {show && <NewOrgModal onClose={() => setShow(false)} onDone={() => { setShow(false); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); }} />}
             {addBranchFor && <AddBranchModal org={addBranchFor} onClose={() => setAddBranchFor(null)} onDone={() => { setAddBranchFor(null); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); }} />}
+            {editOrg && <EditOrgModal org={editOrg} onClose={() => setEditOrg(null)} onDone={() => { setEditOrg(null); qc.invalidateQueries({ queryKey: ["owner_orgs"] }); }} />}
         </div>
     );
 }
@@ -93,6 +110,23 @@ function NewOrgModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
                     <Field label="Subdomain" v={f.subdomain} on={(v) => set("subdomain", v.toLowerCase().replace(/[^a-z0-9-]/g, ""))} ph="egerton-main" mono />
                 </div>
             </div>
+        </Modal>
+    );
+}
+
+function EditOrgModal({ org, onClose, onDone }: { org: any; onClose: () => void; onDone: () => void }) {
+    const [name, setName] = useState(org.name || "");
+    const [ownerEmail, setOwnerEmail] = useState(org.ownerEmail || "");
+    const save = useMutation({
+        mutationFn: async () => (await api.patch(`/owner/organizations/${org.id}`, { name, ownerEmail })).data,
+        onSuccess: () => { toast.success("Organization updated"); onDone(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+    return (
+        <Modal title="Edit Organization" onClose={onClose} onSubmit={() => save.mutate()} busy={save.isPending} disabled={!name}>
+            <Field label="Organization Name" v={name} on={setName} />
+            <Field label="Owner Email" v={ownerEmail} on={setOwnerEmail} ph="owner@school.com" />
+            <p className="text-[11px] text-slate-400">Changing the owner email also updates the org owner's sign-in email.</p>
         </Modal>
     );
 }

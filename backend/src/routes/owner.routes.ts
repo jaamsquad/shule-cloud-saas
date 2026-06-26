@@ -121,6 +121,59 @@ router.post('/organizations/:id/branches', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Edit an organization (name + owner email).
+router.patch('/organizations/:id', async (req, res) => {
+    try {
+        const meta = getMetaDb();
+        const { name, ownerEmail } = req.body || {};
+        const $set: any = { updatedAt: new Date() };
+        if (name) $set.name = name;
+        if (ownerEmail) $set.ownerEmail = String(ownerEmail).trim().toLowerCase();
+        await meta.collection('Organization').updateOne({ _id: new ObjectId(req.params.id) }, { $set });
+        // Keep the org owner's email/name in sync.
+        if (name || ownerEmail) {
+            const upd: any = {};
+            if (name) upd.name = name;
+            if (ownerEmail) upd.email = String(ownerEmail).trim().toLowerCase();
+            await meta.collection('OrgUser').updateOne({ organizationId: req.params.id, role: 'ORG_OWNER' }, { $set: upd });
+        }
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Delete an organization. Refuses if it still has branches (unless ?force=1),
+// and NEVER deletes the underlying school databases — it only unlinks them.
+router.delete('/organizations/:id', async (req, res) => {
+    try {
+        const meta = getMetaDb();
+        const id = req.params.id;
+        const branches = await listBranches(id);
+        if (branches.length && req.query.force !== '1') {
+            return res.status(409).json({ message: `This organization still has ${branches.length} branch(es). Remove them first, or confirm force-delete.` });
+        }
+        // Unlink tenants (the school data is preserved), drop Branch links + org users.
+        for (const b of branches) {
+            await meta.collection('Tenant').updateOne({ _id: new ObjectId(b.tenantId) }, { $unset: { organizationId: '' } }).catch(() => { });
+        }
+        await meta.collection('Branch').deleteMany({ organizationId: id });
+        await meta.collection('OrgUser').deleteMany({ organizationId: id });
+        await meta.collection('Organization').deleteOne({ _id: new ObjectId(id) });
+        res.json({ ok: true, message: 'Organization deleted. Linked schools were preserved.' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Remove a branch from an organization (unlink only — school DB preserved).
+router.delete('/organizations/:id/branches/:branchId', async (req, res) => {
+    try {
+        const meta = getMetaDb();
+        const branch: any = await meta.collection('Branch').findOne({ _id: new ObjectId(req.params.branchId), organizationId: req.params.id });
+        if (!branch) return res.status(404).json({ message: 'Branch not found.' });
+        await meta.collection('Tenant').updateOne({ _id: new ObjectId(branch.tenantId) }, { $unset: { organizationId: '' } }).catch(() => { });
+        await meta.collection('Branch').deleteOne({ _id: branch._id });
+        res.json({ ok: true, message: 'Branch removed (school preserved).' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Wrap one existing standalone tenant into a single-branch organization.
 router.post('/organizations/wrap-tenant/:tenantId', async (req, res) => {
     try {
