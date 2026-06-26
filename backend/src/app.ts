@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
 import academicsRoutes from './routes/academics.routes';
+import organizationRoutes from './routes/organization.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
 import feesRoutes from './routes/fees.routes';
@@ -270,6 +271,12 @@ app.post('/api/v1/integrations/test/:type', async (req, res) => {
         res.status(500).json({ message: `Connection test failed: ${e.message}` });
     }
 });
+
+// ─── Organization (multi-branch) routes — mounted BEFORE tenancy ──────────────
+// Org-level auth/aggregation is not scoped to a single tenant DB; it groups
+// branches in the meta DB and fans out itself. (Transfer routes that need a
+// tenant DB resolve branch DBs explicitly via the organization service.)
+app.use('/api/v1', organizationRoutes);
 
 // Global Tenancy Middleware
 app.use(tenancyMiddleware);

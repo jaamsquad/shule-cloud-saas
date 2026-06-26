@@ -8,6 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { navItems } from "./AppSidebar";
+import BranchSwitcher from "./BranchSwitcher";
 
 // Flatten the sidebar nav into searchable {label, path, group} entries.
 const NAV_LINKS = navItems.flatMap((item: any) =>
@@ -210,6 +211,9 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                 >
                     <Maximize className="w-5 h-5" />
                 </button>
+
+                {/* Multi-branch: organization users get a Branch Switcher here */}
+                <BranchSwitcher />
             </div>
 
             {/* Right side Actions */}

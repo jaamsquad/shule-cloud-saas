@@ -43,6 +43,17 @@ api.interceptors.request.use((config) => {
                 }
             } catch { }
         }
+
+        // ── Multi-branch: an org user's chosen branch overrides the host subdomain ──
+        // The Branch Switcher writes the active branch's subdomain here, so the
+        // entire tenant app instantly scopes to that branch's isolated database.
+        const activeBranch = localStorage.getItem('active_branch_subdomain');
+        if (activeBranch) config.headers['x-tenant-subdomain'] = activeBranch;
+
+        // Org-level auth token (for /org/* calls). Sent alongside; org routes use it,
+        // tenant routes ignore it in favour of auth_token above.
+        const orgToken = localStorage.getItem('org_token');
+        if (orgToken && config.url?.includes('/org/')) config.headers.Authorization = `Bearer ${orgToken}`;
     }
 
     return config;

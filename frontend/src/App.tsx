@@ -161,6 +161,11 @@ import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppI
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
 import CommunicationPreferences from "./pages/tenant/modules/communications/CommunicationPreferences";
 import IntegrationsPage from "./pages/tenant/modules/integrations/IntegrationsPage";
+import OrgLogin from "./pages/org/OrgLogin";
+import OrgDashboard from "./pages/org/OrgDashboard";
+import OrgBranches from "./pages/org/OrgBranches";
+import OrgTransfers from "./pages/org/OrgTransfers";
+import OrgAudit from "./pages/org/OrgAudit";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
@@ -478,6 +483,14 @@ const App = () => {
             <Route path="/parent-portal" element={<ParentPortalLogin />} />
             <Route path="/parent-portal/login" element={<ParentPortalLogin />} />
             <Route path="/parent-portal/dashboard" element={<ParentPortalDashboard />} />
+
+            {/* ORGANIZATION (multi-branch) — standalone, guarded by org_token */}
+            <Route path="/org" element={<OrgLogin />} />
+            <Route path="/org/login" element={<OrgLogin />} />
+            <Route path="/org/dashboard" element={<OrgDashboard />} />
+            <Route path="/org/branches" element={<OrgBranches />} />
+            <Route path="/org/transfers" element={<OrgTransfers />} />
+            <Route path="/org/audit" element={<OrgAudit />} />
 
             {/* 3. TENANT APP (School Portal) */}
             <Route path="/login" element={<Login />} />
