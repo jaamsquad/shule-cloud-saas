@@ -571,6 +571,39 @@ export const setSchoolStatus = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
+// Edit a school's core details (name, email, phone, subdomain). Subdomain must
+// stay unique; the school's DB name is preserved (renaming a DB is unsafe), but
+// the subdomain it resolves by is updated, and the admin's email kept in sync.
+export const updateSchool = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.manage')) return;
+    try {
+        const meta = getDb();
+        const id = new ObjectId(req.params.id);
+        const t: any = await meta.collection('Tenant').findOne({ _id: id });
+        if (!t) return res.status(404).json({ message: 'School not found' });
+        const { name, email, phone, subdomain } = req.body || {};
+        const $set: any = { updatedAt: new Date() };
+        if (name) $set.name = name;
+        if (email !== undefined) { $set.contactEmail = String(email).trim().toLowerCase(); $set.email = $set.contactEmail; }
+        if (phone !== undefined) { $set.contactPhone = phone; $set.phone = phone; }
+        if (subdomain && String(subdomain).toLowerCase().trim() !== t.subdomain) {
+            const sub = String(subdomain).toLowerCase().trim();
+            const reserved = ['owner', 'api', 'www', 'admin', 'support', 'mail', 'localhost', 'app', 'org'];
+            if (reserved.includes(sub)) return res.status(400).json({ message: 'That subdomain is reserved.' });
+            if (await meta.collection('Tenant').findOne({ subdomain: sub, _id: { $ne: id } })) return res.status(409).json({ message: 'That subdomain is already taken.' });
+            $set.subdomain = sub;
+            // Keep any Branch link in sync so org routing still resolves.
+            await meta.collection('Branch').updateMany({ tenantId: String(t._id) }, { $set: { subdomain: sub } }).catch(() => { });
+        }
+        await meta.collection('Tenant').updateOne({ _id: id }, { $set });
+        // Keep the admin user's email in sync if it changed.
+        if (email) {
+            await meta.collection('User').updateOne({ $or: [{ tenantId: t._id }, { tenantId: String(t._id) }] }, { $set: { email: String(email).trim().toLowerCase() } }, { sort: { createdAt: 1 } as any }).catch(() => { });
+        }
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
 // Toggle which modules a school can access (overrides the plan).
 export const setSchoolModules = async (req: Request, res: Response) => {
     if (!guard(req, res, 'schools.manage')) return;

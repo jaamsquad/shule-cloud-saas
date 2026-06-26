@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     ArrowLeft, Users, Briefcase, Database, Power, LogIn, Loader2, Check, Layers,
-    Mail, MessageCircle, Send,
+    Mail, MessageCircle, Send, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -76,6 +76,21 @@ export default function ManageSchool() {
 
     const toggle = (k: string) => setModules((m) => m.includes(k) ? m.filter((x) => x !== k) : [...m, k]);
 
+    // ── Edit details + convert to organization ───────────────────────────────
+    const [showEdit, setShowEdit] = useState(false);
+    const [edit, setEdit] = useState<any>({});
+    useEffect(() => { if (school) setEdit({ name: school.name, email: school.email, phone: school.phone, subdomain: school.subdomain }); }, [school]);
+    const saveDetails = useMutation({
+        mutationFn: async () => api.patch(`/owner/schools/${id}`, edit),
+        onSuccess: () => { toast.success("School details updated"); setShowEdit(false); invalidate(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+    const makeOrg = useMutation({
+        mutationFn: async () => (await api.post(`/owner/organizations/wrap-tenant/${id}`, {})).data,
+        onSuccess: (d: any) => { toast.success(d.reusedSchoolLogin ? "Organization created — the school admin is now the org owner (same login)." : "Organization created."); invalidate(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+
     // ── Message the school directly (email / WhatsApp / both) ────────────────
     const [msgChannel, setMsgChannel] = useState<"both" | "email" | "whatsapp">("email");
     const [msgSubject, setMsgSubject] = useState("");
@@ -97,8 +112,13 @@ export default function ManageSchool() {
     const suspended = school.status === "suspended";
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6">
-            <div className="max-w-5xl mx-auto space-y-6">
+        <div className="min-h-screen bg-slate-50 p-6 relative">
+            {/* Subtle school-admin themed backdrop */}
+            <div
+                className="pointer-events-none fixed inset-0 z-0 bg-no-repeat bg-right-bottom opacity-[0.06]"
+                style={{ backgroundImage: "url('https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=900&q=60')", backgroundSize: "min(40vw, 520px)" }}
+            />
+            <div className="max-w-5xl mx-auto space-y-6 relative z-10">
                 <button onClick={() => navigate("/owner/dashboard")} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800"><ArrowLeft className="w-4 h-4" /> Back to Schools</button>
 
                 {/* Header */}
@@ -113,11 +133,30 @@ export default function ManageSchool() {
                             className={`h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-white ${suspended ? "bg-emerald-500" : "bg-rose-500"}`}>
                             <Power className="w-3.5 h-3.5" /> {suspended ? "Activate" : "Suspend"}
                         </button>
+                        <button onClick={() => setShowEdit(true)} className="h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50">
+                            <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
                         <button onClick={() => impersonate.mutate()} disabled={impersonate.isPending}
                             className="h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-white" style={{ background: PRIMARY }}>
                             {impersonate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogIn className="w-3.5 h-3.5" />} Login as Admin
                         </button>
                     </div>
+                </div>
+
+                {/* Organization */}
+                <div className="bg-white rounded-xl p-5 flex items-center justify-between flex-wrap gap-3" style={{ border: "0.5px solid #e5e7eb" }}>
+                    <div className="flex items-center gap-2">
+                        <Layers className="w-5 h-5" style={{ color: PRIMARY }} />
+                        <div>
+                            <p className="font-black text-slate-800 text-sm">{school.organizationId ? "Part of an organization" : "Multi-branch organization"}</p>
+                            <p className="text-xs text-slate-500">{school.organizationId ? "This school belongs to an organization (its admin can manage branches)." : "Turn this school into an organization. Its admin becomes the organization owner (same login) and can add branches."}</p>
+                        </div>
+                    </div>
+                    {!school.organizationId && (
+                        <button onClick={() => makeOrg.mutate()} disabled={makeOrg.isPending} className="h-9 px-4 rounded-lg text-xs font-black flex items-center gap-1.5 text-white" style={{ background: PRIMARY }}>
+                            {makeOrg.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} Make Organization
+                        </button>
+                    )}
                 </div>
 
                 {/* Counts + DB usage */}
@@ -194,6 +233,34 @@ export default function ManageSchool() {
                     </div>
                 </div>
             </div>
+
+            {/* Edit details modal */}
+            {showEdit && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowEdit(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-slate-100"><h2 className="font-black text-slate-800">Edit School Details</h2></div>
+                        <div className="p-5 space-y-3">
+                            {[
+                                ["School Name", "name", "text"], ["Email", "email", "email"],
+                                ["Phone", "phone", "tel"], ["Subdomain", "subdomain", "text"],
+                            ].map(([label, key, type]) => (
+                                <div key={key}>
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">{label}</label>
+                                    <input type={type} value={edit[key] || ""} onChange={(e) => setEdit({ ...edit, [key]: key === "subdomain" ? e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") : e.target.value })}
+                                        className={`w-full h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#534AB7] ${key === "subdomain" ? "font-mono" : ""}`} />
+                                    {key === "subdomain" && <p className="text-[10px] text-amber-600 mt-1">Changing the subdomain changes the school's login URL. The database is preserved.</p>}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+                            <button onClick={() => setShowEdit(false)} className="h-10 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm">Cancel</button>
+                            <button onClick={() => saveDetails.mutate()} disabled={saveDetails.isPending} className="h-10 px-5 rounded-xl text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50" style={{ background: PRIMARY }}>
+                                {saveDetails.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
