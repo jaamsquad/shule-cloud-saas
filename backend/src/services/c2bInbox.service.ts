@@ -174,7 +174,31 @@ export async function allocate(inboxId: string, db: Db, student: any, opts: { au
             allocatedAt: new Date(), needsReview: false,
         },
     });
+
+    // Notify the payer/parent (SMS + in-app) — best-effort, never blocks.
+    notifyAllocation(db, inbox, student).catch(() => { });
     return { ok: true };
+}
+
+/** Best-effort SMS + in-app notice that a fee payment was received and applied. */
+async function notifyAllocation(db: Db, inbox: any, student: any) {
+    const amount = num(inbox.TransAmount);
+    const name = student.parentName || student.guardianName || student.studentName || 'Parent';
+    const msg = `Dear ${name}, KES ${amount.toLocaleString()} received via M-PESA (Receipt ${inbox.TransID}) and allocated to ${student.studentName}'s fee account. Thank you.`;
+    // SMS to the payer's number (and the parent's, if different).
+    const numbers = [inbox.MSISDN, student.parentPhone, student.guardianPhone, student.phone].filter(Boolean);
+    try {
+        const { queueSms } = await import('./smsGateway.service');
+        const schoolId = String((await db.collection('school_profile').findOne({}))?._id || 'default');
+        await queueSms(db, schoolId, numbers, msg, { audience: 'fees' });
+    } catch { /* SMS optional */ }
+    // In-app notification.
+    try {
+        await db.collection('notifications').insertOne({
+            title: 'Fee payment received', message: msg, type: 'fees',
+            studentId: String(student._id), read: false, createdAt: new Date(),
+        });
+    } catch { /* optional */ }
 }
 
 /** Soft-reverse an allocation: void the payment, mark inbox rejected. Never hard-delete. */
