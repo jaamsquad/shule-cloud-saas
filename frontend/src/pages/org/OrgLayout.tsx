@@ -57,6 +57,7 @@ export default function OrgLayout() {
                         <span className="text-xs font-bold text-slate-700">{user?.name || user?.email}</span>
                         <span className="text-[10px] text-slate-400">{(user?.role || "").replace("ORG_", "").replace("_", " ")}</span>
                     </div>
+                    <button onClick={() => navigate("/org/switch")} title="Switch account" className="text-slate-400 hover:text-slate-700"><Layers className="w-5 h-5" /></button>
                     <button onClick={() => { orgLogout(); navigate("/org/login"); }} title="Sign out" className="text-slate-400 hover:text-rose-500"><LogOut className="w-5 h-5" /></button>
                 </div>
             </header>

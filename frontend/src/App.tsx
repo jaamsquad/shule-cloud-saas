@@ -173,6 +173,7 @@ import OrgUsers from "./pages/org/OrgUsers";
 import OrgSettings from "./pages/org/OrgSettings";
 import OrgExpenses from "./pages/org/OrgExpenses";
 import OrgLayout from "./pages/org/OrgLayout";
+import AccountSwitcher from "./pages/org/AccountSwitcher";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
@@ -496,6 +497,7 @@ const App = () => {
             {/* ORGANIZATION (multi-branch) — branded portal, guarded by org_token */}
             <Route path="/org" element={<OrgLogin />} />
             <Route path="/org/login" element={<OrgLogin />} />
+            <Route path="/org/switch" element={<AccountSwitcher />} />
             <Route element={<OrgLayout />}>
               <Route path="/org/dashboard" element={<OrgDashboard />} />
               <Route path="/org/branches" element={<OrgBranches />} />

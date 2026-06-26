@@ -16,9 +16,11 @@ export default function OrgLogin() {
         e.preventDefault();
         setBusy(true);
         try {
-            await orgLogin(email.trim(), password);
+            const { branches } = await orgLogin(email.trim(), password);
             toast.success("Welcome back");
-            navigate("/org/dashboard");
+            // Land on the account switcher so the user picks a branch or the whole
+            // organisation — unless there's only a single branch and no org view.
+            navigate(branches.length > 1 ? "/org/switch" : "/org/switch");
         } catch (err: any) {
             toast.error(err.response?.data?.message || "Sign-in failed");
         } finally { setBusy(false); }
