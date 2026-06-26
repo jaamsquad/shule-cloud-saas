@@ -171,9 +171,9 @@ export default function SalaryReport() {
                                     <tr key={m.month} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="py-4 px-6 font-black text-slate-800">{m.month}</td>
                                         <td className="py-4 px-6 text-right font-bold text-slate-600">{m.count}</td>
-                                        <td className="py-4 px-6 text-right font-bold text-slate-800">{m.gross.toLocaleString()}</td>
-                                        <td className="py-4 px-6 text-right font-bold text-rose-500">{m.deductions.toLocaleString()}</td>
-                                        <td className="py-4 px-6 text-right font-black text-[#5C67F2]">{m.net.toLocaleString()}</td>
+                                        <td className="py-4 px-6 text-right font-bold text-slate-800">{(Number(m.gross) || 0).toLocaleString()}</td>
+                                        <td className="py-4 px-6 text-right font-bold text-rose-500">{(Number(m.deductions) || 0).toLocaleString()}</td>
+                                        <td className="py-4 px-6 text-right font-black text-[#5C67F2]">{(Number(m.net) || 0).toLocaleString()}</td>
                                         <td className="py-4 px-6 text-center">
                                             <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
                                                 m.paid === m.count

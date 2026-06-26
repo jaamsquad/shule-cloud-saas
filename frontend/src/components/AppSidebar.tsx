@@ -409,6 +409,7 @@ export const navItems: NavItem[] = [
       { label: "Report Card Templates", path: "/settings/report-templates" },
       { label: "Theme & Language", path: "/settings/theme" },
       { label: "Account Settings", path: "/settings/account" },
+      { label: "Organization (Branches)", path: "/settings/organization" },
       { label: "Log out", path: "/logout" },
   ] },
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [

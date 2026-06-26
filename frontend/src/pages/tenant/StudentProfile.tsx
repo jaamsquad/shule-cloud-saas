@@ -257,9 +257,9 @@ export default function StudentProfile() {
                     {feeData.map((f, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{f.term}</TableCell>
-                        <TableCell>{f.amount.toLocaleString()}</TableCell>
-                        <TableCell>{f.paid.toLocaleString()}</TableCell>
-                        <TableCell>{f.balance.toLocaleString()}</TableCell>
+                        <TableCell>{(Number(f.amount) || 0).toLocaleString()}</TableCell>
+                        <TableCell>{(Number(f.paid) || 0).toLocaleString()}</TableCell>
+                        <TableCell>{(Number(f.balance) || 0).toLocaleString()}</TableCell>
                         <TableCell><Badge variant={f.status === "Paid" ? "default" : f.status === "Partial" ? "secondary" : "destructive"}>{f.status}</Badge></TableCell>
                       </TableRow>
                     ))}

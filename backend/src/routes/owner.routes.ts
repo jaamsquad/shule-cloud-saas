@@ -131,14 +131,44 @@ router.post('/organizations/wrap-tenant/:tenantId', async (req, res) => {
         const orgRes = await meta.collection('Organization').insertOne({ name: t.name || t.subdomain, ownerEmail: t.contactEmail || '', branding: null, createdAt: new Date(), backfilled: true });
         const organizationId = String(orgRes.insertedId);
         const branch = await createBranch({ organizationId, name: t.name || t.subdomain, subdomain: t.subdomain, isPrimary: true, tenantId: String(t._id), databaseName: t.databaseName });
-        // Create an org owner using the school's contact email (password set later / reset).
-        if (t.contactEmail) {
-            const email = String(t.contactEmail).toLowerCase();
-            const exists = await meta.collection('OrgUser').findOne({ email });
-            if (!exists) await meta.collection('OrgUser').insertOne({ organizationId, email, name: t.name, role: 'ORG_OWNER', allowedBranchIds: [], passwordHash: await bcrypt.hash(req.body?.password || 'changeme123', 10), createdAt: new Date() });
-        }
-        res.json({ ok: true, organizationId, branch: { id: String(branch._id), name: branch.name } });
+
+        // Make the school's FIRST registered account also an organization owner —
+        // reusing the SAME email + password hash so they log into /org with their
+        // existing school credentials (no new password to remember).
+        const created = await createOrgOwnerFromSchool(meta, organizationId, t, req.body?.password);
+        res.json({ ok: true, organizationId, branch: { id: String(branch._id), name: branch.name }, orgLoginEmail: created.email, reusedSchoolLogin: created.reused });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+
+// Create an ORG_OWNER for a school, reusing the school's first registered admin
+// login (same email + passwordHash) so the existing account works on /org too.
+async function createOrgOwnerFromSchool(meta: any, organizationId: string, tenant: any, fallbackPassword?: string) {
+    // The school's primary admin User in the meta DB (first by creation).
+    const tenantId = tenant._id;
+    let admin = await meta.collection('User').findOne(
+        { $or: [{ tenantId }, { tenantId: String(tenantId) }] },
+        { sort: { createdAt: 1 } },
+    );
+    if (!admin && tenant.contactEmail) admin = await meta.collection('User').findOne({ email: String(tenant.contactEmail).toLowerCase() });
+
+    const email = String(admin?.email || tenant.contactEmail || '').toLowerCase();
+    if (!email) return { email: '', reused: false };
+
+    const existing = await meta.collection('OrgUser').findOne({ email });
+    if (existing) {
+        // Ensure it's linked to this org as owner.
+        await meta.collection('OrgUser').updateOne({ _id: existing._id }, { $set: { organizationId, role: 'ORG_OWNER' } });
+        return { email, reused: true };
+    }
+
+    // Reuse the school's password hash when available → same credentials.
+    const passwordHash = admin?.passwordHash || await bcrypt.hash(String(fallbackPassword || 'changeme123'), 10);
+    await meta.collection('OrgUser').insertOne({
+        organizationId, email, name: admin?.name || tenant.name, role: 'ORG_OWNER',
+        allowedBranchIds: [], passwordHash, linkedUserId: admin ? String(admin._id) : null,
+        createdAt: new Date(),
+    });
+    return { email, reused: !!admin?.passwordHash };
+}
 
 export default router;

@@ -249,7 +249,7 @@ export default function Dashboard() {
     const getBarY = (v: number) => 130 - (v / maxBarValue) * 100;
     const getBarHeight = (v: number) => (v / maxBarValue) * 100;
 
-    const fmt = (n: number) => `KSh ${n.toLocaleString()}`;
+    const fmt = (n: number) => `KSh ${(Number(n) || 0).toLocaleString()}`;
 
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">

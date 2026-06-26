@@ -363,6 +363,7 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 
 // Custom domain + branding
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
+import OrganizationSetup from "./pages/tenant/modules/settings/OrganizationSetup";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
 import BlankForms from "./pages/tenant/modules/forms/BlankForms";
@@ -985,6 +986,7 @@ const App = () => {
               <Route path="/settings/domains" element={<DomainSettings />} />
               <Route path="/settings/theme" element={<ThemeLanguage />} />
               <Route path="/settings/account" element={<AccountSettings />} />
+              <Route path="/settings/organization" element={<OrganizationSetup />} />
               <Route path="/settings/users" element={<PlaceholderPage title="Users & Access" subtitle="Manage school staff roles" />} />
               <Route path="/roles" element={<Roles />} />
               <Route path="/archives" element={<Archives />} />

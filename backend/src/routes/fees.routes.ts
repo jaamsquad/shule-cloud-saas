@@ -438,6 +438,44 @@ router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (re
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
+// ── Self-service: convert THIS school into an organization ────────────────────
+// Lets a school admin turn their existing school into a (single-branch)
+// organization. The school's own login then also works at /org/login, with the
+// same email + password (we reuse the meta User's password hash).
+router.post('/org/convert-this-school', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const ctx = (req as any).tenantContext;
+        if (!ctx?.tenantId) return res.status(400).json({ message: 'No school context.' });
+        const meta = getMetaDb();
+        const tenant: any = await meta.collection('Tenant').findOne({ _id: new ObjectId(String(ctx.tenantId)) });
+        if (!tenant) return res.status(404).json({ message: 'School not found.' });
+        if (tenant.organizationId) {
+            const org = await meta.collection('Organization').findOne({ _id: new ObjectId(String(tenant.organizationId)) });
+            return res.json({ ok: true, already: true, organizationId: String(tenant.organizationId), message: `This school is already part of organization "${org?.name || ''}".` });
+        }
+        const { createBranch } = await import('../services/organization.service');
+        const orgRes = await meta.collection('Organization').insertOne({ name: tenant.name || tenant.subdomain, ownerEmail: tenant.contactEmail || '', branding: null, createdAt: new Date(), backfilled: true });
+        const organizationId = String(orgRes.insertedId);
+        const branch = await createBranch({ organizationId, name: tenant.name || tenant.subdomain, subdomain: tenant.subdomain, isPrimary: true, tenantId: String(tenant._id), databaseName: tenant.databaseName });
+
+        // Reuse the school's first admin login as the org owner.
+        const bcrypt = await import('bcrypt');
+        const admin = await meta.collection('User').findOne({ $or: [{ tenantId: tenant._id }, { tenantId: String(tenant._id) }] }, { sort: { createdAt: 1 } });
+        const email = String(admin?.email || tenant.contactEmail || '').toLowerCase();
+        let reused = false;
+        if (email) {
+            const existing = await meta.collection('OrgUser').findOne({ email });
+            if (existing) { await meta.collection('OrgUser').updateOne({ _id: existing._id }, { $set: { organizationId, role: 'ORG_OWNER' } }); reused = true; }
+            else {
+                const passwordHash = admin?.passwordHash || await bcrypt.hash('changeme123', 10);
+                await meta.collection('OrgUser').insertOne({ organizationId, email, name: admin?.name || tenant.name, role: 'ORG_OWNER', allowedBranchIds: [], passwordHash, linkedUserId: admin ? String(admin._id) : null, createdAt: new Date() });
+                reused = !!admin?.passwordHash;
+            }
+        }
+        res.json({ ok: true, organizationId, branch: { id: String(branch._id), name: branch.name }, orgLoginEmail: email, reusedSchoolLogin: reused, message: `"${tenant.name}" is now an organization. Sign in at /org/login with your existing email${reused ? ' and password' : ''}.` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── C2B Payment Inbox & Reconciliation ────────────────────────────────────────
 // The inbox lives in the meta DB (c2b_inbox) and is scoped to this tenant by its
 // databaseName, so a school only ever sees its own payments.

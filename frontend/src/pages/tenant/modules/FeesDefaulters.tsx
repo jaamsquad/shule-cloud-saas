@@ -232,7 +232,7 @@ export default function FeesDefaulters() {
                                             KSh {d.total_paid.toLocaleString()}
                                         </td>
                                         <td className="py-4 px-6 text-right font-semibold text-slate-800">
-                                            KSh {d.outstanding.toLocaleString()}
+                                            KSh {(Number(d.outstanding) || 0).toLocaleString()}
                                         </td>
                                         <td className="py-4 px-6 text-center font-medium text-slate-800">
                                             {d.days_overdue} Days
