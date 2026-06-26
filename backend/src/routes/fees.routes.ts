@@ -438,6 +438,89 @@ router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (re
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
+// ── C2B Payment Inbox & Reconciliation ────────────────────────────────────────
+// The inbox lives in the meta DB (c2b_inbox) and is scoped to this tenant by its
+// databaseName, so a school only ever sees its own payments.
+const tenantInboxFilter = (req: any): Record<string, any> => {
+    const dbName = req.tenantContext?.databaseName;
+    return dbName ? { tenantDbName: dbName } : { tenantDbName: '__none__' };   // no tenant → nothing
+};
+
+router.get('/payments/inbox', async (req: Request, res: Response) => {
+    try {
+        const meta = getMetaDb();
+        const q: any = tenantInboxFilter(req);
+        const { status, search, source, from, to } = req.query as any;
+        if (status && status !== 'all') q.reconStatus = status;
+        if (source) q.businessType = source;   // till | paybill
+        if (from || to) { q.paidAt = {}; if (from) q.paidAt.$gte = new Date(from); if (to) { const d = new Date(to); d.setHours(23, 59, 59); q.paidAt.$lte = d; } }
+        if (search) {
+            const s = String(search).trim();
+            q.$or = [
+                { TransID: { $regex: s, $options: 'i' } }, { MSISDN: { $regex: s.replace(/\D/g, ''), $options: 'i' } },
+                { customerName: { $regex: s, $options: 'i' } }, { BillRefNumber: { $regex: s, $options: 'i' } },
+                { matchedStudentName: { $regex: s, $options: 'i' } },
+            ];
+        }
+        const rows = await meta.collection('c2b_inbox').find(q).sort({ paidAt: -1 }).limit(1000).toArray();
+        res.json({ data: rows });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.get('/payments/reconciliation', async (req: Request, res: Response) => {
+    try {
+        const meta = getMetaDb();
+        const base = tenantInboxFilter(req);
+        const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+        const [all, today, pending, allocatedToday, duplicates, rejected] = await Promise.all([
+            meta.collection('c2b_inbox').find(base).toArray(),
+            meta.collection('c2b_inbox').find({ ...base, paidAt: { $gte: startOfDay } }).toArray(),
+            meta.collection('c2b_inbox').countDocuments({ ...base, reconStatus: 'pending' }),
+            meta.collection('c2b_inbox').countDocuments({ ...base, reconStatus: { $in: ['allocated', 'auto_matched'] }, allocatedAt: { $gte: startOfDay } }),
+            meta.collection('c2b_inbox').countDocuments({ ...base, duplicateCount: { $gt: 0 } }),
+            meta.collection('c2b_inbox').countDocuments({ ...base, reconStatus: 'rejected' }),
+        ]);
+        const sum = (rows: any[]) => rows.reduce((s, r) => s + (Number(r.TransAmount) || 0), 0);
+        const byType: any = { till: 0, paybill: 0 };
+        all.forEach((r: any) => { byType[r.businessType] = (byType[r.businessType] || 0) + (Number(r.TransAmount) || 0); });
+        res.json({
+            todayCollections: sum(today), todayCount: today.length,
+            totalCollections: sum(all), totalCount: all.length,
+            pending, allocatedToday, duplicates, rejected, byType,
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.get('/payments/:id', async (req: Request, res: Response) => {
+    try {
+        const row = await getMetaDb().collection('c2b_inbox').findOne({ _id: new ObjectId(req.params.id), ...tenantInboxFilter(req) });
+        if (!row) return res.status(404).json({ message: 'Payment not found.' });
+        res.json(row);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/payments/:id/allocate', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { studentId, invoiceId } = req.body || {};
+        if (!studentId) return res.status(400).json({ message: 'studentId is required.' });
+        const student = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) });
+        if (!student) return res.status(404).json({ message: 'Student not found.' });
+        const { allocate } = await import('../services/c2bInbox.service');
+        await allocate(req.params.id, db, student, { processedBy: (req as any).user?.name || 'admin', invoiceId });
+        res.json({ ok: true, message: `Payment allocated to ${student.studentName}.` });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+router.post('/payments/:id/reverse', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { reverse } = await import('../services/c2bInbox.service');
+        await reverse(req.params.id, db, (req as any).user?.name || 'admin', String(req.body?.reason || ''));
+        res.json({ ok: true, message: 'Payment reversed (soft).' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
 // M-PESA TransTime is "YYYYMMDDHHmmss" — convert to a Date.
 function parseMpesaTime(t: string): Date | null {
     const m = String(t || '').match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);

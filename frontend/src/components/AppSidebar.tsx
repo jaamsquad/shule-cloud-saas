@@ -180,6 +180,7 @@ export const navItems: NavItem[] = [
       { label: "Generated Invoices", path: "/fees/invoices" },
       { label: "Collect Fees", path: "/fees/collect" },
       { label: "Till / Paybill Transactions", path: "/fees/till-transactions" },
+      { label: "C2B Payment Inbox", path: "/fees/payment-inbox" },
       { label: "Student Ledger", path: "/fees/ledger" },
       { label: "Fees Paid Slip", path: "/fees/paid-slip" },
       { label: "Fees Defaulters", path: "/fees/defaulters" },

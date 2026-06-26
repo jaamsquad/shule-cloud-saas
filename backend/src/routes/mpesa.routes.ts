@@ -97,11 +97,16 @@ router.post(['/mpesa/c2b/validation', '/pesa/c2b/validation'], (_req, res) => {
 // ─── C2B confirmation ──────────────────────────────────────────────────────────
 // Served at both /mpesa/c2b/confirmation and /pesa/c2b/confirmation.
 router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, res) => {
-    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });   // ACK Safaricom immediately
     try {
         const p = req.body || {};
         const meta = getMetaDb();
         await meta.collection('mpesa_c2b_payments').insertOne({ ...p, receivedAt: new Date() });
+
+        // Feed the C2B Payment Inbox (full raw store + dedupe + auto-match + allocate).
+        // Heavy work runs here, AFTER we've already responded to Safaricom.
+        const { ingestC2B } = await import('../services/c2bInbox.service');
+        ingestC2B(p, { ip: (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '', headers: req.headers }).catch(e => console.error('[C2B inbox] ingest error:', e));
 
         // Auto-match to a student and apply the payment. Paybills carry the account
         // number in BillRefNumber (= student reg/adm no). Tills (Buy Goods) usually

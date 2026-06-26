@@ -37,6 +37,7 @@ import Register from "./pages/public/Register";
 import Activate from "./pages/public/Activate";
 import StudentHistory from "./pages/tenant/modules/students/StudentHistory";
 import TillTransactions from "./pages/tenant/modules/TillTransactions";
+import PaymentInbox from "./pages/tenant/modules/PaymentInbox";
 
 // Tenant Auth
 import Login from "./pages/tenant/auth/Login";
@@ -790,6 +791,7 @@ const App = () => {
 
               {/* Finance */}
               <Route path="/fees/till-transactions" element={<TillTransactions />} />
+              <Route path="/fees/payment-inbox" element={<PaymentInbox />} />
               <Route path="/fees/generate-invoice" element={<GenerateFeesInvoice />} />
               <Route path="/fees/invoices" element={<GeneratedInvoices />} />
               <Route path="/fees/generate-student-invoice" element={<GenerateStudentInvoice />} />
