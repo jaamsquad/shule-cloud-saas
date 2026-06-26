@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle, DownloadCloud } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -26,7 +26,14 @@ export default function TillTransactions() {
     const { data, isLoading, refetch, isFetching } = useQuery({
         queryKey: ["till_transactions", params],
         queryFn: async () => (await api.get("/fees/till-transactions", { params })).data,
+        // Auto-refresh the list every 20s while the page is open so new payments
+        // (captured by C2B or the background Pull-sync) appear on their own.
+        refetchInterval: 20000,
+        refetchOnWindowFocus: true,
     });
+    // Trigger a server-side Pull-sync once when the page opens (best-effort),
+    // so the freshest Safaricom transactions are fetched without a manual click.
+    useEffect(() => { api.post("/fees/till-transactions/sync", {}).catch(() => { }); }, []);
     // M-PESA integration status — to explain WHY direct till payments may be missing.
     const { data: mpesa } = useQuery({
         queryKey: ["mpesa_settings"],
@@ -74,7 +81,8 @@ export default function TillTransactions() {
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Smartphone className="w-5 h-5" /></div>
                     <div>
                         <h1 className="text-2xl font-black text-slate-900">Till / Paybill Transactions</h1>
-                        <p className="text-sm text-slate-400">M-PESA payments received on your integrated Till/Paybill{data?.shortcodes?.length ? ` (${data.shortcodes.join(", ")})` : ""}.</p>
+                        <p className="text-sm text-slate-400 flex items-center gap-1.5">M-PESA payments received on your integrated Till/Paybill{data?.shortcodes?.length ? ` (${data.shortcodes.join(", ")})` : ""}.
+                            <span className="inline-flex items-center gap-1 text-emerald-600 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Auto-syncing</span></p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">

@@ -46,6 +46,14 @@ async function bootstrap() {
         // ── SMS scheduler ─────────────────────────────────────────────────────
         // Release due scheduled SMS jobs every 30s across all tenants.
         setInterval(() => { releaseScheduledSms().catch(() => {}); }, 30_000);
+
+        // ── M-PESA auto-sync ──────────────────────────────────────────────────
+        // Pull recent Till/Paybill transactions from Safaricom every 5 min for
+        // every tenant with the Pull API registered, so payments appear without
+        // anyone clicking "Sync".
+        const { runScheduledPullSync } = require('./services/autoSync.service');
+        setTimeout(() => { runScheduledPullSync().catch(() => {}); }, 20_000);
+        setInterval(() => { runScheduledPullSync().catch(() => {}); }, 5 * 60_000);
     } catch (error) {
         console.error('Server bootstrap failed:', error);
         process.exit(1);
