@@ -9,6 +9,7 @@ import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
 import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
+import analyticsRoutes from './routes/analytics.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
 import feesRoutes from './routes/fees.routes';
@@ -297,6 +298,7 @@ app.use(tenancyMiddleware);
 
 // API Routes
 app.use('/api/v1', academicsRoutes);
+app.use('/api/v1', analyticsRoutes);
 app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
 app.use('/api/v1', feesRoutes);

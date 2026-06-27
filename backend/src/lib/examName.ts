@@ -31,7 +31,7 @@ export interface ExamLike {
     term?: string; termName?: string; academicYear?: string | number; year?: string | number;
 }
 
-export function formatExamName(exam: ExamLike | null | undefined, cls?: any): string {
+export function formatExamName(exam: (ExamLike & Record<string, any>) | any, cls?: any): string {
     if (!exam) return '';
     const form = fmtClass(cls);
     const term = fmtTerm(exam.term ?? exam.termName);
