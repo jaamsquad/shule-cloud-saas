@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { formatExamName } from "@/lib/examName";
 
-const EXAM_TYPES = ["End Term", "Mid Term", "Opening / Opener", "CAT", "Assignment", "Mock", "KCSE", "KCPE", "Practical", "Oral", "Internal", "Other"];
+// Exam types per the naming convention (plus a few legacy options kept for back-compat).
+const EXAM_TYPES = ["CAT 1", "CAT 2", "End Term", "Test Exam", "Trial", "Series 1", "Series 2", "Mid Term", "Opener", "Mock", "KCSE", "KCPE", "Other"];
 const EXAM_MODES = ["Regular", "Special", "Make-up", "Remedial"];
 
 // Defined OUTSIDE the page component so its identity is stable across renders.
@@ -250,6 +252,13 @@ export default function NewExamPage() {
                                 </div>
                             )}
                         </Field>
+                    </div>
+
+                    {/* Live preview of the auto-generated exam name (per the convention) */}
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5 text-sm">
+                        <span className="text-[11px] font-black uppercase text-emerald-600 tracking-wide">Auto-generated name</span>
+                        <div className="font-black text-emerald-800">{formatExamName({ examType: form.type, term: form.term, academicYear: form.academicYear }, "Form 4 East") || "—"}</div>
+                        <span className="text-[11px] text-emerald-600/80">Substituted per class, e.g. each stream gets its own form &amp; stream.</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
