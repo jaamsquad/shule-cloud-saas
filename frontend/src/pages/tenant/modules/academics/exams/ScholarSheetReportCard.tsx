@@ -95,14 +95,12 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                 {/* Subject table */}
                 <table style={{ marginTop: 3 }}><tbody>
                     <tr style={{ fontWeight: 700 }}>
-                        <td>Subject</td><td style={{ textAlign: "center" }}>END TERM</td><td style={{ textAlign: "center" }}>Out of</td><td style={{ textAlign: "center" }}>Total</td><td style={{ textAlign: "center" }}>Point</td><td style={{ textAlign: "center" }}>Grade</td><td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
+                        <td>Subject</td><td style={{ textAlign: "center" }}>END TERM</td><td style={{ textAlign: "center" }}>Point</td><td style={{ textAlign: "center" }}>Grade</td><td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
                     </tr>
                     {(d.subjects || []).map((s: any, i: number) => (
                         <tr key={i}>
                             <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
-                            <td style={{ textAlign: "center" }}>{s.mark.toFixed(1)}</td>
-                            <td style={{ textAlign: "center" }}>{s.outOf.toFixed(1)}</td>
-                            <td style={{ textAlign: "center" }}>{s.total}</td>
+                            <td style={{ textAlign: "center" }}>{Math.round(s.mark)}/{Math.round(s.outOf)}</td>
                             <td style={{ textAlign: "center" }}>{s.point}</td>
                             <td style={{ textAlign: "center" }}>{s.grade}</td>
                             <td style={{ textAlign: "center" }}>{s.position}</td>
@@ -112,25 +110,31 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                     ))}
                 </tbody></table>
 
-                {/* Term bar chart (B&W) — thin bars packed to the left */}
-                {chartBars.length > 1 && (
-                    <div style={{ border: "0.6px solid #000", marginTop: 3, padding: "2px 4px", height: "30mm" }}>
-                        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-start", height: "24mm", gap: 4 }}>
-                            {chartBars.map((c: any, i: number) => {
-                                const h = maxChart ? (c.value / maxChart) * 100 : 0;
-                                return (
-                                    <div key={i} style={{ width: "8mm", textAlign: "center", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                                        {!c.target && <div style={{ fontSize: 7 }}>{c.value}</div>}
-                                        <div style={{ height: `${h}%`, background: c.target ? "#e0e0e0" : "#9e9e9e", border: "0.6px solid #000", width: "5mm", margin: "0 auto" }} />
-                                    </div>
-                                );
-                            })}
+                {/* Performance line graph (B&W) — mean points per term */}
+                {chartBars.length > 1 && (() => {
+                    const W = 180, H = 70, padL = 10, padR = 6, padT = 6, padB = 14;   // viewBox units
+                    const n = chartBars.length;
+                    const x = (i: number) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
+                    const y = (v: number) => padT + (H - padT - padB) * (1 - (maxChart ? v / maxChart : 0));
+                    const pts = chartBars.map((c: any, i: number) => `${x(i)},${y(c.value)}`).join(" ");
+                    return (
+                        <div style={{ border: "0.6px solid #000", marginTop: 3 }}>
+                            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "30mm" }} preserveAspectRatio="none">
+                                {/* gridlines */}
+                                {[0, 0.25, 0.5, 0.75, 1].map(g => <line key={g} x1={padL} x2={W - padR} y1={padT + (H - padT - padB) * g} y2={padT + (H - padT - padB) * g} stroke="#ddd" strokeWidth={0.3} />)}
+                                {/* the performance line */}
+                                <polyline points={pts} fill="none" stroke="#000" strokeWidth={0.8} />
+                                {chartBars.map((c: any, i: number) => (
+                                    <g key={i}>
+                                        <circle cx={x(i)} cy={y(c.value)} r={1.2} fill="#000" />
+                                        {!c.target && <text x={x(i)} y={y(c.value) - 2} fontSize={5} textAnchor="middle">{c.value}</text>}
+                                        <text x={x(i)} y={H - 4} fontSize={5} textAnchor="middle">{c.label}</text>
+                                    </g>
+                                ))}
+                            </svg>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "flex-start", gap: 4 }}>
-                            {chartBars.map((c: any, i: number) => <div key={i} style={{ width: "8mm", textAlign: "center", fontSize: 7 }}>{c.label}</div>)}
-                        </div>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {/* Historical grid — only the levels & terms that have data */}
                 {levels.length > 0 && terms.length > 0 && (
