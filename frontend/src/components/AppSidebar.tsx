@@ -358,7 +358,7 @@ export const navItems: NavItem[] = [
       { label: "Analytics", path: "/exams/analytics" },
       { label: "Generate Report Cards", path: "/exams/generate-reports" },
       { label: "ScholarSheet (A4 Card)", path: "/exams/scholar-sheet" },
-      { label: "Result Card", path: "/exams/result-card" },
+      { label: "Result Card", path: "/exams/scholar-sheet" },
       { label: "Class Report Cards", path: "/exams/class-reports" },
       { label: "Result Sheet", path: "/exams/result-sheet" },
       { label: "Student Rankings", path: "/exams/rankings" },
@@ -372,7 +372,6 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Reports", icon: ClipboardList, moduleKey: "reports", children: [
       { label: "Reports Center", path: "/reports" },
-      { label: "Students Report Card", path: "/reports/report-cards" },
       { label: "Students Info Report", path: "/reports/students-info" },
       { label: "Parents Info Report", path: "/reports/parents-info" },
       { label: "Students Monthly Attendance", path: "/reports/attendance/monthly-students" },

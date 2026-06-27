@@ -748,7 +748,7 @@ const App = () => {
               <Route path="/exams/:id/rankings" element={<ExamRankings />} />
               <Route path="/exams/:id/settings" element={<ExamSettings />} />
               <Route path="/exams/:id" element={<ExamDetail />} />
-              <Route path="/exams/result-card" element={<ResultCard />} />
+              <Route path="/exams/result-card" element={<Navigate to="/exams/scholar-sheet" replace />} />
               <Route path="/exams/scholar-sheet" element={<ScholarSheetPage />} />
               <Route path="/exams/analytics" element={<ExamAnalytics />} />
               <Route path="/exams/class-reports" element={<ClassReportCards />} />
