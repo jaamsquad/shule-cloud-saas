@@ -1,10 +1,143 @@
 import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
+import { formatExamName } from '../lib/examName';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
+
+// ─── Kithimani-style report card data ──────────────────────────────────────────
+// Assembles exactly what the A4 report card needs: summary row, subject rows
+// (mark/out-of/total/point/grade/position/remarks/initials), KCPE + value added,
+// the historical Form1-4 × T1-T3 grid (MP/MG/POS), and the term bar chart series.
+// Subjects come from the student's class (curriculum-driven); grading from the
+// chosen scale.
+const N = (v: any) => Number(v) || 0;
+const RND = (n: number, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
+
+async function loadGrading(database: Db, classId?: string) {
+    const DEF = [
+        { grade: 'A', from: 80, upto: 100, points: 12, remark: 'EXCELLENT' }, { grade: 'A-', from: 75, upto: 79, points: 11, remark: 'V.GOOD' },
+        { grade: 'B+', from: 70, upto: 74, points: 10, remark: 'GOOD' }, { grade: 'B', from: 65, upto: 69, points: 9, remark: 'GOOD' },
+        { grade: 'B-', from: 60, upto: 64, points: 8, remark: 'GOOD' }, { grade: 'C+', from: 55, upto: 59, points: 7, remark: 'FAIR' },
+        { grade: 'C', from: 50, upto: 54, points: 6, remark: 'FAIR' }, { grade: 'C-', from: 45, upto: 49, points: 5, remark: 'C.AVERAGE' },
+        { grade: 'D+', from: 40, upto: 44, points: 4, remark: 'AIM HIGHER' }, { grade: 'D', from: 35, upto: 39, points: 3, remark: 'AIM HIGHER' },
+        { grade: 'D-', from: 30, upto: 34, points: 2, remark: 'WEAK' }, { grade: 'E', from: 0, upto: 29, points: 1, remark: 'PULL UP YOUR SOCKS' },
+    ];
+    let rec: any = classId ? await database.collection('grading_criteria').findOne({ classId }).catch(() => null) : null;
+    if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
+    const raw = (rec?.grades || rec?.gradingScale || []);
+    const scale = raw.length ? raw.map((g: any, i: number) => ({
+        grade: g.grade ?? g.name ?? '', from: N(g.from ?? g.minPercent ?? g.min), upto: N(g.upto ?? g.maxPercent ?? g.max ?? 100),
+        points: N(g.points ?? g.point ?? (raw.length - i)), remark: g.remark ?? g.status ?? g.label ?? '',
+    })).sort((a: any, b: any) => b.upto - a.upto) : DEF;
+    const gradeOf = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
+    const meanGrade = (mp: number) => { let best = scale[scale.length - 1]; for (const s of scale) { if (mp >= s.points - 0.5) { best = s; break; } } return best?.grade || '-'; };
+    return { scale, gradeOf, meanGrade };
+}
+
+router.get('/reports/kithimani-card/:studentId', async (req: Request, res: Response) => {
+    try {
+        const database = getRequestDb(req);
+        const sid = req.params.studentId;
+        const examId = String(req.query.examId || '');
+        if (!examId) return res.status(400).json({ message: 'examId required' });
+
+        const student: any = await database.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+        const exam: any = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
+        const profile: any = await database.collection('school_profile').findOne({}).catch(() => null) || {};
+        const classId = String(student.classId || '');
+        const { gradeOf, meanGrade } = await loadGrading(database, classId);
+
+        // This exam's marks for everyone (for positions) and for this student.
+        const allMarks = await database.collection('exam_marks').find({ examId }).toArray().catch(() => []);
+        const myClass = student.studentClass || student.currentClass || '';
+        const myStream = student.stream || student.streamName || '';
+
+        // Per-student aggregates for positions.
+        const agg: Record<string, { total: number; points: number; n: number; cls: string; stream: string }> = {};
+        const students = await database.collection('students').find({}).toArray().catch(() => []);
+        const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
+        // Per-subject marks for class position per subject.
+        const subjMarks: Record<string, Array<{ sid: string; pct: number }>> = {};
+        for (const m of allMarks) {
+            const id = String(m.studentId); const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
+            const g = gradeOf(pct);
+            const meta = sMeta[id] || {};
+            (agg[id] ||= { total: 0, points: 0, n: 0, cls: meta.studentClass || meta.currentClass || '', stream: meta.stream || meta.streamName || '' });
+            agg[id].total += N(m.marksObtained); agg[id].points += g.points; agg[id].n += 1;
+            (subjMarks[m.subjectName] ||= []).push({ sid: id, pct });
+        }
+        const rows = Object.entries(agg).map(([id, a]) => ({ id, ...a, mean: a.n ? a.total / a.n : 0, meanPoints: a.n ? a.points / a.n : 0 }));
+        // Level (whole-exam) position by total points; class position within same class.
+        const levelSorted = [...rows].sort((x, y) => y.points - x.points);
+        const levelPos = levelSorted.findIndex(r => r.id === sid) + 1;
+        const classmates = rows.filter(r => r.cls === myClass);
+        const classSorted = [...classmates].sort((x, y) => y.points - x.points);
+        const classPos = classSorted.findIndex(r => r.id === sid) + 1;
+
+        // Subject rows for THIS student (curriculum-driven via the class's subjects).
+        const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        let totalMarks = 0, totalPoints = 0;
+        const subjects = mine.map((m: any) => {
+            const max = N(m.totalMarks) || 100; const mark = N(m.marksObtained); const pct = max > 0 ? (mark / max) * 100 : 0;
+            const g = gradeOf(pct); totalMarks += mark; totalPoints += g.points;
+            const list = (subjMarks[m.subjectName] || []).filter(x => agg[x.sid]?.cls === myClass).sort((a, b) => b.pct - a.pct);
+            const pos = list.findIndex(x => x.sid === sid) + 1;
+            return { subject: m.subjectName || m.subject, mark, outOf: max, total: mark, point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials: m.teacherInitials || '' };
+        });
+        const subjN = subjects.length || 1;
+        const meanScore = RND(totalMarks / subjN, 1);
+        const meanPoint = RND(totalPoints / subjN, 1);
+
+        // KCPE / value added.
+        const kcpeMarks = N(student.kcpeMarks ?? student.kcpe);
+        const kcpeMean = N(profile.kcpeMean) || 0;
+        const valueAdded = kcpeMean ? RND(meanPoint - (kcpeMean / 100 * 12), 1) : null;
+
+        // Historical grid: from this student's exam_marks across exams → Form×Term MP/MG/POS.
+        const myAll = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+        const exams = await database.collection('exams').find({}).toArray().catch(() => []);
+        const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
+        const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
+        for (const m of myAll) {
+            const e = examById[String(m.examId)]; if (!e) continue;
+            const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
+            const key = String(m.examId);
+            (histAgg[key] ||= { sum: 0, pts: 0, n: 0, cls: m.classAtTime || '', year: N(e.academicYear ?? e.year), term: N(String(e.term || '').match(/\d+/)?.[0] || 0) });
+            histAgg[key].sum += pct; histAgg[key].pts += gradeOf(pct).points; histAgg[key].n += 1;
+        }
+        // Map to Form (1-4) × Term (1-3).
+        const grid: Record<string, { mp: number; mg: string; pos: string }> = {};
+        const chart: Array<{ label: string; value: number }> = [];
+        for (const [, v] of Object.entries(histAgg)) {
+            const formMatch = String(v.cls).match(/(\d+)/); const form = formMatch ? Number(formMatch[1]) : 0;
+            if (form >= 1 && form <= 4 && v.term >= 1 && v.term <= 3) {
+                const mp = RND(v.pts / v.n, 0);
+                grid[`f${form}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n), pos: '' };
+                chart.push({ label: `f${form}Tm${v.term}`, value: mp });
+            }
+        }
+
+        res.json({
+            school: { name: profile.name || profile.schoolName || '', box: profile.poBox || profile.address || '', tel: profile.phone || profile.tel || '', motto: profile.motto || '', logo: profile.logo || '' },
+            curriculum: profile.curriculum || profile.curriculumType || '8-4-4',
+            issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+            termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
+            examTitle: formatExamName(exam, `${myClass} ${myStream}`),
+            student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: `${myClass} ${myStream}`.trim(), house: student.house || '', photo: student.photo || student.image || '' },
+            summary: { totalMarks: `${RND(totalMarks)}/${subjN * 100}`, meanScore, totalPoints, meanPoint, meanGrade: meanGrade(meanPoint), classPos: `${classPos}/${classmates.length}`, levelPos: `${levelPos}/${rows.length}` },
+            kcpe: { marks: kcpeMarks || '-', rank: student.kcpeRank || '-', mean: kcpeMean || '-', valueAdded: valueAdded ?? '-' },
+            subjects,
+            chart,
+            history: grid,
+            comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
+            nextTermBegins: profile.nextTermBegins || '',
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // Student academic + fees history, grouped by each class the student was in.
 // Uses classAtTime stamped on exam_marks / invoices (falls back to the student's
