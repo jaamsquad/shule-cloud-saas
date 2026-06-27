@@ -47,7 +47,13 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const student: any = await database.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
         if (!student) return res.status(404).json({ message: 'Student not found' });
         const exam: any = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
-        const profile: any = await database.collection('school_profile').findOne({}).catch(() => null) || {};
+        // School profile = the Tenant record in the meta DB (name, logo, etc.),
+        // merged with any tenant-DB profile collection extras.
+        const tenantId = (req as any).tenantContext?.tenantId;
+        const tenant: any = tenantId ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenantId)) }).catch(() => null) : null;
+        const extra: any = await database.collection('school_profile').findOne({}).catch(() => null)
+            || await database.collection('tenant_profile').findOne({}).catch(() => null) || {};
+        const profile: any = { ...(tenant || {}), ...extra, name: tenant?.instituteName || tenant?.name || extra?.name };
         const classId = String(student.classId || '');
         const { gradeOf, meanGrade } = await loadGrading(database, classId);
 

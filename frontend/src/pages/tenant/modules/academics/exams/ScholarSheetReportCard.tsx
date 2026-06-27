@@ -7,7 +7,7 @@ import api from "@/lib/api";
 // Subjects are curriculum-driven (from the class) and grades use the chosen
 // grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function ScholarSheetReportCard({ studentId, examId }: { studentId: string; examId: string }) {
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe = true, hideToolbar = false }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean }) {
     const { data, isLoading } = useQuery({
         queryKey: ["scholar_sheet", studentId, examId],
         enabled: !!studentId && !!examId,
@@ -24,10 +24,12 @@ export default function ScholarSheetReportCard({ studentId, examId }: { studentI
 
     return (
         <div className="bg-white">
-            {/* Toolbar (screen only) */}
-            <div className="print:hidden flex justify-end p-3 gap-2 bg-slate-50 border-b">
-                <button onClick={() => window.print()} className="h-9 px-4 rounded-lg bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> Print</button>
-            </div>
+            {/* Toolbar (screen only; hidden when the parent page provides its own) */}
+            {!hideToolbar && (
+                <div className="print:hidden flex justify-end p-3 gap-2 bg-slate-50 border-b">
+                    <button onClick={() => window.print()} className="h-9 px-4 rounded-lg bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> Print</button>
+                </div>
+            )}
 
             <style>{`
                 @page { size: A4 portrait; margin: 8mm; }
@@ -75,10 +77,12 @@ export default function ScholarSheetReportCard({ studentId, examId }: { studentI
                     </tr>
                 </tbody></table>
 
-                {/* KCPE row */}
-                <table style={{ marginTop: 1 }}><tbody><tr style={{ textAlign: "center" }}>
-                    <td>KCPE Marks : <b>{d.kcpe.marks}</b></td><td>KCPE Rank : <b>{d.kcpe.rank}</b></td><td>KCPE Mean : <b>{d.kcpe.mean}</b></td><td>Value Added : <b>{d.kcpe.valueAdded}</b></td>
-                </tr></tbody></table>
+                {/* KCPE row (toggleable) */}
+                {showKcpe && (
+                    <table style={{ marginTop: 1 }}><tbody><tr style={{ textAlign: "center" }}>
+                        <td>KCPE Marks : <b>{d.kcpe.marks}</b></td><td>KCPE Rank : <b>{d.kcpe.rank}</b></td><td>KCPE Mean : <b>{d.kcpe.mean}</b></td><td>Value Added : <b>{d.kcpe.valueAdded}</b></td>
+                    </tr></tbody></table>
+                )}
 
                 {/* Subject table */}
                 <table style={{ marginTop: 3 }}><tbody>
