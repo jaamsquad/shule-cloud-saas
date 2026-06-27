@@ -31,6 +31,24 @@ const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } ca
 const tdb = (req: Request): Db | null => (req as any).tenantDb || null;
 const schoolId = (req: Request): string => String((req as any).tenantContext?.tenantId || '');
 
+// Resolve the school's display name (Tenant record + tenant-DB profile fallback)
+// and prefix the message: "Egerton High School: <message>". Applied at QUEUE time
+// so EVERY provider (Android device SIM or HTTP API) sends the branded text.
+async function brandFor(req: Request, db: Db, message: string): Promise<string> {
+    let name = (req as any).tenantContext?.tenantName || '';
+    if (!name) {
+        try {
+            const { getMetaDb } = await import('../lib/mongodb');
+            const tid = (req as any).tenantContext?.tenantId;
+            const t: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }) : null;
+            name = t?.instituteName || t?.name || '';
+        } catch { /* ignore */ }
+    }
+    if (!name) { const p: any = await db.collection('school_profile').findOne({}).catch(() => null) || await db.collection('tenant_profile').findOne({}).catch(() => null); name = p?.name || ''; }
+    const { brandMessage } = await import('../services/talksasa.service');
+    return brandMessage(name, message);
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 //  SCHOOL ADMIN
 // ════════════════════════════════════════════════════════════════════════════
@@ -49,8 +67,9 @@ router.post('/communications/sms/settings', async (req, res) => {
 router.post('/communications/sms/send', async (req, res) => {
     try {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
-        const { message, to, audience, audiences, scheduledAt } = req.body || {};
-        if (!message) return res.status(400).json({ message: 'Message is required' });
+        const { message: rawMsg, to, audience, audiences, scheduledAt } = req.body || {};
+        if (!rawMsg) return res.status(400).json({ message: 'Message is required' });
+        const message = await brandFor(req, db, rawMsg);   // prefix school name (all providers)
 
         let numbers: string[] = Array.isArray(to) ? to : (to ? [to] : []);
         const audList: string[] = Array.isArray(audiences) ? audiences : (audience ? [audience] : []);
@@ -83,7 +102,7 @@ router.post('/communications/sms/test', async (req, res) => {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
         const { phone } = req.body || {};
         if (!phone) return res.status(400).json({ message: 'A test phone number is required' });
-        const message = 'ShuleCloud SMS test — your gateway is connected and working. ✅';
+        const message = await brandFor(req, db, 'SMS test — your gateway is connected and working. ✅');
         const settings = await getSmsSettings(db);
         if (settings.provider === 'api') {
             await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
@@ -114,8 +133,10 @@ router.post('/communications/sms/send-results', async (req, res) => {
         const { type, id, scheduledAt } = req.body || {};
         if (!type || !id) return res.status(400).json({ message: 'Choose a result source' });
 
-        const messages = await buildResultMessages(db, type, id);
-        if (messages.length === 0) return res.status(409).json({ message: 'No results found, or students have no parent phone numbers.' });
+        const messagesRaw = await buildResultMessages(db, type, id);
+        if (messagesRaw.length === 0) return res.status(409).json({ message: 'No results found, or students have no parent phone numbers.' });
+        // Prefix the school name on every result message.
+        const messages = await Promise.all(messagesRaw.map(async (m: any) => ({ ...m, text: await brandFor(req, db, m.text) })));
 
         const settings = await getSmsSettings(db);
         const when = scheduledAt ? new Date(scheduledAt) : null;
@@ -300,11 +321,9 @@ router.get('/communications/sms/balance', async (req, res) => {
 
 async function sendViaApi(db: Db, cfg: any, numbers: string[], rawMessage: string) {
     const results: any[] = [];
-    // Prefix every message with the school name, e.g. "Egerton High School: <msg>".
-    const profile = await db.collection('school_profile').findOne({}).catch(() => null) as any;
-    const schoolName = profile?.name || profile?.schoolName || '';
-    const { brandMessage } = await import('../services/talksasa.service');
-    const message = brandMessage(schoolName, rawMessage);
+    // The message is already branded (school name prefixed) at queue time, so we
+    // dispatch it as-is. The job lookup below also keys on this exact text.
+    const message = rawMessage;
 
     // ── Talksasa vendor ───────────────────────────────────────────────────────
     if (cfg?.vendor === 'talksasa' || cfg?.apiToken) {
