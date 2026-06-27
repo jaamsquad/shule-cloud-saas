@@ -210,7 +210,7 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
 
             {tab === "merit" && <MeritList examId={examId} form={form} />}
             {tab === "subjects" && <SubjectSheet examId={examId} form={form} />}
-            {tab === "classes" && <ClassLevels examId={examId} />}
+            {tab === "classes" && <ClassLevels examId={examId} form={form} />}
             {tab === "improved" && <MostImproved examId={examId} />}
         </div>
     );
@@ -255,10 +255,15 @@ function SubjectSheet({ examId, form }: { examId: string; form: string }) {
 }
 
 // Class & stream rollup — a class level (Form 4) with its streams (4 East/West…).
-function ClassLevels({ examId }: { examId: string }) {
+// When a form is selected (drill-down), show ONLY that level.
+function ClassLevels({ examId, form }: { examId: string; form?: string | null }) {
     const { data, isLoading } = useQuery({ queryKey: ["an_class_levels", examId], queryFn: async () => (await api.get("/analytics/class-levels", { params: { examId } })).data });
     if (isLoading) return <Spin />;
-    const classes = data?.classes || [];
+    let classes = data?.classes || [];
+    if (form) {
+        const f = String(form).toLowerCase().replace(/\s+/g, " ").trim();
+        classes = classes.filter((c: any) => String(c.level).toLowerCase().replace(/\s+/g, " ").trim() === f);
+    }
     if (!classes.length) return <Empty msg="No data." />;
     return (
         <div className="space-y-3">
