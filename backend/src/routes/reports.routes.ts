@@ -84,6 +84,46 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const classSorted = [...classmates].sort((x, y) => y.points - x.points);
         const classPos = classSorted.findIndex(r => r.id === sid) + 1;
 
+        // Resolve the teacher who teaches each subject for THIS class, as initials
+        // (e.g. "Muzamil Mohamed" → "M.M"). We try, in order: a class-specific
+        // staff_subjects link, the subject's own teacherId, then a teacher whose
+        // assigned subjects include this subject.
+        const initialsOf = (name: string) => String(name || '')
+            .trim().split(/\s+/).filter(Boolean).slice(0, 3)
+            .map(w => w[0].toUpperCase()).join('.');
+        const [staffList, subjectDefs, staffSubjectLinks] = await Promise.all([
+            database.collection('staff').find({}).toArray().catch(() => []),
+            database.collection('subjects').find({}).toArray().catch(() => []),
+            database.collection('staff_subjects').find({}).toArray().catch(() => []),
+        ]);
+        const staffName = (s: any) => s?.employeeName || s?.name || `${s?.firstName || ''} ${s?.lastName || s?.surname || ''}`.trim();
+        const staffById: Record<string, any> = {}; staffList.forEach((s: any) => { staffById[String(s._id)] = s; });
+        const normSub = (v: any) => String(v || '').toLowerCase().trim();
+        // subjectName → teacher name, preferring a link scoped to this class.
+        const teacherForSubject = (subjectName: string): string => {
+            const want = normSub(subjectName);
+            // Find the subject definition(s) by name.
+            const defs = subjectDefs.filter((d: any) => normSub(d.name || d.subjectName) === want);
+            const defIds = new Set(defs.map((d: any) => String(d._id)));
+            // 1) staff_subjects link for this subject + this class.
+            const linkClass = staffSubjectLinks.find((l: any) =>
+                (defIds.has(String(l.subjectId)) || normSub(l.subjectName) === want) &&
+                (String(l.classId) === classId || normSub(l.className) === normSub(myClass)));
+            if (linkClass) { const t = staffById[String(linkClass.teacherId || linkClass.staffId)]; if (t) return staffName(t); }
+            // 2) any staff_subjects link for this subject.
+            const linkAny = staffSubjectLinks.find((l: any) => defIds.has(String(l.subjectId)) || normSub(l.subjectName) === want);
+            if (linkAny) { const t = staffById[String(linkAny.teacherId || linkAny.staffId)]; if (t) return staffName(t); }
+            // 3) the subject definition's own teacherId.
+            const defWithTeacher = defs.find((d: any) => d.teacherId);
+            if (defWithTeacher) { const t = staffById[String(defWithTeacher.teacherId)]; if (t) return staffName(t); }
+            // 4) a teacher whose assigned subjects include this subject.
+            const t = staffList.find((s: any) => (s.subjects || s.assignedSubjects || []).some((x: any) => {
+                const id = typeof x === 'object' ? String(x.subjectId || x._id || x.id) : String(x);
+                return defIds.has(id) || normSub(typeof x === 'object' ? (x.name || x.subjectName) : x) === want;
+            }));
+            return t ? staffName(t) : '';
+        };
+
         // Subject rows for THIS student (curriculum-driven via the class's subjects).
         const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
         let totalMarks = 0, totalPoints = 0;
@@ -92,7 +132,9 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const g = gradeOf(pct); totalMarks += mark; totalPoints += g.points;
             const list = (subjMarks[m.subjectName] || []).filter(x => agg[x.sid]?.cls === myClass).sort((a, b) => b.pct - a.pct);
             const pos = list.findIndex(x => x.sid === sid) + 1;
-            return { subject: m.subjectName || m.subject, mark, outOf: max, total: mark, point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials: m.teacherInitials || '' };
+            const tName = m.teacherName || teacherForSubject(m.subjectName || m.subject);
+            const initials = m.teacherInitials || initialsOf(tName);
+            return { subject: m.subjectName || m.subject, mark, outOf: max, total: mark, point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials };
         });
         const subjN = subjects.length || 1;
         const meanScore = RND(totalMarks / subjN, 1);

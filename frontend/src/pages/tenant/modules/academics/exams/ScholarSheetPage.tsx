@@ -9,39 +9,61 @@ import ScholarSheetReportCard from "./ScholarSheetReportCard";
 // render/print the A4 card(s). Print outputs ONLY the report(s) — sidebar, header
 // and toolbar are hidden via the print stylesheet below.
 export default function ScholarSheetPage() {
+    // Class + stream are SEPARATE (v2 model): pick Form 4, then East/South.
     const [classId, setClassId] = useState("");
+    const [streamId, setStreamId] = useState("");
     const [examId, setExamId] = useState("");
     const [studentId, setStudentId] = useState("");
+    const [studentSearch, setStudentSearch] = useState("");   // searchable student box
+    const [studentOpen, setStudentOpen] = useState(false);
     const [wholeClass, setWholeClass] = useState(false);
     // KCPE field visibility toggles.
     const [showKcpe, setShowKcpe] = useState(true);
 
-    const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
+    // v2 classes (levels) + streams for the chosen class.
+    const { data: v2classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
+    const { data: v2streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
 
-    const clsLabel = (c: any) => `${c.levelName || c.name || c.className || ""}${c.stream ? ` ${c.stream}` : ""}`.trim();
-    const cls = classes.find((c: any) => c._id === classId);
-    const classLabel = cls ? clsLabel(cls) : "";
+    const cls = v2classes.find((c: any) => String(c._id) === String(classId));
+    const stream = v2streams.find((s: any) => String(s._id) === String(streamId));
+    // Label used for exam naming + headers: "Form 4 East" or just "Form 4".
+    const classLabel = cls ? (stream ? (stream.fullName || `${cls.name} ${stream.name}`) : cls.name) : "";
 
-    // Robust class membership: match by classId, OR by a normalized comparison of
-    // the student's class/stream text against the selected class's label/name.
+    // Student membership: match by v2 classId/streamId when present, else fall
+    // back to a normalized comparison of the student's class/stream TEXT.
     const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const classStudents = useMemo(() => {
         if (!classId || !cls) return [];
-        const want = new Set([norm(clsLabel(cls)), norm(cls.levelName), norm(cls.name), norm(cls.className)].filter(Boolean));
-        const wantStream = norm(cls.stream);
+        const wantClass = new Set([norm(cls.name), norm(cls.className), norm(cls.level)].filter(Boolean));
+        const wantStream = stream ? norm(stream.name) : "";
         return students.filter((s: any) => {
-            if (String(s.classId) === String(classId)) return true;
-            const sc = norm(s.studentClass || s.currentClass || s.class);
+            // Strong match: v2 ids stored on the student.
+            const idClassMatch = String(s.classId) === String(classId);
+            const idStreamMatch = !streamId || String(s.streamId) === String(streamId);
+            if (idClassMatch) return idStreamMatch;
+            // Text fallback: student's class text matches the class level…
+            const sc = norm(s.studentClass || s.currentClass || s.class || s.className);
             const ss = norm(s.stream || s.streamName);
-            // Match the full label, or (class-level matches AND stream matches).
-            if (want.has(sc)) return true;
-            if (wantStream && ss && wantStream === ss && [...want].some(w => w.includes(norm(cls.levelName || cls.name)))) return true;
-            // Last resort: the student's class text equals the selected label.
-            return want.has(sc) || sc === norm(clsLabel(cls));
+            const classOk = [...wantClass].some(w => w && (sc === w || sc.startsWith(w)));
+            if (!classOk) {
+                // …or the full "Form 4 East" label matches.
+                if (sc !== norm(classLabel)) return false;
+            }
+            // If a stream is chosen, the student's stream must match it.
+            if (wantStream) return ss === wantStream || sc.endsWith(wantStream) || sc === norm(classLabel);
+            return true;
         });
-    }, [students, classId, cls]);
+    }, [students, classId, streamId, cls, stream, classLabel]);
+
+    // Filtered list for the searchable student box.
+    const studentMatches = useMemo(() => {
+        const q = norm(studentSearch);
+        if (!q) return classStudents;
+        return classStudents.filter((s: any) =>
+            norm(`${s.studentName || s.name} ${s.registrationNo || s.admNo || ""}`).includes(q));
+    }, [classStudents, studentSearch]);
 
     const ready = examId && (wholeClass ? classStudents.length > 0 : !!studentId);
     const renderList = wholeClass ? classStudents : (studentId ? classStudents.filter((s: any) => s._id === studentId) : []);
@@ -104,19 +126,52 @@ export default function ScholarSheetPage() {
 
             <div className="ss-no-print bg-white border-b border-slate-100 p-4">
                 <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 mb-3"><FileText className="w-5 h-5 text-[#2E7D32]" /> ScholarSheet — Report Card</h1>
-                <div className="grid sm:grid-cols-3 gap-3 max-w-3xl">
-                    <select value={classId} onChange={e => { setClassId(e.target.value); setStudentId(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-4xl">
+                    {/* Class (Form 4) */}
+                    <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); setStudentId(""); setStudentSearch(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Class —</option>
-                        {classes.map((c: any) => <option key={c._id} value={c._id}>{clsLabel(c) || "Unnamed class"}</option>)}
+                        {v2classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
+                    {/* Stream (East / South) */}
+                    <select value={streamId} onChange={e => { setStreamId(e.target.value); setStudentId(""); setStudentSearch(""); }} disabled={!classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
+                        <option value="">All streams</option>
+                        {v2streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                    </select>
+                    {/* Exam */}
                     <select value={examId} onChange={e => setExamId(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Exam —</option>
                         {exams.map((ex: any) => <option key={ex._id} value={ex._id}>{formatExamName(ex, classLabel || undefined)}</option>)}
                     </select>
-                    <select value={studentId} onChange={e => setStudentId(e.target.value)} disabled={!classId || wholeClass} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
-                        <option value="">— Student —</option>
-                        {classStudents.map((s: any) => <option key={s._id} value={s._id}>{s.studentName || s.name} · {s.registrationNo || s.admNo}</option>)}
-                    </select>
+                    {/* Searchable student box */}
+                    <div className="relative">
+                        <input
+                            value={studentSearch}
+                            onChange={e => { setStudentSearch(e.target.value); setStudentOpen(true); if (studentId) setStudentId(""); }}
+                            onFocus={() => setStudentOpen(true)}
+                            onBlur={() => setTimeout(() => setStudentOpen(false), 150)}
+                            disabled={!classId || wholeClass}
+                            placeholder={studentId ? "" : "Search student…"}
+                            className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"
+                        />
+                        {studentId && !studentSearch && (() => {
+                            const s = classStudents.find((x: any) => x._id === studentId);
+                            return s ? <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-700">{s.studentName || s.name} · {s.registrationNo || s.admNo}</span> : null;
+                        })()}
+                        {studentOpen && !wholeClass && classId && (
+                            <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                                {studentMatches.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No students</div>}
+                                {studentMatches.map((s: any) => (
+                                    <button
+                                        key={s._id}
+                                        onMouseDown={e => { e.preventDefault(); setStudentId(s._id); setStudentSearch(""); setStudentOpen(false); }}
+                                        className={`block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${s._id === studentId ? "bg-slate-100 font-bold" : ""}`}
+                                    >
+                                        {s.studentName || s.name} · {s.registrationNo || s.admNo}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 mt-3">
