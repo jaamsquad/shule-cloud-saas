@@ -49,14 +49,21 @@ export default function ScholarSheetPage() {
                 Every report card prints on its OWN page. */}
             <style>{`
                 @media print {
+                    @page { size: A4 portrait; margin: 8mm; }
+                    /* Hide all app chrome; reveal only the print area — kept in NORMAL
+                       flow (no absolute positioning) so page-breaks actually apply. */
                     body * { visibility: hidden !important; }
                     .ss-print-area, .ss-print-area * { visibility: visible !important; }
-                    .ss-print-area { position: absolute; left: 0; top: 0; width: 100%; }
                     .ss-no-print { display: none !important; }
-                    @page { size: A4 portrait; margin: 8mm; }
-                    /* One card per page: never split a card, always break after each. */
-                    .ss-card { page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; box-shadow: none !important; margin: 0 !important; }
-                    .ss-card:last-child { page-break-after: auto; break-after: auto; }
+                    /* One card per page. min-height fills the A4 content box so a short
+                       card still pushes the next student onto a fresh page. */
+                    .ss-card {
+                        page-break-after: always; break-after: page;
+                        page-break-inside: avoid; break-inside: avoid;
+                        box-shadow: none !important; margin: 0 auto !important;
+                        min-height: 275mm;
+                    }
+                    .ss-card:last-child { page-break-after: avoid; break-after: avoid; min-height: 0; }
                 }
             `}</style>
 

@@ -4,7 +4,7 @@ import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area,
     LineChart, Line, Legend, CartesianGrid,
 } from "recharts";
-import { Loader2, ChevronRight, ArrowLeft, Trophy, TrendingUp, Users, Award, ChevronDown } from "lucide-react";
+import { Loader2, ChevronRight, ArrowLeft, Trophy, TrendingUp, Users, Award, ChevronDown, Printer } from "lucide-react";
 import api from "@/lib/api";
 
 // Zeraki-style teacher/admin analytics. Two views:
@@ -210,8 +210,23 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
     if (isLoading) return <Spin />;
     const students = data?.students || [];
     const subjects = Array.from(new Set(students.flatMap((s: any) => s.subjects.map((x: any) => x.name)))) as string[];
+
+    const print = () => {
+        const w = window.open("", "_blank", "width=1000,height=800"); if (!w) return;
+        const head = `<tr><th>#</th><th>Adm</th><th>Name</th><th>Stream</th>${subjects.map(s => `<th>${s}</th>`).join("")}<th>Pts</th></tr>`;
+        const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td><td>${st.stream || ""}</td>${subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("")}<td><b>${st.totalPoints}</b></td></tr>`).join("");
+        w.document.write(`<!DOCTYPE html><html><head><title>Merit List — ${form}</title><style>
+            @page{size:A4 landscape;margin:10mm} body{font-family:'Times New Roman',serif;color:#000;font-size:11px}
+            h2{margin:0 0 2px} table{width:100%;border-collapse:collapse;margin-top:8px} th,td{border:.6px solid #000;padding:2px 4px;text-align:center} th{background:#eee}
+        </style></head><body>
+            <h2>MERIT LIST — ${form}</h2><div>${form} · ${students.length} students</div>
+            <table><thead>${head}</thead><tbody>${rows}</tbody></table>
+            <script>onload=()=>print()</script></body></html>`);
+        w.document.close();
+    };
+
     return (
-        <Card title={<span className="flex items-center gap-2"><Trophy className="w-4 h-4" style={{ color: GREEN }} /> Merit List</span>}>
+        <Card title={<span className="flex items-center justify-between w-full"><span className="flex items-center gap-2"><Trophy className="w-4 h-4" style={{ color: GREEN }} /> Merit List</span><button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button></span>}>
             <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                     <thead><tr className="text-slate-400 uppercase"><th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th>{subjects.map(s => <th key={s} className="text-center px-1">{s.slice(0, 4)}</th>)}<th className="text-center">Pts</th></tr></thead>

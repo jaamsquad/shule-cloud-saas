@@ -242,6 +242,63 @@ router.get('/analytics/most-improved', async (req: Request, res: Response) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// List subjects available for an exam (optionally within a form/class).
+router.get('/analytics/subjects', async (req: Request, res: Response) => {
+    try {
+        const examId = String(req.query.examId || '');
+        const { rows } = await buildExamResults(db(req), examId);
+        const form = String(req.query.form || '');
+        const inForm = form ? rows.filter(r => String(r.className).toLowerCase().includes(form.toLowerCase()) || String(r.stream).toLowerCase().includes(form.toLowerCase())) : rows;
+        const subjects = Array.from(new Set(inForm.flatMap(r => r.subjects.map((s: any) => s.name)))).sort();
+        res.json({ subjects });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Per-subject sheet: every student (in a form/stream) for ONE subject, ranked by
+// that subject's marks, with grade + position. Like a merit list for a subject.
+router.get('/analytics/subject-sheet', async (req: Request, res: Response) => {
+    try {
+        const examId = String(req.query.examId || '');
+        const subject = String(req.query.subject || '');
+        const form = String(req.query.form || '');
+        if (!subject) return res.status(400).json({ message: 'subject required' });
+        const { rows } = await buildExamResults(db(req), examId);
+        const inForm = form ? rows.filter(r => String(r.className).toLowerCase().includes(form.toLowerCase()) || String(r.stream).toLowerCase().includes(form.toLowerCase())) : rows;
+        const list = inForm
+            .map(r => { const s = r.subjects.find((x: any) => x.name === subject); return s ? { adm: r.adm, name: r.name, stream: r.stream, marks: s.marks, pct: s.pct, grade: s.grade, points: s.points } : null; })
+            .filter(Boolean) as any[];
+        list.sort((a, b) => b.marks - a.marks);
+        list.forEach((r, i) => { r.position = i + 1; });
+        const avg = list.length ? round(list.reduce((a, r) => a + r.pct, 0) / list.length, 1) : 0;
+        res.json({ subject, form, count: list.length, average: avg, students: list });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Class-level structure: groups streams into their class level (Form 4 contains
+// 4 East/West/South). Returns per-class-level + per-stream means for an exam.
+router.get('/analytics/class-levels', async (req: Request, res: Response) => {
+    try {
+        const examId = String(req.query.examId || '');
+        const { rows, scale } = await buildExamResults(db(req), examId);
+        // Derive a class-level key from the class/stream name, e.g. "Form 4".
+        const levelOf = (s: string) => { const m = String(s).match(/(form|grade)\s*\d+/i); return m ? m[0].replace(/\s+/g, ' ').toUpperCase() : String(s).toUpperCase(); };
+        const byLevel: Record<string, any[]> = {};
+        rows.forEach(r => { (byLevel[levelOf(r.className || r.stream)] ||= []).push(r); });
+        const classes = Object.entries(byLevel).map(([level, list]) => {
+            const byStream: Record<string, any[]> = {};
+            list.forEach(r => { (byStream[r.stream || level] ||= []).push(r); });
+            const mp = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
+            return {
+                level, students: list.length,
+                meanPoints: round(mp, 2), meanPct: round(list.reduce((a, r) => a + r.meanPct, 0) / list.length, 2),
+                meanGrade: meanGradeFromPoints(scale, mp),
+                streams: Object.entries(byStream).map(([stream, sl]) => ({ stream, students: sl.length, meanPoints: round(sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length, 2), meanPct: round(sl.reduce((a, r) => a + r.meanPct, 0) / sl.length, 2), meanGrade: meanGradeFromPoints(scale, sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length) })).sort((a, b) => b.meanPoints - a.meanPoints),
+            };
+        }).sort((a, b) => a.level.localeCompare(b.level));
+        res.json({ classes });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Performance over time — mean points per stream + overall, across all exams.
 router.get('/analytics/over-time', async (req: Request, res: Response) => {
     try {
