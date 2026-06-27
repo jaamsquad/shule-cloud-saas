@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
@@ -24,9 +24,24 @@ export default function ScholarSheetPage() {
     const cls = classes.find((c: any) => c._id === classId);
     const classLabel = cls ? clsLabel(cls) : "";
 
-    const classStudents = useMemo(() => students.filter((s: any) =>
-        !classId || s.classId === classId || s.studentClass === (cls?.levelName || cls?.name) || s.currentClass === (cls?.levelName || cls?.name)
-    ), [students, classId, cls]);
+    // Robust class membership: match by classId, OR by a normalized comparison of
+    // the student's class/stream text against the selected class's label/name.
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const classStudents = useMemo(() => {
+        if (!classId || !cls) return [];
+        const want = new Set([norm(clsLabel(cls)), norm(cls.levelName), norm(cls.name), norm(cls.className)].filter(Boolean));
+        const wantStream = norm(cls.stream);
+        return students.filter((s: any) => {
+            if (String(s.classId) === String(classId)) return true;
+            const sc = norm(s.studentClass || s.currentClass || s.class);
+            const ss = norm(s.stream || s.streamName);
+            // Match the full label, or (class-level matches AND stream matches).
+            if (want.has(sc)) return true;
+            if (wantStream && ss && wantStream === ss && [...want].some(w => w.includes(norm(cls.levelName || cls.name)))) return true;
+            // Last resort: the student's class text equals the selected label.
+            return want.has(sc) || sc === norm(clsLabel(cls));
+        });
+    }, [students, classId, cls]);
 
     const ready = examId && (wholeClass ? classStudents.length > 0 : !!studentId);
     const renderList = wholeClass ? classStudents : (studentId ? classStudents.filter((s: any) => s._id === studentId) : []);
@@ -42,6 +57,26 @@ export default function ScholarSheetPage() {
     });
     const allLoaded = cardQueries.length > 0 && cardQueries.every(q => q.isSuccess || q.isError);
     const loadedCount = cardQueries.filter(q => q.isSuccess).length;
+
+    // Reliable print: copy the rendered cards' HTML into a fresh window with a
+    // forced page-break after each, then print THAT window. This avoids the
+    // browser quirks of @media print on the live app (the cause of "1 sheet").
+    const printRef = useRef<HTMLDivElement>(null);
+    const printAll = () => {
+        const area = printRef.current;
+        if (!area) { window.print(); return; }
+        const w = window.open("", "_blank", "width=900,height=1000");
+        if (!w) { window.print(); return; }   // popups blocked → fall back
+        const cards = Array.from(area.querySelectorAll(".ss-card")).map(el => `<div class="page">${(el as HTMLElement).innerHTML}</div>`).join("");
+        w.document.write(`<!DOCTYPE html><html><head><title>Report Cards</title><style>
+            @page { size: A4 portrait; margin: 8mm; }
+            body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .page { page-break-after: always; break-after: page; }
+            .page:last-child { page-break-after: auto; break-after: auto; }
+            img { max-width: 100%; }
+        </style></head><body>${cards}<script>window.onload=function(){setTimeout(function(){window.print();},300);}</script></body></html>`);
+        w.document.close();
+    };
 
     return (
         <div className="flex-1 bg-[#F5F5F5] min-h-screen">
@@ -91,7 +126,7 @@ export default function ScholarSheetPage() {
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
                         <input type="checkbox" checked={showKcpe} onChange={e => setShowKcpe(e.target.checked)} /> Show KCPE fields
                     </label>
-                    <button onClick={() => window.print()} disabled={!ready || !allLoaded} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
+                    <button onClick={printAll} disabled={!ready || !allLoaded} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
                         {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${classStudents.length})` : "Report"}`}
                     </button>
@@ -99,7 +134,7 @@ export default function ScholarSheetPage() {
             </div>
 
             {ready ? (
-                <div className="ss-print-area p-4 print:p-0">
+                <div ref={printRef} className="ss-print-area p-4 print:p-0">
                     {renderList.map((s: any, i: number) => (
                         <div key={s._id} className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0">
                             <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
