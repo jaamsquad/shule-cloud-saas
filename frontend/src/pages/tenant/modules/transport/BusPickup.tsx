@@ -12,6 +12,9 @@ export default function BusPickup() {
     const qc = useQueryClient();
     const [q, setQ] = useState("");
     const [zone, setZone] = useState("");
+    // Where the bus is heading on this run — the school sets it; drives the SMS
+    // wording ("picked from home" vs "picked from school").
+    const [heading, setHeading] = useState<"school" | "home">("school");
 
     const { data: students = [], isLoading } = useQuery({
         queryKey: ["transport_students"],
@@ -41,7 +44,12 @@ export default function BusPickup() {
 
     const mark = useMutation({
         mutationFn: async ({ student, type }: { student: any; type: "pickup" | "drop" }) =>
-            (await api.post("/transport/pickup", { studentId: student._id, studentName: student.studentName, type, busName: student.transportZone })).data,
+            (await api.post("/transport/pickup", {
+                studentId: student._id, studentName: student.studentName, type,
+                busName: student.transportZone,
+                direction: heading === "school" ? "to_school" : "to_home",   // where the bus is going
+                busReg: student.busReg || student.busNumberPlate || "",
+            })).data,
         onSuccess: (d: any) => {
             const via = (d.notified || []).join(", ");
             toast.success(via ? `Recorded — parent notified via ${via}` : "Recorded");
@@ -55,7 +63,14 @@ export default function BusPickup() {
             <div className="max-w-5xl mx-auto">
                 <div className="flex items-center gap-4 mb-6">
                     <div className="w-12 h-12 rounded-2xl bg-[#5C67F2] flex items-center justify-center text-white"><Bus className="w-6 h-6" /></div>
-                    <div><h1 className="text-xl font-black text-slate-800">Bus Pickup & Drop</h1><p className="text-xs text-slate-500">Mark students picked up or dropped — parents are notified automatically</p></div>
+                    <div className="flex-1"><h1 className="text-xl font-black text-slate-800">Bus Pickup & Drop</h1><p className="text-xs text-slate-500">Mark students picked up or dropped — parents are notified automatically</p></div>
+                    {/* The school sets where the bus is heading on this run. */}
+                    <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1">
+                        <span className="text-[11px] font-bold text-slate-400 pl-2">Bus heading:</span>
+                        {(["school", "home"] as const).map(h => (
+                            <button key={h} onClick={() => setHeading(h)} className={`h-8 px-3 rounded-lg text-xs font-bold capitalize ${heading === h ? "bg-[#5C67F2] text-white" : "text-slate-600"}`}>To {h}</button>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3">

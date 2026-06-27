@@ -21,8 +21,10 @@ export default function ResultCard() {
                 examId: selectedExam._id, classId: selectedClass._id,
                 className: selectedClass.levelName || selectedClass.name,
             });
-            const { sent = 0, failed = 0, skipped = 0, total = 0 } = r.data || {};
-            toast.success(`Result cards emailed — ${sent} sent${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} without email` : ""} (of ${total}).`);
+            const { sent = 0, failed = 0, skipped = 0, total = 0, error } = r.data || {};
+            const summary = `${sent} sent${failed ? `, ${failed} failed` : ""}${skipped ? `, ${skipped} without email` : ""} (of ${total}).`;
+            if (sent === 0 && failed > 0) toast.error(`No emails went out. ${error ? `Reason: ${error}` : "Check Communications → Settings (SMTP)."} (${summary})`, { duration: 12000 });
+            else toast.success(`Result cards emailed — ${summary}${error ? ` First error: ${error}` : ""}`, { duration: failed ? 10000 : 5000 });
         } catch (e: any) {
             toast.error(e.response?.data?.message || "Failed to email result cards");
         } finally { setEmailing(false); }

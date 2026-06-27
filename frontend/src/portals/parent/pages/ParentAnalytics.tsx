@@ -18,8 +18,8 @@ export default function ParentAnalytics() {
     const [examId, setExamId] = useState("");
     const [examOpen, setExamOpen] = useState(false);
 
-    const { data: examData } = useQuery({ queryKey: ["p_an_exams"], queryFn: async () => (await api.get("/analytics/exams")).data });
-    const exams = (examData?.exams || []).filter((e: any) => e.publishStatus === "Published" || true);
+    const { data: examData } = useQuery({ queryKey: ["p_an_exams", sid], enabled: !!sid, queryFn: async () => (await api.get("/analytics/exams", { params: { studentId: sid } })).data });
+    const exams = examData?.exams || [];
     const activeExamId = examId || exams[0]?.id || "";
 
     const { data, isLoading } = useQuery({
@@ -49,7 +49,9 @@ export default function ParentAnalytics() {
                         <>
                             <div className="fixed inset-0 z-10" onClick={() => setExamOpen(false)} />
                             <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 z-20 max-h-80 overflow-y-auto text-slate-700">
-                                {exams.map((e: any) => (
+                                {exams.length === 0 ? (
+                                    <p className="px-4 py-3 text-sm text-slate-400">No exams published yet.</p>
+                                ) : exams.map((e: any) => (
                                     <button key={e.id} onClick={() => { setExamId(e.id); setExamOpen(false); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm">{e.title}</button>
                                 ))}
                             </div>

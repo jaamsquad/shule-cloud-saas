@@ -191,7 +191,20 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         const tenant = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) || (tid as any) }) : null;
         const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
 
+        // Fail fast with a clear message if email isn't configured at all, instead
+        // of reporting "20 failed" with no reason.
+        try {
+            const { getCommSettings } = await import('../services/communications.service');
+            const cs: any = await getCommSettings(db);
+            const host = cs.smtpHost || process.env.SMTP_HOST;
+            const user = cs.smtpUser || process.env.SMTP_USER;
+            const pass = cs.smtpPass || process.env.SMTP_PASS;
+            if (cs.emailEnabled === false) return res.status(400).json({ message: 'Email sending is disabled. Enable it in Communications → Settings.' });
+            if (!host || !user || !pass) return res.status(400).json({ message: 'Email is not configured. Set SMTP host, username and password in Communications → Settings (or the Email/SMTP integration).' });
+        } catch { /* fall through — per-student errors will surface below */ }
+
         let sent = 0, failed = 0, skipped = 0;
+        let firstError = '';
 
         // Process every student concurrently (bounded) so all emails go out fast.
         const processStudent = async (st: any) => {
@@ -213,7 +226,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
                     attachments: [{ filename: `ResultCard-${(st.registrationNo || st.admNo || st.studentName || 'student').toString().replace(/[^\w-]/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
                 });
                 sent++;
-            } catch { failed++; }
+            } catch (e: any) { failed++; if (!firstError) firstError = e?.message || String(e); }
         };
 
         const CONCURRENCY = 8;
@@ -223,7 +236,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         }));
 
         await closeReportBrowser().catch(() => {});
-        res.json({ total: students.length, sent, failed, skipped });
+        res.json({ total: students.length, sent, failed, skipped, error: failed > 0 ? firstError : undefined });
     } catch (e: any) {
         await closeReportBrowser().catch(() => {});
         res.status(500).json({ message: e.message });
@@ -1139,7 +1152,9 @@ router.patch('/students/:id/parent-credentials', async (req, res) => {
 router.post('/transport/pickup', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { studentId, studentName, type, busName } = req.body || {};   // type: 'pickup' | 'drop'
+        // type: 'pickup' | 'drop'. direction: 'to_school' | 'to_home' (the school
+        // decides where the bus is headed). busReg: registration / number plate.
+        const { studentId, studentName, type, busName, direction, busReg } = req.body || {};
         if (!studentId) return res.status(400).json({ message: 'studentId is required' });
 
         const student = await db.collection('students').findOne({ _id: new ObjectId(String(studentId)) }).catch(() => null);
@@ -1166,7 +1181,15 @@ router.post('/transport/pickup', async (req, res) => {
         // Always format in Kenyan time (Africa/Nairobi), not the server's timezone,
         // so parents see the correct local time even when the VPS runs in UTC.
         const timeStr = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' });
-        const msg = `${name} has been ${verb} by the school bus${busName ? ` (${busName})` : ''} at ${timeStr}.`;
+        // The bus is heading "to school" (picked from home) or "to home" (picked
+        // from school). Default by event type if the school didn't specify.
+        const goingHome = direction ? direction === 'to_home' : type === 'drop';
+        const fromPlace = goingHome ? 'school' : 'home';
+        // Brief, directional message + bus identifier (reg/plate, else bus name).
+        const busId = busReg || busName || '';
+        const msg = type === 'drop'
+            ? `${name} has been dropped ${goingHome ? 'home' : 'at school'} by school bus${busId ? ` ${busId}` : ''} at ${timeStr}.`
+            : `${name} has been picked from ${fromPlace} by school bus${busId ? ` ${busId}` : ''} at ${timeStr}.`;
         const email = student?.parentEmail || student?.fatherEmail || student?.motherEmail || '';
         const phone = student?.parentPhone || student?.fatherPhone || student?.motherPhone || student?.phone || '';
 

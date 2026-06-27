@@ -107,10 +107,23 @@ async function examsChrono(database: Db) {
 
 // ─── Endpoints ──────────────────────────────────────────────────────────────────
 
-// All exams grouped by term (for the exam selector).
+// All exams grouped by term (for the exam selector). Pass ?studentId= to return
+// ONLY the exams that student actually sat (so a parent never picks an empty one);
+// pass ?onlyPublished=1 to hide unpublished exams from parents.
 router.get('/analytics/exams', async (req: Request, res: Response) => {
     try {
-        const exams = await examsChrono(db(req));
+        const database = db(req);
+        let exams = await examsChrono(database);
+        const studentId = String(req.query.studentId || req.headers['x-student-id'] || '');
+        if (studentId) {
+            const sat = await database.collection('exam_marks').distinct('examId', { studentId }).catch(() => []);
+            const satSet = new Set(sat.map(String));
+            const filtered = exams.filter((e: any) => satSet.has(String(e._id)));
+            if (filtered.length) exams = filtered;   // fall back to all if none matched (legacy ids)
+        }
+        if (String(req.query.onlyPublished || '') === '1') {
+            exams = exams.filter((e: any) => /publish/i.test(String(e.publishStatus || '')) || e.publishStatus === undefined);
+        }
         const data = exams.map((e: any) => ({
             id: String(e._id), examName: e.examName, examType: e.type || e.examType,
             term: e.term, academicYear: e.academicYear ?? e.year,
