@@ -53,9 +53,12 @@ export async function talksasaBalance(cfg: TalksasaConfig) {
     const resp = await fetch(`${BASE}/balance`, { headers: { Authorization: `Bearer ${cfg.apiToken}`, Accept: 'application/json' } });
     const data: any = await resp.json().catch(() => ({}));
     if (!resp.ok || data?.status === 'error') throw new Error(data?.message || `HTTP ${resp.status}`);
-    // Talksasa returns { status, data: <unit info> } — surface a numeric balance when possible.
+    // Talksasa returns { status, data: { remaining_balance: "Ksh115", ... } } — surface a clean string.
     const raw = data?.data;
-    const balance = typeof raw === 'number' ? raw : Number(raw?.balance ?? raw?.sms_balance ?? raw?.units ?? raw) || raw;
+    let balance: any = raw;
+    if (raw && typeof raw === 'object') balance = raw.remaining_balance ?? raw.balance ?? raw.sms_balance ?? raw.units ?? JSON.stringify(raw);
+    // Normalise "Ksh115" → "Ksh 115" for readability.
+    if (typeof balance === 'string') balance = balance.replace(/(ksh)\s*/i, 'KSh ').trim();
     return { balance, raw };
 }
 

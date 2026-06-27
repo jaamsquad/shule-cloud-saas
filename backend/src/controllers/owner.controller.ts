@@ -320,7 +320,7 @@ export const listOwnerUsers = async (req: Request, res: Response) => {
         const db = getDb();
         const users = await db.collection('OwnerUser').find({}, { projection: { passwordHash: 0 } }).sort({ createdAt: -1 }).toArray();
         return res.json(users.map((u: any) => ({
-            _id: String(u._id), name: u.name, email: u.email,
+            _id: String(u._id), name: u.name, email: u.email, phone: u.phone || '',
             role: u.role || 'owner', status: u.status || (u.isActive === false ? 'suspended' : 'active'),
             createdAt: u.createdAt,
         })));
