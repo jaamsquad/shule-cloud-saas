@@ -19,8 +19,13 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
 
     const d = data;
     const maxChart = Math.max(12.5, ...((d.chart || []).map((c: any) => c.value)));
-    const TERMS = [["f1Tm1", "f1Tm2", "f1Tm3"], ["f2Tm1", "f2Tm2", "f2Tm3"], ["f3Tm1", "f3Tm2", "f3Tm3"], ["f4Tm1", "f4Tm2", "f4Tm3"], ["Target"]].flat();
-    const hist = (f: number, t: number) => d.history?.[`f${f}t${t}`];
+    // Chart bars = only the (level, term) points that have data + a Target.
+    const chartBars = [...(d.chart || []), { label: "Target", value: maxChart, target: true }];
+    // History grid: render only the levels & terms that actually have data.
+    const levels: number[] = d.levels?.length ? d.levels : [];
+    const terms: number[] = d.terms?.length ? d.terms : [];
+    const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade"
+    const hist = (lvl: number, t: number) => d.history?.[`l${lvl}t${t}`];
 
     return (
         <div className="bg-white">
@@ -104,41 +109,45 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                     ))}
                 </tbody></table>
 
-                {/* Term bar chart (B&W) */}
-                <div style={{ border: "0.6px solid #000", marginTop: 3, padding: "2px 4px", height: "30mm", position: "relative" }}>
-                    <div style={{ display: "flex", alignItems: "flex-end", height: "24mm", gap: 2 }}>
-                        {TERMS.map((label) => {
-                            const v = label === "Target" ? maxChart : (d.chart?.find((c: any) => c.label === label)?.value || 0);
-                            const h = maxChart ? (v / maxChart) * 100 : 0;
-                            return (
-                                <div key={label} style={{ flex: 1, textAlign: "center", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                                    <div style={{ height: `${h}%`, background: "#bdbdbd", border: "0.6px solid #000", width: "70%", margin: "0 auto" }} />
-                                </div>
-                            );
-                        })}
+                {/* Term bar chart (B&W) — only points with data, plus a Target bar */}
+                {chartBars.length > 1 && (
+                    <div style={{ border: "0.6px solid #000", marginTop: 3, padding: "2px 4px", height: "30mm" }}>
+                        <div style={{ display: "flex", alignItems: "flex-end", height: "24mm", gap: 3 }}>
+                            {chartBars.map((c: any, i: number) => {
+                                const h = maxChart ? (c.value / maxChart) * 100 : 0;
+                                return (
+                                    <div key={i} style={{ flex: 1, textAlign: "center", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                                        {!c.target && <div style={{ fontSize: 7 }}>{c.value}</div>}
+                                        <div style={{ height: `${h}%`, background: c.target ? "#e0e0e0" : "#9e9e9e", border: "0.6px solid #000", width: "60%", margin: "0 auto" }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{ display: "flex", gap: 3 }}>
+                            {chartBars.map((c: any, i: number) => <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 7 }}>{c.label}</div>)}
+                        </div>
                     </div>
-                    <div style={{ display: "flex", gap: 2 }}>
-                        {TERMS.map((label) => <div key={label} style={{ flex: 1, textAlign: "center", fontSize: 7 }}>{label}</div>)}
-                    </div>
-                </div>
+                )}
 
-                {/* Historical grid Form 1-4 × T1-T3 */}
-                <table style={{ marginTop: 3, textAlign: "center" }}><tbody>
-                    <tr style={{ fontWeight: 700 }}>
-                        <td></td>
-                        {[1, 2, 3, 4].map(f => <td key={f} colSpan={3}>Form {f}</td>)}
-                    </tr>
-                    <tr style={{ fontWeight: 700 }}>
-                        <td></td>
-                        {[1, 2, 3, 4].flatMap(f => [1, 2, 3].map(t => <td key={`${f}-${t}`}>T{t}</td>))}
-                    </tr>
-                    {(["mp", "mg", "pos"] as const).map(metric => (
-                        <tr key={metric}>
-                            <td style={{ fontWeight: 700 }}>{metric.toUpperCase()}</td>
-                            {[1, 2, 3, 4].flatMap(f => [1, 2, 3].map(t => { const h = hist(f, t); return <td key={`${metric}-${f}-${t}`}>{h ? (h as any)[metric] || "-" : "-"}</td>; }))}
+                {/* Historical grid — only the levels & terms that have data */}
+                {levels.length > 0 && terms.length > 0 && (
+                    <table style={{ marginTop: 3, textAlign: "center" }}><tbody>
+                        <tr style={{ fontWeight: 700 }}>
+                            <td></td>
+                            {levels.map(l => <td key={l} colSpan={terms.length}>{levelPrefix} {l}</td>)}
                         </tr>
-                    ))}
-                </tbody></table>
+                        <tr style={{ fontWeight: 700 }}>
+                            <td></td>
+                            {levels.flatMap(l => terms.map(t => <td key={`${l}-${t}`}>T{t}</td>))}
+                        </tr>
+                        {(["mp", "mg"] as const).map(metric => (
+                            <tr key={metric}>
+                                <td style={{ fontWeight: 700 }}>{metric.toUpperCase()}</td>
+                                {levels.flatMap(l => terms.map(t => { const h = hist(l, t); return <td key={`${metric}-${l}-${t}`}>{h ? (h as any)[metric] ?? "-" : "-"}</td>; }))}
+                            </tr>
+                        ))}
+                    </tbody></table>
+                )}
 
                 {/* Comments + signatures */}
                 <table style={{ marginTop: 3 }}><tbody>

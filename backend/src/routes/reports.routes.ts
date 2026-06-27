@@ -107,25 +107,38 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const myAll = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
+        // Detect the level system: "Form" (8-4-4) or "Grade" (CBC). Use the
+        // student's current class first, then any class seen in history.
+        const curriculum = String(profile.curriculum || profile.curriculumType || '').toLowerCase();
+        const looksGrade = /grade|cbc|junior|pp[12]/i.test(`${myClass} ${curriculum}`);
+        const levelSys = looksGrade ? { prefix: 'Grade', short: 'G' } : { prefix: 'Form', short: 'F' };
+
         const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
         for (const m of myAll) {
             const e = examById[String(m.examId)]; if (!e) continue;
             const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
             const key = String(m.examId);
-            (histAgg[key] ||= { sum: 0, pts: 0, n: 0, cls: m.classAtTime || '', year: N(e.academicYear ?? e.year), term: N(String(e.term || '').match(/\d+/)?.[0] || 0) });
+            (histAgg[key] ||= { sum: 0, pts: 0, n: 0, cls: m.classAtTime || myClass || '', year: N(e.academicYear ?? e.year), term: N(String(e.term || '').match(/\d+/)?.[0] || 0) });
             histAgg[key].sum += pct; histAgg[key].pts += gradeOf(pct).points; histAgg[key].n += 1;
         }
-        // Map to Form (1-4) × Term (1-3).
-        const grid: Record<string, { mp: number; mg: string; pos: string }> = {};
+        // Build the grid + chart from the (level, term) combos that ACTUALLY have
+        // data, so only filled cells/bars are shown — and report which levels &
+        // terms exist so the frontend renders just those columns.
+        const grid: Record<string, { mp: number; mg: string }> = {};
         const chart: Array<{ label: string; value: number }> = [];
-        for (const [, v] of Object.entries(histAgg)) {
-            const formMatch = String(v.cls).match(/(\d+)/); const form = formMatch ? Number(formMatch[1]) : 0;
-            if (form >= 1 && form <= 4 && v.term >= 1 && v.term <= 3) {
-                const mp = RND(v.pts / v.n, 0);
-                grid[`f${form}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n), pos: '' };
-                chart.push({ label: `f${form}Tm${v.term}`, value: mp });
-            }
+        const levelsSet = new Set<number>(); const termsSet = new Set<number>();
+        for (const v of Object.values(histAgg)) {
+            if (!v.n) continue;
+            const lvlMatch = String(v.cls).match(/(\d+)/); const lvl = lvlMatch ? Number(lvlMatch[1]) : 0;
+            if (lvl < 1 || v.term < 1) continue;
+            const mp = RND(v.pts / v.n, 0);
+            grid[`l${lvl}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n) };
+            chart.push({ label: `${levelSys.short}${lvl}T${v.term}`, value: mp });
+            levelsSet.add(lvl); termsSet.add(v.term);
         }
+        const levels = Array.from(levelsSet).sort((a, b) => a - b);
+        const terms = Array.from(termsSet).sort((a, b) => a - b);
+        chart.sort((a, b) => a.label.localeCompare(b.label));
 
         res.json({
             school: { name: profile.name || profile.schoolName || '', box: profile.poBox || profile.address || '', tel: profile.phone || profile.tel || '', motto: profile.motto || '', logo: profile.logo || '' },
@@ -139,6 +152,9 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             subjects,
             chart,
             history: grid,
+            levelSystem: levelSys.prefix,    // "Form" | "Grade"
+            levels,                          // e.g. [3, 4] — only those with data
+            terms,                           // e.g. [2, 3] — only those with data
             comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
             nextTermBegins: profile.nextTermBegins || '',
         });
