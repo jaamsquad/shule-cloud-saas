@@ -7,6 +7,13 @@ const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 const num = (v: any) => Number(v) || 0;
 const round = (n: number, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
+// Class-level key from a class/stream label, e.g. "FORM 4 West" -> "Form 4".
+// Falls back to a title-cased version of the raw text when there's no form/grade.
+const levelOf = (s: string) => {
+    const m = String(s || '').match(/(form|grade)\s*\d+/i);
+    if (m) { const w = m[0].replace(/\s+/g, ' ').trim().toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1); }
+    return String(s || 'Class').trim();
+};
 
 // ─── Grading (KCSE 12-point) ───────────────────────────────────────────────────
 // Loads the school's grading scale and exposes pct → { grade, points }. Falls
@@ -153,8 +160,10 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         const examId = String(req.query.examId || '');
         if (!examId) return res.json({ classes: [] });
         const { rows, scale } = await buildExamResults(db(req), examId);
+        // Group by CLASS LEVEL ("Form 4"), not per stream — so My Classes shows one
+        // card per form that aggregates all its streams.
         const byClass: Record<string, any[]> = {};
-        rows.forEach(r => { (byClass[r.className || r.stream || 'Class'] ||= []).push(r); });
+        rows.forEach(r => { (byClass[levelOf(r.className || r.stream)] ||= []).push(r); });
         const grades = scale.map((s: any) => s.grade);
         const classes = Object.entries(byClass).map(([name, list]) => {
             const breakdown: Record<string, number> = {};
@@ -290,8 +299,6 @@ router.get('/analytics/class-levels', async (req: Request, res: Response) => {
     try {
         const examId = String(req.query.examId || '');
         const { rows, scale } = await buildExamResults(db(req), examId);
-        // Derive a class-level key from the class/stream name, e.g. "Form 4".
-        const levelOf = (s: string) => { const m = String(s).match(/(form|grade)\s*\d+/i); return m ? m[0].replace(/\s+/g, ' ').toUpperCase() : String(s).toUpperCase(); };
         const byLevel: Record<string, any[]> = {};
         rows.forEach(r => { (byLevel[levelOf(r.className || r.stream)] ||= []).push(r); });
         const classes = Object.entries(byLevel).map(([level, list]) => {
