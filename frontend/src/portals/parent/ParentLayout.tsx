@@ -10,7 +10,7 @@ import { useBranding } from "../useBranding";
 import { parentApi, ParentInfo, ParentChild } from "./parentApi";
 
 const NAV: PortalNavSection[] = [
-    { label: "Overview", items: [{ to: "/", label: "My Child", icon: GraduationCap }] },
+    { label: "Overview", items: [{ to: "/", label: "My Child", icon: GraduationCap }, { to: "/inbox", label: "Inbox", icon: Megaphone }] },
     {
         label: "Academics",
         items: [

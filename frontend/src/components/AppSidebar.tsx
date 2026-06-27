@@ -385,6 +385,7 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Communications", icon: MessageSquare, moduleKey: "communications", children: [
       { label: "Announcements", path: "/communications/announcements" },
+      { label: "Message Parents", path: "/communications/parent-messages" },
       { label: "Bulk SMS", path: "/communications/sms" },
       { label: "Email Broadcast", path: "/communications/email" },
       { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },

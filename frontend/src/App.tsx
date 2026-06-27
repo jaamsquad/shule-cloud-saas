@@ -159,6 +159,7 @@ import LiveClassSettings from "./pages/tenant/modules/liveclass/LiveClassSetting
 import MeetingRoom from "./pages/tenant/modules/liveclass/MeetingRoom";
 import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
+import ParentMessaging from "./pages/tenant/modules/communications/ParentMessaging";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
 import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppIntegration";
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
@@ -760,6 +761,7 @@ const App = () => {
               <Route path="/communications" element={<Announcements />} />
               <Route path="/communications/announcements" element={<Announcements />} />
               <Route path="/communications/sms" element={<BulkSMS />} />
+              <Route path="/communications/parent-messages" element={<ParentMessaging />} />
               <Route path="/communications/email" element={<ChannelComposer channel="email" />} />
               <Route path="/communications/whatsapp" element={<ChannelComposer channel="whatsapp" />} />
               <Route path="/communications/notifications" element={<ReportNotificationSettings />} />
