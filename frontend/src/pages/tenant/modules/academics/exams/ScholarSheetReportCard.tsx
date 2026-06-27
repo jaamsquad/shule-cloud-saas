@@ -2,16 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Printer } from "lucide-react";
 import api from "@/lib/api";
 
-// A4 report card matching the Kithimani HGM Secondary layout exactly.
+// ScholarSheet — the classic A4 academic report card.
 // Black & white only (colour permitted solely for the logo + student photo).
 // Subjects are curriculum-driven (from the class) and grades use the chosen
-// grading scale — both resolved by the backend /reports/kithimani-card endpoint.
+// grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function KithimaniReportCard({ studentId, examId }: { studentId: string; examId: string }) {
+export default function ScholarSheetReportCard({ studentId, examId }: { studentId: string; examId: string }) {
     const { data, isLoading } = useQuery({
-        queryKey: ["kithimani_card", studentId, examId],
+        queryKey: ["scholar_sheet", studentId, examId],
         enabled: !!studentId && !!examId,
-        queryFn: async () => (await api.get(`/reports/kithimani-card/${studentId}`, { params: { examId } })).data,
+        queryFn: async () => (await api.get(`/reports/scholar-sheet/${studentId}`, { params: { examId } })).data,
     });
 
     if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;

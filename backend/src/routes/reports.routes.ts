@@ -7,7 +7,7 @@ const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const router = Router();
 
-// ─── Kithimani-style report card data ──────────────────────────────────────────
+// ─── ScholarSheet report card data ─────────────────────────────────────────────
 // Assembles exactly what the A4 report card needs: summary row, subject rows
 // (mark/out-of/total/point/grade/position/remarks/initials), KCPE + value added,
 // the historical Form1-4 × T1-T3 grid (MP/MG/POS), and the term bar chart series.
@@ -37,7 +37,7 @@ async function loadGrading(database: Db, classId?: string) {
     return { scale, gradeOf, meanGrade };
 }
 
-router.get('/reports/kithimani-card/:studentId', async (req: Request, res: Response) => {
+router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:studentId'], async (req: Request, res: Response) => {
     try {
         const database = getRequestDb(req);
         const sid = req.params.studentId;
