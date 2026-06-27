@@ -89,8 +89,22 @@ export const queueSms = async (
     const r = await db.collection('sms_jobs').insertMany(docs);
     const jobIds = Object.values(r.insertedIds).map(String);
 
-    // Push to the school's devices so they fetch immediately (real-time).
-    if (!opts.scheduledAt || opts.scheduledAt <= now) {
+    const dueNow = !opts.scheduledAt || opts.scheduledAt <= now;
+
+    // Send IMMEDIATELY via Talksasa when configured — no queueing/waiting for a
+    // device to poll. Only fall back to the device queue when there's no API.
+    if (dueNow) {
+        try {
+            const settings = await getSmsSettings(db);
+            const cfg: any = settings.apiConfig || {};
+            if (cfg.apiToken) {
+                const { talksasaSend } = await import('./talksasa.service');
+                const res = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, clean, message);
+                await db.collection('sms_jobs').updateMany({ _id: { $in: Object.values(r.insertedIds) } }, { $set: { status: res.ok ? 'sent' : 'failed', provider: 'talksasa', error: res.error, updatedAt: new Date() } });
+                return { queued: clean.length, jobIds, sent: res.sent, failed: res.failed, provider: 'talksasa' };
+            }
+        } catch { /* fall through to device */ }
+        // No API → push to the school's devices so they fetch immediately.
         notifyDevices(schoolId, { count: clean.length });
     }
     return { queued: clean.length, jobIds };

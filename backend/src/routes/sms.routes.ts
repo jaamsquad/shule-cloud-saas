@@ -79,18 +79,19 @@ router.post('/communications/sms/send', async (req, res) => {
 
         const audienceLabel = audList.join(',') || null;
         const settings = await getSmsSettings(db);
-        if (settings.provider === 'api') {
-            // Traditional HTTP gateway — queue then send immediately via the API.
+        // queueSms now dispatches immediately via Talksasa when configured, else
+        // notifies devices. Non-Africa's-Talking API still uses the legacy path.
+        if (settings.provider === 'api' && !settings.apiConfig?.apiToken) {
             const { queued } = await queueSms(db, schoolId(req), numbers, message, { audience: audienceLabel || undefined, createdBy: (req as any).user?.id });
             const sent = await sendViaApi(db, settings.apiConfig, numbers, message);
             return res.json({ provider: 'api', queued, ...sent });
         }
 
-        // Device provider — queue jobs for the connected Android phone(s).
         const result = await queueSms(db, schoolId(req), numbers, message, {
             audience: audienceLabel || undefined, createdBy: (req as any).user?.id,
             scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         });
+        if ((result as any).provider === 'talksasa') return res.json({ provider: 'talksasa', ...result });
         const devices = await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true });
         res.json({ provider: 'device', ...result, onlineDevices: devices });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -104,15 +105,16 @@ router.post('/communications/sms/test', async (req, res) => {
         if (!phone) return res.status(400).json({ message: 'A test phone number is required' });
         const message = await brandFor(req, db, 'SMS test — your gateway is connected and working. ✅');
         const settings = await getSmsSettings(db);
-        if (settings.provider === 'api') {
+        if (settings.provider === 'api' && !settings.apiConfig?.apiToken) {
             await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
             const sent = await sendViaApi(db, settings.apiConfig, [phone], message);
             return res.json({ provider: 'api', ...sent });
         }
+        // Talksasa: queueSms sends immediately. Device: it notifies the phone.
+        const tr = await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
+        if ((tr as any).provider === 'talksasa') return res.json({ provider: 'talksasa', ...tr });
         const online = await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true });
-        if (online === 0) return res.status(409).json({ message: 'No phone is connected & online. Open the ShuleCloud SMS app on your paired phone, then try again.' });
-        const result = await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
-        res.json({ provider: 'device', ...result, onlineDevices: online });
+        res.json({ provider: 'device', ...tr, onlineDevices: online });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -145,7 +147,9 @@ router.post('/communications/sms/send-results', async (req, res) => {
             const r = await queueSms(db, schoolId(req), [m.phone], m.text, { audience: `results:${type}`, scheduledAt: when, createdBy: (req as any).user?.id });
             queued += r.queued;
         }
-        if (settings.provider === 'api' && !when) {
+        // queueSms already dispatched via Talksasa (immediate). Only the legacy
+        // non-token API provider needs the extra sendViaApi call.
+        if (settings.provider === 'api' && !settings.apiConfig?.apiToken && !when) {
             for (const m of messages) await sendViaApi(db, settings.apiConfig, [m.phone], m.text);
         }
         res.json({ provider: settings.provider, recipients: messages.length, queued });

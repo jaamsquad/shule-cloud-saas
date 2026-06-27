@@ -1179,8 +1179,22 @@ router.post('/transport/pickup', async (req, res) => {
                 sent.push('whatsapp');
             }
             if (settings.notifySms && phone) {
-                await db.collection('sms_logs').insertOne({ to: phone, message: msg, status: 'Queued', purpose: 'transport', createdAt: at });
-                sent.push('sms');
+                // Actually send via the school's SMS gateway (Talksasa / device),
+                // branded with the school name. Previously this only logged a row
+                // and never sent anything.
+                const { getSmsSettings } = await import('../services/smsGateway.service');
+                const smsSettings = await getSmsSettings(db);
+                const cfg = smsSettings.apiConfig || {};
+                const tenant: any = (req as any).tenantContext;
+                let schoolName = tenant?.tenantName || '';
+                if (!schoolName) { try { const { getMetaDb } = await import('../lib/mongodb'); const t: any = tenant?.tenantId ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenant.tenantId)) }) : null; schoolName = t?.instituteName || t?.name || ''; } catch { /* ignore */ } }
+                const { brandMessage, talksasaSend } = await import('../services/talksasa.service');
+                const branded = brandMessage(schoolName, msg);
+                let ok = false;
+                if (cfg.apiToken) { const r = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, [phone], branded); ok = r.ok; }
+                else { const { queueSms } = await import('../services/smsGateway.service'); await queueSms(db, String(tenant?.tenantId || 'default'), [phone], branded, { audience: 'transport' }); ok = true; }
+                await db.collection('sms_logs').insertOne({ to: phone, message: branded, status: ok ? 'Sent' : 'Failed', purpose: 'transport', createdAt: at });
+                if (ok) sent.push('sms');
             }
         } catch (e: any) { /* notification best-effort */ }
 
