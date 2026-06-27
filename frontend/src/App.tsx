@@ -198,6 +198,7 @@ import AcademicYearsPage from "./pages/tenant/modules/academics-v2/AcademicYears
 import EnrollmentFormPage from "./pages/tenant/modules/academics-v2/EnrollmentFormPage";
 import StudentHistoryPage from "./pages/tenant/modules/academics-v2/StudentHistoryPage";
 import ClassesStreamsPage from "./pages/tenant/modules/academics-v2/ClassesStreamsPage";
+import TeacherSubjectsPage from "./pages/tenant/modules/academics-v2/TeacherSubjectsPage";
 import EnrollmentPage from "./pages/tenant/modules/academics-v2/EnrollmentPage";
 import PromotionWizard from "./pages/tenant/modules/academics-v2/PromotionWizard";
 import V2MarksEntry from "./pages/tenant/modules/academics-v2/V2MarksEntry";
@@ -665,6 +666,7 @@ const App = () => {
               <Route path="/cafeteria/menu" element={<MealMenu />} />
               <Route path="/canteen/transactions" element={<CanteenTransactions />} />
               <Route path="/academic-system/classes" element={<ClassesStreamsPage />} />
+              <Route path="/academic-system/teacher-subjects" element={<TeacherSubjectsPage />} />
               <Route path="/academic-system/enrollments" element={<EnrollmentPage />} />
               <Route path="/academic-system/enroll" element={<EnrollmentFormPage />} />
               <Route path="/academic-system/promote" element={<PromotionWizard />} />

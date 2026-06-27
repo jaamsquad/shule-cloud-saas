@@ -909,6 +909,54 @@ router.delete('/v2/subjects/:id', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// 11b. TEACHER ↔ SUBJECT ↔ CLASS ASSIGNMENTS (staff_subjects)
+// Drives the "Initials" column on report cards. One link = a teacher teaches
+// a subject for a class (stream optional). Stored denormalised (names alongside
+// ids) so report rendering needs no extra joins.
+// ═══════════════════════════════════════════════════════════════════
+
+// List assignments, optionally filtered by class / subject / teacher.
+router.get('/v2/teacher-subjects', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const q: any = {};
+        if (req.query.classId) q.classId = String(req.query.classId);
+        if (req.query.subjectId) q.subjectId = String(req.query.subjectId);
+        if (req.query.teacherId) q.$or = [{ teacherId: String(req.query.teacherId) }, { staffId: String(req.query.teacherId) }];
+        const rows = await db.collection('staff_subjects').find(q).sort({ className: 1, subjectName: 1 }).toArray();
+        res.json(rows);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Create / upsert an assignment. Idempotent on (subjectId, classId, streamId).
+router.post('/v2/teacher-subjects', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const { teacherId, teacherName, subjectId, subjectName, classId, className, streamId, streamName } = req.body || {};
+        if (!teacherId) return res.status(400).json({ message: 'teacherId required' });
+        if (!subjectId && !subjectName) return res.status(400).json({ message: 'subject required' });
+        const key: any = { subjectId: subjectId || null, classId: classId || null, streamId: streamId || null };
+        const doc = {
+            teacherId: String(teacherId), staffId: String(teacherId), teacherName: teacherName || '',
+            subjectId: subjectId || null, subjectName: subjectName || '',
+            classId: classId || null, className: className || '',
+            streamId: streamId || null, streamName: streamName || '',
+            updatedAt: now(),
+        };
+        await db.collection('staff_subjects').updateOne(key, { $set: doc, $setOnInsert: { createdAt: now() } }, { upsert: true });
+        res.status(201).json({ ok: true, ...doc });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.delete('/v2/teacher-subjects/:id', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        await db.collection('staff_subjects').deleteOne({ _id: toOid(req.params.id) });
+        res.json({ message: 'Removed' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
 // 12. AUDIT LOG
 // ═══════════════════════════════════════════════════════════════════
 

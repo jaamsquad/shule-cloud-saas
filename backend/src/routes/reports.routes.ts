@@ -109,10 +109,10 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const linkClass = staffSubjectLinks.find((l: any) =>
                 (defIds.has(String(l.subjectId)) || normSub(l.subjectName) === want) &&
                 (String(l.classId) === classId || normSub(l.className) === normSub(myClass)));
-            if (linkClass) { const t = staffById[String(linkClass.teacherId || linkClass.staffId)]; if (t) return staffName(t); }
+            if (linkClass) { const t = staffById[String(linkClass.teacherId || linkClass.staffId)]; if (t) return staffName(t); if (linkClass.teacherName) return linkClass.teacherName; }
             // 2) any staff_subjects link for this subject.
             const linkAny = staffSubjectLinks.find((l: any) => defIds.has(String(l.subjectId)) || normSub(l.subjectName) === want);
-            if (linkAny) { const t = staffById[String(linkAny.teacherId || linkAny.staffId)]; if (t) return staffName(t); }
+            if (linkAny) { const t = staffById[String(linkAny.teacherId || linkAny.staffId)]; if (t) return staffName(t); if (linkAny.teacherName) return linkAny.teacherName; }
             // 3) the subject definition's own teacherId.
             const defWithTeacher = defs.find((d: any) => d.teacherId);
             if (defWithTeacher) { const t = staffById[String(defWithTeacher.teacherId)]; if (t) return staffName(t); }
