@@ -534,6 +534,17 @@ router.post('/org/convert-this-school', requireRole('ADMIN'), async (req: Reques
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Student fee credit (overpayment carried forward) + its ledger.
+router.get('/fees/credit/:studentId', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { getCredit } = await import('../services/feeCredit.service');
+        const credit = await getCredit(db, { studentId: req.params.studentId });
+        const ledger = await db.collection('fee_credits').find({ studentId: req.params.studentId }).sort({ createdAt: -1 }).limit(100).toArray().catch(() => []);
+        res.json({ credit, ledger });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── C2B Payment Inbox & Reconciliation ────────────────────────────────────────
 // The inbox lives in the meta DB (c2b_inbox) and is scoped to this tenant by its
 // databaseName, so a school only ever sees its own payments.
@@ -1080,7 +1091,14 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
             (invoice as any).classAtTime = stu?.studentClass || stu?.className || stu?.currentClass || '';
         } catch { /* optional */ }
 
-        await db.collection('invoices').insertOne(invoice);
+        const ins = await db.collection('invoices').insertOne(invoice);
+        (invoice as any)._id = ins.insertedId;
+        // Auto-apply any carry-forward overpayment credit to this new invoice.
+        try {
+            const { applyCreditToInvoice } = await import('../services/feeCredit.service');
+            const used = await applyCreditToInvoice(db, invoice, { studentId: String(student_id), registrationNo: (invoice as any).registrationNo });
+            if (used > 0) { const fresh = await db.collection('invoices').findOne({ _id: ins.insertedId }); Object.assign(invoice, fresh); }
+        } catch { /* optional */ }
         res.status(201).json({ data: invoice, meta: {}, errors: [] });
         emailInvoiceToParent(req, db, invoice, student_id);   // best-effort, after responding
     } catch (e: any) {
@@ -2136,13 +2154,10 @@ router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request,
             });
         }
 
-        if (payAmount > invoice.balance) {
-            return res.status(422).json({
-                data: null,
-                meta: {},
-                errors: [{ code: 'OVERPAYMENT', message: `Payment amount (${payAmount}) cannot exceed outstanding balance (${invoice.balance})` }]
-            });
-        }
+        // Overpayment is now ALLOWED — the invoice is cleared and the excess is
+        // banked as a carry-forward credit (auto-applied to the next invoice).
+        const invBalance = Number(invoice.balance ?? (invoice.total_due - invoice.amount_paid)) || 0;
+        const excess = Math.max(0, payAmount - invBalance);
 
         const receipt_no = await getNextReceiptNo(db, schoolId);
 
@@ -2168,16 +2183,22 @@ router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request,
         const stu = await db.collection('students').findOne({ _id: new ObjectId(String(invoice.student_id)) }).catch(() => null);
         await postFeePaymentJournal(db, payment, stu?.studentName || stu?.name);
 
-        // Update Invoice status and balance
-        const amount_paid = invoice.amount_paid + payAmount;
-        const balance = invoice.total_due - amount_paid;
-        let status = 'PARTIAL';
-        if (balance <= 0) status = 'PAID';
+        // Update Invoice: cap at fully paid; the excess goes to credit, not balance.
+        const applied = payAmount - excess;                  // amount that hit this invoice
+        const amount_paid = Number(invoice.amount_paid || 0) + applied;
+        const balance = Math.max(0, Number(invoice.total_due) - amount_paid);
+        const status = balance <= 0 ? 'PAID' : 'PARTIAL';
 
         await db.collection('invoices').updateOne(
             { _id: invoice._id },
             { $set: { amount_paid, balance, status, updatedAt: new Date().toISOString() } }
         );
+
+        // Bank the overpayment as a carry-forward credit on the student.
+        if (excess > 0) {
+            const { addCredit } = await import('../services/feeCredit.service');
+            await addCredit(db, { studentId: String(invoice.student_id), studentName: stu?.studentName || stu?.name, amount: excess, reason: 'Overpayment', receipt: receipt_no });
+        }
 
         res.status(201).json({
             data: {
@@ -2472,6 +2493,10 @@ router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request
             };
         });
 
+        // Carry-forward overpayment credit → net outstanding can go negative.
+        const credit = Math.max(0, Number(student.feeCredit) || 0);
+        const netOutstanding = outstanding - credit;
+
         res.json({
             data: {
                 student: {
@@ -2482,7 +2507,9 @@ router.get('/schools/:sid/students/:student_id/fee-summary', async (req: Request
                 },
                 total_invoiced,
                 total_paid,
-                outstanding,
+                credit,                          // available overpayment credit
+                outstanding: netOutstanding,     // negative = the school owes the student (credit)
+                grossOutstanding: outstanding,
                 invoices: mappedInvoices
             },
             meta: {},

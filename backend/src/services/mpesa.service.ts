@@ -339,5 +339,11 @@ export async function applyMpesaPayment(db: Db, opts: { studentId?: string; stud
             await db.collection('invoices').updateOne({ _id: inv._id }, { $set: reduceInvoice(inv, pay) });
             remaining -= pay;
         }
+        // Anything left over is an OVERPAYMENT → store as a carry-forward credit
+        // (a negative balance) that auto-applies to the next invoice.
+        if (remaining > 0) {
+            const { addCredit } = await import('./feeCredit.service');
+            await addCredit(db, { studentId: opts.studentId, studentName: opts.studentName, registrationNo: opts.registrationNo, amount: remaining, reason: 'Overpayment', receipt: opts.receipt });
+        }
     } catch { /* ignore */ }
 }
