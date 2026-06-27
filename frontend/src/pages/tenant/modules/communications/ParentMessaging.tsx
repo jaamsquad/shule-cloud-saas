@@ -15,13 +15,16 @@ const TYPES = [
 ];
 
 export default function ParentMessaging() {
-    const [type, setType] = useState("General");
+    // Deep-link: ?tab=send-results preselects the Results type.
+    const initialType = new URLSearchParams(window.location.search).get("tab") === "send-results" ? "Results" : "General";
+    const [type, setType] = useState(initialType);
     const [scope, setScope] = useState<"class" | "student">("class");
     const [classId, setClassId] = useState("");
     const [studentId, setStudentId] = useState("");
     const [examId, setExamId] = useState("");
     const [subject, setSubject] = useState("");
     const [body, setBody] = useState("");
+    const [sendSms, setSendSms] = useState(true);   // also send an SMS via the gateway
 
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
@@ -33,11 +36,11 @@ export default function ParentMessaging() {
 
     const send = useMutation({
         mutationFn: async () => (await api.post("/messaging/compose", {
-            type, subject, body,
+            type, subject, body, sendSms,
             ...(scope === "student" ? { studentId } : { classId, className: cls ? clsLabel(cls) : "" }),
             ...(type === "Results" ? { examId } : {}),
         })).data,
-        onSuccess: (d: any) => { toast.success(`Sent to ${d.sent} parent(s).`); setSubject(""); setBody(""); },
+        onSuccess: (d: any) => { toast.success(`Sent to ${d.sent} parent(s)${d.smsSent ? ` · ${d.smsSent} SMS` : ""}.`); setSubject(""); setBody(""); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Could not send"),
     });
 
@@ -102,6 +105,9 @@ export default function ParentMessaging() {
                     <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder="Write your message…" className="w-full p-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" />
                 </div>
 
+                <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                    <input type="checkbox" checked={sendSms} onChange={e => setSendSms(e.target.checked)} /> Also send SMS to parents (via Talksasa)
+                </label>
                 <button onClick={() => send.mutate()} disabled={send.isPending || !ready} className="h-11 px-5 rounded-xl bg-[#5C67F2] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50">
                     {send.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send to Parents
                 </button>

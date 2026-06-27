@@ -48,7 +48,14 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
         if (!recipients.length) return res.status(400).json({ message: 'No recipients found.' });
 
         const now = new Date();
+        const sendSms = req.body?.sendSms !== false;   // also send an SMS by default
         const docs = [];
+        const smsTargets: Array<{ phone: string; text: string }> = [];
+
+        // School name to brand SMS.
+        let schoolName = (req as any).tenantContext?.tenantName || '';
+        if (!schoolName) { try { const { getMetaDb } = await import('../lib/mongodb'); const tid = (req as any).tenantContext?.tenantId; const t: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }) : null; schoolName = t?.instituteName || t?.name || ''; } catch { /* ignore */ } }
+
         for (const s of recipients) {
             const sid = String(s._id);
             let attachment = null;
@@ -57,9 +64,30 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                 studentId: sid, studentName: s.studentName || s.name, stream: s.stream || s.streamName || '',
                 from: sender, type, subject, body: body || '', attachment, read: false, createdAt: now,
             });
+            // Build an SMS per parent.
+            if (sendSms) {
+                const phone = s.parentPhone || s.guardianPhone || s.fatherPhone || s.motherPhone || s.phone || '';
+                if (phone) {
+                    let text = `${subject}${body ? ` — ${body}` : ''}`;
+                    if (attachment) text = `${subject}. ${attachment.examTitle}: ${attachment.subjects.map((x: any) => `${x.name} ${x.marks}/${x.outOf}`).join(', ')}. Mean ${attachment.meanPct}%.`;
+                    smsTargets.push({ phone, text });
+                }
+            }
         }
         await database.collection('parent_messages').insertMany(docs);
-        res.json({ ok: true, sent: docs.length });
+
+        // Send the SMS via the school gateway (Talksasa, branded, immediate).
+        let smsSent = 0;
+        if (sendSms && smsTargets.length) {
+            const { queueSms } = await import('../services/smsGateway.service');
+            const { brandMessage } = await import('../services/talksasa.service');
+            const schoolId = String((req as any).tenantContext?.tenantId || 'default');
+            for (const t of smsTargets) {
+                const r: any = await queueSms(database, schoolId, [t.phone], brandMessage(schoolName, t.text), { audience: 'parent_message' });
+                if (r.provider !== 'talksasa' || r.sent) smsSent++;
+            }
+        }
+        res.json({ ok: true, sent: docs.length, smsSent });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
