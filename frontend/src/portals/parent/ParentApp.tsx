@@ -3,6 +3,7 @@ import ParentLogin from "./ParentLogin";
 import ParentLayout from "./ParentLayout";
 import ParentDashboard from "./pages/ParentDashboard";
 import ParentResults from "./pages/ParentResults";
+import ParentAnalytics from "./pages/ParentAnalytics";
 import ParentFees from "./pages/ParentFees";
 import ParentTimetable from "./pages/ParentTimetable";
 import ParentAttendance from "./pages/ParentAttendance";
@@ -20,6 +21,7 @@ export default function ParentApp() {
             <Route element={<ParentLayout />}>
                 <Route path="/" element={<ParentDashboard />} />
                 <Route path="/results" element={<ParentResults />} />
+                <Route path="/analytics" element={<ParentAnalytics />} />
                 <Route path="/timetable" element={<ParentTimetable />} />
                 <Route path="/attendance" element={<ParentAttendance />} />
                 <Route path="/fees" element={<ParentFees />} />

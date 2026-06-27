@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { GraduationCap, Award, CreditCard, Megaphone, Loader2, CalendarClock, CalendarCheck, Receipt, Users, Wallet, MapPin, Trophy } from "lucide-react";
+import { GraduationCap, Award, CreditCard, Megaphone, Loader2, CalendarClock, CalendarCheck, Receipt, Users, Wallet, MapPin, Trophy, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
 import { tenantDisplayName } from "../portal";
@@ -15,6 +15,7 @@ const NAV: PortalNavSection[] = [
         label: "Academics",
         items: [
             { to: "/results", label: "Exam Results", icon: Award },
+            { to: "/analytics", label: "Analytics", icon: TrendingUp },
             { to: "/timetable", label: "Timetable", icon: CalendarClock },
             { to: "/attendance", label: "Attendance", icon: CalendarCheck },
         ],
