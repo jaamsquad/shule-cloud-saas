@@ -172,17 +172,37 @@ export function ReportCardsPage() {
     const [sid, setSid] = useState(""); const [search, setSearch] = useState("");
     const { data, isLoading } = useQuery({ queryKey: ["cbc_rc", sid], queryFn: () => cbc.reportCard(sid), enabled: !!sid });
     const filtered = students.filter((s: any) => !search || `${s.studentName || s.name} ${s.registrationNo || s.admNo}`.toLowerCase().includes(search.toLowerCase()));
+    // Print in the ScholarSheet look — black & white A4 (colour only for the logo).
     const print = () => {
         if (!data) return; const w = openPrintDoc(); if (!w) return toast.error("Allow pop-ups");
-        const areas = (data.learningAreas || []).map((a: any) => `<tr><td>${a.area}</td><td>${a.level} — ${a.levelLabel}</td><td>${(a.strands || []).map((s: any) => `${s.strand}: ${s.level}`).join("<br/>") || "—"}</td></tr>`).join("");
-        w.document.write(`<!DOCTYPE html><html><head><title>CBC Report Card</title><style>@page{margin:15mm}body{font-family:Arial;color:#1e293b}.h{text-align:center;border-bottom:3px solid #7C3AED;padding-bottom:12px;margin-bottom:16px}h1{color:#7C3AED;font-size:20px;margin:4px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#7C3AED;color:#fff;padding:8px;text-align:left;font-size:11px}td{padding:8px;border-bottom:1px solid #eee;font-size:12px}.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:12px}.cm{border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:14px}</style></head><body>
-        <div class="h">${data.school.logo ? `<img src="${data.school.logo}" style="height:50px"/>` : ""}<h1>${data.school.name}</h1><div style="color:#7C3AED;font-weight:600">CBC Learner Report Card</div></div>
-        <div class="info"><div><b>Learner:</b> ${data.student.name}</div><div><b>Adm No:</b> ${data.student.admissionNo || "—"}</div><div><b>Grade:</b> ${data.student.grade || "—"}</div><div><b>Term:</b> ${[data.term, data.year].filter(Boolean).join(", ") || "—"}</div></div>
-        <table><thead><tr><th>Learning Area</th><th>Achievement Level</th><th>Strands</th></tr></thead><tbody>${areas || '<tr><td colspan="3">No assessments recorded.</td></tr>'}</tbody></table>
-        <div class="cm"><b>Class Teacher's Comment:</b><br/>${data.teacherComment || "—"}</div>
-        <div class="cm"><b>Head Teacher's Comment:</b><br/>${data.headComment || "—"}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px"><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:10px">Principal Signature</div><div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:10px">School Stamp</div></div>
-        <script>onload=()=>print()</script></body></html>`);
+        const issue = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        const rows = (data.learningAreas || []).map((a: any) =>
+            `<tr><td style="text-transform:uppercase">${a.area}</td><td style="text-align:center"><b>${a.level || "-"}</b></td><td>${a.levelLabel || "-"}</td><td>${(a.strands || []).map((s: any) => `${s.strand}: ${s.level}`).join("; ") || "-"}</td></tr>`
+        ).join("");
+        w.document.write(`<!DOCTYPE html><html><head><title>CBC Report Card</title><style>
+            @page{size:A4 portrait;margin:8mm}
+            body{font-family:'Times New Roman',Georgia,serif;color:#000;font-size:11px;line-height:1.2}
+            .rc{width:194mm;margin:0 auto}
+            table{width:100%;border-collapse:collapse} td,th{border:.6px solid #000;padding:2px 4px}
+            .nb td,.nb th{border:none} h1{font-size:20px;font-weight:800;margin:0}
+            .muted{font-size:10px}
+        </style></head><body><div class="rc">
+            <table class="nb"><tr>
+                <td style="width:16mm;vertical-align:top">${data.school.logo ? `<img src="${data.school.logo}" style="width:15mm;height:15mm;object-fit:contain"/>` : ""}</td>
+                <td style="vertical-align:top"><h1>${data.school.name || "SCHOOL NAME"}</h1><div class="muted">${data.school.box || ""}</div><div class="muted" style="font-style:italic">${data.school.motto || ""}</div><div style="font-weight:700;margin-top:2px">CBC Learner Report Card</div></td>
+                <td style="width:55mm;text-align:right;vertical-align:top" class="muted">Issue Date : <b>${issue}</b></td>
+            </tr></table>
+            <table style="margin-top:3px"><tr>
+                <td>Name : <b>${data.student.name}</b></td><td>Adm No : <b>${data.student.admissionNo || "—"}</b></td>
+                <td>Grade : <b>${data.student.grade || "—"}</b></td><td>Term : <b>${[data.term, data.year].filter(Boolean).join(" ") || "—"}</b></td>
+            </tr></table>
+            <table style="margin-top:3px"><thead><tr style="font-weight:700">
+                <td>Learning Area</td><td style="text-align:center">Level</td><td>Performance</td><td>Strands</td>
+            </tr></thead><tbody>${rows || '<tr><td colspan="4" style="text-align:center">No assessments recorded.</td></tr>'}</tbody></table>
+            <table style="margin-top:6px"><tr><td style="height:14mm;vertical-align:top"><b>Class Teacher's Comments :</b><div>${data.teacherComment || ""}</div></td><td style="width:45mm;vertical-align:bottom">Signature : ____________</td></tr>
+            <tr><td style="height:14mm;vertical-align:top"><b>Head Teacher's Comments :</b><div>${data.headComment || ""}</div></td><td style="vertical-align:bottom">Signature : ____________</td></tr></table>
+            <div class="muted" style="text-align:center;margin-top:4px">ShuleCloud School System | www.shulecloud.com</div>
+        </div><script>onload=()=>print()</script></body></html>`);
         w.document.close();
     };
     return (
