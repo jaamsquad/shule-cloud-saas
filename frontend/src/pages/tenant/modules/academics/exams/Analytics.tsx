@@ -113,7 +113,7 @@ function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: strin
 }
 
 function FormAnalytics({ examId, form }: { examId: string; form: string }) {
-    const [tab, setTab] = useState<"overview" | "merit" | "improved">("overview");
+    const [tab, setTab] = useState<"overview" | "merit" | "improved" | "subjects" | "classes">("overview");
     const { data, isLoading } = useQuery({ queryKey: ["an_form", examId, form], queryFn: async () => (await api.get("/analytics/form", { params: { examId, form } })).data });
     const { data: ot } = useQuery({ queryKey: ["an_ot", form], queryFn: async () => (await api.get("/analytics/over-time", { params: { form } })).data });
     if (isLoading) return <Spin />;
@@ -131,8 +131,8 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
                 <p className="text-xs text-slate-500 mt-2 flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {data.satCount} students sat this exam</p>
             </div>
 
-            <div className="flex gap-2">
-                {[["overview", "Overview"], ["merit", "Merit List"], ["improved", "Most Improved"]].map(([k, l]) => (
+            <div className="flex gap-2 flex-wrap">
+                {[["overview", "Overview"], ["merit", "Merit List"], ["subjects", "Subjects"], ["classes", "Class & Stream"], ["improved", "Most Improved"]].map(([k, l]) => (
                     <button key={k} onClick={() => setTab(k as any)} className={`h-9 px-4 rounded-lg font-bold text-sm ${tab === k ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tab === k ? { background: GREEN } : {}}>{l}</button>
                 ))}
             </div>
@@ -200,7 +200,79 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
             )}
 
             {tab === "merit" && <MeritList examId={examId} form={form} />}
+            {tab === "subjects" && <SubjectSheet examId={examId} form={form} />}
+            {tab === "classes" && <ClassLevels examId={examId} />}
             {tab === "improved" && <MostImproved examId={examId} />}
+        </div>
+    );
+}
+
+// Subject performance — pick a subject, see every student ranked (score/grade/pos).
+function SubjectSheet({ examId, form }: { examId: string; form: string }) {
+    const [subject, setSubject] = useState("");
+    const { data: subs } = useQuery({ queryKey: ["an_subjects", examId, form], queryFn: async () => (await api.get("/analytics/subjects", { params: { examId, form } })).data });
+    const subjects: string[] = subs?.subjects || [];
+    const active = subject || subjects[0] || "";
+    const { data, isLoading } = useQuery({ queryKey: ["an_subject_sheet", examId, form, active], enabled: !!active, queryFn: async () => (await api.get("/analytics/subject-sheet", { params: { examId, form, subject: active } })).data });
+    const students = data?.students || [];
+
+    const print = () => {
+        const w = window.open("", "_blank", "width=900,height=800"); if (!w) return;
+        const rows = students.map((s: any) => `<tr><td>${s.position}</td><td>${s.adm}</td><td style="text-align:left">${s.name}</td><td>${s.stream || ""}</td><td>${s.marks}</td><td>${s.grade}</td><td>${s.points}</td></tr>`).join("");
+        w.document.write(`<!DOCTYPE html><html><head><title>${active} — ${form}</title><style>@page{size:A4 portrait;margin:12mm}body{font-family:'Times New Roman',serif;font-size:11px}h2{margin:0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:.6px solid #000;padding:2px 5px;text-align:center}th{background:#eee}</style></head><body><h2>${active.toUpperCase()} — ${form}</h2><div>Average: ${data?.average ?? 0}% · ${students.length} students</div><table><thead><tr><th>#</th><th>Adm</th><th>Name</th><th>Stream</th><th>Marks</th><th>Grade</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table><script>onload=()=>print()</script></body></html>`);
+        w.document.close();
+    };
+
+    return (
+        <Card title={<span className="flex items-center justify-between w-full"><span>Subject Performance</span><button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button></span>}>
+            <select value={active} onChange={e => setSubject(e.target.value)} className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white mb-3">
+                {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {isLoading ? <Spin /> : students.length === 0 ? <Empty msg="No marks for this subject." /> : (
+                <table className="w-full text-sm">
+                    <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th><th className="text-center">Marks</th><th className="text-center">Grade</th><th className="text-center">Pts</th></tr></thead>
+                    <tbody>
+                        {students.map((s: any) => (
+                            <tr key={s.adm} className="border-t border-slate-50">
+                                <td className="py-1.5 font-black">{s.position}</td><td>{s.adm}</td><td className="font-bold text-slate-700">{s.name}</td><td>{s.stream}</td>
+                                <td className="text-center">{s.marks}</td><td className="text-center font-bold">{s.grade}</td><td className="text-center">{s.points}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </Card>
+    );
+}
+
+// Class & stream rollup — a class level (Form 4) with its streams (4 East/West…).
+function ClassLevels({ examId }: { examId: string }) {
+    const { data, isLoading } = useQuery({ queryKey: ["an_class_levels", examId], queryFn: async () => (await api.get("/analytics/class-levels", { params: { examId } })).data });
+    if (isLoading) return <Spin />;
+    const classes = data?.classes || [];
+    if (!classes.length) return <Empty msg="No data." />;
+    return (
+        <div className="space-y-3">
+            {classes.map((c: any) => (
+                <Card key={c.level} title={<span className="flex items-center justify-between w-full"><span>{c.level} (overall)</span><span className="text-xs font-normal text-slate-400">{c.students} students</span></span>}>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                        <Stat label="Mean Points" value={c.meanPoints} />
+                        <Stat label="Mean Marks" value={`${c.meanPct}%`} />
+                        <Stat label="Mean Grade" value={c.meanGrade} />
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-1">Stream</th><th className="text-center">Students</th><th className="text-center">Mean Pts</th><th className="text-center">Mean %</th><th className="text-center">Grade</th></tr></thead>
+                        <tbody>
+                            {c.streams.map((s: any, i: number) => (
+                                <tr key={s.stream} className="border-t border-slate-50">
+                                    <td className="py-1.5 font-bold text-slate-700">{i + 1}. {s.stream}</td>
+                                    <td className="text-center">{s.students}</td><td className="text-center font-bold">{s.meanPoints}</td><td className="text-center">{s.meanPct}%</td><td className="text-center">{s.meanGrade}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </Card>
+            ))}
         </div>
     );
 }

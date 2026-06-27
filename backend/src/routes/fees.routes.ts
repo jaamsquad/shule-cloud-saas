@@ -1572,9 +1572,13 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
         const balance = Number(invoice.balance ?? invoice.total_due ?? invoice.total ?? 0);
         const phone = student?.fatherPhone || student?.motherPhone || student?.guardianPhone || student?.parentPhone || student?.phone || '';
         const email = student?.fatherEmail || student?.motherEmail || student?.guardianEmail || student?.parentEmail || student?.email || '';
-        const school = await tenantDb.collection('theme_settings').findOne({}).catch(() => null);
-        const text = req.body?.message ||
-            `Dear Parent, ${name} has a fee balance of KSh ${balance.toLocaleString()} on invoice ${invoice.invoice_no || ''}. Kindly clear it. ${school?.name || ''}`.trim();
+        // Resolve the school name (Tenant record) to prefix the message.
+        let schoolName = (req as any).tenantContext?.tenantName || '';
+        if (!schoolName) { try { const tid = (req as any).tenantContext?.tenantId; const t: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }) : null; schoolName = t?.instituteName || t?.name || ''; } catch { /* ignore */ } }
+        const { brandMessage } = await import('../services/talksasa.service');
+        const rawText = req.body?.message ||
+            `Dear Parent, ${name} has a fee balance of KSh ${balance.toLocaleString()} on invoice ${invoice.invoice_no || ''}. Kindly clear it. Thank you.`.trim();
+        const text = brandMessage(schoolName, rawText);   // "Egerton High School: Dear Parent, …"
 
         const { sendEmail, sendWhatsApp } = await import('../services/communications.service');
         if (channel === 'email') {
@@ -1584,9 +1588,14 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
             if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
             // Pass schoolId so the scanned WhatsApp (QR) session is used when connected.
             await sendWhatsApp(tenantDb, { to: [phone], message: text, schoolId: (req as any).tenantContext?.tenantId });
-        } else { // sms
+        } else { // sms — actually SEND via the school gateway (Talksasa, branded,
+                 // immediate). Previously this only logged a row and never sent.
             if (!phone) return res.status(400).json({ message: 'No parent phone on record for this student' });
-            await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: 'Queued', purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });
+            const { queueSms } = await import('../services/smsGateway.service');
+            const schoolId = String((req as any).tenantContext?.tenantId || 'default');
+            const r: any = await queueSms(tenantDb, schoolId, [phone], text, { audience: 'fee_reminder' });
+            await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: r.provider === 'talksasa' ? (r.sent ? 'Sent' : 'Failed') : 'Queued', purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });
+            if (r.provider === 'talksasa' && !r.sent) return res.status(400).json({ message: r.error || 'SMS failed to send.' });
         }
         res.json({ data: { sent: true, channel, to: channel === 'email' ? email : phone }, message: 'Reminder sent' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
