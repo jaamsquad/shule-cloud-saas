@@ -35,6 +35,7 @@ export default function AddStudent() {
     const schoolType = schoolProfile?.schoolType || "Mixed"; // Boarding | Day | Mixed
     const [showParents, setShowParents] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showQuickAdd, setShowQuickAdd] = useState(false);   // Customize → quick table
     const [isProcessing, setIsProcessing] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +63,8 @@ export default function AddStudent() {
         enabled: !!enroll.classId,
     });
     const activeYear = v2Years.find((y: any) => y.isActive) || v2Years[0];
+    // All streams (for the Quick Add table — pick class then its streams per row).
+    const { data: v2AllStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams_all"], queryFn: async () => (await api.get("/v2/streams")).data || [] });
 
     // For single-type schools the residence is fixed; for mixed schools the admin picks.
     useEffect(() => {
@@ -272,7 +275,7 @@ export default function AddStudent() {
                     </span>
                 </div>
                 <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-[#ff5e5e] text-white text-xs font-bold rounded-md shadow-sm">Customize</button>
+                    <button onClick={() => setShowQuickAdd(true)} className="px-4 py-2 bg-[#ff5e5e] text-white text-xs font-bold rounded-md shadow-sm">Customize</button>
                     <button 
                         onClick={() => setShowImportModal(true)}
                         className="px-4 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-bold rounded-md shadow-sm flex items-center gap-2 transition-all"
@@ -601,7 +604,149 @@ export default function AddStudent() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Quick Add table (Customize) — record basic info for many students fast */}
+            <QuickAddStudents
+                open={showQuickAdd}
+                onOpenChange={setShowQuickAdd}
+                classes={v2Classes}
+                allStreams={v2AllStreams}
+                activeYear={activeYear}
+                onDone={() => { queryClient.invalidateQueries({ queryKey: ["students"] }); queryClient.invalidateQueries({ queryKey: ["students-list"] }); }}
+            />
         </div>
+    );
+}
+
+// ── Quick Add table ──────────────────────────────────────────────────────────
+// A simple grid to capture students' basic info — Name, Class, Stream, Reg/Adm No,
+// Gender — and admit them all at once (creates the student + v2 enrollment).
+function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear, onDone }: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    classes: any[];
+    allStreams: any[];
+    activeYear: any;
+    onDone: () => void;
+}) {
+    type Row = { name: string; classId: string; streamId: string; reg: string; gender: string };
+    const blank = (): Row => ({ name: "", classId: "", streamId: "", reg: "", gender: "Male" });
+    const [rows, setRows] = useState<Row[]>([blank(), blank(), blank()]);
+    const [saving, setSaving] = useState(false);
+
+    const setRow = (i: number, patch: Partial<Row>) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r));
+    const addRow = () => setRows(rs => [...rs, blank()]);
+    const removeRow = (i: number) => setRows(rs => rs.length > 1 ? rs.filter((_, j) => j !== i) : rs);
+    const streamsFor = (classId: string) => allStreams.filter((s: any) => String(s.classId) === String(classId));
+
+    const save = async () => {
+        const filled = rows.filter(r => r.name.trim() && r.classId);
+        if (!filled.length) { toast.error("Add at least one student with a name and class."); return; }
+        setSaving(true);
+        let ok = 0, fail = 0;
+        for (const r of filled) {
+            try {
+                const cls = classes.find((c: any) => String(c._id) === String(r.classId));
+                const stream = allStreams.find((s: any) => String(s._id) === String(r.streamId));
+                const fullClass = stream ? (stream.fullName || `${cls?.name || ""} ${stream.name}`) : (cls?.name || "");
+                const cleanReg = (r.reg || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "student";
+                const portalUsername = r.reg || r.name.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
+                const created: any = (await api.post("/students", {
+                    studentName: r.name.trim(),
+                    registrationNo: r.reg.trim(),
+                    admNo: r.reg.trim(),
+                    studentClass: fullClass,
+                    classId: r.classId,
+                    streamId: r.streamId || null,
+                    stream: stream?.name || "",
+                    streamName: stream?.name || "",
+                    gender: r.gender,
+                    admissionDate: new Date().toISOString().split("T")[0],
+                    status: "Active",
+                    portalUsername,
+                    portalPassword: `shule@${cleanReg}`,
+                    credentialsGenerated: true,
+                    lastPasswordReset: new Date().toISOString(),
+                })).data;
+                const newId = created?._id || created?.id || created?.insertedId;
+                if (newId && r.classId && r.streamId && activeYear?._id) {
+                    await api.post("/v2/enrollments", { studentId: String(newId), academicYearId: activeYear._id, classId: r.classId, streamId: r.streamId }).catch(() => {});
+                }
+                ok++;
+            } catch { fail++; }
+        }
+        setSaving(false);
+        if (ok) toast.success(`Admitted ${ok} student${ok > 1 ? "s" : ""}${fail ? ` · ${fail} failed` : ""}.`);
+        else toast.error("Could not admit students.");
+        if (ok) { setRows([blank(), blank(), blank()]); onDone(); onOpenChange(false); }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="p-0 border-none overflow-hidden rounded-[24px] max-w-4xl shadow-2xl bg-white">
+                <DialogHeader className="bg-gradient-to-r from-[#5C67F2] to-[#7A85F7] p-6 text-white flex flex-row items-center justify-between space-y-0">
+                    <div className="flex flex-col">
+                        <DialogTitle className="text-xl font-bold tracking-tight">Quick Add Students</DialogTitle>
+                        <DialogDescription className="text-indigo-100 text-xs mt-1">Record basic info — name, class, stream, reg/adm no, gender — and admit them all at once.</DialogDescription>
+                    </div>
+                    <button onClick={() => onOpenChange(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"><X className="w-4 h-4" /></button>
+                </DialogHeader>
+
+                <div className="p-5 max-h-[60vh] overflow-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="text-left text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">
+                                <th className="py-2 pr-2 w-8">#</th>
+                                <th className="py-2 pr-2">Name *</th>
+                                <th className="py-2 pr-2">Reg / Adm No</th>
+                                <th className="py-2 pr-2">Class *</th>
+                                <th className="py-2 pr-2">Stream</th>
+                                <th className="py-2 pr-2">Gender</th>
+                                <th className="py-2 w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((r, i) => (
+                                <tr key={i} className="border-b border-slate-50">
+                                    <td className="py-1.5 pr-2 text-slate-400 font-bold">{i + 1}</td>
+                                    <td className="py-1.5 pr-2"><input value={r.name} onChange={e => setRow(i, { name: e.target.value })} placeholder="Student name" className="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" /></td>
+                                    <td className="py-1.5 pr-2"><input value={r.reg} onChange={e => setRow(i, { reg: e.target.value })} placeholder="e.g. BS120" className="w-28 h-9 px-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" /></td>
+                                    <td className="py-1.5 pr-2">
+                                        <select value={r.classId} onChange={e => setRow(i, { classId: e.target.value, streamId: "" })} className="w-32 h-9 px-2 rounded-lg border border-slate-200 text-sm bg-white">
+                                            <option value="">— Class —</option>
+                                            {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="py-1.5 pr-2">
+                                        <select value={r.streamId} onChange={e => setRow(i, { streamId: e.target.value })} disabled={!r.classId} className="w-28 h-9 px-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50">
+                                            <option value="">—</option>
+                                            {streamsFor(r.classId).map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="py-1.5 pr-2">
+                                        <select value={r.gender} onChange={e => setRow(i, { gender: e.target.value })} className="w-24 h-9 px-2 rounded-lg border border-slate-200 text-sm bg-white">
+                                            <option>Male</option><option>Female</option>
+                                        </select>
+                                    </td>
+                                    <td className="py-1.5"><button onClick={() => removeRow(i)} className="text-slate-300 hover:text-red-500"><X className="w-4 h-4" /></button></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <button onClick={addRow} className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-[#5C67F2] hover:text-[#4a54c4]"><Plus className="w-4 h-4" /> Add row</button>
+                </div>
+
+                <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <p className="text-xs text-slate-400 font-bold">{rows.filter(r => r.name.trim() && r.classId).length} ready to admit</p>
+                    <div className="flex gap-2">
+                        <button onClick={() => onOpenChange(false)} className="h-10 px-4 rounded-xl border border-slate-200 text-sm font-bold text-slate-500">Cancel</button>
+                        <button onClick={save} disabled={saving} className="h-10 px-5 rounded-xl bg-[#5C67F2] text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-50">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Admit Students
+                        </button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 
