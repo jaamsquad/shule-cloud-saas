@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { GraduationCap, FileText, Printer, Users } from "lucide-react";
+import { useQuery, useQueries } from "@tanstack/react-query";
+import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { formatExamName } from "@/lib/examName";
 import ScholarSheetReportCard from "./ScholarSheetReportCard";
@@ -30,6 +30,18 @@ export default function ScholarSheetPage() {
 
     const ready = examId && (wholeClass ? classStudents.length > 0 : !!studentId);
     const renderList = wholeClass ? classStudents : (studentId ? classStudents.filter((s: any) => s._id === studentId) : []);
+
+    // Prefetch EVERY card's data up-front so the whole class is fully rendered
+    // before printing — otherwise lazily-loading cards get skipped in the print.
+    const cardQueries = useQueries({
+        queries: (examId ? renderList : []).map((s: any) => ({
+            queryKey: ["scholar_sheet", s._id, examId],
+            queryFn: async () => (await api.get(`/reports/scholar-sheet/${s._id}`, { params: { examId } })).data,
+            staleTime: 5 * 60 * 1000,
+        })),
+    });
+    const allLoaded = cardQueries.length > 0 && cardQueries.every(q => q.isSuccess || q.isError);
+    const loadedCount = cardQueries.filter(q => q.isSuccess).length;
 
     return (
         <div className="flex-1 bg-[#F5F5F5] min-h-screen">
@@ -72,17 +84,18 @@ export default function ScholarSheetPage() {
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
                         <input type="checkbox" checked={showKcpe} onChange={e => setShowKcpe(e.target.checked)} /> Show KCPE fields
                     </label>
-                    <button onClick={() => window.print()} disabled={!ready} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
-                        <Printer className="w-4 h-4" /> Print {wholeClass ? `Class (${classStudents.length})` : "Report"}
+                    <button onClick={() => window.print()} disabled={!ready || !allLoaded} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
+                        {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                        {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${classStudents.length})` : "Report"}`}
                     </button>
                 </div>
             </div>
 
             {ready ? (
                 <div className="ss-print-area p-4 print:p-0">
-                    {renderList.map((s: any) => (
+                    {renderList.map((s: any, i: number) => (
                         <div key={s._id} className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0">
-                            <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar />
+                            <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
                         </div>
                     ))}
                 </div>

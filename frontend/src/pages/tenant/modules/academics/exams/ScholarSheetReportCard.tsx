@@ -7,14 +7,17 @@ import api from "@/lib/api";
 // Subjects are curriculum-driven (from the class) and grades use the chosen
 // grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function ScholarSheetReportCard({ studentId, examId, showKcpe = true, hideToolbar = false }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean }) {
-    const { data, isLoading } = useQuery({
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe = true, hideToolbar = false, preloaded }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any }) {
+    // When the parent page has already fetched the data (whole-class print), use
+    // it directly so the card never shows a spinner mid-print. Otherwise fetch.
+    const { data: fetched, isLoading } = useQuery({
         queryKey: ["scholar_sheet", studentId, examId],
-        enabled: !!studentId && !!examId,
+        enabled: !preloaded && !!studentId && !!examId,
         queryFn: async () => (await api.get(`/reports/scholar-sheet/${studentId}`, { params: { examId } })).data,
     });
+    const data = preloaded || fetched;
 
-    if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
+    if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
     if (!data) return <div className="p-8 text-center text-slate-400">No report data.</div>;
 
     const d = data;
@@ -109,22 +112,22 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                     ))}
                 </tbody></table>
 
-                {/* Term bar chart (B&W) — only points with data, plus a Target bar */}
+                {/* Term bar chart (B&W) — thin bars packed to the left */}
                 {chartBars.length > 1 && (
                     <div style={{ border: "0.6px solid #000", marginTop: 3, padding: "2px 4px", height: "30mm" }}>
-                        <div style={{ display: "flex", alignItems: "flex-end", height: "24mm", gap: 3 }}>
+                        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-start", height: "24mm", gap: 4 }}>
                             {chartBars.map((c: any, i: number) => {
                                 const h = maxChart ? (c.value / maxChart) * 100 : 0;
                                 return (
-                                    <div key={i} style={{ flex: 1, textAlign: "center", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                                    <div key={i} style={{ width: "8mm", textAlign: "center", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
                                         {!c.target && <div style={{ fontSize: 7 }}>{c.value}</div>}
-                                        <div style={{ height: `${h}%`, background: c.target ? "#e0e0e0" : "#9e9e9e", border: "0.6px solid #000", width: "60%", margin: "0 auto" }} />
+                                        <div style={{ height: `${h}%`, background: c.target ? "#e0e0e0" : "#9e9e9e", border: "0.6px solid #000", width: "5mm", margin: "0 auto" }} />
                                     </div>
                                 );
                             })}
                         </div>
-                        <div style={{ display: "flex", gap: 3 }}>
-                            {chartBars.map((c: any, i: number) => <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 7 }}>{c.label}</div>)}
+                        <div style={{ display: "flex", justifyContent: "flex-start", gap: 4 }}>
+                            {chartBars.map((c: any, i: number) => <div key={i} style={{ width: "8mm", textAlign: "center", fontSize: 7 }}>{c.label}</div>)}
                         </div>
                     </div>
                 )}
