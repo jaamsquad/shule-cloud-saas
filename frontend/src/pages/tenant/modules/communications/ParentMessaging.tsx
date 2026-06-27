@@ -20,24 +20,36 @@ export default function ParentMessaging() {
     const [type, setType] = useState(initialType);
     const [scope, setScope] = useState<"class" | "student">("class");
     const [classId, setClassId] = useState("");
+    const [streamId, setStreamId] = useState("");     // v2 stream (East/South)
     const [studentId, setStudentId] = useState("");
     const [examId, setExamId] = useState("");
     const [subject, setSubject] = useState("");
     const [body, setBody] = useState("");
     const [sendSms, setSendSms] = useState(true);   // also send an SMS via the gateway
 
-    const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
+    // v2 classes (Form 4) + streams for the chosen class.
+    const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
+    const { data: streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
 
-    const clsLabel = (c: any) => `${c.levelName || c.name || ""}${c.stream ? ` ${c.stream}` : ""}`.trim();
-    const cls = classes.find((c: any) => c._id === classId);
-    const classStudents = students.filter((s: any) => !classId || s.classId === classId || s.studentClass === (cls?.levelName || cls?.name) || s.currentClass === (cls?.levelName || cls?.name));
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const cls = classes.find((c: any) => String(c._id) === String(classId));
+    const stream = streams.find((s: any) => String(s._id) === String(streamId));
+    // Label for headers + exam naming: "Form 4 East" or "Form 4".
+    const classLabel = cls ? (stream ? (stream.fullName || `${cls.name} ${stream.name}`) : cls.name) : "";
+    const classStudents = students.filter((s: any) => {
+        if (!classId) return true;
+        const classOk = String(s.classId) === String(classId) || norm(s.studentClass || s.currentClass) === norm(cls?.name);
+        if (!classOk) return false;
+        if (!streamId) return true;
+        return String(s.streamId) === String(streamId) || norm(s.stream || s.streamName) === norm(stream?.name);
+    });
 
     const send = useMutation({
         mutationFn: async () => (await api.post("/messaging/compose", {
             type, subject, body, sendSms,
-            ...(scope === "student" ? { studentId } : { classId, className: cls ? clsLabel(cls) : "" }),
+            ...(scope === "student" ? { studentId } : { classId, className: cls?.name || "", streamId, streamName: stream?.name || "", classLabel }),
             ...(type === "Results" ? { examId } : {}),
         })).data,
         onSuccess: (d: any) => { toast.success(`Sent to ${d.sent} parent(s)${d.smsSent ? ` · ${d.smsSent} SMS` : ""}.`); setSubject(""); setBody(""); },
@@ -70,10 +82,16 @@ export default function ParentMessaging() {
                         <button onClick={() => setScope("class")} className={`h-9 px-3 rounded-lg text-sm font-bold ${scope === "class" ? "bg-[#5C67F2] text-white" : "bg-slate-50 text-slate-600"}`}>Whole Class</button>
                         <button onClick={() => setScope("student")} className={`h-9 px-3 rounded-lg text-sm font-bold ${scope === "student" ? "bg-[#5C67F2] text-white" : "bg-slate-50 text-slate-600"}`}>One Student</button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <select value={classId} onChange={e => { setClassId(e.target.value); setStudentId(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Class (Form 4) */}
+                        <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); setStudentId(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                             <option value="">— Class —</option>
-                            {classes.map((c: any) => <option key={c._id} value={c._id}>{clsLabel(c) || "Unnamed"}</option>)}
+                            {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name || "Unnamed"}</option>)}
+                        </select>
+                        {/* Stream (East/South) */}
+                        <select value={streamId} onChange={e => { setStreamId(e.target.value); setStudentId(""); }} disabled={!classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
+                            <option value="">All streams</option>
+                            {streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                         </select>
                         {scope === "student" && (
                             <select value={studentId} onChange={e => setStudentId(e.target.value)} disabled={!classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
@@ -82,6 +100,9 @@ export default function ParentMessaging() {
                             </select>
                         )}
                     </div>
+                    {scope === "class" && classId && (
+                        <p className="text-[11px] text-slate-400 mt-1">{classStudents.length} student(s) in {classLabel || "this class"}.</p>
+                    )}
                 </div>
 
                 {/* Results: pick exam to attach */}
@@ -90,7 +111,7 @@ export default function ParentMessaging() {
                         <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Attach Results From</label>
                         <select value={examId} onChange={e => setExamId(e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                             <option value="">— Exam —</option>
-                            {exams.map((ex: any) => <option key={ex._id} value={ex._id}>{formatExamName(ex, cls ? clsLabel(cls) : undefined)}</option>)}
+                            {exams.map((ex: any) => <option key={ex._id} value={ex._id}>{formatExamName(ex, classLabel || undefined)}</option>)}
                         </select>
                         <p className="text-[11px] text-slate-400 mt-1">Each parent's message will include their child's results for this exam.</p>
                     </div>

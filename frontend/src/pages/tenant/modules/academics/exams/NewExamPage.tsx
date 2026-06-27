@@ -54,9 +54,11 @@ export default function NewExamPage() {
         queryKey: ["v2_academic_years"],
         queryFn: async () => (await api.get("/v2/academic-years")).data || [],
     });
+    // v2 classes (levels like Form 4). Exams are scoped to a class LEVEL; each
+    // stream is named per-card at render time, and marks are entered per stream.
     const { data: classes = [] } = useQuery<any[]>({
-        queryKey: ["classes"],
-        queryFn: async () => (await api.get("/academics/classes")).data || [],
+        queryKey: ["v2_classes"],
+        queryFn: async () => (await api.get("/v2/classes")).data || [],
     });
     const { data: subjects = [] } = useQuery<any[]>({
         queryKey: ["subjects"],
@@ -275,7 +277,7 @@ export default function NewExamPage() {
                         <Field label="Class">
                             <select value={form.classLevel} onChange={f("classLevel")} className={selectCls}>
                                 <option value="All Classes">All Classes</option>
-                                {classes.map((c: any) => <option key={c._id} value={c.levelName || c.name}>{c.levelName || c.name}</option>)}
+                                {classes.map((c: any) => <option key={c._id} value={c.name}>{c.name}</option>)}
                             </select>
                         </Field>
                     </div>

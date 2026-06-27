@@ -58,6 +58,7 @@ function autoGrade(
 export default function ExamMarks() {
     const [selectedExam, setSelectedExam] = useState<any>(null);
     const [selectedClass, setSelectedClass] = useState<any>(null);
+    const [selectedStream, setSelectedStream] = useState<any>(null);   // v2 stream (East/South)
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
     const [entries, setEntries] = useState<MarkEntry[]>([]);
     const [search, setSearch] = useState("");
@@ -84,9 +85,15 @@ export default function ExamMarks() {
     const examSubjectConfigs: Array<{ subjectId: string; subjectName: string; maxMarks: number }> =
         examDetail?.subjectConfigs || [];
 
+    // v2 classes (Form 4) + streams (East/South) for the chosen class.
     const { data: classes = [] } = useQuery<any[]>({
-        queryKey: ["classes"],
-        queryFn: async () => (await api.get("/academics/classes")).data,
+        queryKey: ["v2_classes"],
+        queryFn: async () => (await api.get("/v2/classes")).data || [],
+    });
+    const { data: streams = [] } = useQuery<any[]>({
+        queryKey: ["v2_streams", selectedClass?._id],
+        enabled: !!selectedClass?._id,
+        queryFn: async () => (await api.get("/v2/streams", { params: { classId: selectedClass._id } })).data || [],
     });
 
     const { data: subjectsRaw = [] } = useQuery<any[]>({
@@ -139,12 +146,18 @@ export default function ExamMarks() {
         gradingConfig?.grades || [];
 
 
-    // Filter students for the selected class — matches by classId OR by studentClass name (same as Classes.tsx)
+    // Filter students for the selected class + stream. Match by v2 classId/streamId
+    // when stored on the student, else fall back to class/stream TEXT.
+    const normTxt = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const students = selectedClass
-        ? allStudents.filter((s: any) =>
-            s.classId === selectedClass._id ||
-            s.studentClass === (selectedClass.levelName || selectedClass.name)
-          )
+        ? allStudents.filter((s: any) => {
+            const classOk = s.classId === selectedClass._id ||
+                normTxt(s.studentClass || s.currentClass) === normTxt(selectedClass.name || selectedClass.className);
+            if (!classOk) return false;
+            if (!selectedStream) return true;   // "All streams"
+            return String(s.streamId) === String(selectedStream._id) ||
+                normTxt(s.stream || s.streamName) === normTxt(selectedStream.name);
+          })
         : [];
 
     const { data: existingMarks = [] } = useQuery<any[]>({
@@ -245,7 +258,9 @@ export default function ExamMarks() {
                 subjectId: selectedSubject._id,
                 subjectName: selectedSubject.name || selectedSubject.subjectName,
                 classId: selectedClass._id,
-                className: selectedClass.levelName || selectedClass.name,
+                className: selectedClass.name || selectedClass.className,
+                streamId: selectedStream?._id || null,
+                streamName: selectedStream?.name || "",
                 // Always store as number; 0 for absent
                 marksObtained: e.attendanceStatus === "Absent" ? 0 : Number(e.marksObtained),
                 totalMarks: Number(e.totalMarks) || 100,
@@ -281,7 +296,7 @@ export default function ExamMarks() {
                 <p className="text-slate-400 text-sm font-medium mb-8">Select exam, class, and subject to enter or update student marks.</p>
 
                 {/* Filters */}
-                <div className="grid grid-cols-3 gap-4 mb-8">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {/* Exam */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Exam</label>
@@ -302,20 +317,39 @@ export default function ExamMarks() {
                         </div>
                     </div>
 
-                    {/* Class */}
+                    {/* Class (Form 4) */}
                     <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Class</label>
                         <div className="relative">
                             <select
                                 value={selectedClass?._id || ""}
-                                onChange={e => setSelectedClass(classes.find((o: any) => o._id === e.target.value) || null)}
+                                onChange={e => { setSelectedClass(classes.find((o: any) => o._id === e.target.value) || null); setSelectedStream(null); setEntries([]); }}
                                 className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
                             >
                                 <option value="">— Select Class —</option>
                                 {classes.map((o: any) => (
                                     <option key={o._id} value={o._id}>
-                                        {o.levelName || o.name || "—"}
+                                        {o.name || "—"}
                                     </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+
+                    {/* Stream (East / South) */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Select Stream</label>
+                        <div className="relative">
+                            <select
+                                value={selectedStream?._id || ""}
+                                onChange={e => { setSelectedStream(streams.find((o: any) => o._id === e.target.value) || null); setEntries([]); }}
+                                disabled={!selectedClass}
+                                className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none disabled:bg-gray-50"
+                            >
+                                <option value="">All streams</option>
+                                {streams.map((o: any) => (
+                                    <option key={o._id} value={o._id}>{o.name}</option>
                                 ))}
                             </select>
                             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -377,7 +411,7 @@ export default function ExamMarks() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <h3 className="font-black text-slate-700 text-sm">
-                                        {selectedExam?.examName} · {selectedClass?.name} · {selectedSubject?.name}
+                                        {selectedExam?.examName} · {selectedClass?.name}{selectedStream ? ` ${selectedStream.name}` : ""} · {selectedSubject?.name}
                                     </h3>
                                     <p className="text-xs text-slate-400 font-medium mt-0.5">
                                         {filtered.length} student(s) · Grades auto-calculated · Max marks: <strong className="text-[#5C67F2]">{subjectMaxMarks}</strong>

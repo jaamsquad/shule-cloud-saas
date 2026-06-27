@@ -31,7 +31,7 @@ async function resultsAttachment(database: Db, studentId: string, examId: string
 router.post('/messaging/compose', async (req: Request, res: Response) => {
     try {
         const database = db(req);
-        const { type, subject, body, classId, className, studentId, examId } = req.body || {};
+        const { type, subject, body, classId, className, streamId, streamName, studentId, examId } = req.body || {};
         if (!TYPES.includes(type)) return res.status(400).json({ message: 'Invalid message type.' });
         if (!subject) return res.status(400).json({ message: 'Subject is required.' });
 
@@ -42,8 +42,19 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             const s = await database.collection('students').findOne({ _id: new ObjectId(String(studentId)) }).catch(() => null);
             if (s) recipients = [s];
         } else if (classId || className) {
+            // Resolve by class, then narrow to a stream when one is chosen.
             const q: any = classId ? { classId: String(classId) } : { $or: [{ studentClass: className }, { currentClass: className }] };
-            recipients = await database.collection('students').find(q).toArray().catch(() => []);
+            let list = await database.collection('students').find(q).toArray().catch(() => []);
+            // If classId yielded nothing (legacy students stored class as text), retry by name.
+            if (!list.length && className) {
+                list = await database.collection('students').find({ $or: [{ studentClass: className }, { currentClass: className }] }).toArray().catch(() => []);
+            }
+            if (streamId || streamName) {
+                const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+                const wantStream = norm(streamName);
+                list = list.filter((s: any) => String(s.streamId) === String(streamId) || (wantStream && norm(s.stream || s.streamName) === wantStream));
+            }
+            recipients = list;
         }
         if (!recipients.length) return res.status(400).json({ message: 'No recipients found.' });
 
