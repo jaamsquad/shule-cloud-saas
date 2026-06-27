@@ -73,13 +73,28 @@ async function buildExamResults(database: Db, examId: string) {
     const sById: Record<string, any> = {};
     students.forEach((s: any) => { sById[String(s._id)] = s; });
 
-    // Derive a clean stream label. Prefer the explicit stream field; else try to
-    // extract the stream word from the class text ("Form 4 West" → "West"). If the
-    // class text has NO stream word (just "Form 4"), the student has no stream —
-    // label it "(No stream)" rather than inventing a stream named after the class.
+    // Authoritative streams = the v2_streams collection. We resolve each student's
+    // stream against THIS list so analytics shows real streams (West/South), not a
+    // stale word left in old class text.
+    const v2Streams = await database.collection('v2_streams').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+    const streamById: Record<string, any> = {}; const streamByName: Record<string, any> = {};
+    v2Streams.forEach((s: any) => { streamById[String(s._id)] = s; streamByName[String(s.name || '').toLowerCase().trim()] = s; });
+    const validStreamNames = new Set(v2Streams.map((s: any) => String(s.name || '').toLowerCase().trim()));
+
+    // Resolve a student's stream: prefer the v2 streamId, then a v2 stream whose
+    // NAME the student references, then a stream word in the class text — but ONLY
+    // if that word is a real v2 stream. Otherwise "(No stream)".
     const streamWord = (className: string): string => {
         const m = String(className || '').match(/(?:form|grade)\s*\d+\s+(.+)$/i);
         return m ? m[1].trim() : '';
+    };
+    const resolveStream = (stu: any, className: string): string => {
+        if (stu.streamId && streamById[String(stu.streamId)]) return streamById[String(stu.streamId)].name;
+        const named = String(stu.streamName || stu.stream || '').toLowerCase().trim();
+        if (named && (validStreamNames.size === 0 || validStreamNames.has(named))) return stu.streamName || stu.stream;
+        const word = streamWord(className).toLowerCase().trim();
+        if (word && validStreamNames.has(word)) return streamWord(className);
+        return '(No stream)';
     };
     const rows = ids.map((sid) => {
         const r = byStudent[sid];
@@ -90,7 +105,7 @@ async function buildExamResults(database: Db, examId: string) {
         const meanPct = subjects.length ? subjects.reduce((a: number, s: any) => a + s.pct, 0) / subjects.length : 0;
         const meanPoints = subjects.length ? totalPoints / subjects.length : 0;
         const className = r.classAtTime || stu.studentClass || stu.currentClass || '';
-        const stream = stu.streamName || stu.stream || streamWord(className) || '(No stream)';
+        const stream = resolveStream(stu, className);
         return {
             studentId: sid,
             name: stu.studentName || stu.name || 'Student',
