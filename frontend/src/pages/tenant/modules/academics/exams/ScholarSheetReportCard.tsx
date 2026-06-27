@@ -37,8 +37,8 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
             )}
 
             <style>{`
-                @page { size: A4 portrait; margin: 8mm; }
-                @media print { .no-print { display: none !important; } body { -webkit-print-color-adjust: exact; } }
+                ${hideToolbar ? "" : "@page { size: A4 portrait; margin: 8mm; }"}
+                @media print { .no-print { display: none !important; } body { -webkit-print-color-adjust: exact; } .rc { break-inside: avoid; } }
                 .rc { width: 194mm; margin: 0 auto; color: #000; font-family: 'Times New Roman', Georgia, serif; font-size: 10px; line-height: 1.15; }
                 .rc table { width: 100%; border-collapse: collapse; }
                 .rc td, .rc th { border: 0.6px solid #000; padding: 1.5px 3px; }

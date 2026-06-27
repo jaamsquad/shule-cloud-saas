@@ -33,7 +33,8 @@ export default function ScholarSheetPage() {
 
     return (
         <div className="flex-1 bg-[#F5F5F5] min-h-screen">
-            {/* Print rules: show only .ss-print-area; hide app chrome + this toolbar. */}
+            {/* Print rules: show only .ss-print-area; hide app chrome + toolbar.
+                Every report card prints on its OWN page. */}
             <style>{`
                 @media print {
                     body * { visibility: hidden !important; }
@@ -41,8 +42,10 @@ export default function ScholarSheetPage() {
                     .ss-print-area { position: absolute; left: 0; top: 0; width: 100%; }
                     .ss-no-print { display: none !important; }
                     @page { size: A4 portrait; margin: 8mm; }
+                    /* One card per page: never split a card, always break after each. */
+                    .ss-card { page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; box-shadow: none !important; margin: 0 !important; }
+                    .ss-card:last-child { page-break-after: auto; break-after: auto; }
                 }
-                .ss-card-break { page-break-after: always; }
             `}</style>
 
             <div className="ss-no-print bg-white border-b border-slate-100 p-4">
@@ -77,8 +80,8 @@ export default function ScholarSheetPage() {
 
             {ready ? (
                 <div className="ss-print-area p-4 print:p-0">
-                    {renderList.map((s: any, i: number) => (
-                        <div key={s._id} className={`bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${i < renderList.length - 1 ? "ss-card-break" : ""}`}>
+                    {renderList.map((s: any) => (
+                        <div key={s._id} className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0">
                             <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar />
                         </div>
                     ))}
