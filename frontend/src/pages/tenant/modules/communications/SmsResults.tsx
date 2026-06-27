@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { GraduationCap, FileText, BookOpenCheck, Send, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { sms } from "@/lib/smsApi";
+import api from "@/lib/api";
 
 const PURPLE = "#5C67F2";
 
@@ -18,13 +19,24 @@ export default function SmsResults() {
   const [type, setType] = useState<SourceType>("exam");
   const [id, setId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
+  // Optional class + stream filter (leave blank = whole school).
+  const [classId, setClassId] = useState("");
+  const [streamId, setStreamId] = useState("");
 
   const { data: sources, isLoading } = useQuery({ queryKey: ["sms_result_sources"], queryFn: sms.resultSources });
+  const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
+  const { data: streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
+  const cls = classes.find((c: any) => String(c._id) === classId);
+  const stream = streams.find((s: any) => String(s._id) === streamId);
 
   const list = type === "exam" ? (sources?.exams || []) : type === "classTest" ? (sources?.classTests || []) : (sources?.cbcActivities || []);
 
   const send = useMutation({
-    mutationFn: () => sms.sendResults({ type, id, scheduledAt: scheduledAt || null }),
+    mutationFn: () => sms.sendResults({
+      type, id, scheduledAt: scheduledAt || null,
+      classId: classId || undefined, className: cls?.name || undefined,
+      streamId: streamId || undefined, streamName: stream?.name || undefined,
+    }),
     onSuccess: (r: any) => {
       toast.success(scheduledAt
         ? `Scheduled results for ${r.recipients} learner(s).`
@@ -77,6 +89,24 @@ export default function SmsResults() {
               ))}
             </select>
           )}
+        </div>
+
+        {/* Class + stream filter (optional) */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Send To (optional — leave blank for all)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); }} className="h-11 px-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]">
+              <option value="">All classes</option>
+              {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+            <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!classId} className="h-11 px-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] disabled:opacity-50">
+              <option value="">All streams</option>
+              {streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+            </select>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1.5">
+            {classId ? `Only ${cls?.name || "class"}${stream ? ` ${stream.name}` : " (all streams)"} parents.` : "Results go to every learner's parent."}
+          </p>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">

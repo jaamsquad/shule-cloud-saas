@@ -166,6 +166,7 @@ const CBC_LABEL: Record<string, string> = { EE: 'Exceeding Expectation', ME: 'Me
 /** Build personalised result messages (phone + text) for an exam/class-test/CBC source. */
 export const buildResultMessages = async (
     db: Db, type: 'exam' | 'classTest' | 'cbc', id: string,
+    filter?: { classId?: string; streamId?: string; className?: string; streamName?: string },
 ): Promise<{ phone: string; text: string }[]> => {
     const { ObjectId } = await import('mongodb');
     const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
@@ -176,13 +177,25 @@ export const buildResultMessages = async (
     const out: { phone: string; text: string }[] = [];
     const pre = school ? school + ': ' : '';
 
+    // Optional class+stream gate: only send to learners in the chosen class
+    // (and stream, if one is chosen). Matches by v2 ids or class/stream TEXT.
+    const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const f = filter && (filter.classId || filter.className) ? filter : null;
+    const passesFilter = (st: any): boolean => {
+        if (!f) return true;
+        const classOk = String(st.classId) === String(f.classId) || norm(st.studentClass || st.currentClass) === norm(f.className);
+        if (!classOk) return false;
+        if (!f.streamId && !f.streamName) return true;
+        return String(st.streamId) === String(f.streamId) || norm(st.stream || st.streamName) === norm(f.streamName);
+    };
+
     if (type === 'exam') {
         const exam = await db.collection('exams').findOne({ _id: oid(id) });
         const marks = await db.collection('marks').find({ examId: id }).toArray();
         const byStudent: Record<string, any[]> = {};
         marks.forEach((m: any) => { (byStudent[m.studentId] ||= []).push(m); });
         for (const [sid, ms] of Object.entries(byStudent)) {
-            const st = byId[sid]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            const st = byId[sid]; if (!st || !passesFilter(st)) continue; const phone = studentPhone(st); if (!phone) continue;
             const total = ms.reduce((t, m) => t + Number(m.marks || m.score || 0), 0);
             const avg = ms.length ? Math.round(total / ms.length) : 0;
             const lines = ms.map(m => `${m.subjectName || 'Subj'}:${Number(m.marks || m.score || 0)}(${gradeFor(Number(m.marks || m.score || 0))})`).join(', ');
@@ -192,7 +205,7 @@ export const buildResultMessages = async (
         const test = await db.collection('class_tests').findOne({ _id: oid(id) });
         const tmarks = await db.collection('test_marks').find({ test_id: oid(id) }).toArray();
         for (const m of tmarks) {
-            const st = byId[String(m.student_id)] || byId[m.studentId]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            const st = byId[String(m.student_id)] || byId[m.studentId]; if (!st || !passesFilter(st)) continue; const phone = studentPhone(st); if (!phone) continue;
             const score = Number(m.score ?? m.marks ?? 0);
             const display = test?.total_marks ? `${score}/${test.total_marks}` : `${score}`;
             out.push({ phone, text: `${pre}${studentName(st)} scored ${display} in ${test?.name || 'the class test'}${test?.subject_name ? ' (' + test.subject_name + ')' : ''}.` });
@@ -201,7 +214,7 @@ export const buildResultMessages = async (
         const activity = await db.collection('cbc_activities').findOne({ _id: oid(id) });
         const assessments = await db.collection('cbc_assessments').find({ activityId: id, deletedAt: { $exists: false } }).toArray();
         for (const a of assessments) {
-            const st = byId[a.studentId]; if (!st) continue; const phone = studentPhone(st); if (!phone) continue;
+            const st = byId[a.studentId]; if (!st || !passesFilter(st)) continue; const phone = studentPhone(st); if (!phone) continue;
             out.push({ phone, text: `${pre}${studentName(st)} — ${activity?.learningArea || activity?.title || 'CBC'} assessment: ${a.level} (${CBC_LABEL[a.level] || ''}).` });
         }
     }

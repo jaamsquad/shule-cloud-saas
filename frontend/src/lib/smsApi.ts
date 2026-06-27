@@ -11,7 +11,7 @@ export const sms = {
   test: (phone: string) => api.post("/communications/sms/test", { phone }).then(r => r.data),
 
   resultSources: () => api.get("/communications/sms/result-sources").then(r => r.data),
-  sendResults: (body: { type: string; id: string; scheduledAt?: string | null }) =>
+  sendResults: (body: { type: string; id: string; scheduledAt?: string | null; classId?: string; streamId?: string; className?: string; streamName?: string }) =>
     api.post("/communications/sms/send-results", body).then(r => r.data),
 
   devices: () => api.get("/sms/devices").then(r => r.data),

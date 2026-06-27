@@ -66,6 +66,14 @@ async function buildExamResults(database: Db, examId: string) {
     const sById: Record<string, any> = {};
     students.forEach((s: any) => { sById[String(s._id)] = s; });
 
+    // Derive a clean stream label. Prefer the explicit stream field; else try to
+    // extract the stream word from the class text ("Form 4 West" → "West"). If the
+    // class text has NO stream word (just "Form 4"), the student has no stream —
+    // label it "(No stream)" rather than inventing a stream named after the class.
+    const streamWord = (className: string): string => {
+        const m = String(className || '').match(/(?:form|grade)\s*\d+\s+(.+)$/i);
+        return m ? m[1].trim() : '';
+    };
     const rows = ids.map((sid) => {
         const r = byStudent[sid];
         const stu = sById[sid] || {};
@@ -74,12 +82,14 @@ async function buildExamResults(database: Db, examId: string) {
         const totalPoints = subjects.reduce((a: number, s: any) => a + s.points, 0);
         const meanPct = subjects.length ? subjects.reduce((a: number, s: any) => a + s.pct, 0) / subjects.length : 0;
         const meanPoints = subjects.length ? totalPoints / subjects.length : 0;
+        const className = r.classAtTime || stu.studentClass || stu.currentClass || '';
+        const stream = stu.streamName || stu.stream || streamWord(className) || '(No stream)';
         return {
             studentId: sid,
             name: stu.studentName || stu.name || 'Student',
             adm: stu.registrationNo || stu.admNo || stu.admissionNo || '',
-            stream: stu.stream || stu.streamName || '',
-            className: r.classAtTime || stu.studentClass || stu.currentClass || '',
+            stream,
+            className,
             kcpe: num(stu.kcpeMarks ?? stu.kcpe),
             subjects, totalMarks, totalPoints,
             meanPct: round(meanPct, 2), meanPoints: round(meanPoints, 2),
@@ -286,7 +296,7 @@ router.get('/analytics/class-levels', async (req: Request, res: Response) => {
         rows.forEach(r => { (byLevel[levelOf(r.className || r.stream)] ||= []).push(r); });
         const classes = Object.entries(byLevel).map(([level, list]) => {
             const byStream: Record<string, any[]> = {};
-            list.forEach(r => { (byStream[r.stream || level] ||= []).push(r); });
+            list.forEach(r => { (byStream[r.stream || '(No stream)'] ||= []).push(r); });
             const mp = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
             return {
                 level, students: list.length,

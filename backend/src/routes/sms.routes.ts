@@ -132,10 +132,10 @@ router.get('/communications/sms/result-sources', async (req, res) => {
 router.post('/communications/sms/send-results', async (req, res) => {
     try {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
-        const { type, id, scheduledAt } = req.body || {};
+        const { type, id, scheduledAt, classId, streamId, className, streamName } = req.body || {};
         if (!type || !id) return res.status(400).json({ message: 'Choose a result source' });
 
-        const messagesRaw = await buildResultMessages(db, type, id);
+        const messagesRaw = await buildResultMessages(db, type, id, { classId, streamId, className, streamName });
         if (messagesRaw.length === 0) return res.status(409).json({ message: 'No results found, or students have no parent phone numbers.' });
         // Prefix the school name on every result message.
         const messages = await Promise.all(messagesRaw.map(async (m: any) => ({ ...m, text: await brandFor(req, db, m.text) })));
