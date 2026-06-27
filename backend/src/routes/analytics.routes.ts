@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Db } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 
@@ -174,7 +174,8 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
     try {
         const examId = String(req.query.examId || '');
         if (!examId) return res.json({ classes: [] });
-        const { rows, scale } = await buildExamResults(db(req), examId);
+        const database = db(req);
+        const { rows, scale } = await buildExamResults(database, examId);
         // Group by CLASS LEVEL ("Form 4"), not per stream — so My Classes shows one
         // card per form that aggregates all its streams.
         const byClass: Record<string, any[]> = {};
@@ -187,11 +188,29 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
             const meanPoints = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
             const meanPct = list.reduce((a, r) => a + r.meanPct, 0) / list.length;
             return {
-                name, students: list.length,
+                name, students: list.length, noMarks: false,
                 meanPoints: round(meanPoints, 2), meanPct: round(meanPct, 2),
                 meanGrade: meanGradeFromPoints(scale, meanPoints), breakdown,
             };
         });
+
+        // Also surface every class the exam APPLIES TO — even if no marks are entered
+        // yet — so My Classes shows the full picture (and which classes still need
+        // marks). The exam's classLevel is "All Classes" or a specific level.
+        const exam: any = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
+        const examLevel = String(exam?.classLevel || exam?.classLevels || '').trim();
+        const v2Classes = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+        const have = new Set(classes.map(c => c.name.toLowerCase()));
+        const wantedLevels = (!examLevel || /all/i.test(examLevel))
+            ? v2Classes.map((c: any) => levelOf(c.name))   // all classes
+            : [levelOf(examLevel)];
+        for (const lvl of wantedLevels) {
+            if (have.has(lvl.toLowerCase())) continue;
+            have.add(lvl.toLowerCase());
+            const emptyBreakdown: Record<string, number> = {}; grades.forEach((g: string) => emptyBreakdown[g] = 0);
+            classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown });
+        }
+        classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
         res.json({ classes, grades });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

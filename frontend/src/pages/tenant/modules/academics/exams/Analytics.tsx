@@ -31,7 +31,7 @@ export default function Analytics() {
             <div className="text-white px-5 py-4 flex items-center justify-between" style={{ background: GREEN }}>
                 <div className="flex items-center gap-2">
                     {form && <button onClick={() => setForm(null)} className="mr-1"><ArrowLeft className="w-5 h-5" /></button>}
-                    <h1 className="text-lg font-black">{form ? `${form} Analytics` : "My Classes"}</h1>
+                    <h1 className="text-lg font-black">{form ? `${form} Analytics` : "Analysis"}</h1>
                 </div>
                 {/* Exam selector (grouped by term) */}
                 <div className="relative">
@@ -83,27 +83,36 @@ function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: strin
     return (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {classes.map((c: any) => (
-                <div key={c.name} className="bg-white rounded-2xl border border-slate-100 p-5">
+                <div key={c.name} className={`bg-white rounded-2xl border p-5 ${c.noMarks ? "border-dashed border-slate-200" : "border-slate-100"}`}>
                     <div className="flex items-center justify-between mb-3">
                         <h3 className="font-black text-slate-800">{c.name}</h3>
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Users className="w-3.5 h-3.5" />{c.students}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                        <Stat label="Mean Pts" value={c.meanPoints} />
-                        <Stat label="Mean %" value={`${c.meanPct}`} />
-                        <Stat label="Grade" value={c.meanGrade} />
-                    </div>
-                    {/* Grade breakdown bars */}
-                    <div className="h-20">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={grades.map((g: string) => ({ grade: g, n: c.breakdown[g] || 0 }))}>
-                                <XAxis dataKey="grade" tick={{ fontSize: 8 }} interval={0} />
-                                <Tooltip />
-                                <Bar dataKey="n" fill={LIGHT} radius={[2, 2, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <button onClick={() => onAnalyze(c.name)} className="w-full mt-3 h-9 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-1.5" style={{ background: GREEN }}>
+                    {c.noMarks ? (
+                        <div className="py-6 text-center">
+                            <p className="text-sm font-bold text-slate-400">No marks entered yet</p>
+                            <p className="text-[11px] text-slate-400 mt-1">This class sat the exam but marks are pending.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                                <Stat label="Mean Pts" value={c.meanPoints} />
+                                <Stat label="Mean %" value={`${c.meanPct}`} />
+                                <Stat label="Grade" value={c.meanGrade} />
+                            </div>
+                            {/* Grade breakdown bars */}
+                            <div className="h-20">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={grades.map((g: string) => ({ grade: g, n: c.breakdown[g] || 0 }))}>
+                                        <XAxis dataKey="grade" tick={{ fontSize: 8 }} interval={0} />
+                                        <Tooltip />
+                                        <Bar dataKey="n" fill={LIGHT} radius={[2, 2, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </>
+                    )}
+                    <button onClick={() => onAnalyze(c.name)} disabled={c.noMarks} className="w-full mt-3 h-9 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-1.5 disabled:opacity-40" style={{ background: GREEN }}>
                         Analyze <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
