@@ -228,7 +228,13 @@ export const deleteItem = (collectionName: string) => async (req: Request, res: 
     try {
         const db = getRequestDb(req);
         const { id } = req.params;
-        const item = await db.collection(collectionName).findOne({ _id: new ObjectId(id) });
+        // _id may be stored as an ObjectId OR a plain string. Match either so delete
+        // never silently fails on a non-ObjectId id.
+        const idCandidates: any[] = [id];
+        try { idCandidates.push(new ObjectId(id)); } catch { /* not a valid ObjectId — string only */ }
+        const filter = { _id: { $in: idCandidates } };
+
+        const item = await db.collection(collectionName).findOne(filter);
         if (!item) return res.status(404).json({ message: 'Item not found in active registry' });
 
         // Archive within this institution's own database
@@ -239,8 +245,8 @@ export const deleteItem = (collectionName: string) => async (req: Request, res: 
             archivedId: item._id
         });
 
-        await db.collection(collectionName).deleteOne({ _id: new ObjectId(id) });
-        res.json({ message: 'Entity moved to secure archives (Auto-purge in 30 days)' });
+        const result = await db.collection(collectionName).deleteOne({ _id: item._id });
+        res.json({ message: 'Entity moved to secure archives (Auto-purge in 30 days)', deleted: result.deletedCount });
     } catch (error: any) {
         res.status(500).json({ message: 'Archival integrity error', error: error.message });
     }

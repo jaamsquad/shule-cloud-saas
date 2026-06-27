@@ -157,8 +157,12 @@ export default function CreateExam() {
         mutationFn: (id: string) => api.delete(`/academics/exams/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["exams"] });
+            queryClient.invalidateQueries({ queryKey: ["report_card_generations"] });
             setDeleteConfirm(null);
             toast.success("Exam deleted");
+        },
+        onError: (e: any) => {
+            toast.error(e?.response?.data?.message || e?.message || "Could not delete exam");
         },
     });
 
