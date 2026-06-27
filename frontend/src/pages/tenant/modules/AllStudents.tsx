@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -300,11 +300,24 @@ function ClassStreamEditor({ student, classes, saving, onCancel, onSave }: {
     onCancel: () => void;
     onSave: (payload: any) => void;
 }) {
-    // Pre-select the student's current class (by id or by name) and stream.
-    const initialClass = classes.find((c: any) =>
-        String(c._id) === String(student.classId) || norm(c.name) === norm(student.studentClass) || norm(student.studentClass).startsWith(norm(c.name)));
+    // Pre-select the student's current class. We TRUST the displayed class TEXT
+    // (studentClass, e.g. "Form 4 West") over a possibly-stale classId, because the
+    // list shows that text. Match the v2 class whose name is the class LEVEL of that
+    // text ("Form 4"). Only fall back to classId if the text gives no match.
+    const displayText = norm(student.studentClass || student.currentClass || student.className);
+    const levelKey = (v: string) => { const m = String(v).match(/(form|grade)\s*\d+/i); return m ? m[0].replace(/\s+/g, " ").toLowerCase().trim() : ""; };
+    const wantLevel = levelKey(displayText);
+    const byText = classes.find((c: any) => {
+        const cn = norm(c.name);
+        return cn === displayText || (wantLevel && levelKey(cn) === wantLevel) || (cn && displayText.startsWith(cn + " ")) || cn === displayText;
+    });
+    const byId = classes.find((c: any) => String(c._id) === String(student.classId));
+    const initialClass = byText || byId;
     const [classId, setClassId] = useState<string>(initialClass?._id ? String(initialClass._id) : "");
+    // Pre-select the stream from streamId, else the stream word in the class text.
+    const streamWord = (() => { const m = String(student.studentClass || "").match(/(?:form|grade)\s*\d+\s+(.+)$/i); return m ? m[1].trim() : ""; })();
     const [streamId, setStreamId] = useState<string>(student.streamId ? String(student.streamId) : "");
+    const [streamPreset] = useState<string>(norm(student.streamName || student.stream || streamWord));
 
     const { data: streams = [] } = useQuery<any[]>({
         queryKey: ["v2_streams", classId],
@@ -313,6 +326,14 @@ function ClassStreamEditor({ student, classes, saving, onCancel, onSave }: {
     });
     const cls = classes.find((c: any) => String(c._id) === classId);
     const stream = streams.find((s: any) => String(s._id) === streamId);
+
+    // Once the class's streams load, pre-select the student's current stream by name
+    // (when we don't already have a streamId).
+    useEffect(() => {
+        if (streamId || !streamPreset || !streams.length) return;
+        const match = streams.find((s: any) => norm(s.name) === streamPreset);
+        if (match) setStreamId(String(match._id));
+    }, [streams, streamPreset, streamId]);
 
     const save = () => {
         if (!cls) { onCancel(); return; }

@@ -20,7 +20,24 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
     if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
     if (!data) return <div className="p-8 text-center text-slate-400">No report data.</div>;
 
+    // Report card not generated for this class/term yet → show a clear notice
+    // instead of partial marks. (Generate it in Exams → Generate Report Cards.)
+    if (data.notReady) {
+        return (
+            <div className="p-10 text-center">
+                <p className="text-base font-black text-slate-700">Result not ready yet for this term</p>
+                <p className="text-sm text-slate-400 mt-1">
+                    {data.student?.name ? `${data.student.name} · ${data.student.className || ""}` : ""}
+                </p>
+                <p className="text-xs text-slate-400 mt-3">Generate this class's report cards in <b>Exams → Generate Report Cards</b>, then reopen.</p>
+            </div>
+        );
+    }
+
     const d = data;
+    // Per-exam columns (Mid Term / End Term…). Falls back to a single "END TERM".
+    const cols: Array<{ examId: string; title: string }> = d.examColumns?.length ? d.examColumns : [{ examId: "", title: "END TERM" }];
+    const multiExam: boolean = !!d.multiExam && cols.length > 1;
     const maxChart = Math.max(12.5, ...((d.chart || []).map((c: any) => c.value)));
     // Chart bars = only the (level, term) points that have data + a Target.
     const chartBars = [...(d.chart || []), { label: "Target", value: maxChart, target: true }];
@@ -92,22 +109,34 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                     </tr></tbody></table>
                 )}
 
-                {/* Subject table */}
+                {/* Subject table — one column per exam (Mid Term / End Term…),
+                    plus an Aggregate column when more than one exam is combined. */}
                 <table style={{ marginTop: 3 }}><tbody>
                     <tr style={{ fontWeight: 700 }}>
-                        <td>Subject</td><td style={{ textAlign: "center" }}>END TERM</td><td style={{ textAlign: "center" }}>Point</td><td style={{ textAlign: "center" }}>Grade</td><td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
+                        <td>Subject</td>
+                        {cols.map((c, ci) => <td key={ci} style={{ textAlign: "center" }}>{c.title}</td>)}
+                        {multiExam && <td style={{ textAlign: "center" }}>AGGREGATE</td>}
+                        <td style={{ textAlign: "center" }}>Point</td><td style={{ textAlign: "center" }}>Grade</td><td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
                     </tr>
-                    {(d.subjects || []).map((s: any, i: number) => (
-                        <tr key={i}>
-                            <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
-                            <td style={{ textAlign: "center" }}>{Math.round(s.mark)}/{Math.round(s.outOf)}</td>
-                            <td style={{ textAlign: "center" }}>{s.point}</td>
-                            <td style={{ textAlign: "center" }}>{s.grade}</td>
-                            <td style={{ textAlign: "center" }}>{s.position}</td>
-                            <td style={{ textTransform: "uppercase" }}>{s.remark}</td>
-                            <td style={{ textAlign: "center" }}>{s.initials || "-"}</td>
-                        </tr>
-                    ))}
+                    {(d.subjects || []).map((s: any, i: number) => {
+                        // Per-exam cells (fall back to the single aggregate when no cells).
+                        const cells = s.cells && s.cells.length ? s.cells : [{ mark: s.mark, outOf: s.outOf }];
+                        return (
+                            <tr key={i}>
+                                <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
+                                {cols.map((_c, ci) => {
+                                    const cell = cells[ci];
+                                    return <td key={ci} style={{ textAlign: "center" }}>{cell && cell.mark !== null && cell.mark !== undefined ? `${Math.round(cell.mark)}/${Math.round(cell.outOf)}` : "-"}</td>;
+                                })}
+                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{Math.round(s.mark)}/{Math.round(s.outOf)}</td>}
+                                <td style={{ textAlign: "center" }}>{s.point}</td>
+                                <td style={{ textAlign: "center" }}>{s.grade}</td>
+                                <td style={{ textAlign: "center" }}>{s.position}</td>
+                                <td style={{ textTransform: "uppercase" }}>{s.remark}</td>
+                                <td style={{ textAlign: "center" }}>{s.initials || "-"}</td>
+                            </tr>
+                        );
+                    })}
                 </tbody></table>
 
                 {/* Performance line graph (B&W) — mean points per term */}

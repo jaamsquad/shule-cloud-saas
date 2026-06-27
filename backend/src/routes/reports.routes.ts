@@ -57,24 +57,61 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const classId = String(student.classId || '');
         const { gradeOf, meanGrade } = await loadGrading(database, classId);
 
-        // This exam's marks for everyone (for positions) and for this student.
-        const allMarks = await database.collection('exam_marks').find({ examId }).toArray().catch(() => []);
         const myClass = student.studentClass || student.currentClass || '';
         const myStream = student.stream || student.streamName || '';
 
-        // Per-student aggregates for positions.
+        // Find the report-card generation for THIS student's class. The generation
+        // pins the End Term (main) exam + optional internal assessments (Mid Term,
+        // CAT…) that should appear as columns. We match by classId, or by class name.
+        const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const generations = await database.collection('report_card_generations').find({}).toArray().catch(() => []);
+        const gen: any = generations.find((g: any) =>
+            (classId && String(g.classId) === classId) ||
+            norm(g.className) === norm(myClass) ||
+            norm(g.className) === norm(`${myClass} ${myStream}`) ||
+            (g.mainExamId && String(g.mainExamId) === examId && (norm(myClass).includes(norm(g.className)) || norm(g.className).includes(norm(myClass)))));
+
+        // If the class has no generated report card for this term, the result isn't
+        // ready — tell the frontend to show "Result not ready yet for this term".
+        if (!gen) {
+            return res.json({ notReady: true, message: 'Result not ready yet for this term.',
+                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: `${myClass} ${myStream}`.trim() } });
+        }
+
+        // The exam set = main End Term + any additional internal assessments. Each
+        // becomes a column; the report aggregates across all of them.
+        const examIds: string[] = [String(gen.mainExamId || examId), ...((gen.additionalExamIds || []).map((x: any) => String(x)))]
+            .filter((v, i, a) => v && a.indexOf(v) === i);
+        const examDocs = await database.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray().catch(() => []);
+        const examMeta: Record<string, any> = {}; examDocs.forEach((e: any) => examMeta[String(e._id)] = e);
+        // Short, readable column titles, e.g. "MID TERM", "END TERM".
+        const colTitle = (e: any) => String(e?.type || e?.examType || e?.examName || 'EXAM').toUpperCase().slice(0, 12);
+        const examColumns = examIds.map(id => ({ examId: id, title: colTitle(examMeta[id]) }));
+        const multiExam = examColumns.length > 1;
+
+        // Marks across ALL exams in the set (for positions + per-student aggregate).
+        const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+
+        // Per-student aggregate across the whole exam set (for positions).
         const agg: Record<string, { total: number; points: number; n: number; cls: string; stream: string }> = {};
         const students = await database.collection('students').find({}).toArray().catch(() => []);
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
-        // Per-subject marks for class position per subject.
-        const subjMarks: Record<string, Array<{ sid: string; pct: number }>> = {};
+        // Per-subject AGGREGATED pct per student (avg across the exam set) for subject position.
+        const subjPctByStudent: Record<string, Record<string, { sum: number; n: number }>> = {};
         for (const m of allMarks) {
             const id = String(m.studentId); const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
             const g = gradeOf(pct);
             const meta = sMeta[id] || {};
             (agg[id] ||= { total: 0, points: 0, n: 0, cls: meta.studentClass || meta.currentClass || '', stream: meta.stream || meta.streamName || '' });
             agg[id].total += N(m.marksObtained); agg[id].points += g.points; agg[id].n += 1;
-            (subjMarks[m.subjectName] ||= []).push({ sid: id, pct });
+            const sub = m.subjectName || m.subject || 'Subject';
+            ((subjPctByStudent[sub] ||= {})[id] ||= { sum: 0, n: 0 });
+            subjPctByStudent[sub][id].sum += pct; subjPctByStudent[sub][id].n += 1;
+        }
+        // Aggregated per-subject ranking list (one entry per student, avg pct).
+        const subjMarks: Record<string, Array<{ sid: string; pct: number }>> = {};
+        for (const [sub, byStu] of Object.entries(subjPctByStudent)) {
+            subjMarks[sub] = Object.entries(byStu).map(([id, v]) => ({ sid: id, pct: v.n ? v.sum / v.n : 0 }));
         }
         const rows = Object.entries(agg).map(([id, a]) => ({ id, ...a, mean: a.n ? a.total / a.n : 0, meanPoints: a.n ? a.points / a.n : 0 }));
         // Level (whole-exam) position by total points; class position within same class.
@@ -124,17 +161,40 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             return t ? staffName(t) : '';
         };
 
-        // Subject rows for THIS student (curriculum-driven via the class's subjects).
+        // Subject rows for THIS student, with a column per exam in the set and an
+        // AGGREGATE (average of the per-exam percentages). Group this student's marks
+        // by subject, then per exam.
         const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        const bySubject: Record<string, Record<string, any>> = {};
+        for (const m of mine) {
+            const sub = m.subjectName || m.subject || 'Subject';
+            (bySubject[sub] ||= {})[String(m.examId)] = m;
+        }
         let totalMarks = 0, totalPoints = 0;
-        const subjects = mine.map((m: any) => {
-            const max = N(m.totalMarks) || 100; const mark = N(m.marksObtained); const pct = max > 0 ? (mark / max) * 100 : 0;
-            const g = gradeOf(pct); totalMarks += mark; totalPoints += g.points;
-            const list = (subjMarks[m.subjectName] || []).filter(x => agg[x.sid]?.cls === myClass).sort((a, b) => b.pct - a.pct);
+        const subjects = Object.entries(bySubject).map(([sub, byExam]) => {
+            // One cell per exam column.
+            const cells = examColumns.map(col => {
+                const m = byExam[col.examId];
+                if (!m) return { mark: null as number | null, outOf: 100, pct: null as number | null };
+                const max = N(m.totalMarks) || 100; const mark = N(m.marksObtained);
+                return { mark, outOf: max, pct: max > 0 ? (mark / max) * 100 : 0 };
+            });
+            // Aggregate = average of available exam percentages → a 0-100 score.
+            const present = cells.filter(c => c.pct !== null) as Array<{ mark: number; outOf: number; pct: number }>;
+            const aggPct = present.length ? present.reduce((a, c) => a + c.pct, 0) / present.length : 0;
+            const g = gradeOf(aggPct);
+            const aggMark = Math.round(aggPct);     // aggregate expressed out of 100
+            totalMarks += aggMark; totalPoints += g.points;
+            const list = (subjMarks[sub] || []).filter(x => agg[x.sid]?.cls === myClass).sort((a, b) => b.pct - a.pct);
             const pos = list.findIndex(x => x.sid === sid) + 1;
-            const tName = m.teacherName || teacherForSubject(m.subjectName || m.subject);
-            const initials = m.teacherInitials || initialsOf(tName);
-            return { subject: m.subjectName || m.subject, mark, outOf: max, total: mark, point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials };
+            const tName = teacherForSubject(sub);
+            const initials = initialsOf(tName);
+            return {
+                subject: sub,
+                cells,                                  // per-exam columns
+                mark: aggMark, outOf: 100, total: aggMark,   // aggregate (back-compat fields)
+                point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials,
+            };
         });
         const subjN = subjects.length || 1;
         const meanScore = RND(totalMarks / subjN, 1);
@@ -187,7 +247,9 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             curriculum: profile.curriculum || profile.curriculumType || '8-4-4',
             issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
             termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
-            examTitle: formatExamName(exam, `${myClass} ${myStream}`),
+            examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, `${myClass} ${myStream}`),
+            examColumns,            // [{ examId, title }] — one per exam in the set
+            multiExam,              // true when >1 exam (show columns + aggregate)
             student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: `${myClass} ${myStream}`.trim(), house: student.house || '', photo: student.photo || student.image || '' },
             summary: { totalMarks: `${RND(totalMarks)}/${subjN * 100}`, meanScore, totalPoints, meanPoint, meanGrade: meanGrade(meanPoint), classPos: `${classPos}/${classmates.length}`, levelPos: `${levelPos}/${rows.length}` },
             kcpe: { marks: kcpeMarks || '-', rank: student.kcpeRank || '-', mean: kcpeMean || '-', valueAdded: valueAdded ?? '-' },
