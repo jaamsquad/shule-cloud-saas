@@ -79,6 +79,11 @@ export default function ScholarSheetPage() {
     });
     const allLoaded = cardQueries.length > 0 && cardQueries.every(q => q.isSuccess || q.isError);
     const loadedCount = cardQueries.filter(q => q.isSuccess).length;
+    // A card is "not ready" when its class has no generated report card for this term.
+    const isNotReady = (i: number) => cardQueries[i]?.data?.notReady === true;
+    const notReadyCount = cardQueries.filter(q => q.data?.notReady === true).length;
+    const readyCount = cardQueries.filter(q => q.isSuccess && !q.data?.notReady).length;
+    const noneReady = allLoaded && cardQueries.length > 0 && readyCount === 0;
 
     // Reliable print: copy the rendered cards' HTML into a fresh window with a
     // forced page-break after each, then print THAT window. This avoids the
@@ -87,9 +92,12 @@ export default function ScholarSheetPage() {
     const printAll = () => {
         const area = printRef.current;
         if (!area) { window.print(); return; }
+        // Only print cards that are ready — skip "not ready" (ungenerated) ones.
+        const printable = Array.from(area.querySelectorAll(".ss-card:not(.ss-not-ready)"));
+        if (printable.length === 0) return;
         const w = window.open("", "_blank", "width=900,height=1000");
         if (!w) { window.print(); return; }   // popups blocked → fall back
-        const cards = Array.from(area.querySelectorAll(".ss-card")).map(el => `<div class="page">${(el as HTMLElement).innerHTML}</div>`).join("");
+        const cards = printable.map(el => `<div class="page">${(el as HTMLElement).innerHTML}</div>`).join("");
         w.document.write(`<!DOCTYPE html><html><head><title>Report Cards</title><style>
             @page { size: A4 portrait; margin: 8mm; }
             body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -181,17 +189,26 @@ export default function ScholarSheetPage() {
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
                         <input type="checkbox" checked={showKcpe} onChange={e => setShowKcpe(e.target.checked)} /> Show KCPE fields
                     </label>
-                    <button onClick={printAll} disabled={!ready || !allLoaded} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
+                    <button onClick={printAll} disabled={!ready || !allLoaded || noneReady} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
                         {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                        {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${classStudents.length})` : "Report"}`}
+                        {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${readyCount} ready)` : "Report"}`}
                     </button>
                 </div>
+
+                {/* Generation status banner for whole-class printing. */}
+                {ready && allLoaded && notReadyCount > 0 && (
+                    <div className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-bold border ${noneReady ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
+                        {noneReady
+                            ? "Result not ready yet for this term — generate this class's report cards in Exams → Generate Report Cards, then print."
+                            : `${readyCount} of ${renderList.length} report cards are ready. ${notReadyCount} student(s) aren't generated yet and will be skipped when printing.`}
+                    </div>
+                )}
             </div>
 
             {ready ? (
                 <div ref={printRef} className="ss-print-area p-4 print:p-0">
                     {renderList.map((s: any, i: number) => (
-                        <div key={s._id} className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0">
+                        <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
                             <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
                         </div>
                     ))}
