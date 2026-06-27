@@ -13,6 +13,44 @@ router.get('/billing/payments', getBillingPayments);
 
 // ─── Owner analytics ─────────────────────────────────────────────────────────
 router.get('/audit-logs', getOwnerAuditLogs);        // platform audit trail
+
+// Platform Talksasa balance + save the platform token.
+router.get('/communications/balance', async (_req, res) => {
+    try {
+        const meta = getMetaDb();
+        const platform = await meta.collection('platform_settings').findOne({}).catch(() => null) as any;
+        const apiToken = platform?.talksasa?.apiToken || process.env.TALKSASA_TOKEN;
+        if (!apiToken) return res.json({ configured: false });
+        const { talksasaBalance } = await import('../services/talksasa.service');
+        const b = await talksasaBalance({ apiToken });
+        res.json({ configured: true, balance: b.balance, raw: b.raw, senderId: platform?.talksasa?.senderId || 'SHULECLOUD', topupUrl: 'https://bulksms.talksasa.com' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+router.post('/communications/settings', async (req, res) => {
+    try {
+        const { apiToken, senderId } = req.body || {};
+        await getMetaDb().collection('platform_settings').updateOne({}, { $set: { 'talksasa.apiToken': apiToken, 'talksasa.senderId': senderId, updatedAt: new Date() } }, { upsert: true });
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Owner SMS / WhatsApp to any number(s) via Talksasa (platform token).
+router.post('/communications/send', async (req, res) => {
+    try {
+        const { channel, message, numbers } = req.body || {};
+        if (!message) return res.status(400).json({ message: 'Message is required.' });
+        const recips = (Array.isArray(numbers) ? numbers : String(numbers || '').split(',')).map((s: string) => s.trim()).filter(Boolean);
+        if (!recips.length) return res.status(400).json({ message: 'At least one recipient is required.' });
+        const meta = getMetaDb();
+        const platform = await meta.collection('platform_settings').findOne({}).catch(() => null) as any;
+        const apiToken = platform?.talksasa?.apiToken || process.env.TALKSASA_TOKEN;
+        const senderId = platform?.talksasa?.senderId || 'SHULECLOUD';
+        if (!apiToken) return res.status(400).json({ message: 'No Talksasa token configured (platform settings / TALKSASA_TOKEN).' });
+        const { talksasaSend } = await import('../services/talksasa.service');
+        const r = await talksasaSend({ apiToken, senderId }, recips, message, { type: channel === 'whatsapp' ? 'whatsapp' : 'plain' });
+        res.json({ ok: r.ok, sent: r.sent, failed: r.failed, error: r.error });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/stats', getOwnerStats);                 // GET /api/v1/owner/stats
 router.get('/revenue', getOwnerRevenue);             // GET /api/v1/owner/revenue?period=monthly
 router.get('/schools/summary', getSchoolsSummary);   // GET /api/v1/owner/schools/summary

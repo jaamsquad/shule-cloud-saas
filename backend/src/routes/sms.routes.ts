@@ -285,11 +285,38 @@ router.post('/mobile/update', async (req, res) => {
 });
 
 // ─── HTTP gateway sender (Africa's Talking-style) ────────────────────────────
-async function sendViaApi(db: Db, cfg: any, numbers: string[], message: string) {
+// SMS balance + profile (Talksasa). Reads the school's saved token.
+router.get('/communications/sms/balance', async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const settings = await getSmsSettings(db);
+        const token = settings.apiConfig?.apiToken;
+        if (!token) return res.json({ configured: false, message: 'Talksasa not configured.' });
+        const { talksasaBalance } = await import('../services/talksasa.service');
+        const b = await talksasaBalance({ apiToken: token });
+        res.json({ configured: true, vendor: 'talksasa', balance: b.balance, raw: b.raw, topupUrl: 'https://bulksms.talksasa.com' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+async function sendViaApi(db: Db, cfg: any, numbers: string[], rawMessage: string) {
     const results: any[] = [];
+    // Prefix every message with the school name, e.g. "Egerton High School: <msg>".
+    const profile = await db.collection('school_profile').findOne({}).catch(() => null) as any;
+    const schoolName = profile?.name || profile?.schoolName || '';
+    const { brandMessage } = await import('../services/talksasa.service');
+    const message = brandMessage(schoolName, rawMessage);
+
+    // ── Talksasa vendor ───────────────────────────────────────────────────────
+    if (cfg?.vendor === 'talksasa' || cfg?.apiToken) {
+        const { talksasaSend } = await import('../services/talksasa.service');
+        const r = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, numbers, message);
+        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: r.ok ? 'sent' : 'failed', provider: 'talksasa', error: r.error, updatedAt: new Date() } });
+        return { sent: r.sent, failed: r.failed, error: r.error, raw: r.raw };
+    }
+
     if (!cfg?.apiKey || !cfg?.username) {
         // No API configured — log as failed so the school notices.
-        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message, status: 'queued' }, { $set: { status: 'failed', error: 'SMS API not configured', updatedAt: new Date() } });
+        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: 'failed', error: 'SMS API not configured', updatedAt: new Date() } });
         return { sent: 0, failed: numbers.length, error: 'SMS API not configured' };
     }
     try {
@@ -302,7 +329,7 @@ async function sendViaApi(db: Db, cfg: any, numbers: string[], message: string) 
         const data: any = await resp.json().catch(() => ({}));
         const recipients = data?.SMSMessageData?.Recipients || [];
         const sent = recipients.filter((r: any) => /success|sent/i.test(r.status)).length;
-        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message, status: 'queued' }, { $set: { status: sent ? 'sent' : 'failed', provider: 'api', updatedAt: new Date() } });
+        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: sent ? 'sent' : 'failed', provider: 'api', updatedAt: new Date() } });
         results.push(data);
         return { sent: sent || (resp.ok ? numbers.length : 0), failed: numbers.length - (sent || (resp.ok ? numbers.length : 0)), raw: data };
     } catch (e: any) {

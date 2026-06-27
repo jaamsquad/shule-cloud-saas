@@ -453,6 +453,60 @@ router.post('/org/expenses/:branchId/:id/decision', requireOrgAuth, requireOrgRo
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Organization communications (SMS / WhatsApp via Talksasa) ────────────────
+// Sends to free-typed numbers or to a branch's staff/parents. Uses the org's
+// Talksasa token (org settings) or the platform token (env TALKSASA_TOKEN).
+router.post('/org/communications/send', requireOrgAuth, async (req: Request, res: Response) => {
+    try {
+        const { channel, message, numbers, branchId, audience } = req.body || {};
+        if (!message) return res.status(400).json({ message: 'Message is required.' });
+        const meta = getMetaDb();
+        const org = await meta.collection('Organization').findOne({ _id: new ObjectId(req.orgUser!.organizationId) });
+        const apiToken = (org as any)?.talksasa?.apiToken || process.env.TALKSASA_TOKEN;
+        const senderId = (org as any)?.talksasa?.senderId || (org?.name || 'SCHOOL').replace(/[^A-Za-z0-9]/g, '').slice(0, 11).toUpperCase();
+        if (!apiToken) return res.status(400).json({ message: 'No Talksasa token configured for the organization. Add it in Org Settings.' });
+
+        // Resolve recipients: explicit numbers + (optionally) a branch audience.
+        let recips: string[] = Array.isArray(numbers) ? numbers : (numbers ? String(numbers).split(',') : []);
+        if (branchId && audience) {
+            const bdb = await branchDb(req.orgUser!.organizationId, branchId);
+            if (bdb) {
+                const coll = audience === 'staff' ? 'staff' : 'students';
+                const field = audience === 'staff' ? ['phone', 'phoneNumber'] : ['parentPhone', 'guardianPhone', 'phone'];
+                const docs = await bdb.collection(coll).find({}).toArray().catch(() => []);
+                docs.forEach((d: any) => { for (const f of field) if (d[f]) { recips.push(d[f]); break; } });
+            }
+        }
+        recips = Array.from(new Set(recips.map(String).map(s => s.trim()).filter(Boolean)));
+        if (!recips.length) return res.status(400).json({ message: 'No recipients.' });
+
+        const { talksasaSend, brandMessage } = await import('../services/talksasa.service');
+        const text = brandMessage(org?.name, message);
+        const r = await talksasaSend({ apiToken, senderId }, recips, text, { type: channel === 'whatsapp' ? 'whatsapp' : 'plain' });
+        await audit({ organizationId: req.orgUser!.organizationId, userId: req.orgUser!.orgUserId, userName: req.orgUser!.name, action: `comms.${channel || 'sms'}`, newValue: { count: recips.length }, ip: ipOf(req), device: deviceOf(req) });
+        res.json({ ok: r.ok, sent: r.sent, failed: r.failed, error: r.error });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Org Talksasa balance + save the org's token.
+router.get('/org/communications/balance', requireOrgAuth, async (req: Request, res: Response) => {
+    try {
+        const org = await getMetaDb().collection('Organization').findOne({ _id: new ObjectId(req.orgUser!.organizationId) }) as any;
+        const apiToken = org?.talksasa?.apiToken || process.env.TALKSASA_TOKEN;
+        if (!apiToken) return res.json({ configured: false });
+        const { talksasaBalance } = await import('../services/talksasa.service');
+        const b = await talksasaBalance({ apiToken });
+        res.json({ configured: true, balance: b.balance, raw: b.raw, senderId: org?.talksasa?.senderId || '', topupUrl: 'https://bulksms.talksasa.com' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+router.post('/org/communications/settings', requireOrgAuth, requireOrgRole('ORG_OWNER', 'ORG_ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const { apiToken, senderId } = req.body || {};
+        await getMetaDb().collection('Organization').updateOne({ _id: new ObjectId(req.orgUser!.organizationId) }, { $set: { 'talksasa.apiToken': apiToken, 'talksasa.senderId': senderId } });
+        res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Backfill: wrap existing standalone tenants into single-branch orgs ───────
 // Non-destructive. For every active Tenant without an organizationId, create an
 // Organization + a primary Branch pointing at that tenant's existing DB. Nothing

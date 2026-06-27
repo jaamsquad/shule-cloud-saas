@@ -154,6 +154,22 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── SMS ──────────────────────────────────────────────────────────────────
     {
+        key: "talksasa", name: "Talksasa SMS", category: "SMS", logo: "💬", color: "#2E7D32",
+        description: "Send SMS and WhatsApp via Talksasa BulkSMS — fees, results, reminders.",
+        docsUrl: "https://bulksms.talksasa.com",
+        testEndpoint: "/integrations/test/talksasa",
+        guide: [
+            "Sign in at bulksms.talksasa.com and open Developers → API Documents",
+            "Copy your API token (Bearer token)",
+            "Register a Sender ID (alphanumeric, max 11 chars) for production",
+            "Paste the token + Sender ID here and Test",
+        ],
+        fields: [
+            { label: "API Token", field: "apiToken", masked: true, hint: "Bearer token from Talksasa Developers" },
+            { label: "Sender ID", field: "senderId", masked: false, placeholder: "e.g. SCHOOLNAME", hint: "Alphanumeric, max 11 chars" },
+        ],
+    },
+    {
         key: "africas_talking", name: "Africa's Talking", category: "SMS", logo: "📱", color: "#E63946",
         description: "Send SMS reminders, result alerts and bulk announcements.",
         docsUrl: "https://developers.africastalking.com",

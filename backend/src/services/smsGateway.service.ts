@@ -26,16 +26,23 @@ export const newToken = () => crypto.randomBytes(24).toString('hex');
 
 export const getSmsSettings = async (db: Db) => {
     const s = await db.collection('sms_settings').findOne({ _id: 'sms' as any }).catch(() => null);
-    // Pull the SMS-API credentials from the Integrations page (Africa's Talking)
-    // when the school hasn't set an explicit apiConfig on sms_settings.
+    // Pull SMS-API credentials from the Integrations page when the school hasn't
+    // set an explicit apiConfig. Talksasa takes precedence, then Africa's Talking.
     let apiConfig = s?.apiConfig || {};
-    if (!apiConfig.apiKey) {
-        const at = await db.collection('integration_settings').findOne({ integration: 'africas_talking' }).catch(() => null);
-        if (at && (at.enabled || at.apiKey)) apiConfig = { apiKey: at.apiKey, username: at.username, senderId: at.senderId, environment: at.environment };
+    let providerOverride: SmsProvider | null = null;
+    if (!apiConfig.apiToken && !apiConfig.apiKey) {
+        const ts = await db.collection('integration_settings').findOne({ integration: 'talksasa' }).catch(() => null);
+        if (ts && (ts.enabled !== false) && ts.apiToken) {
+            apiConfig = { vendor: 'talksasa', apiToken: ts.apiToken, senderId: ts.senderId };
+            providerOverride = 'api';
+        } else {
+            const at = await db.collection('integration_settings').findOne({ integration: 'africas_talking' }).catch(() => null);
+            if (at && (at.enabled || at.apiKey)) { apiConfig = { apiKey: at.apiKey, username: at.username, senderId: at.senderId, environment: at.environment }; providerOverride = 'api'; }
+        }
     }
     return {
-        provider: (s?.provider as SmsProvider) || 'device',
-        apiConfig,                                // { apiKey, username, senderId, ... }
+        provider: providerOverride || (s?.provider as SmsProvider) || 'device',
+        apiConfig,                                // { vendor, apiToken | apiKey, username, senderId, ... }
         pacingMs: s?.pacingMs ?? 2500,           // gap between messages on a device
         dailyLimit: s?.dailyLimit ?? 0,          // 0 = unlimited
         updatedAt: s?.updatedAt || null,

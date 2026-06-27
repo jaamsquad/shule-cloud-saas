@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, NavLink } from "react-router-dom";
-import { LogOut, Layers, LayoutDashboard, Building2, ArrowRightLeft, FileBarChart, Wallet, Users, Settings, ShieldCheck } from "lucide-react";
+import { LogOut, Layers, LayoutDashboard, Building2, ArrowRightLeft, FileBarChart, Wallet, Users, Settings, ShieldCheck, MessageSquare } from "lucide-react";
 import api from "@/lib/api";
 import { isOrgUser, getOrgUser, getOrgInfo, orgPrimary, orgLogout } from "@/lib/orgContext";
 import BranchSwitcher from "@/components/BranchSwitcher";
@@ -13,6 +13,7 @@ const NAV = [
     { to: "/org/transfers", label: "Transfers", icon: ArrowRightLeft },
     { to: "/org/reports", label: "Reports", icon: FileBarChart },
     { to: "/org/expenses", label: "Expenses", icon: Wallet },
+    { to: "/org/communications", label: "Communications", icon: MessageSquare },
     { to: "/org/users", label: "Users", icon: Users },
     { to: "/org/settings", label: "Settings", icon: Settings },
     { to: "/org/audit", label: "Audit", icon: ShieldCheck },

@@ -184,6 +184,12 @@ app.post('/api/v1/integrations/test/:type', async (req, res) => {
     const body = req.body || {};
     try {
         switch (type) {
+            case 'talksasa': {
+                if (!body.apiToken) return res.status(400).json({ message: 'API Token is required' });
+                const { talksasaTest } = await import('./services/talksasa.service');
+                await talksasaTest({ apiToken: body.apiToken });
+                return res.json({ message: 'Talksasa connection successful! Token is valid.' });
+            }
             case 'mpesa': {
                 // Test Daraja API by getting access token
                 if (!body.consumerKey || !body.consumerSecret) return res.status(400).json({ message: 'Consumer Key and Secret are required' });

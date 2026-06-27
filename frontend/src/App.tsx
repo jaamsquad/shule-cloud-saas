@@ -53,6 +53,7 @@ import OwnerChangePassword from "./pages/owner/ChangePassword";
 import OwnerDashboard from "./pages/owner/Dashboard";
 import OwnerTenants from "./pages/owner/Tenants";
 import OwnerOrganizations from "./pages/owner/Organizations";
+import OwnerCommunications from "./pages/owner/OwnerCommunications";
 import OwnerPlans from "./pages/owner/Plans";
 import OwnerAudit from "./pages/owner/Audit";
 import OwnerAnnouncements from "./pages/owner/Announcements";
@@ -174,6 +175,7 @@ import OrgSettings from "./pages/org/OrgSettings";
 import OrgExpenses from "./pages/org/OrgExpenses";
 import OrgLayout from "./pages/org/OrgLayout";
 import AccountSwitcher from "./pages/org/AccountSwitcher";
+import OrgCommunications from "./pages/org/OrgCommunications";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
@@ -473,6 +475,7 @@ const App = () => {
               <Route path="/owner/schools/:id" element={<ManageSchool />} />
               <Route path="/owner/tenants" element={<OwnerTenants />} />
               <Route path="/owner/organizations" element={<OwnerOrganizations />} />
+              <Route path="/owner/communications" element={<OwnerCommunications />} />
               <Route path="/owner/plans" element={<OwnerPlans />} />
               <Route path="/owner/audit" element={<OwnerAudit />} />
               <Route path="/owner/announcements" element={<OwnerAnnouncements />} />
@@ -506,6 +509,7 @@ const App = () => {
               <Route path="/org/users" element={<OrgUsers />} />
               <Route path="/org/settings" element={<OrgSettings />} />
               <Route path="/org/expenses" element={<OrgExpenses />} />
+              <Route path="/org/communications" element={<OrgCommunications />} />
               <Route path="/org/audit" element={<OrgAudit />} />
             </Route>
 
