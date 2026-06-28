@@ -2620,4 +2620,9 @@ router.get('/tenant/subscribe/status', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Online Examination — student-portal exam taking ─────────────────────────
+// Mounted here so it reuses the same `authed` JWT + tenant-DB resolution.
+import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
+router.use(buildStudentExamRouter(authed));
+
 export default router;
