@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus } from "lucide-react";
+import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus, ClipboardCheck as ClipboardCheckIcon } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
 import { tenantDisplayName } from "../portal";
@@ -23,6 +23,7 @@ const NAV: PortalNavSection[] = [
     ]},
     { label: "Assessment", items: [
         { to: "/marks", label: "Marks Entry", icon: PencilLine },
+        { to: "/cbc", label: "CBC Assessment", icon: ClipboardCheckIcon },
         { to: "/results", label: "Results", icon: BarChart3 },
     ]},
     { label: "Attendance", items: [
