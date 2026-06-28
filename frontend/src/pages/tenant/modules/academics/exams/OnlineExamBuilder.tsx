@@ -122,6 +122,12 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
         mutationFn: async (qid: string) => (await api.delete(`/online-exams/${examId}/questions/${qid}`)).data,
         onSuccess: () => refetch(),
     });
+    // Push scored attempts into exam_marks so ScholarSheet + analytics show them.
+    const publishResults = useMutation({
+        mutationFn: async () => (await api.post(`/online-exams/${examId}/publish-results`)).data,
+        onSuccess: (d: any) => toast.success(d.message || "Results published to report cards"),
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen p-6">
@@ -135,6 +141,11 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                     <div className="flex gap-2">
                         {exam?.status !== "Published" && <button onClick={() => setStatus.mutate("Published")} className="h-10 px-4 rounded-xl bg-emerald-500 text-white font-bold text-sm flex items-center gap-1.5"><Send className="w-4 h-4" /> Publish</button>}
                         {exam?.status === "Published" && <button onClick={() => setStatus.mutate("Closed")} className="h-10 px-4 rounded-xl bg-slate-700 text-white font-bold text-sm">Close</button>}
+                        {(exam?.status === "Published" || exam?.status === "Closed") && (
+                            <button onClick={() => publishResults.mutate()} disabled={publishResults.isPending} className="h-10 px-4 rounded-xl bg-[#5C67F2] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50" title="Send scores to ScholarSheet & Analytics">
+                                {publishResults.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Publish to Report Cards
+                            </button>
+                        )}
                     </div>
                 </div>
 

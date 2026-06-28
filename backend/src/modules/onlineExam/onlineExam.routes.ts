@@ -218,6 +218,73 @@ router.post('/online-exams/:id/questions/reorder', async (req: Request, res: Res
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Publish results to the main Exams module (ScholarSheet + analytics) ────────
+// Simple bridge: ensure a matching exam exists in the `exams` collection, then write
+// each submitted attempt's score into `exam_marks` (the collection ScholarSheet and
+// analytics already read). Online exam → one subject → one mark per student.
+router.post('/online-exams/:id/publish-results', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const exam: any = await database.collection('online_exams').findOne({ _id: oid(req.params.id)! });
+        if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+        // 1) Ensure a linked exam in the main `exams` collection (create once).
+        let mainExamId: string = exam.mainExamId || '';
+        if (!mainExamId) {
+            const examDoc = {
+                examName: exam.examName,
+                type: exam.category || 'CAT',
+                term: exam.term || '', academicYear: exam.academicYear || String(new Date().getFullYear()),
+                classLevel: exam.className || 'All Classes',
+                status: 'Active', publishStatus: 'Published',
+                source: 'online_exam', onlineExamId: String(exam._id),
+                createdAt: now(), updatedAt: now(),
+            };
+            const r = await database.collection('exams').insertOne(examDoc);
+            mainExamId = String(r.insertedId);
+            await database.collection('online_exams').updateOne({ _id: exam._id }, { $set: { mainExamId } });
+        }
+
+        // 2) Write each submitted/marked attempt's score into exam_marks.
+        const attempts = await database.collection('online_exam_attempts').find({
+            examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] },
+        }).toArray().catch(() => []);
+        const totalMarks = Number(exam.totalMarks) || 100;
+        const subjectName = exam.subjectName || 'Online Exam';
+
+        let written = 0, pending = 0;
+        const ops = attempts.map((a: any) => {
+            // finalScore = autoScore when no manual marking is needed; else the marked total.
+            const score = a.finalScore != null ? a.finalScore : (a.needsManual ? null : a.autoScore);
+            if (score == null) { pending++; return null; }
+            written++;
+            const cls = a.className || exam.className || '';
+            return {
+                updateOne: {
+                    filter: { studentId: String(a.studentId), examId: mainExamId, subjectId: exam.subjectId || subjectName },
+                    update: {
+                        $set: {
+                            studentId: String(a.studentId), examId: mainExamId,
+                            subjectId: exam.subjectId || subjectName, subjectName,
+                            marksObtained: Number(score), totalMarks,
+                            className: cls, updatedAt: now(), source: 'online_exam',
+                        },
+                        $setOnInsert: { createdAt: now(), classAtTime: cls, academicYear: exam.academicYear || String(new Date().getFullYear()) },
+                    },
+                    upsert: true,
+                },
+            };
+        }).filter(Boolean) as any[];
+
+        if (ops.length) await database.collection('exam_marks').bulkWrite(ops);
+        // Mark published attempts.
+        await database.collection('online_exam_attempts').updateMany({ examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked'] }, finalScore: { $ne: null } }, { $set: { status: 'published' } }).catch(() => {});
+        await audit(database, req, 'RESULTS_PUBLISHED', req.params.id, { mainExamId, written, pending });
+
+        res.json({ ok: true, mainExamId, written, pending, message: pending ? `${written} published · ${pending} awaiting manual marking` : `${written} result(s) published to report cards` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Keep exam.totalMarks in sync with the sum of its questions' marks.
 async function recomputeTotal(database: Db, examId: string) {
     const agg = await database.collection('online_exam_questions').aggregate([
