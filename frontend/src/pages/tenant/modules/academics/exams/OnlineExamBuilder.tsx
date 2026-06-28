@@ -110,6 +110,7 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
 
 function ExamEditor({ examId, classes, subjects, onBack }: any) {
     const qc = useQueryClient();
+    const [view, setView] = useState<"build" | "mark">("build");
     const { data: exam, refetch } = useQuery({ queryKey: ["online_exam", examId], queryFn: async () => (await api.get(`/online-exams/${examId}`)).data });
     const questions: any[] = exam?.questions || [];
 
@@ -149,25 +150,93 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                     </div>
                 </div>
 
-                {/* Questions */}
-                <div className="space-y-2 mb-4">
-                    {questions.map((q: any, i: number) => (
-                        <div key={q._id} className="bg-white rounded-xl border border-slate-100 p-3 flex items-start gap-3">
-                            <GripVertical className="w-4 h-4 text-slate-300 mt-1" />
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black text-[#5C67F2] uppercase">{TYPES.find(t => t.v === q.type)?.label || q.type}</span>
-                                    <span className="text-[10px] text-slate-400">{q.marks} mk</span>
-                                </div>
-                                <p className="text-sm text-slate-700 truncate">{i + 1}. {q.questionText}</p>
-                            </div>
-                            <button onClick={() => delQ.mutate(q._id)} className="text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                    ))}
+                {/* Build / Mark toggle */}
+                <div className="flex gap-2 mb-4">
+                    <button onClick={() => setView("build")} className={`h-9 px-4 rounded-lg font-bold text-sm ${view === "build" ? "bg-[#5C67F2] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Questions</button>
+                    <button onClick={() => setView("mark")} className={`h-9 px-4 rounded-lg font-bold text-sm ${view === "mark" ? "bg-[#5C67F2] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Mark Submissions</button>
                 </div>
 
-                <AddQuestion examId={examId} onAdded={refetch} />
+                {view === "build" ? (
+                    <>
+                        <div className="space-y-2 mb-4">
+                            {questions.map((q: any, i: number) => (
+                                <div key={q._id} className="bg-white rounded-xl border border-slate-100 p-3 flex items-start gap-3">
+                                    <GripVertical className="w-4 h-4 text-slate-300 mt-1" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-black text-[#5C67F2] uppercase">{TYPES.find(t => t.v === q.type)?.label || q.type}</span>
+                                            <span className="text-[10px] text-slate-400">{q.marks} mk</span>
+                                        </div>
+                                        <p className="text-sm text-slate-700 truncate">{i + 1}. {q.questionText}</p>
+                                    </div>
+                                    <button onClick={() => delQ.mutate(q._id)} className="text-slate-300 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                        </div>
+                        <AddQuestion examId={examId} onAdded={refetch} />
+                    </>
+                ) : (
+                    <MarkingPanel examId={examId} />
+                )}
             </div>
+        </div>
+    );
+}
+
+// Manual marking — grade essay/short/file answers per student, then save (recomputes
+// final score = auto + manual). Auto-only exams show nothing to mark here.
+function MarkingPanel({ examId }: { examId: string }) {
+    const { data, refetch, isLoading } = useQuery({ queryKey: ["online_marking", examId], queryFn: async () => (await api.get(`/online-exams/${examId}/marking`)).data });
+    const manualQs: any[] = data?.manualQuestions || [];
+    const attempts: any[] = data?.attempts || [];
+    const [open, setOpen] = useState<string>("");   // attemptId being marked
+    const [marks, setMarks] = useState<Record<string, any>>({});
+    const [comments, setComments] = useState<Record<string, string>>({});
+
+    const save = useMutation({
+        mutationFn: async (attemptId: string) => (await api.post(`/online-exams/${examId}/marking/${attemptId}`, { marks, comments })).data,
+        onSuccess: (d: any) => { toast.success(`Saved · final ${d.finalScore}`); setOpen(""); refetch(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+
+    if (isLoading) return <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#5C67F2]" /></div>;
+    if (attempts.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-400 font-bold">No submissions yet.</div>;
+    if (manualQs.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-500 font-bold">All questions are auto-marked — nothing to grade manually. Use "Publish to Report Cards".</div>;
+
+    return (
+        <div className="space-y-2">
+            {attempts.map((a: any) => {
+                const editing = open === a._id;
+                return (
+                    <div key={a._id} className="bg-white rounded-xl border border-slate-100 p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="font-bold text-slate-800">{a.studentName}</p>
+                                <p className="text-[11px] text-slate-400">Auto {a.autoScore ?? 0}{a.finalScore != null ? ` · Final ${a.finalScore}` : a.needsManual ? " · awaiting marking" : ""}</p>
+                            </div>
+                            <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
+                        </div>
+                        {editing && (
+                            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                                {manualQs.map((q: any) => (
+                                    <div key={q._id} className="bg-slate-50 rounded-xl p-3">
+                                        <p className="text-xs font-bold text-slate-600 mb-1">{q.questionText} <span className="text-slate-400">({q.marks} marks)</span></p>
+                                        {q.rubric && <p className="text-[11px] text-slate-400 mb-2">Rubric: {q.rubric}</p>}
+                                        <div className="bg-white rounded-lg border border-slate-200 p-2 text-sm text-slate-700 whitespace-pre-wrap mb-2 max-h-40 overflow-auto">{a.answers[q._id] || <span className="text-slate-300">No answer</span>}</div>
+                                        <div className="flex items-center gap-2">
+                                            <input type="number" min={0} max={q.marks} value={marks[q._id] ?? ""} onChange={e => setMarks(m => ({ ...m, [q._id]: e.target.value }))} placeholder={`/ ${q.marks}`} className="w-24 h-9 px-2 rounded-lg border border-slate-200 text-sm text-center" />
+                                            <input value={comments[q._id] ?? ""} onChange={e => setComments(c => ({ ...c, [q._id]: e.target.value }))} placeholder="Comment (optional)" className="flex-1 h-9 px-3 rounded-lg border border-slate-200 text-sm" />
+                                        </div>
+                                    </div>
+                                ))}
+                                <button onClick={() => save.mutate(a._id)} disabled={save.isPending} className="h-10 px-5 rounded-xl bg-emerald-500 text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-50">
+                                    {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save Marks
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 }

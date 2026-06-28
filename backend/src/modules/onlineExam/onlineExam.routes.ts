@@ -8,7 +8,8 @@
 import { Router, Request, Response } from 'express';
 import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
-import { DEFAULT_SETTINGS, EXAM_STATUS, QUESTION_TYPES } from './onlineExam.types';
+import { DEFAULT_SETTINGS, EXAM_STATUS, QUESTION_TYPES, AUTO_TYPES } from './onlineExam.types';
+import { markQuestion } from './onlineExam.marking';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -215,6 +216,55 @@ router.post('/online-exams/:id/questions/reorder', async (req: Request, res: Res
         const ids: string[] = Array.isArray(req.body?.order) ? req.body.order : [];
         await Promise.all(ids.map((qid, i) => database.collection('online_exam_questions').updateOne({ _id: oid(qid)! }, { $set: { order: i } })));
         res.json({ message: 'Reordered' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Manual marking ─────────────────────────────────────────────────────────
+// List submitted attempts for an exam, with each student's answers and which
+// questions need the teacher to award marks (essay/short/file/optional fill-blank).
+router.get('/online-exams/:id/marking', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const questions = await database.collection('online_exam_questions').find({ examId: req.params.id, deletedAt: { $exists: false } }).sort({ order: 1 }).toArray();
+        const manualQ = questions.filter((q: any) => !(AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false)));
+        const attempts = await database.collection('online_exam_attempts').find({ examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } }).toArray();
+        res.json({
+            manualQuestions: manualQ.map((q: any) => ({ _id: String(q._id), questionText: q.questionText, marks: q.marks, type: q.type, rubric: q.rubric || '' })),
+            attempts: attempts.map((a: any) => ({
+                _id: String(a._id), studentName: a.studentName, status: a.status,
+                autoScore: a.autoScore, finalScore: a.finalScore, needsManual: a.needsManual,
+                // Only expose the student's answers to the manual questions + any saved awards.
+                answers: Object.fromEntries(manualQ.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
+                marks: a.manualMarks || {}, comments: a.manualComments || {},
+            })),
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Save manual marks for one attempt. Recomputes finalScore = auto + manual.
+router.post('/online-exams/:id/marking/:attemptId', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const marks: Record<string, number> = req.body?.marks || {};
+        const comments: Record<string, string> = req.body?.comments || {};
+        const attempt: any = await database.collection('online_exam_attempts').findOne({ _id: oid(req.params.attemptId)! });
+        if (!attempt) return res.status(404).json({ message: 'Attempt not found' });
+        const questions = await database.collection('online_exam_questions').find({ examId: req.params.id, deletedAt: { $exists: false } }).toArray();
+
+        // Auto portion (recompute so it's always correct) + manual awards (capped at max).
+        let total = 0;
+        for (const q of questions) {
+            const qid = String(q._id);
+            const isAuto = AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false);
+            if (isAuto) { total += markQuestion(q, attempt.answers?.[qid]).awarded; }
+            else { total += Math.max(0, Math.min(Number(q.marks) || 0, Number(marks[qid]) || 0)); }
+        }
+        total = Math.round(total * 100) / 100;
+        await database.collection('online_exam_attempts').updateOne({ _id: attempt._id }, {
+            $set: { manualMarks: marks, manualComments: comments, finalScore: total, needsManual: false, status: 'marked', markedAt: now() },
+        });
+        await audit(database, req, 'TEACHER_MARKED', req.params.id, { attemptId: req.params.attemptId, finalScore: total });
+        res.json({ ok: true, finalScore: total });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
