@@ -24,7 +24,7 @@ async function resultsAttachment(database: Db, studentId: string, examId: string
         return { name: m.subjectName || m.subject, marks: mark, outOf: max, pct: max ? Math.round((mark / max) * 100) : 0 };
     });
     const meanPct = subjects.length ? Math.round(subjects.reduce((a, s) => a + s.pct, 0) / subjects.length) : 0;
-    return { examTitle: formatExamName(exam, `${student?.studentClass || ''} ${student?.stream || ''}`), subjects, meanPct };
+    return { studentName: student?.studentName || student?.name || '', examTitle: formatExamName(exam, `${student?.studentClass || ''} ${student?.stream || ''}`), subjects, meanPct };
 }
 
 // Compose & send (admin/teacher).
@@ -79,8 +79,10 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             if (sendSms) {
                 const phone = s.parentPhone || s.guardianPhone || s.fatherPhone || s.motherPhone || s.phone || '';
                 if (phone) {
+                    const childName = s.studentName || s.name || 'Your child';
                     let text = `${subject}${body ? ` — ${body}` : ''}`;
-                    if (attachment) text = `${subject}. ${attachment.examTitle}: ${attachment.subjects.map((x: any) => `${x.name} ${x.marks}/${x.outOf}`).join(', ')}. Mean ${attachment.meanPct}%.`;
+                    // Results SMS leads with the student's name so the parent knows whose marks these are.
+                    if (attachment) text = `${childName} — ${attachment.examTitle}: ${attachment.subjects.map((x: any) => `${x.name} ${x.marks}/${x.outOf}`).join(', ')}. Mean ${attachment.meanPct}%.`;
                     smsTargets.push({ phone, text });
                 }
             }
