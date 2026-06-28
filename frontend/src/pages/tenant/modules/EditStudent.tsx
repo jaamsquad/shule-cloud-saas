@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Home, Plus, RotateCcw, Check, Loader2, ArrowLeft } from "lucide-react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -32,6 +32,15 @@ export default function EditStudent() {
     });
 
     const classNames = classes.map((c: any) => c.name || c.levelName).filter(Boolean);
+
+    // Simple Class + Stream selection (v2 model). Replaces the old enrollment link.
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const [classId, setClassId] = useState("");
+    const [streamId, setStreamId] = useState("");
+    const { data: v2Classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
+    const { data: v2Streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
+    const selClass = v2Classes.find((c: any) => String(c._id) === classId);
+    const selStream = v2Streams.find((s: any) => String(s._id) === streamId);
 
     const [formData, setFormData] = useState({
         studentName: "",
@@ -123,13 +132,45 @@ export default function EditStudent() {
         }
     }, [student]);
 
+    // Pre-select Class + Stream from the student (by id or by class TEXT level).
+    useEffect(() => {
+        if (!student || !v2Classes.length) return;
+        const text = norm(student.studentClass || student.currentClass);
+        const levelKey = (v: string) => { const m = String(v).match(/(form|grade)\s*\d+/i); return m ? m[0].replace(/\s+/g, " ").toLowerCase().trim() : ""; };
+        const wantLevel = levelKey(text);
+        const byText = v2Classes.find((c: any) => norm(c.name) === text || (wantLevel && levelKey(c.name) === wantLevel) || (norm(c.name) && text.startsWith(norm(c.name) + " ")));
+        const byId = v2Classes.find((c: any) => String(c._id) === String(student.classId));
+        const cls = byText || byId;
+        if (cls && !classId) setClassId(String(cls._id));
+    }, [student, v2Classes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Once streams load, pre-select the student's stream by id or name.
+    useEffect(() => {
+        if (!student || streamId || !v2Streams.length) return;
+        const streamWord = (() => { const m = String(student.studentClass || "").match(/(?:form|grade)\s*\d+\s+(.+)$/i); return m ? m[1].trim() : ""; })();
+        const want = norm(student.streamName || student.stream || streamWord);
+        const match = v2Streams.find((s: any) => String(s._id) === String(student.streamId) || norm(s.name) === want);
+        if (match) setStreamId(String(match._id));
+    }, [v2Streams, student]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        updateItem({ id: id!, data: formData }, {
+        // Save the chosen class + stream as both ids and denormalised text.
+        const fullClass = selStream ? (selStream.fullName || `${selClass?.name || ""} ${selStream.name}`) : (selClass?.name || formData.studentClass);
+        const payload = {
+            ...formData,
+            studentClass: fullClass,
+            classId: classId || undefined,
+            className: selClass?.name || "",
+            streamId: streamId || null,
+            stream: selStream?.name || "",
+            streamName: selStream?.name || "",
+        };
+        updateItem({ id: id!, data: payload }, {
             onSuccess: () => navigate("/students")
         } as any);
     };
@@ -188,14 +229,20 @@ export default function EditStudent() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                                 <InputField name="studentName" value={formData.studentName} onChange={handleChange} label="Student Name*" placeholder="Name of Student" required />
                                 <InputField name="registrationNo" value={formData.registrationNo} onChange={handleChange} label="Registration No*" placeholder="Registration No" required />
-                                {/* Class is managed via the Enrollment system (preserves history). */}
+                                {/* Simple Class + Stream selection (v2 model). */}
                                 <div className="relative">
-                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Class</div>
-                                    <Link to="/academic-system/enroll"
-                                        className="w-full h-12 px-6 border border-dashed border-[#5C67F2]/40 rounded-full bg-[#5C67F2]/5 flex items-center justify-between text-sm font-bold text-[#5C67F2] hover:bg-[#5C67F2]/10 transition-colors">
-                                        <span>{formData.studentClass || "Manage via Enrollment"}</span>
-                                        <span className="text-[10px] uppercase tracking-widest">Enroll →</span>
-                                    </Link>
+                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Class*</div>
+                                    <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); }} className="w-full h-12 px-6 border border-gray-200 rounded-full bg-white text-sm font-bold text-gray-700 focus:outline-none focus:border-[#5C67F2]">
+                                        <option value="">— Select Class —</option>
+                                        {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Stream</div>
+                                    <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!classId} className="w-full h-12 px-6 border border-gray-200 rounded-full bg-white text-sm font-bold text-gray-700 focus:outline-none focus:border-[#5C67F2] disabled:bg-slate-50">
+                                        <option value="">{classId ? "— Select Stream —" : "Pick class first"}</option>
+                                        {v2Streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                                    </select>
                                 </div>
                                 <InputField name="admissionDate" value={formData.admissionDate} onChange={handleChange} label="Date of Admission*" placeholder="dd/mm/yyyy" required isDate />
                                 <InputField name="discount" value={formData.discount} onChange={handleChange} label="Discount In Fee" placeholder="In %" />
