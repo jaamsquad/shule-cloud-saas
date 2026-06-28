@@ -57,6 +57,7 @@ export const navItems: NavItem[] = [
     label: "Classes", icon: LayoutTemplate, moduleKey: "classes", children: [
       { label: "All Classes", path: "/classes" },
       { label: "New Class", path: "/classes/new" },
+      { label: "Classes & Streams", path: "/academic-system/classes" },
     ]
   },
   { label: "Subjects", icon: BookOpen, moduleKey: "subjects", children: [
@@ -65,7 +66,6 @@ export const navItems: NavItem[] = [
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },
-      { label: "Classes & Streams", path: "/academic-system/classes" },
       { label: "Teacher ↔ Subjects", path: "/academic-system/teacher-subjects" },
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
