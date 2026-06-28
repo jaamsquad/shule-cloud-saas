@@ -49,10 +49,16 @@ export default function Teachers() {
 
     // ── Derived ───────────────────────────────────────────────────────────────
     const teachers = useMemo(() => {
+        // A staff member is a teacher if their designation/role says so, OR their
+        // roles[] array includes any teaching role (Teacher, Subject Teacher, Class
+        // Teacher, Form Teacher, etc.), OR they're flagged isTeachingStaff.
+        const TEACH = ["teacher", "teaching assistant", "instructor"];
+        const hasTeachingRole = (arr: any) => Array.isArray(arr) && arr.some((x: any) => TEACH.some(t => String(x).toLowerCase().includes(t)));
         const all = allStaff.filter((s: any) => {
             const d = (s.designation || "").toLowerCase();
             const r = (s.role || "").toLowerCase();
-            return d.includes("teacher") || r.includes("teacher") || s.isTeachingStaff;
+            return d.includes("teacher") || r.includes("teacher") || s.isTeachingStaff ||
+                hasTeachingRole(s.roles) || hasTeachingRole(s.assignedRoles);
         });
         if (!search.trim()) return all;
         const q = search.toLowerCase();
