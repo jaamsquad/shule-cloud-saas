@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     User, ClipboardList, CalendarClock, FileText, ShieldCheck,
-    Landmark, Receipt, Loader2, Award, CreditCard, Wallet, Video, NotebookPen,
+    Landmark, Receipt, Loader2, Award, CreditCard, Wallet, Video, NotebookPen, MonitorCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
@@ -21,6 +21,7 @@ const NAV: PortalNavSection[] = [
         label: "Academics",
         items: [
             { to: "/registration", label: "Registration", icon: ClipboardList },
+            { to: "/online-exams", label: "Online Exams", icon: MonitorCheck },
             { to: "/exam-results", label: "Exam Results", icon: Award },
             { to: "/assignments", label: "Assignments", icon: NotebookPen },
             { to: "/homework", label: "Homework", icon: FileText },
