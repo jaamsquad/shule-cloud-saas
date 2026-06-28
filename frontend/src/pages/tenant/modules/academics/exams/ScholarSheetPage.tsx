@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
@@ -19,6 +19,14 @@ export default function ScholarSheetPage() {
     const [wholeClass, setWholeClass] = useState(false);
     // KCPE field visibility toggles.
     const [showKcpe, setShowKcpe] = useState(true);
+    // Deep-link from a student's Academic History: ?studentId=&examId= opens that
+    // exact card directly (used for viewing previous-class ScholarSheets).
+    const [deepLink, setDeepLink] = useState<{ studentId: string; examId: string } | null>(null);
+    useEffect(() => {
+        const p = new URLSearchParams(window.location.search);
+        const s = p.get("studentId"); const e = p.get("examId");
+        if (s && e) { setDeepLink({ studentId: s, examId: e }); setExamId(e); setStudentId(s); }
+    }, []);
 
     // v2 classes (levels) + streams for the chosen class.
     const { data: v2classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
@@ -107,6 +115,21 @@ export default function ScholarSheetPage() {
         </style></head><body>${cards}<script>window.onload=function(){setTimeout(function(){window.print();},300);}</script></body></html>`);
         w.document.close();
     };
+
+    // Deep-link mode: render exactly the requested student's card for the exam.
+    if (deepLink) {
+        return (
+            <div className="flex-1 bg-[#F5F5F5] min-h-screen p-4">
+                <div className="ss-no-print mb-3 flex items-center justify-between">
+                    <h1 className="text-lg font-black text-slate-900 flex items-center gap-2"><FileText className="w-5 h-5 text-[#2E7D32]" /> ScholarSheet</h1>
+                    <button onClick={() => { setDeepLink(null); }} className="text-sm font-bold text-[#5C67F2]">Open full ScholarSheet →</button>
+                </div>
+                <div className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto">
+                    <ScholarSheetReportCard studentId={deepLink.studentId} examId={deepLink.examId} showKcpe={showKcpe} />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 bg-[#F5F5F5] min-h-screen">

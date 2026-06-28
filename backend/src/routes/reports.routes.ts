@@ -308,6 +308,50 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Academic History — the classes a student has been in (current + previous after
+// promotion) and the exams sat in each, so the profile can list each class's
+// ScholarSheets. Built from exam_marks.classAtTime + the student's classHistory.
+router.get('/reports/student-academic-history/:studentId', async (req: Request, res: Response) => {
+    try {
+        const database = getRequestDb(req);
+        const sid = req.params.studentId;
+        const student: any = await database.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+        const currentClass = student.studentClass || student.currentClass || '';
+
+        const [marks, exams] = await Promise.all([
+            database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            database.collection('exams').find({}).toArray().catch(() => []),
+        ]);
+        const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
+
+        // Group marks by the class held at the time, then by exam within that class.
+        const byClass: Record<string, { className: string; exams: Record<string, { examId: string; name: string; term: string; year: string; n: number }> }> = {};
+        for (const m of marks) {
+            const cls = m.classAtTime || currentClass || 'Unknown';
+            const grp = (byClass[cls] ||= { className: cls, exams: {} });
+            const eid = String(m.examId); const e = examById[eid] || {};
+            (grp.exams[eid] ||= { examId: eid, name: e.examName || e.name || 'Exam', term: e.term || '', year: String(e.academicYear ?? e.year ?? ''), n: 0 }).n++;
+        }
+        // Order: previous classes first (from classHistory), current class last.
+        const histOrder: string[] = Array.isArray(student.classHistory) ? student.classHistory.map((h: any) => h.className).filter(Boolean) : [];
+        const classes = Object.values(byClass).map(c => ({
+            className: c.className,
+            isCurrent: c.className === currentClass,
+            exams: Object.values(c.exams).sort((a, b) => `${a.year}${a.term}`.localeCompare(`${b.year}${b.term}`)),
+        })).sort((a, b) => {
+            if (a.isCurrent) return 1; if (b.isCurrent) return -1;
+            return histOrder.indexOf(a.className) - histOrder.indexOf(b.className);
+        });
+
+        res.json({
+            student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo, currentClass },
+            classes,
+            classHistory: Array.isArray(student.classHistory) ? student.classHistory : [],
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Student academic + fees history, grouped by each class the student was in.
 // Uses classAtTime stamped on exam_marks / invoices (falls back to the student's
 // current class for legacy records that weren't stamped).

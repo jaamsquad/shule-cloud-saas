@@ -7,6 +7,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 import { openPrintDoc, printElementToPdf } from "@/lib/pdfDoc";
+import AcademicHistoryCard from "@/components/AcademicHistoryCard";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -264,6 +265,9 @@ export default function StudentReport() {
                         <DetailRow label="Family" value={student.family || ""} />
                         <DetailRow label="Discount in Fee" value={student.discount ? `${student.discount}%` : ""} />
                     </div>
+
+                    {/* Academic History — past classes + ScholarSheet links */}
+                    <AcademicHistoryCard studentId={String(student?._id || id)} />
 
                     {/* Extended Details List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">
