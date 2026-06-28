@@ -11,7 +11,6 @@ type Category = { key: string; icon: any; color: string; reports: Report[] };
 
 const CATEGORIES: Category[] = [
   { key: "Academic", icon: GraduationCap, color: "#2563EB", reports: [
-    { label: "Students Report Cards", path: "/reports/report-cards" },
     { label: "Student Progress Report", path: "/reports/student-progress" },
     { label: "Subject Performance", path: "/reports/computed/subject-performance" }, { label: "Class Performance", path: "/reports/computed/class-performance" },
     { label: "Grade Distribution", path: "/reports/computed/grade-distribution" }, { label: "Mark Sheets", path: "/reports/computed/mark-sheets" },

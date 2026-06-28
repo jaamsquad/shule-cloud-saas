@@ -960,7 +960,7 @@ const App = () => {
               </Route>
               <Route path="/reports/view/:key" element={<GenericReport />} />
               <Route path="/reports/computed/:key" element={<ComputedReport />} />
-              <Route path="/reports/report-cards" element={<StudentsReportCard />} />
+              {/* <Route path="/reports/report-cards" element={<StudentsReportCard />} /> */}
               <Route path="/reports/students-info" element={<StudentsInfoReport />} />
               <Route path="/reports/parents-info" element={<ParentsInfoReport />} />
               <Route path="/reports/attendance/monthly-students" element={<StudentsMonthlyAttendanceReport />} />

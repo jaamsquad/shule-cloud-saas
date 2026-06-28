@@ -65,6 +65,8 @@ export const navItems: NavItem[] = [
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },
+      { label: "Classes & Streams", path: "/academic-system/classes" },
+      { label: "Teacher ↔ Subjects", path: "/academic-system/teacher-subjects" },
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
       { label: "All Students", path: "/students", pagePerm: "students.all" },
@@ -272,12 +274,6 @@ export const navItems: NavItem[] = [
       { label: "Generate For Class", path: "/timetable/class" },
       { label: "Generate For Teacher", path: "/timetable/teacher" },
   ] },
-  { label: "Academic System", icon: BookMarked, moduleKey: "academic_system", children: [
-      { label: "Academic Years & Terms", path: "/academic-system/years" },
-      { label: "Classes & Streams", path: "/academic-system/classes" },
-      { label: "Teacher ↔ Subjects", path: "/academic-system/teacher-subjects" },
-      
-  ] },
   { label: "Academic Content", icon: GraduationCap, moduleKey: "academics_content", children: [
       { label: "Lesson Plans", path: "/academics/lesson-plans" },
       { label: "Schemes of Work", path: "/academics/schemes-of-work" },
@@ -365,8 +361,6 @@ export const navItems: NavItem[] = [
       { label: "Exam Schedule", path: "/exams/schedule" },
       { label: "Date Sheet", path: "/exams/date-sheet" },
       { label: "Blank Award List", path: "/exams/blank-award-list" },
-  ] },
-  { label: "Class Tests", icon: FileText, moduleKey: "exams", children: [
       { label: "Manage Test Marks", path: "/tests/marks" },
       { label: "Test Result", path: "/tests/results" }
   ] },
