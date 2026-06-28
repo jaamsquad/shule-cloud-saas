@@ -59,6 +59,13 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
 
         const myClass = student.studentClass || student.currentClass || '';
         const myStream = student.stream || student.streamName || '';
+        // Clean display label: avoid duplicating the stream when studentClass
+        // already ends with it (e.g. "Form 1 East" + stream "East" → "Form 1 East").
+        const classFull = (() => {
+            const c = String(myClass).trim(); const s = String(myStream).trim();
+            if (!s) return c;
+            return c.toLowerCase().endsWith(s.toLowerCase()) ? c : `${c} ${s}`.trim();
+        })();
 
         // Find the report-card generation for THIS student's class. The generation
         // pins the End Term (main) exam + optional internal assessments (Mid Term,
@@ -75,19 +82,20 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // ready — tell the frontend to show "Result not ready yet for this term".
         if (!gen) {
             return res.json({ notReady: true, message: 'Result not ready yet for this term.',
-                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: `${myClass} ${myStream}`.trim() } });
+                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: classFull } });
         }
 
-        // The exam set = main End Term + any additional internal assessments. Each
-        // becomes a column; the report aggregates across all of them.
-        const examIds: string[] = [String(gen.mainExamId || examId), ...((gen.additionalExamIds || []).map((x: any) => String(x)))]
+        // The exam set = the exam the user opened (always shown) + the generation's
+        // main End Term + any additional internal assessments. The selected exam
+        // comes first so its column leads. De-duplicated.
+        const examIds: string[] = [String(examId), String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))]
             .filter((v, i, a) => v && a.indexOf(v) === i);
         const examDocs = await database.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray().catch(() => []);
         const examMeta: Record<string, any> = {}; examDocs.forEach((e: any) => examMeta[String(e._id)] = e);
         // Short, readable column titles, e.g. "MID TERM", "END TERM".
         const colTitle = (e: any) => String(e?.type || e?.examType || e?.examName || 'EXAM').toUpperCase().slice(0, 12);
         const examColumns = examIds.map(id => ({ examId: id, title: colTitle(examMeta[id]) }));
-        const multiExam = examColumns.length > 1;
+        let multiExam = examColumns.length > 1;
 
         // Marks across ALL exams in the set (for positions + per-student aggregate).
         const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
@@ -164,7 +172,29 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // Subject rows for THIS student, with a column per exam in the set and an
         // AGGREGATE (average of the per-exam percentages). Group this student's marks
         // by subject, then per exam.
-        const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        let mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        // Safety net: if the exam set yielded NO marks for this student (e.g. the
+        // generation pinned an exam the student wasn't marked in), fall back to ALL
+        // of this student's marks for the SAME TERM as the selected exam, so the card
+        // shows results instead of an empty table.
+        if (mine.length === 0) {
+            const selExam: any = exam || examMeta[examId];
+            const term = String(selExam?.term || '').toLowerCase();
+            const studentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+            const examsAll = await database.collection('exams').find({}).toArray().catch(() => []);
+            const eById: Record<string, any> = {}; examsAll.forEach((e: any) => eById[String(e._id)] = e);
+            const termMarks = studentMarks.filter((m: any) => {
+                const e = eById[String(m.examId)];
+                return term ? String(e?.term || '').toLowerCase() === term : true;
+            });
+            if (termMarks.length) {
+                mine = termMarks;
+                // Rebuild columns from the exams actually present in the fallback marks.
+                const ids = Array.from(new Set(termMarks.map((m: any) => String(m.examId))));
+                examColumns.length = 0;
+                ids.forEach(id => examColumns.push({ examId: id, title: String(eById[id]?.type || eById[id]?.examType || eById[id]?.examName || 'EXAM').toUpperCase().slice(0, 12) }));
+            }
+        }
         const bySubject: Record<string, Record<string, any>> = {};
         for (const m of mine) {
             const sub = m.subjectName || m.subject || 'Subject';
@@ -199,6 +229,8 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const subjN = subjects.length || 1;
         const meanScore = RND(totalMarks / subjN, 1);
         const meanPoint = RND(totalPoints / subjN, 1);
+        // Columns may have changed via the fallback above — recompute multiExam.
+        multiExam = examColumns.length > 1;
 
         // KCPE / value added.
         const kcpeMarks = N(student.kcpeMarks ?? student.kcpe);
@@ -247,10 +279,10 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             curriculum: profile.curriculum || profile.curriculumType || '8-4-4',
             issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
             termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
-            examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, `${myClass} ${myStream}`),
+            examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, classFull),
             examColumns,            // [{ examId, title }] — one per exam in the set
             multiExam,              // true when >1 exam (show columns + aggregate)
-            student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: `${myClass} ${myStream}`.trim(), house: student.house || '', photo: student.photo || student.image || '' },
+            student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: classFull, house: student.house || '', photo: student.photo || student.image || '' },
             summary: { totalMarks: `${RND(totalMarks)}/${subjN * 100}`, meanScore, totalPoints, meanPoint, meanGrade: meanGrade(meanPoint), classPos: `${classPos}/${classmates.length}`, levelPos: `${levelPos}/${rows.length}` },
             kcpe: { marks: kcpeMarks || '-', rank: student.kcpeRank || '-', mean: kcpeMean || '-', valueAdded: valueAdded ?? '-' },
             subjects,
