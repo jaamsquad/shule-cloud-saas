@@ -411,7 +411,7 @@ export const navItems: NavItem[] = [
   { label: "Settings", icon: Building2, moduleKey: "settings", children: [
       // Owner-gated via plan modules; Roles is always available (no planModule).
       { label: "Integrations", path: "/integrations", planModule: "integrations" },
-      { label: "Custom Domain & Branding", path: "/settings/domains", planModule: "custom_domain" },
+      // { label: "Custom Domain & Branding", path: "/settings/domains", planModule: "custom_domain" },
       { label: "Roles & Permissions", path: "/roles" },
   ] },
 ];
