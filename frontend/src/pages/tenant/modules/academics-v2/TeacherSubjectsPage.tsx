@@ -45,11 +45,17 @@ export default function TeacherSubjectsPage() {
 
     const ready = classId && subjectId && teacherId;
 
-    // Show links for the chosen class (or all, when none chosen).
+    // Show links for the chosen class (or all, when none chosen). Match by v2 id OR
+    // by class-name text, so assignments made on the Teachers page (which use legacy
+    // class ids/names) also appear here.
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const shown = useMemo(() => {
-        const rows = classId ? links.filter((l: any) => String(l.classId) === classId) : links;
+        const want = norm(cls?.name);
+        const rows = classId
+            ? links.filter((l: any) => String(l.classId) === classId || (want && (norm(l.className) === want || norm(l.className).startsWith(want))))
+            : links;
         return [...rows].sort((a, b) => `${a.className} ${a.subjectName}`.localeCompare(`${b.className} ${b.subjectName}`));
-    }, [links, classId]);
+    }, [links, classId, cls]);
 
     return (
         <div className="flex-1 bg-[#F8FAFC] min-h-screen p-6">

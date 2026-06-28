@@ -858,6 +858,21 @@ router.post('/v2/teacher-subjects', async (req, res) => {
             updatedAt: now(),
         };
         await db.collection('staff_subjects').updateOne(key, { $set: doc, $setOnInsert: { createdAt: now() } }, { upsert: true });
+
+        // Mirror onto staff.subjectAssignments so the Teachers page reflects it too
+        // (single source of truth = staff_subjects; this keeps the card in sync).
+        try {
+            const tid = toOid(String(teacherId));
+            const staff: any = await db.collection('staff').findOne({ _id: tid });
+            const list: any[] = Array.isArray(staff?.subjectAssignments) ? staff.subjectAssignments : [];
+            const exists = list.some((a: any) => String(a.subjectId) === String(subjectId) && String(a.classId || '') === String(classId || ''));
+            if (!exists) {
+                list.push({ subjectId: subjectId || '', subjectName: subjectName || '', classId: classId || '', className: streamName ? `${className} ${streamName}`.trim() : (className || '') });
+                const subjIds = [...new Set(list.map((a: any) => String(a.subjectId)).filter(Boolean))];
+                await db.collection('staff').updateOne({ _id: tid }, { $set: { subjectAssignments: list, specializedSubjects: subjIds, updatedAt: now() } });
+            }
+        } catch { /* staff mirror is best-effort */ }
+
         res.status(201).json({ ok: true, ...doc });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -865,7 +880,21 @@ router.post('/v2/teacher-subjects', async (req, res) => {
 router.delete('/v2/teacher-subjects/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        const link: any = await db.collection('staff_subjects').findOne({ _id: toOid(req.params.id) });
         await db.collection('staff_subjects').deleteOne({ _id: toOid(req.params.id) });
+        // Remove the mirrored entry from staff.subjectAssignments too.
+        if (link?.teacherId || link?.staffId) {
+            try {
+                const tid = toOid(String(link.teacherId || link.staffId));
+                const staff: any = await db.collection('staff').findOne({ _id: tid });
+                const list: any[] = Array.isArray(staff?.subjectAssignments) ? staff.subjectAssignments : [];
+                const next = list.filter((a: any) => !(String(a.subjectId) === String(link.subjectId) && String(a.classId || '') === String(link.classId || '')));
+                if (next.length !== list.length) {
+                    const subjIds = [...new Set(next.map((a: any) => String(a.subjectId)).filter(Boolean))];
+                    await db.collection('staff').updateOne({ _id: tid }, { $set: { subjectAssignments: next, specializedSubjects: subjIds, updatedAt: now() } });
+                }
+            } catch { /* best-effort */ }
+        }
         res.json({ message: 'Removed' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

@@ -117,13 +117,23 @@ export default function Teachers() {
         mutationFn: async () => {
             if (!assigningTeacher) return;
             const tid = assigningTeacher._id;
-            // Save subject assignments on staff record
-            // Also keep specializedSubjects for backward compatibility
+            const teacherName = assigningTeacher.employeeName || assigningTeacher.name || "";
+            // Save subject assignments on staff record (backward-compat display)
             const uniqueSubjectIds = [...new Set(subjectAssignments.map(a => a.subjectId).filter(Boolean))];
             await api.patch(`/staff/${tid}`, {
                 subjectAssignments,
                 specializedSubjects: uniqueSubjectIds,
             });
+            // Single source of truth: also write each assignment to staff_subjects
+            // (via /v2/teacher-subjects) so the "Assign Teachers to Subjects" page +
+            // report-card initials stay in sync.
+            await Promise.all(subjectAssignments.map(a =>
+                api.post("/v2/teacher-subjects", {
+                    teacherId: tid, teacherName,
+                    subjectId: a.subjectId, subjectName: a.subjectName,
+                    classId: a.classId || null, className: a.className || "",
+                }).catch(() => {})
+            ));
             // Class teacher: remove from old class, assign to new
             const prevClass = classes.find((c: any) => c.classTeacherId === tid);
             if (prevClass && prevClass._id !== editClassId) {
@@ -136,6 +146,7 @@ export default function Teachers() {
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["staff"] });
             qc.invalidateQueries({ queryKey: ["classes"] });
+            qc.invalidateQueries({ queryKey: ["teacher_subjects"] });
             toast.success("Teacher assignments saved successfully");
             closeModal();
         },
