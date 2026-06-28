@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
 import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete } from '../services/mpesa.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
+import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 
 const router = Router();
 
@@ -2620,9 +2621,134 @@ router.get('/tenant/subscribe/status', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── Teacher-portal CBC Assessment ───────────────────────────────────────────
+// Teachers create CBC activities, record assessments (achievement level + optional
+// numeric marks) and view learner progress — but ONLY for the classes/learning-areas
+// they are assigned (via staffAssignments). Records go to the same cbc_assessments
+// collection the admin CBC module + report cards read.
+const CBC_LEVEL_SCORE: Record<string, number> = { EE: 4, ME: 3, AE: 2, BE: 1 };
+const CBC_SCORE_LEVEL = (avg: number) => avg >= 3.5 ? 'EE' : avg >= 2.5 ? 'ME' : avg >= 1.5 ? 'AE' : 'BE';
+const cbcNorm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+// The teacher's allowed classes + learning areas (areas = the "subjects" assigned).
+async function cbcScope(db: Db, decoded: any) {
+    const { assignments, classTeacherOf } = await staffAssignments(db, decoded);
+    const classMap: Record<string, { classId: string; className: string; areas: Set<string> }> = {};
+    const add = (className: string, classId: string, area?: string) => {
+        if (!className) return;
+        const key = cbcNorm(className);
+        (classMap[key] ||= { classId: classId || '', className, areas: new Set() });
+        if (area) classMap[key].areas.add(area);
+    };
+    assignments.forEach(a => add(a.className, a.classId, a.subject));
+    classTeacherOf.forEach(c => add(c.className, c.classId));
+    const classes = Object.values(classMap).map(c => ({ classId: c.classId, className: c.className, learningAreas: Array.from(c.areas).sort() }));
+    return { classes };
+}
+const cbcAllows = (scope: { classes: any[] }, className: string) =>
+    scope.classes.some(c => cbcNorm(c.className) === cbcNorm(className) || cbcNorm(className).startsWith(cbcNorm(c.className)));
+
+// What the teacher may record: their classes + the learning areas per class.
+router.get('/staff-portal/cbc/scope', authed(async (req, res, db, decoded) => {
+    const scope = await cbcScope(db, decoded);
+    const areas = await db.collection('cbc_learning_areas').find({ deletedAt: { $exists: false } }).sort({ name: 1 }).toArray().catch(() => []);
+    res.json({ ...scope, allLearningAreas: areas.map((a: any) => a.name).filter(Boolean) });
+}));
+
+// List / create CBC activities the teacher owns (filtered to their classes).
+router.get('/staff-portal/cbc/activities', authed(async (req, res, db, decoded) => {
+    const scope = await cbcScope(db, decoded);
+    const rows = await db.collection('cbc_activities').find({ deletedAt: { $exists: false } }).sort({ createdAt: -1 }).limit(500).toArray().catch(() => []);
+    const mine = rows.filter((a: any) => a.teacherId === decoded.staffId || cbcAllows(scope, a.grade || a.class || a.className || ''));
+    res.json(mine);
+}));
+router.post('/staff-portal/cbc/activities', authed(async (req, res, db, decoded) => {
+    const b = req.body || {};
+    const className = b.grade || b.class || b.className || '';
+    const scope = await cbcScope(db, decoded);
+    if (!cbcAllows(scope, className)) return res.status(403).json({ message: 'You can only create activities for the classes you teach.' });
+    const doc = {
+        title: b.title || 'CBC Activity', learningArea: b.learningArea || '', strand: b.strand || '',
+        grade: className, class: className, term: b.term || '', year: b.year || String(new Date().getFullYear()),
+        assessmentType: b.assessmentType || 'Observation', maxMarks: Number(b.maxMarks) || 0,
+        teacherId: decoded.staffId, teacherName: decoded.name, createdAt: new Date(),
+    };
+    const r = await db.collection('cbc_activities').insertOne(doc);
+    res.status(201).json({ _id: r.insertedId, ...doc });
+}));
+
+// Roster for an activity/area: students in the class + any existing records.
+router.get('/staff-portal/cbc/roster', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || '');
+    const activityId = String(req.query.activityId || '');
+    const scope = await cbcScope(db, decoded);
+    if (!cbcAllows(scope, className)) return res.status(403).json({ message: 'Not your class.' });
+    const students = await studentsInClass(db, className);
+    const existing = activityId ? await db.collection('cbc_assessments').find({ activityId, deletedAt: { $exists: false } }).toArray().catch(() => []) : [];
+    const byStudent: Record<string, any> = {}; existing.forEach((e: any) => byStudent[String(e.studentId)] = e);
+    res.json(students.map((s: any) => ({
+        studentId: String(s._id), name: s.studentName || s.name, admNo: s.registrationNo || s.admNo,
+        level: byStudent[String(s._id)]?.level || '', marks: byStudent[String(s._id)]?.marks ?? '',
+    })));
+}));
+
+// Record assessments for a class (achievement level + optional numeric marks).
+router.post('/staff-portal/cbc/assess', authed(async (req, res, db, decoded) => {
+    const b = req.body || {};
+    const className = b.className || '';
+    const scope = await cbcScope(db, decoded);
+    if (!cbcAllows(scope, className)) return res.status(403).json({ message: 'Not your class.' });
+    const records: any[] = Array.isArray(b.records) ? b.records : [];
+    const activity: any = b.activityId ? await db.collection('cbc_activities').findOne({ _id: safeObjId(b.activityId)! }).catch(() => null) : null;
+    const maxMarks = Number(activity?.maxMarks || b.maxMarks || 0);
+    const ops = records.filter(r => r.studentId && (r.level || r.marks != null && r.marks !== '')).map(r => {
+        // If only marks given, derive the level band; if only level given, keep it.
+        let level = r.level;
+        if (!level && r.marks != null && r.marks !== '' && maxMarks > 0) {
+            const pct = (Number(r.marks) / maxMarks) * 100;
+            level = pct >= 80 ? 'EE' : pct >= 60 ? 'ME' : pct >= 40 ? 'AE' : 'BE';
+        }
+        return {
+            updateOne: {
+                filter: { studentId: String(r.studentId), activityId: b.activityId || '' },
+                update: {
+                    $set: {
+                        studentId: String(r.studentId), activityId: b.activityId || '',
+                        learningArea: b.learningArea || activity?.learningArea || '', strand: b.strand || activity?.strand || '',
+                        grade: className, class: className, term: b.term || activity?.term || '', year: b.year || activity?.year || String(new Date().getFullYear()),
+                        level: level || '', score: CBC_LEVEL_SCORE[level] || 0,
+                        marks: r.marks != null && r.marks !== '' ? Number(r.marks) : null, maxMarks,
+                        teacherId: decoded.staffId, teacherName: decoded.name, updatedAt: new Date(),
+                    },
+                    $setOnInsert: { createdAt: new Date() },
+                },
+                upsert: true,
+            },
+        };
+    });
+    if (ops.length) await db.collection('cbc_assessments').bulkWrite(ops);
+    res.json({ ok: true, saved: ops.length });
+}));
+
+// Learner progress: per-area levels for this term vs the previous term (comparison).
+router.get('/staff-portal/cbc/progress/:studentId', authed(async (req, res, db, decoded) => {
+    const sid = req.params.studentId;
+    const all = await db.collection('cbc_assessments').find({ studentId: sid, deletedAt: { $exists: false } }).sort({ createdAt: 1 }).toArray().catch(() => []);
+    const byTermArea: Record<string, Record<string, { sum: number; n: number }>> = {};
+    all.forEach((a: any) => {
+        const term = `${a.year || ''} ${a.term || ''}`.trim() || 'Current';
+        const area = a.learningArea || 'Other';
+        ((byTermArea[term] ||= {})[area] ||= { sum: 0, n: 0 });
+        byTermArea[term][area].sum += a.score || 0; byTermArea[term][area].n++;
+    });
+    const terms = Object.keys(byTermArea);
+    const latest = terms[terms.length - 1]; const prev = terms[terms.length - 2];
+    const areaRow = (term?: string) => term ? Object.fromEntries(Object.entries(byTermArea[term]).map(([ar, v]) => [ar, CBC_SCORE_LEVEL(v.sum / v.n)])) : {};
+    res.json({ terms, current: { term: latest || '', areas: areaRow(latest) }, previous: { term: prev || '', areas: areaRow(prev) }, total: all.length });
+}));
+
 // ─── Online Examination — student-portal exam taking ─────────────────────────
 // Mounted here so it reuses the same `authed` JWT + tenant-DB resolution.
-import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 router.use(buildStudentExamRouter(authed));
 
 export default router;
