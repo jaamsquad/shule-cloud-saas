@@ -14,6 +14,43 @@ import api from "@/lib/api";
 const GREEN = "#2E7D32", LIGHT = "#81C784";
 const STREAM_COLORS = ["#2E7D32", "#1565C0", "#C62828", "#F9A825", "#6A1B9A", "#00838F", "#4E342E"];
 
+// Shared school identity (name + logo) for print headers. Reads the tenant profile.
+function useSchool() {
+    const { data } = useQuery({ queryKey: ["tenant_profile_analytics"], queryFn: async () => (await api.get("/auth/tenant/profile")).data });
+    return {
+        name: data?.instituteName || data?.name || data?.schoolName || "",
+        logo: data?.logo || data?.logoUrl || data?.badge || "",
+        box: data?.poBox || data?.address || "",
+        tel: data?.phone || data?.tel || "",
+    };
+}
+
+// Open a print window with a branded header (logo + school name + report title),
+// then the supplied body HTML. Shared by every printable analytics view.
+function printDoc(school: { name: string; logo: string; box?: string; tel?: string }, title: string, subtitle: string, bodyHtml: string, landscape = false) {
+    const w = window.open("", "_blank", `width=${landscape ? 1100 : 900},height=820`);
+    if (!w) return;
+    const header = `
+        <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px">
+            ${school.logo ? `<img src="${school.logo}" style="width:54px;height:54px;object-fit:contain"/>` : ""}
+            <div style="flex:1">
+                <div style="font-size:20px;font-weight:800;letter-spacing:.5px">${school.name || "SCHOOL NAME"}</div>
+                <div style="font-size:10px">${[school.box, school.tel ? `Tel: ${school.tel}` : ""].filter(Boolean).join(" · ")}</div>
+                <div style="font-size:13px;font-weight:700;margin-top:2px">${title}</div>
+            </div>
+            <div style="text-align:right;font-size:10px">Issued: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
+        </div>
+        ${subtitle ? `<div style="font-size:11px;margin-bottom:6px">${subtitle}</div>` : ""}`;
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>
+        @page{size:A4 ${landscape ? "landscape" : "portrait"};margin:10mm}
+        body{font-family:'Times New Roman',serif;color:#000;font-size:11px;-webkit-print-color-adjust:exact}
+        table{width:100%;border-collapse:collapse;margin-top:8px}
+        th,td{border:.6px solid #000;padding:2px 5px;text-align:center}
+        th{background:#eee}
+    </style></head><body>${header}${bodyHtml}<script>onload=()=>print()</script></body></html>`);
+    w.document.close();
+}
+
 export default function Analytics() {
     const [examId, setExamId] = useState("");
     const [form, setForm] = useState<string | null>(null);   // null = My Classes view
@@ -218,6 +255,7 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
 
 // Subject performance — pick a subject, see every student ranked (score/grade/pos).
 function SubjectSheet({ examId, form }: { examId: string; form: string }) {
+    const school = useSchool();
     const [subject, setSubject] = useState("");
     const { data: subs } = useQuery({ queryKey: ["an_subjects", examId, form], queryFn: async () => (await api.get("/analytics/subjects", { params: { examId, form } })).data });
     const subjects: string[] = subs?.subjects || [];
@@ -226,10 +264,9 @@ function SubjectSheet({ examId, form }: { examId: string; form: string }) {
     const students = data?.students || [];
 
     const print = () => {
-        const w = window.open("", "_blank", "width=900,height=800"); if (!w) return;
         const rows = students.map((s: any) => `<tr><td>${s.position}</td><td>${s.adm}</td><td style="text-align:left">${s.name}</td><td>${s.stream || ""}</td><td>${s.marks}</td><td>${s.grade}</td><td>${s.points}</td></tr>`).join("");
-        w.document.write(`<!DOCTYPE html><html><head><title>${active} — ${form}</title><style>@page{size:A4 portrait;margin:12mm}body{font-family:'Times New Roman',serif;font-size:11px}h2{margin:0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:.6px solid #000;padding:2px 5px;text-align:center}th{background:#eee}</style></head><body><h2>${active.toUpperCase()} — ${form}</h2><div>Average: ${data?.average ?? 0}% · ${students.length} students</div><table><thead><tr><th>#</th><th>Adm</th><th>Name</th><th>Stream</th><th>Marks</th><th>Grade</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table><script>onload=()=>print()</script></body></html>`);
-        w.document.close();
+        const body = `<table><thead><tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th><th>Marks</th><th>Grade</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
+        printDoc(school, `${active.toUpperCase()} — ${form || "All"}`, `Average: ${data?.average ?? 0}% · ${students.length} students`, body);
     };
 
     return (
@@ -257,6 +294,7 @@ function SubjectSheet({ examId, form }: { examId: string; form: string }) {
 // Class & stream rollup — a class level (Form 4) with its streams (4 East/West…).
 // When a form is selected (drill-down), show ONLY that level.
 function ClassLevels({ examId, form }: { examId: string; form?: string | null }) {
+    const school = useSchool();
     const { data, isLoading } = useQuery({ queryKey: ["an_class_levels", examId], queryFn: async () => (await api.get("/analytics/class-levels", { params: { examId } })).data });
     if (isLoading) return <Spin />;
     let classes = data?.classes || [];
@@ -265,8 +303,21 @@ function ClassLevels({ examId, form }: { examId: string; form?: string | null })
         classes = classes.filter((c: any) => String(c.level).toLowerCase().replace(/\s+/g, " ").trim() === f);
     }
     if (!classes.length) return <Empty msg="No data." />;
+
+    const print = () => {
+        const body = classes.map((c: any) => `
+            <h3 style="margin:10px 0 0">${c.level} (overall) — ${c.students} students · Mean ${c.meanPoints} pts · ${c.meanPct}% · ${c.meanGrade}</h3>
+            <table><thead><tr><th style="text-align:left">Stream</th><th>Students</th><th>Mean Pts</th><th>Mean %</th><th>Grade</th></tr></thead>
+            <tbody>${c.streams.map((s: any, i: number) => `<tr><td style="text-align:left">${i + 1}. ${s.stream}</td><td>${s.students}</td><td><b>${s.meanPoints}</b></td><td>${s.meanPct}%</td><td>${s.meanGrade}</td></tr>`).join("")}</tbody></table>
+        `).join("");
+        printDoc(school, "CLASS & STREAM ANALYSIS", form ? `${form}` : "All classes", body);
+    };
+
     return (
         <div className="space-y-3">
+            <div className="flex justify-end">
+                <button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button>
+            </div>
             {classes.map((c: any) => (
                 <Card key={c.level} title={<span className="flex items-center justify-between w-full"><span>{c.level} (overall)</span><span className="text-xs font-normal text-slate-400">{c.students} students</span></span>}>
                     <div className="grid grid-cols-3 gap-3 mb-3">
@@ -292,23 +343,17 @@ function ClassLevels({ examId, form }: { examId: string; form?: string | null })
 }
 
 function MeritList({ examId, form }: { examId: string; form: string }) {
+    const school = useSchool();
     const { data, isLoading } = useQuery({ queryKey: ["an_merit", examId, form], queryFn: async () => (await api.get("/analytics/merit-list", { params: { examId, form } })).data });
     if (isLoading) return <Spin />;
     const students = data?.students || [];
     const subjects = Array.from(new Set(students.flatMap((s: any) => s.subjects.map((x: any) => x.name)))) as string[];
 
     const print = () => {
-        const w = window.open("", "_blank", "width=1000,height=800"); if (!w) return;
-        const head = `<tr><th>#</th><th>Adm</th><th>Name</th><th>Stream</th>${subjects.map(s => `<th>${s}</th>`).join("")}<th>Pts</th></tr>`;
+        const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th>${subjects.map(s => `<th>${s}</th>`).join("")}<th>Pts</th></tr>`;
         const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td><td>${st.stream || ""}</td>${subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("")}<td><b>${st.totalPoints}</b></td></tr>`).join("");
-        w.document.write(`<!DOCTYPE html><html><head><title>Merit List — ${form}</title><style>
-            @page{size:A4 landscape;margin:10mm} body{font-family:'Times New Roman',serif;color:#000;font-size:11px}
-            h2{margin:0 0 2px} table{width:100%;border-collapse:collapse;margin-top:8px} th,td{border:.6px solid #000;padding:2px 4px;text-align:center} th{background:#eee}
-        </style></head><body>
-            <h2>MERIT LIST — ${form}</h2><div>${form} · ${students.length} students</div>
-            <table><thead>${head}</thead><tbody>${rows}</tbody></table>
-            <script>onload=()=>print()</script></body></html>`);
-        w.document.close();
+        const body = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+        printDoc(school, `MERIT LIST — ${form || "All"}`, `${form || "All classes"} · ${students.length} students`, body, true);
     };
 
     return (
@@ -332,11 +377,19 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
 }
 
 function MostImproved({ examId }: { examId: string }) {
+    const school = useSchool();
     const { data, isLoading } = useQuery({ queryKey: ["an_improved", examId], queryFn: async () => (await api.get("/analytics/most-improved", { params: { examId } })).data });
     if (isLoading) return <Spin />;
     const students = data?.students || [];
+
+    const print = () => {
+        const rows = students.map((s: any, i: number) => `<tr><td>${i + 1}</td><td>${s.adm}</td><td style="text-align:left">${s.name}</td><td>${s.stream || ""}</td><td>${s.from} → ${s.to}</td><td><b>${s.change > 0 ? "+" : ""}${s.change}</b></td></tr>`).join("");
+        const body = `<table><thead><tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th><th>From → To</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
+        printDoc(school, "MOST IMPROVED STUDENTS", data?.comparedTo ? `Compared to ${data.comparedTo}` : "", body);
+    };
+
     return (
-        <Card title={<span className="flex items-center gap-2"><Award className="w-4 h-4" style={{ color: GREEN }} /> Most Improved {data?.comparedTo ? <span className="text-[11px] text-slate-400 font-normal">vs {data.comparedTo}</span> : null}</span>}>
+        <Card title={<span className="flex items-center justify-between w-full"><span className="flex items-center gap-2"><Award className="w-4 h-4" style={{ color: GREEN }} /> Most Improved {data?.comparedTo ? <span className="text-[11px] text-slate-400 font-normal">vs {data.comparedTo}</span> : null}</span>{students.length > 0 && <button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button>}</span>}>
             {students.length === 0 ? <Empty msg="No previous exam to compare, or no improvement yet." /> : (
                 <table className="w-full text-sm">
                     <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-2">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th><th className="text-right">From → To</th><th className="text-center">Change</th></tr></thead>

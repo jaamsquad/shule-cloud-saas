@@ -100,6 +100,17 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // Marks across ALL exams in the set (for positions + per-student aggregate).
         const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
 
+        // Keep ONLY exam columns that actually have marks for THIS student. This
+        // drops phantom/empty columns (e.g. a pinned exam with no marks) so the card
+        // shows just the real exams — one column when only End Term exists, and extra
+        // columns (Mid Term / CAT) only when those were marked for this term.
+        const myExamIdsWithMarks = new Set(allMarks.filter((m: any) => String(m.studentId) === sid).map((m: any) => String(m.examId)));
+        if (myExamIdsWithMarks.size > 0) {
+            const kept = examColumns.filter(c => myExamIdsWithMarks.has(c.examId));
+            if (kept.length) { examColumns.length = 0; kept.forEach(c => examColumns.push(c)); }
+        }
+        multiExam = examColumns.length > 1;
+
         // Per-student aggregate across the whole exam set (for positions).
         const agg: Record<string, { total: number; points: number; n: number; cls: string; stream: string }> = {};
         const students = await database.collection('students').find({}).toArray().catch(() => []);
