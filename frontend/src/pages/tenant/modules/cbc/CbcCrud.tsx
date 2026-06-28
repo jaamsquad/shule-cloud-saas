@@ -4,7 +4,7 @@ import { Plus, Loader2, Trash2, Pencil, X, Search } from "lucide-react";
 import { toast } from "sonner";
 import { cbc } from "./cbcApi";
 
-export type Fld = { k: string; label: string; type?: "text" | "number" | "date" | "select" | "textarea"; options?: string[] | (() => string[]); required?: boolean };
+export type Fld = { k: string; label: string; type?: "text" | "number" | "date" | "select" | "textarea"; options?: string[] | (() => string[]); required?: boolean; allowCustom?: boolean };
 const ACCENT = "#7C3AED";
 
 export default function CbcCrud({ collection, title, addLabel = "Add", fields, columns, searchKeys }: { collection: string; title: string; addLabel?: string; fields: Fld[]; columns: { k: string; label: string }[]; searchKeys?: string[] }) {
@@ -57,7 +57,13 @@ export default function CbcCrud({ collection, title, addLabel = "Add", fields, c
                             {fields.map(f => (
                                 <div key={f.k} className={f.type === "textarea" ? "col-span-2" : ""}>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-1">{f.label}{f.required && " *"}</label>
-                                    {f.type === "select" ? <select value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#7C3AED]"><option value="">Select…</option>{opts(f).map(o => <option key={o}>{o}</option>)}</select>
+                                    {f.type === "select" && f.allowCustom ? (
+                                        // Pick from options OR type a custom value (datalist-backed input).
+                                        <>
+                                            <input list={`dl-${f.k}`} value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: e.target.value }))} placeholder="Select or type…" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#7C3AED]" />
+                                            <datalist id={`dl-${f.k}`}>{opts(f).map(o => <option key={o} value={o} />)}</datalist>
+                                        </>
+                                    ) : f.type === "select" ? <select value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#7C3AED]"><option value="">Select…</option>{opts(f).map(o => <option key={o}>{o}</option>)}</select>
                                         : f.type === "textarea" ? <textarea value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#7C3AED]" />
                                             : <input type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(s => ({ ...s, [f.k]: f.type === "number" ? Number(e.target.value) : e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#7C3AED]" />}
                                 </div>

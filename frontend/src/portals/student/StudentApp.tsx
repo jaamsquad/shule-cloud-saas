@@ -5,6 +5,7 @@ import PersonalProfile from "./pages/PersonalProfile";
 import Registration from "./pages/Registration";
 import ExamResults from "./pages/ExamResults";
 import OnlineExams from "./pages/OnlineExams";
+import TakeOnlineExam from "./pages/TakeOnlineExam";
 import StudentLive from "./pages/StudentLive";
 import StudentTasks from "./pages/StudentTasks";
 import StudentResources from "./pages/StudentResources";
@@ -29,6 +30,7 @@ export default function StudentApp() {
                 <Route path="/registration" element={<Registration />} />
                 <Route path="/exam-results" element={<ExamResults />} />
                 <Route path="/online-exams" element={<OnlineExams />} />
+                <Route path="/online-exam/:examId" element={<TakeOnlineExam />} />
                 <Route path="/live" element={<StudentLive />} />
                 <Route path="/assignments" element={<StudentTasks type="assignment" title="Assignments" />} />
                 <Route path="/homework" element={<StudentTasks type="homework" title="Homework" />} />

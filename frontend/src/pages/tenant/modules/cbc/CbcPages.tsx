@@ -23,6 +23,11 @@ const useTeachers = () => {
     const { data = [] } = useQuery({ queryKey: ["cbc_teachers"], queryFn: async () => { try { const r = await (await import("@/lib/api")).default.get("/staff"); return r.data || []; } catch { return []; } } });
     return data.filter((s: any) => /teacher|tutor|instructor|hod/i.test(`${s.designation || ""} ${(s.roles || []).join(" ")}`)).map((s: any) => s.employeeName || s.name).filter(Boolean) as string[];
 };
+// Subjects — used so a CBC learning area can be picked from existing subjects.
+const useSubjects = () => {
+    const { data = [] } = useQuery({ queryKey: ["cbc_subjects"], queryFn: async () => { try { const r = await (await import("@/lib/api")).default.get("/subjects"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } } });
+    return Array.from(new Set(data.map((s: any) => s.name || s.subjectName).filter(Boolean))) as string[];
+};
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export function CbcDashboard() {
@@ -56,9 +61,9 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 // ── Config CRUD pages ─────────────────────────────────────────────────────────
 export function LearningAreasPage() {
-    const classes = useClasses(); const teachers = useTeachers();
+    const classes = useClasses(); const teachers = useTeachers(); const subjects = useSubjects();
     return <CbcCrud collection="cbc_learning_areas" title="Learning Areas" addLabel="New Learning Area"
-        fields={[{ k: "name", label: "Name", required: true }, { k: "grade", label: "Grade Level", type: "select", options: () => classes }, { k: "code", label: "Code" }, { k: "description", label: "Description", type: "textarea" }, { k: "teacher", label: "Assigned Teacher", type: "select", options: () => teachers }, { k: "active", label: "Status", type: "select", options: ["Active", "Inactive"] }]}
+        fields={[{ k: "name", label: "Name (pick a subject)", type: "select", options: () => subjects, allowCustom: true, required: true }, { k: "grade", label: "Grade Level", type: "select", options: () => classes }, { k: "code", label: "Code" }, { k: "description", label: "Description", type: "textarea" }, { k: "teacher", label: "Assigned Teacher", type: "select", options: () => teachers }, { k: "active", label: "Status", type: "select", options: ["Active", "Inactive"] }]}
         columns={[{ k: "name", label: "Learning Area" }, { k: "grade", label: "Grade" }, { k: "code", label: "Code" }, { k: "teacher", label: "Teacher" }]} />;
 }
 export function CompetenciesPage() {
