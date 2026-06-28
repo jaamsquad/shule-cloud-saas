@@ -262,115 +262,50 @@ router.get('/v2/students/:id/history', async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 6. PROMOTION WORKFLOW
-// Creates NEW enrollment, marks old as "completed"
-// NEVER modifies old enrollment or marks
+// 6. PROMOTION (enrollment-free)
+// Updates each student's CURRENT class/stream and appends a promotion-history
+// entry. Past exam marks already carry classAtTime, so previous results stay
+// attached to the old class forever (Academic History on the student page).
 // ═══════════════════════════════════════════════════════════════════
 
-router.post('/v2/promotions/preview', async (req, res) => {
-    try {
-        const db = getRequestDb(req);
-        const { fromAcademicYearId, fromClassId, fromStreamId, toAcademicYearId, toClassId, toStreamId } = req.body;
-        const activeEnrollments = await db.collection('student_enrollments').find({
-            academicYearId: fromAcademicYearId, classId: fromClassId, streamId: fromStreamId, status: 'active'
-        }).toArray();
-        const [toClass, toStream] = await Promise.all([
-            db.collection('v2_classes').findOne({ _id: toOid(toClassId) }),
-            db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }),
-        ]);
-        res.json({
-            studentsToPromote: activeEnrollments.length,
-            fromClass: activeEnrollments[0]?.className,
-            fromStream: activeEnrollments[0]?.streamName,
-            toClass: toClass?.name,
-            toStream: toStream?.name,
-            students: activeEnrollments.map((e: any) => ({ studentId: e.studentId, name: e.studentName, enrollmentId: e._id })),
-        });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-
+// Promote selected students to a destination class + stream.
 router.post('/v2/promotions', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { fromAcademicYearId, fromClassId, fromStreamId, toAcademicYearId, toClassId, toStreamId, studentIds } = req.body;
+        const { studentIds, toClassId, toStreamId, academicYear } = req.body || {};
+        if (!Array.isArray(studentIds) || !studentIds.length) return res.status(400).json({ message: 'No students selected' });
+        if (!toClassId) return res.status(400).json({ message: 'Destination class is required' });
 
-        if (!fromAcademicYearId || !toAcademicYearId || !fromClassId || !toClassId || !fromStreamId || !toStreamId) {
-            return res.status(400).json({ message: 'All year/class/stream IDs are required' });
-        }
-
-        // Get active enrollments to promote
-        const query: any = { academicYearId: fromAcademicYearId, classId: fromClassId, streamId: fromStreamId, status: 'active' };
-        if (studentIds?.length) query.studentId = { $in: studentIds };
-        const toPromote = await db.collection('student_enrollments').find(query).toArray();
-
-        if (!toPromote.length) return res.status(400).json({ message: 'No active enrollments found to promote' });
-
-        const [toYear, toClass, toStream] = await Promise.all([
-            db.collection('academic_years').findOne({ _id: toOid(toAcademicYearId) }),
-            db.collection('v2_classes').findOne({ _id: toOid(toClassId) }),
-            db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }),
+        const [toClass, toStream] = await Promise.all([
+            db.collection('v2_classes').findOne({ _id: toOid(toClassId) }).catch(() => null),
+            toStreamId ? db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }).catch(() => null) : null,
         ]);
+        if (!toClass) return res.status(400).json({ message: 'Destination class not found' });
+        const fullClass = toStream ? (toStream.fullName || `${toClass.name} ${toStream.name}`) : toClass.name;
+        const year = academicYear || String(new Date().getFullYear());
 
-        let promoted = 0;
-        let skipped = 0;
-
-        for (const enrollment of toPromote) {
-            // Check not already enrolled in target
-            const alreadyEnrolled = await db.collection('student_enrollments').findOne({
-                studentId: enrollment.studentId, academicYearId: toAcademicYearId, classId: toClassId, streamId: toStreamId, status: 'active'
+        let promoted = 0, skipped = 0;
+        for (const sid of studentIds) {
+            const oid = toOid(String(sid));
+            if (!oid) { skipped++; continue; }
+            const student: any = await db.collection('students').findOne({ _id: oid }).catch(() => null);
+            if (!student) { skipped++; continue; }
+            const fromClass = student.studentClass || student.currentClass || '';
+            // Append a history entry (immutable record of the class they left).
+            const historyEntry = { className: fromClass, classId: student.classId || '', streamId: student.streamId || '', streamName: student.stream || student.streamName || '', academicYear: student.academicYear || '', leftAt: now() };
+            await db.collection('students').updateOne({ _id: oid }, {
+                $set: {
+                    studentClass: fullClass, currentClass: fullClass,
+                    classId: toClassId, className: toClass.name,
+                    streamId: toStreamId || null, stream: toStream?.name || '', streamName: toStream?.name || '',
+                    academicYear: year, updatedAt: now(),
+                },
+                $push: { classHistory: historyEntry } as any,
             });
-            if (alreadyEnrolled) { skipped++; continue; }
-
-            // 1. Mark old enrollment as completed — NEVER delete it
-            await db.collection('student_enrollments').updateOne(
-                { _id: enrollment._id },
-                { $set: { status: 'completed', completedAt: now(), promotedToYearId: toAcademicYearId } }
-            );
-
-            // 2. Create NEW enrollment for promoted year/class/stream
-            const newEnrollment = {
-                studentId: enrollment.studentId,
-                studentName: enrollment.studentName,
-                academicYearId: toAcademicYearId,
-                academicYear: toYear?.year || '',
-                termId: null,
-                classId: toClassId,
-                className: toClass?.name || '',
-                streamId: toStreamId,
-                streamName: toStream?.name || '',
-                fullClassName: toStream?.fullName || `${toClass?.name} ${toStream?.name}`,
-                status: 'active',
-                promotedFromEnrollmentId: enrollment._id.toString(),
-                enrollmentDate: now(),
-                createdAt: now(),
-            };
-            await db.collection('student_enrollments').insertOne(newEnrollment);
-
-            // 3. Sync the student's CURRENT class on the students collection so the
-            //    All Students page (and everything that reads studentClass) reflects
-            //    the promotion immediately. Historical enrollments stay intact above.
-            const newClassLabel = newEnrollment.fullClassName || `${toClass?.name || ''} ${toStream?.name || ''}`.trim() || toClass?.name || '';
-            const sid = enrollment.studentId;
-            try {
-                const filter = /^[a-f0-9]{24}$/i.test(String(sid)) ? { _id: new (require('mongodb').ObjectId)(String(sid)) } : { _id: sid as any };
-                await db.collection('students').updateOne(filter, {
-                    $set: {
-                        studentClass: newClassLabel,
-                        currentClass: newClassLabel,
-                        classId: toClassId,
-                        streamId: toStreamId,
-                        streamName: toStream?.name || '',
-                        academicYear: toYear?.year || '',
-                        updatedAt: now(),
-                    },
-                });
-            } catch { /* ignore a bad id, continue promoting others */ }
             promoted++;
         }
-
-        await auditLog(db, 'BULK_PROMOTION', 'student_enrollments', 'bulk', 'system', { from: fromClassId, fromStream: fromStreamId }, { to: toClassId, toStream: toStreamId, count: promoted });
-
-        res.json({ message: `Promotion complete`, promoted, skipped, total: toPromote.length });
+        await auditLog(db, 'BULK_PROMOTION', 'students', 'bulk', 'system', null, { toClassId, toStreamId, count: promoted });
+        res.json({ message: 'Promotion complete', promoted, skipped, total: studentIds.length, destination: fullClass });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
