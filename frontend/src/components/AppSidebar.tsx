@@ -276,7 +276,6 @@ export const navItems: NavItem[] = [
       { label: "Academic Years & Terms", path: "/academic-system/years" },
       { label: "Classes & Streams", path: "/academic-system/classes" },
       { label: "Teacher ↔ Subjects", path: "/academic-system/teacher-subjects" },
-      { label: "Student Enrollments", path: "/academic-system/enrollments" },
       { label: "Promotion Wizard", path: "/academic-system/promote" },
       
   ] },

@@ -239,24 +239,13 @@ router.delete('/v2/streams/:id', async (req, res) => {
 // CRITICAL: Never overwrite. Always create new on promotion.
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/v2/enrollments', async (req, res) => {
+// Enrollment feature removed — class/stream is stored directly on the student.
+// This endpoint purges any leftover student_enrollments records.
+router.delete('/v2/enrollments/purge', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const query: any = { deletedAt: { $exists: false } };
-        if (req.query.studentId) query.studentId = req.query.studentId.toString();
-        if (req.query.academicYearId) query.academicYearId = req.query.academicYearId.toString();
-        if (req.query.classId) query.classId = req.query.classId.toString();
-        if (req.query.streamId) query.streamId = req.query.streamId.toString();
-        if (req.query.status) query.status = req.query.status.toString();
-        const enrollments = await db.collection('student_enrollments').find(query).sort({ enrollmentDate: -1 }).toArray();
-        // Enrich with each student's REAL current class from the students collection.
-        const students = await db.collection('students').find({}).toArray().catch(() => []);
-        const byId: Record<string, any> = {};
-        students.forEach((s: any) => { byId[String(s._id)] = s; });
-        res.json(enrollments.map((e: any) => {
-            const s = byId[String(e.studentId)];
-            return { ...e, currentClass: s?.studentClass || s?.currentClass || e.fullClassName || e.className || '' };
-        }));
+        const r = await db.collection('student_enrollments').deleteMany({});
+        res.json({ ok: true, removed: r.deletedCount });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -271,81 +260,6 @@ router.get('/v2/students/:id/history', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-router.post('/v2/enrollments', async (req, res) => {
-    try {
-        const db = getRequestDb(req);
-        const { studentId, academicYearId, termId, classId, streamId } = req.body;
-        if (!studentId || !academicYearId || !classId || !streamId) {
-            return res.status(400).json({ message: 'studentId, academicYearId, classId, streamId are required' });
-        }
-        // Check for duplicate active enrollment
-        const existing = await db.collection('student_enrollments').findOne({ studentId, academicYearId, classId, streamId, status: 'active', deletedAt: { $exists: false } });
-        if (existing) return res.status(400).json({ message: 'Student already has an active enrollment in this class/stream for this year' });
-
-        const [student, year, cls, stream] = await Promise.all([
-            db.collection('students').findOne({ _id: toOid(studentId) }),
-            db.collection('academic_years').findOne({ _id: toOid(academicYearId) }),
-            db.collection('v2_classes').findOne({ _id: toOid(classId) }),
-            db.collection('v2_streams').findOne({ _id: toOid(streamId) }),
-        ]);
-
-        const enrollment = {
-            studentId, studentName: student?.studentName || student?.name || '',
-            academicYearId, academicYear: year?.year || '',
-            termId: termId || null,
-            classId, className: cls?.name || '',
-            streamId, streamName: stream?.name || '', fullClassName: stream?.fullName || `${cls?.name} ${stream?.name}`,
-            status: 'active', promotedFromEnrollmentId: req.body.promotedFromEnrollmentId || null,
-            enrollmentDate: now(), createdAt: now(),
-        };
-
-        const result = await db.collection('student_enrollments').insertOne(enrollment);
-
-        // Sync the student's current class so All Students reflects the enrolment.
-        try {
-            await db.collection('students').updateOne(
-                { _id: toOid(studentId) },
-                { $set: { studentClass: enrollment.fullClassName || cls?.name || '', currentClass: enrollment.fullClassName || cls?.name || '', classId, streamId, streamName: stream?.name || '', academicYear: year?.year || '', updatedAt: now() } },
-            );
-        } catch { /* ignore */ }
-
-        await auditLog(db, 'CREATE_ENROLLMENT', 'student_enrollments', result.insertedId.toString(), 'system', null, enrollment);
-        res.status(201).json({ id: result.insertedId, ...enrollment });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-
-// Enroll MANY students into the same class/stream/year in one call.
-router.post('/v2/enrollments/bulk', async (req, res) => {
-    try {
-        const db = getRequestDb(req);
-        const { studentIds, academicYearId, termId, classId, streamId } = req.body;
-        if (!Array.isArray(studentIds) || studentIds.length === 0 || !academicYearId || !classId || !streamId) {
-            return res.status(400).json({ message: 'studentIds[], academicYearId, classId, streamId are required' });
-        }
-        const [year, cls, stream] = await Promise.all([
-            db.collection('academic_years').findOne({ _id: toOid(academicYearId) }),
-            db.collection('v2_classes').findOne({ _id: toOid(classId) }),
-            db.collection('v2_streams').findOne({ _id: toOid(streamId) }),
-        ]);
-        let enrolled = 0, skipped = 0;
-        for (const studentId of studentIds) {
-            const existing = await db.collection('student_enrollments').findOne({ studentId, academicYearId, classId, streamId, status: 'active', deletedAt: { $exists: false } });
-            if (existing) { skipped++; continue; }
-            const student = await db.collection('students').findOne({ _id: toOid(studentId) });
-            const enrollment = {
-                studentId, studentName: student?.studentName || student?.name || '',
-                academicYearId, academicYear: year?.year || '', termId: termId || null,
-                classId, className: cls?.name || '',
-                streamId, streamName: stream?.name || '', fullClassName: stream?.fullName || `${cls?.name} ${stream?.name}`,
-                status: 'active', enrollmentDate: now(), createdAt: now(),
-            };
-            const r = await db.collection('student_enrollments').insertOne(enrollment);
-            await auditLog(db, 'CREATE_ENROLLMENT', 'student_enrollments', r.insertedId.toString(), 'system', null, enrollment);
-            enrolled++;
-        }
-        res.status(201).json({ enrolled, skipped, total: studentIds.length });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
 
 // ═══════════════════════════════════════════════════════════════════
 // 6. PROMOTION WORKFLOW

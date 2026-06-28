@@ -85,24 +85,25 @@ export default function AddStudent() {
         const portalUsername = formData.registrationNo || formData.studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
         const portalPassword = `shule@${cleanReg}`;
 
+        // Save the chosen class + stream directly on the student record.
+        const cls = v2Classes.find((c: any) => String(c._id) === String(enroll.classId));
+        const stream = v2Streams.find((s: any) => String(s._id) === String(enroll.streamId));
+        const fullClass = stream ? (stream.fullName || `${cls?.name || ""} ${stream.name}`) : (cls?.name || formData.studentClass);
+
         createItem({
             ...formData,
+            studentClass: fullClass,
+            classId: enroll.classId || undefined,
+            className: cls?.name || "",
+            streamId: enroll.streamId || null,
+            stream: stream?.name || "",
+            streamName: stream?.name || "",
             portalUsername,
             portalPassword,
             credentialsGenerated: true,
             lastPasswordReset: new Date().toISOString()
         }, {
-            onSuccess: async (created: any) => {
-                // Enroll the new student into the chosen class/stream via the V2 system.
-                const newId = created?._id || created?.id || created?.insertedId;
-                if (newId && enroll.classId && enroll.streamId && activeYear?._id) {
-                    try {
-                        await api.post("/v2/enrollments", {
-                            studentId: String(newId), academicYearId: activeYear._id,
-                            classId: enroll.classId, streamId: enroll.streamId,
-                        });
-                    } catch (_) { /* student still created; enrollment can be done later */ }
-                }
+            onSuccess: () => {
                 toast.success(`Student added with credentials. Pass: ${portalPassword}`);
                 navigate("/students");
             }
@@ -651,7 +652,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
                 const fullClass = stream ? (stream.fullName || `${cls?.name || ""} ${stream.name}`) : (cls?.name || "");
                 const cleanReg = (r.reg || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "student";
                 const portalUsername = r.reg || r.name.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
-                const created: any = (await api.post("/students", {
+                await api.post("/students", {
                     studentName: r.name.trim(),
                     registrationNo: r.reg.trim(),
                     admNo: r.reg.trim(),
@@ -667,11 +668,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
                     portalPassword: `shule@${cleanReg}`,
                     credentialsGenerated: true,
                     lastPasswordReset: new Date().toISOString(),
-                })).data;
-                const newId = created?._id || created?.id || created?.insertedId;
-                if (newId && r.classId && r.streamId && activeYear?._id) {
-                    await api.post("/v2/enrollments", { studentId: String(newId), academicYearId: activeYear._id, classId: r.classId, streamId: r.streamId }).catch(() => {});
-                }
+                });
                 ok++;
             } catch { fail++; }
         }

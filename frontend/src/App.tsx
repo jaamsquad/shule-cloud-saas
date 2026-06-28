@@ -195,11 +195,9 @@ import StudentMedical from "./pages/tenant/modules/students/StudentMedical";
 import StudentDocuments from "./pages/tenant/modules/students/StudentDocuments";
 // Academic System V2
 import AcademicYearsPage from "./pages/tenant/modules/academics-v2/AcademicYearsPage";
-import EnrollmentFormPage from "./pages/tenant/modules/academics-v2/EnrollmentFormPage";
 import StudentHistoryPage from "./pages/tenant/modules/academics-v2/StudentHistoryPage";
 import ClassesStreamsPage from "./pages/tenant/modules/academics-v2/ClassesStreamsPage";
 import TeacherSubjectsPage from "./pages/tenant/modules/academics-v2/TeacherSubjectsPage";
-import EnrollmentPage from "./pages/tenant/modules/academics-v2/EnrollmentPage";
 import PromotionWizard from "./pages/tenant/modules/academics-v2/PromotionWizard";
 import V2MarksEntry from "./pages/tenant/modules/academics-v2/V2MarksEntry";
 import V2ReportCard from "./pages/tenant/modules/academics-v2/V2ReportCard";
@@ -667,8 +665,9 @@ const App = () => {
               <Route path="/canteen/transactions" element={<CanteenTransactions />} />
               <Route path="/academic-system/classes" element={<ClassesStreamsPage />} />
               <Route path="/academic-system/teacher-subjects" element={<TeacherSubjectsPage />} />
-              <Route path="/academic-system/enrollments" element={<EnrollmentPage />} />
-              <Route path="/academic-system/enroll" element={<EnrollmentFormPage />} />
+              {/* Enrollment feature removed — class/stream is set directly on the student. */}
+              <Route path="/academic-system/enrollments" element={<Navigate to="/students" replace />} />
+              <Route path="/academic-system/enroll" element={<Navigate to="/students" replace />} />
               <Route path="/academic-system/promote" element={<PromotionWizard />} />
               <Route path="/academic-system/marks" element={<V2MarksEntry />} />
               <Route path="/academic-system/report-cards" element={<V2ReportCard />} />
