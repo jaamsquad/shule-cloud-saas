@@ -246,11 +246,6 @@ export default function Classes() {
         queryFn: async () => { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; },
     });
 
-    const { data: enrollments = [] } = useQuery({
-        queryKey: ["v2_enrollments_classes"],
-        queryFn: async () => { const r = await api.get("/v2/enrollments?status=active"); return Array.isArray(r.data) ? r.data : []; },
-    });
-
     const { data: staff = [] } = useQuery({
         queryKey: ["staff"],
         queryFn: async () => { const r = await api.get("/staff"); return Array.isArray(r.data) ? r.data : []; },
@@ -272,14 +267,15 @@ export default function Classes() {
         ...filteredLegacy.map((c: any) => ({ _id: c._id, name: c.name || c.levelName, isV2: false, classTeacherId: c.classTeacherId, capacity: c.capacity })),
     ];
 
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const getClassStudents = (cls: any) => {
         if (cls.isV2) {
-            // V2: students enrolled in this stream
-            const enrolledIds = enrollments.filter((e: any) => e.streamId === cls.streamId).map((e: any) => e.studentId);
-            return students.filter((s: any) => enrolledIds.includes(s._id?.toString()) || enrolledIds.includes(s._id));
+            // V2: students whose streamId matches, or whose class text equals the
+            // stream's full name ("Form 4 East").
+            return students.filter((s: any) => String(s.streamId) === String(cls.streamId) || norm(s.studentClass || s.currentClass) === norm(cls.name));
         }
         // Legacy: match by class name
-        return students.filter((s: any) => s.studentClass === cls.name || s.studentClass === (cls.name) || s.levelName === cls.name);
+        return students.filter((s: any) => s.studentClass === cls.name || s.levelName === cls.name);
     };
 
     const getGenderStats = (sts: any[]) => {
@@ -369,7 +365,7 @@ export default function Classes() {
                                     const stats = getGenderStats(getClassStudents(cls));
                                     return (
                                         <tr key={cls._id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                            <td className="px-5 py-3 font-bold text-slate-700 cursor-pointer" onClick={() => navigate(cls.isV2 ? `/academic-system/enrollments?streamId=${cls.streamId}` : `/classes/${cls._id}`)}>{cls.name}{cls.isV2 && <span className="ml-2 text-[8px] font-black text-[#5C67F2] bg-indigo-50 px-1.5 py-0.5 rounded">V2</span>}</td>
+                                            <td className="px-5 py-3 font-bold text-slate-700 cursor-pointer" onClick={() => navigate(cls.isV2 ? `/students` : `/classes/${cls._id}`)}>{cls.name}{cls.isV2 && <span className="ml-2 text-[8px] font-black text-[#5C67F2] bg-indigo-50 px-1.5 py-0.5 rounded">V2</span>}</td>
                                             <td className="px-3 py-3 text-center font-black text-slate-700">{stats.total}</td>
                                             <td className="px-3 py-3 text-center text-blue-600 font-bold">{stats.boys}</td>
                                             <td className="px-3 py-3 text-center text-pink-600 font-bold">{stats.girls}</td>
@@ -394,7 +390,7 @@ export default function Classes() {
                             return (
                                 <div key={cls._id}
                                     className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:shadow-lg transition-all group relative cursor-pointer"
-                                    onClick={() => navigate(cls.isV2 ? `/academic-system/enrollments?streamId=${cls.streamId}` : `/classes/${cls._id}`)}>
+                                    onClick={() => navigate(cls.isV2 ? `/students` : `/classes/${cls._id}`)}>
 
                                     {/* V2 badge */}
                                     {cls.isV2 && (

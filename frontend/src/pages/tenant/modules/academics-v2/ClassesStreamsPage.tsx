@@ -34,6 +34,13 @@ export default function ClassesStreamsPage() {
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 
+    // Purge leftover student_enrollments records (the old enrollment feature).
+    const purgeMut = useMutation({
+        mutationFn: () => api.delete("/v2/enrollments/purge"),
+        onSuccess: (r: any) => toast.success(`Cleared ${r?.data?.removed ?? 0} old enrollment record(s).`),
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to clear"),
+    });
+
     const delMut = useMutation({
         mutationFn: ({ id, type }: { id: string; type: "class" | "stream" }) =>
             type === "class" ? api.delete(`/v2/classes/${id}`) : api.delete(`/v2/streams/${id}`),
@@ -50,9 +57,14 @@ export default function ClassesStreamsPage() {
                     <span className="font-bold text-gray-600">Academic System</span><span className="text-gray-300">/</span>
                     <span className="font-black text-[#5C67F2]">Classes & Streams</span>
                 </div>
-                <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
-                    <Plus className="w-4 h-4" /> New Class
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => { if (confirm("Permanently clear all old student-enrollment records? Class/stream stays on the students themselves.")) purgeMut.mutate(); }} disabled={purgeMut.isPending} className="h-10 px-4 bg-white border border-slate-200 text-slate-500 hover:text-rose-500 hover:border-rose-200 font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 disabled:opacity-50">
+                        {purgeMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />} Clear Old Enrollments
+                    </button>
+                    <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
+                        <Plus className="w-4 h-4" /> New Class
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-8">
