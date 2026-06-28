@@ -295,6 +295,46 @@ router.get('/analytics/most-improved', async (req: Request, res: Response) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// Current vs previous exam comparison — overall means + per-subject deltas.
+router.get('/analytics/compare', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const examId = String(req.query.examId || '');
+        const form = String(req.query.form || '');
+        const exams = await examsChrono(database);
+        const idx = exams.findIndex((e: any) => String(e._id) === examId);
+        const prev = idx > 0 ? exams[idx - 1] : null;
+
+        const inForm = (rows: any[]) => form ? rows.filter(r => String(r.className).toLowerCase().includes(form.toLowerCase()) || String(r.stream).toLowerCase().includes(form.toLowerCase())) : rows;
+        const cur = await buildExamResults(database, examId);
+        const curRows = inForm(cur.rows);
+        const prevData = prev ? await buildExamResults(database, String(prev._id)) : null;
+        const prevRows = prevData ? inForm(prevData.rows) : [];
+
+        const mean = (rows: any[], key: string) => rows.length ? round(rows.reduce((a, r) => a + (r[key] || 0), 0) / rows.length, 2) : 0;
+        // Per-subject mean % in each exam.
+        const subjMean = (rows: any[]) => {
+            const m: Record<string, { sum: number; n: number }> = {};
+            rows.forEach(r => r.subjects.forEach((s: any) => { (m[s.name] ||= { sum: 0, n: 0 }); m[s.name].sum += s.pct; m[s.name].n++; }));
+            return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, round(v.sum / v.n, 1)]));
+        };
+        const curSub = subjMean(curRows); const prevSub = subjMean(prevRows);
+        const subjects = Array.from(new Set([...Object.keys(curSub), ...Object.keys(prevSub)])).sort().map(name => ({
+            name, current: curSub[name] ?? null, previous: prevSub[name] ?? null,
+            change: (curSub[name] != null && prevSub[name] != null) ? round(curSub[name] - prevSub[name], 1) : null,
+        }));
+
+        res.json({
+            currentExam: formatExamName(exams[idx]),
+            previousExam: prev ? formatExamName(prev) : null,
+            current: { meanPoints: mean(curRows, 'meanPoints'), meanPct: mean(curRows, 'meanPct'), students: curRows.length },
+            previous: prev ? { meanPoints: mean(prevRows, 'meanPoints'), meanPct: mean(prevRows, 'meanPct'), students: prevRows.length } : null,
+            delta: prev ? { meanPoints: round(mean(curRows, 'meanPoints') - mean(prevRows, 'meanPoints'), 2), meanPct: round(mean(curRows, 'meanPct') - mean(prevRows, 'meanPct'), 1) } : null,
+            subjects,
+        });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // List subjects available for an exam (optionally within a form/class).
 router.get('/analytics/subjects', async (req: Request, res: Response) => {
     try {

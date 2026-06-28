@@ -162,6 +162,7 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
     const [tab, setTab] = useState<"overview" | "merit" | "improved" | "subjects" | "classes">("overview");
     const { data, isLoading } = useQuery({ queryKey: ["an_form", examId, form], queryFn: async () => (await api.get("/analytics/form", { params: { examId, form } })).data });
     const { data: ot } = useQuery({ queryKey: ["an_ot", form], queryFn: async () => (await api.get("/analytics/over-time", { params: { form } })).data });
+    const { data: cmp } = useQuery({ queryKey: ["an_compare", examId, form], queryFn: async () => (await api.get("/analytics/compare", { params: { examId, form } })).data });
     if (isLoading) return <Spin />;
     if (!data) return <Empty msg="No data." />;
 
@@ -185,6 +186,54 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
 
             {tab === "overview" && (
                 <>
+                    {/* Current vs Previous exam */}
+                    {cmp && (
+                        <Card title="This Exam vs Previous">
+                            {!cmp.previous ? <Empty msg="No previous exam to compare." /> : (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="text-center">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Mean Points</div>
+                                            <div className="text-lg font-black text-slate-800">{cmp.current.meanPoints} <span className="text-slate-300 text-xs">vs {cmp.previous.meanPoints}</span></div>
+                                            <Delta v={cmp.delta.meanPoints} />
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Mean Marks</div>
+                                            <div className="text-lg font-black text-slate-800">{cmp.current.meanPct}% <span className="text-slate-300 text-xs">vs {cmp.previous.meanPct}%</span></div>
+                                            <Delta v={cmp.delta.meanPct} />
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Students</div>
+                                            <div className="text-lg font-black text-slate-800">{cmp.current.students}</div>
+                                        </div>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-2 text-center">Compared to <b>{cmp.previousExam}</b></p>
+                                </>
+                            )}
+                        </Card>
+                    )}
+
+                    {/* Per-subject current vs previous */}
+                    {cmp?.subjects?.length > 0 && (
+                        <Card title="Subject Comparison (Mean % — This vs Previous)">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-1">Subject</th><th className="text-center">This</th><th className="text-center">Previous</th><th className="text-center">Change</th></tr></thead>
+                                    <tbody>
+                                        {cmp.subjects.map((s: any) => (
+                                            <tr key={s.name} className="border-t border-slate-50">
+                                                <td className="py-1.5 font-bold text-slate-700">{s.name}</td>
+                                                <td className="text-center">{s.current != null ? `${s.current}%` : "—"}</td>
+                                                <td className="text-center text-slate-400">{s.previous != null ? `${s.previous}%` : "—"}</td>
+                                                <td className="text-center">{s.change != null ? <Delta v={s.change} /> : <span className="text-slate-300">—</span>}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    )}
+
                     {/* Stream comparison */}
                     <Card title="Stream Comparison (Mean Points)">
                         <div className="h-56">
