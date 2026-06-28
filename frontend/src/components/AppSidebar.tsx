@@ -353,6 +353,7 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Exams", icon: ClipboardList, moduleKey: "exams", children: [
       { label: "Create New Exam", path: "/exams/create" },
+      { label: "Online Examinations", path: "/exams/online" },
       { label: "Add / Update Exam Marks", path: "/exams/marks" },
       { label: "Analytics", path: "/exams/analytics" },
       { label: "Generate Report Cards", path: "/exams/generate-reports" },
