@@ -1517,51 +1517,93 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
             return res.status(404).json({ message: "Class not found" });
         }
 
-        // Fetch exam for curriculum info
+        // Fetch main exam
         const mainExam = await db.collection('exams').findOne({ _id: new ObjectId(mainExamId) });
         if (!mainExam) {
             return res.status(404).json({ message: "Main exam not found" });
         }
 
-        // Fetch additional exams
-        const additionalExams = await db.collection('exams').find({
-            _id: { $in: additionalExamIds.map((id: string) => new ObjectId(id)) }
-        }).toArray();
+        // Fetch additional exams if any
+        const additionalExams = [];
+        if (additionalExamIds && additionalExamIds.length > 0) {
+            const fetched = await db.collection('exams').find({
+                _id: { $in: additionalExamIds.map((id: string) => new ObjectId(id)) }
+            }).toArray();
+            additionalExams.push(...fetched);
+        }
 
-        // Build exam list
         const examList = [mainExam, ...additionalExams].filter(Boolean);
-        const examIds = examList.map(e => e._id);
 
-        // Fetch students in class
+        // Fetch students in this class
         const students = await db.collection('students').find({
-            class: classDoc._id.toString()
+            $or: [
+                { class: classDoc._id.toString() },
+                { classId: classDoc._id.toString() },
+                { "enrollment.class": classDoc._id.toString() }
+            ]
         }).toArray();
 
         if (students.length === 0) {
-            return res.status(404).json({ message: "No students found in this class" });
+            return res.status(400).json({ message: "No students found in this class" });
         }
 
-        // Generate PDF via puppeteer service
-        const { generateReportCardPDF } = require('../services/report-card-pdf.service');
-        
-        const pdf = await generateReportCardPDF(db, {
-            students,
-            exams: examList,
-            class: classDoc,
-            curriculum: mainExam.curriculum || 'CBC',
-            term,
-            year: academicYear
-        });
+        // Import PDF generation functions
+        const { reportCardHtml, htmlToPdf } = require('../services/report-card-pdf.service');
+        const school = await db.collection('school').findOne({}) || {};
 
-        // Set response headers
+        // Generate combined PDF with all student report cards
+        let allHtml = `
+            <style>
+                * { margin: 0; padding: 0; }
+                body { font-family: Arial, sans-serif; }
+                .page-break { page-break-after: always; margin-top: 1cm; }
+            </style>
+        `;
+
+        for (const student of students) {
+            try {
+                // Fetch marks for this student
+                const marks = await db.collection('marks').find({
+                    studentId: student._id.toString(),
+                    examId: { $in: examList.map(e => e._id.toString()) }
+                }).toArray();
+
+                if (marks.length > 0) {
+                    const reportData = {
+                        school: school.schoolName || 'School',
+                        logo: school.logo || null,
+                        motto: school.motto || '',
+                        template: mainExam.curriculum || 'CBC',
+                        student: {
+                            ...student,
+                            className: classDoc.levelName || classDoc.name
+                        },
+                        exam: mainExam,
+                        className: classDoc.levelName || classDoc.name,
+                        marks
+                    };
+
+                    const html = reportCardHtml(reportData);
+                    allHtml += html + '<div class="page-break"></div>';
+                }
+            } catch (err) {
+                console.error(`Error generating card for student ${student._id}:`, err);
+            }
+        }
+
+        // Convert combined HTML to PDF
+        const pdf = await htmlToPdf(allHtml);
+
+        // Set response headers for download
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="report-cards-${className}-${term}T${academicYear}.pdf"`);
-        
+        res.setHeader('Content-Disposition', `attachment; filename="Report-Cards-${className}-${term}-${academicYear}.pdf"`);
+        res.setHeader('Content-Length', pdf.length);
+
         // Send PDF
         res.end(pdf);
     } catch (error: any) {
         console.error('Error generating PDF:', error);
-        res.status(500).json({ message: "Error generating PDF", error: error.message });
+        res.status(500).json({ message: "Error generating PDF: " + error.message });
     }
 });
 

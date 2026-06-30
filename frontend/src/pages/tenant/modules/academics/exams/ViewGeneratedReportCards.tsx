@@ -1,11 +1,12 @@
 /**
  * Generated Report Cards - View & Download
- * Display all generated report cards with filtering by year, term, and class.
+ * Display all generated report cards grouped by exam with filtering by year and term.
  * Users can download PDFs or view individual cards.
  */
 import { useState, useMemo } from "react";
-import { Home, ChevronRight, Download, Eye, Loader2, Calendar, BookOpen, Users, FileText, Search, Filter } from "lucide-react";
+import { Home, ChevronRight, Download, Eye, Loader2, Calendar, BookOpen, Users, FileText, Search, Filter, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -22,12 +23,19 @@ interface GeneratedCard {
     totalStudents?: number;
 }
 
-export default function GeneratedReportCardsList() {
+interface ExamGroup {
+    examId: string;
+    examName: string;
+    cards: GeneratedCard[];
+}
+
+export default function ViewGeneratedReportCards() {
+    const navigate = useNavigate();
     const [selectedYear, setSelectedYear] = useState<string>("");
     const [selectedTerm, setSelectedTerm] = useState<string>("");
-    const [selectedClass, setSelectedClass] = useState<string>("");
     const [searchTerm, setSearchTerm] = useState("");
     const [downloading, setDownloading] = useState<string | null>(null);
+    const [expandedExams, setExpandedExams] = useState<Set<string>>(new Set());
 
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: v2Terms = [] } = useQuery<any[]>({
@@ -40,14 +48,9 @@ export default function GeneratedReportCardsList() {
         queryFn: async () => (await api.get("/v2/academic-years")).data || [],
     });
 
-    const { data: classes = [] } = useQuery<any[]>({
-        queryKey: ["classes"],
-        queryFn: async () => (await api.get("/academics/classes")).data || [],
-    });
-
     // Fetch all generated report cards
     const { data: generatedCards = [], isLoading } = useQuery<GeneratedCard[]>({
-        queryKey: ["generated_report_cards"],
+        queryKey: ["report_card_generations"],
         queryFn: async () => (await api.get("/report_card_generations")).data || [],
     });
 
@@ -70,42 +73,52 @@ export default function GeneratedReportCardsList() {
         return Array.from(set).sort();
     }, [generatedCards, v2Terms]);
 
-    const classNames = useMemo(() => {
-        return classes.map(c => c.levelName || c.name).filter(Boolean).sort();
-    }, [classes]);
-
-    // Filter generated cards
-    const filteredCards = useMemo(() => {
-        let result = generatedCards;
+    // Filter and group by exam
+    const examGroups = useMemo(() => {
+        let filtered = generatedCards;
 
         if (selectedYear) {
-            result = result.filter(card => card.academicYear === selectedYear);
+            filtered = filtered.filter(card => card.academicYear === selectedYear);
         }
 
         if (selectedTerm) {
-            result = result.filter(card => card.term === selectedTerm);
-        }
-
-        if (selectedClass) {
-            result = result.filter(card => card.className === selectedClass);
+            filtered = filtered.filter(card => card.term === selectedTerm);
         }
 
         if (searchTerm) {
             const search = searchTerm.toLowerCase();
-            result = result.filter(card =>
+            filtered = filtered.filter(card =>
                 card.className.toLowerCase().includes(search) ||
                 card.mainExamName.toLowerCase().includes(search) ||
                 card.term.toLowerCase().includes(search)
             );
         }
 
-        return result.sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
-    }, [generatedCards, selectedYear, selectedTerm, selectedClass, searchTerm]);
+        // Group by exam
+        const grouped: Record<string, ExamGroup> = {};
+        filtered.forEach(card => {
+            const key = card.mainExamId;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    examId: card.mainExamId,
+                    examName: card.mainExamName,
+                    cards: []
+                };
+            }
+            grouped[key].cards.push(card);
+        });
+
+        return Object.values(grouped)
+            .sort((a, b) => a.examName.localeCompare(b.examName))
+            .map(group => ({
+                ...group,
+                cards: group.cards.sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime())
+            }));
+    }, [generatedCards, selectedYear, selectedTerm, searchTerm]);
 
     const handleDownloadPDF = async (card: GeneratedCard) => {
         setDownloading(card._id);
         try {
-            // Generate PDF and download
             const response = await api.get(`/report_card_generations/${card._id}/pdf`, {
                 responseType: 'blob',
             });
@@ -119,14 +132,36 @@ export default function GeneratedReportCardsList() {
             window.URL.revokeObjectURL(url);
             toast.success("PDF downloaded successfully");
         } catch (error: any) {
+            console.error("Download error:", error);
             toast.error(error.response?.data?.message || "Failed to download PDF");
         } finally {
             setDownloading(null);
         }
     };
 
+    const handleViewCard = (card: GeneratedCard) => {
+        // Navigate to Scholar Sheet with class and exam parameters
+        navigate(`/exams/scholar-sheet?examId=${card.mainExamId}&class=${card.classId}`, {
+            state: { className: card.className, examName: card.mainExamName }
+        });
+    };
+
+    const toggleExam = (examId: string) => {
+        const newExpanded = new Set(expandedExams);
+        if (newExpanded.has(examId)) {
+            newExpanded.delete(examId);
+        } else {
+            newExpanded.add(examId);
+        }
+        setExpandedExams(newExpanded);
+    };
+
     const activeYear = v2Years.find(y => y.isActive);
     const activeTerm = v2Terms.find(t => t.isActive);
+
+    const totalCards = useMemo(() => {
+        return examGroups.reduce((sum, group) => sum + group.cards.length, 0);
+    }, [examGroups]);
 
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen flex flex-col pb-10">
@@ -154,7 +189,7 @@ export default function GeneratedReportCardsList() {
                 <div>
                     <h1 className="text-xl sm:text-2xl font-black text-slate-800">Generated Report Cards</h1>
                     <p className="text-sm text-slate-400 mt-0.5">
-                        View and download all generated report cards. Filter by year, term, and class.
+                        View and download report cards grouped by exam. Filter by year and term.
                     </p>
                 </div>
 
@@ -196,29 +231,14 @@ export default function GeneratedReportCardsList() {
                             </select>
                         </div>
 
-                        {/* Class Filter */}
-                        <div>
-                            <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Class</label>
-                            <select
-                                value={selectedClass}
-                                onChange={(e) => setSelectedClass(e.target.value)}
-                                className="w-full mt-1.5 h-10 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:border-[#5C67F2]"
-                            >
-                                <option value="">All Classes</option>
-                                {classNames.map(name => (
-                                    <option key={name} value={name}>{name}</option>
-                                ))}
-                            </select>
-                        </div>
-
                         {/* Search */}
-                        <div>
+                        <div className="sm:col-span-2 lg:col-span-2">
                             <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Search</label>
                             <div className="relative mt-1.5">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                 <input
                                     type="text"
-                                    placeholder="Search..."
+                                    placeholder="Search by exam or class..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="w-full pl-9 pr-3 h-10 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:border-[#5C67F2]"
@@ -234,7 +254,7 @@ export default function GeneratedReportCardsList() {
                         <Loader2 className="w-8 h-8 animate-spin text-[#5C67F2]" />
                         <p className="text-sm font-medium">Loading report cards...</p>
                     </div>
-                ) : filteredCards.length === 0 ? (
+                ) : totalCards === 0 ? (
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm py-20 flex flex-col items-center gap-3 text-gray-400">
                         <FileText className="w-10 h-10 opacity-50" />
                         <p className="font-bold text-sm">
@@ -247,62 +267,87 @@ export default function GeneratedReportCardsList() {
                 ) : (
                     <div className="space-y-3">
                         <div className="text-sm text-gray-600 font-medium">
-                            Showing {filteredCards.length} report card{filteredCards.length !== 1 ? 's' : ''}
+                            Showing {totalCards} report card{totalCards !== 1 ? 's' : ''} across {examGroups.length} exam{examGroups.length !== 1 ? 's' : ''}
                         </div>
 
-                        {filteredCards.map(card => (
-                            <div
-                                key={card._id}
-                                className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-                            >
-                                <div className="flex items-start gap-4 flex-1 min-w-0">
-                                    <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                                        <FileText className="w-6 h-6 text-[#5C67F2]" />
-                                    </div>
-
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                                            <h3 className="text-sm font-black text-gray-900">{card.className}</h3>
-                                            <span className="text-xs font-bold bg-indigo-50 text-[#5C67F2] px-2.5 py-1 rounded-full">
-                                                {card.mainExamName}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-4 flex-wrap text-xs text-gray-500 font-medium">
-                                            <span className="flex items-center gap-1">
-                                                <Calendar className="w-3.5 h-3.5" />
-                                                {card.academicYear} · {card.term}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <BookOpen className="w-3.5 h-3.5" />
-                                                Generated {new Date(card.generatedAt).toLocaleDateString()}
-                                            </span>
+                        {/* Exam Groups */}
+                        {examGroups.map((group) => (
+                            <div key={group.examId} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                                {/* Exam Header */}
+                                <button
+                                    onClick={() => toggleExam(group.examId)}
+                                    className="w-full px-4 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-100"
+                                >
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <BookOpen className="w-5 h-5 text-[#5C67F2] flex-shrink-0" />
+                                        <div className="text-left flex-1 min-w-0">
+                                            <h3 className="font-bold text-gray-900 text-sm">{group.examName}</h3>
+                                            <p className="text-xs text-gray-500">{group.cards.length} class{group.cards.length !== 1 ? 'es' : ''}</p>
                                         </div>
                                     </div>
-                                </div>
+                                    <ChevronDown
+                                        className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${
+                                            expandedExams.has(group.examId) ? 'rotate-180' : ''
+                                        }`}
+                                    />
+                                </button>
 
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                    <button
-                                        onClick={() => handleDownloadPDF(card)}
-                                        disabled={downloading === card._id}
-                                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase text-white bg-[#5C67F2] hover:bg-[#4a54c4] rounded-lg transition-colors disabled:opacity-50"
-                                    >
-                                        {downloading === card._id ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                            <Download className="w-3.5 h-3.5" />
-                                        )}
-                                        <span className="hidden sm:inline">Download PDF</span>
-                                        <span className="sm:hidden">Download</span>
-                                    </button>
+                                {/* Exam Cards List */}
+                                {expandedExams.has(group.examId) && (
+                                    <div className="divide-y divide-gray-100">
+                                        {group.cards.map(card => (
+                                            <div
+                                                key={card._id}
+                                                className="px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 hover:bg-gray-50 transition-colors"
+                                            >
+                                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                                    <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                                                        <FileText className="w-5 h-5 text-[#5C67F2]" />
+                                                    </div>
 
-                                    <button
-                                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase text-[#5C67F2] bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
-                                    >
-                                        <Eye className="w-3.5 h-3.5" />
-                                        <span className="hidden sm:inline">View</span>
-                                    </button>
-                                </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="text-sm font-bold text-gray-900">{card.className}</h4>
+
+                                                        <div className="flex items-center gap-4 flex-wrap text-xs text-gray-500 font-medium mt-1">
+                                                            <span className="flex items-center gap-1">
+                                                                <Calendar className="w-3.5 h-3.5" />
+                                                                {card.academicYear} · {card.term}
+                                                            </span>
+                                                            <span className="flex items-center gap-1">
+                                                                <BookOpen className="w-3.5 h-3.5" />
+                                                                Generated {new Date(card.generatedAt).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <button
+                                                        onClick={() => handleDownloadPDF(card)}
+                                                        disabled={downloading === card._id}
+                                                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase text-white bg-[#5C67F2] hover:bg-[#4a54c4] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {downloading === card._id ? (
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Download className="w-3.5 h-3.5" />
+                                                        )}
+                                                        <span className="hidden sm:inline">Download PDF</span>
+                                                        <span className="sm:hidden">Download</span>
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => handleViewCard(card)}
+                                                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase text-[#5C67F2] bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                        <span className="hidden sm:inline">View</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
