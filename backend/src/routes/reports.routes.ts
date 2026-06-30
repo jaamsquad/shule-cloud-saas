@@ -1519,8 +1519,7 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             generatedAt: payload.generatedAt || new Date().toISOString(),
         };
         const result = await db.collection('report_card_generations').insertOne(generation);
-        generation._id = result.insertedId;
-        res.status(201).json(generation);
+        res.status(201).json({ ...generation, _id: result.insertedId });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
