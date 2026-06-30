@@ -50,6 +50,10 @@ export default function ScholarSheetPage() {
         }
     }, []);
 
+    // Student membership: match by v2 classId/streamId when present, else fall
+    // back to a normalized comparison of the student's class/stream TEXT.
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
     // v2 classes (levels) + streams for the chosen class.
     const { data: v2classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const { data: legacyClasses = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
@@ -75,10 +79,6 @@ export default function ScholarSheetPage() {
     const stream = v2streams.find((s: any) => String(s._id) === String(streamId));
     const classNameSource = cls || legacyClass;
     const classLabel = classNameSource ? (stream ? (stream.fullName || `${classNameSource.name || classNameSource.levelName || classNameSource.className} ${stream.name}`) : (classNameSource.name || classNameSource.levelName || classNameSource.className)) : "";
-
-    // Student membership: match by v2 classId/streamId when present, else fall
-    // back to a normalized comparison of the student's class/stream TEXT.
-    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const classStudents = useMemo(() => {
         if (!classId || (!cls && !legacyClass)) return [];
         const source = cls || legacyClass;
