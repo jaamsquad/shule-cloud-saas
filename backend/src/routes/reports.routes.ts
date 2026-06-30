@@ -1488,4 +1488,81 @@ router.get('/reports/shared/departments', async (req: Request, res: Response) =>
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
+// 8. GET /api/v1/report_card_generations/:id/pdf
+// Download generated report card as PDF
+router.get('/report_card_generations/:id/pdf', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { id } = req.params;
+
+        // Validate ObjectId
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid report card ID" });
+        }
+
+        // Fetch the generation record
+        const generation = await db.collection('report_card_generations').findOne({
+            _id: new ObjectId(id)
+        });
+
+        if (!generation) {
+            return res.status(404).json({ message: "Report card generation not found" });
+        }
+
+        const { classId, className, mainExamId, mainExamName, additionalExamIds = [], term, academicYear } = generation;
+
+        // Fetch class to get students
+        const classDoc = await db.collection('classes').findOne({ _id: new ObjectId(classId) });
+        if (!classDoc) {
+            return res.status(404).json({ message: "Class not found" });
+        }
+
+        // Fetch exam for curriculum info
+        const mainExam = await db.collection('exams').findOne({ _id: new ObjectId(mainExamId) });
+        if (!mainExam) {
+            return res.status(404).json({ message: "Main exam not found" });
+        }
+
+        // Fetch additional exams
+        const additionalExams = await db.collection('exams').find({
+            _id: { $in: additionalExamIds.map((id: string) => new ObjectId(id)) }
+        }).toArray();
+
+        // Build exam list
+        const examList = [mainExam, ...additionalExams].filter(Boolean);
+        const examIds = examList.map(e => e._id);
+
+        // Fetch students in class
+        const students = await db.collection('students').find({
+            class: classDoc._id.toString()
+        }).toArray();
+
+        if (students.length === 0) {
+            return res.status(404).json({ message: "No students found in this class" });
+        }
+
+        // Generate PDF via puppeteer service
+        const { generateReportCardPDF } = require('../services/report-card-pdf.service');
+        
+        const pdf = await generateReportCardPDF(db, {
+            students,
+            exams: examList,
+            class: classDoc,
+            curriculum: mainExam.curriculum || 'CBC',
+            term,
+            year: academicYear
+        });
+
+        // Set response headers
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="report-cards-${className}-${term}T${academicYear}.pdf"`);
+        
+        // Send PDF
+        res.end(pdf);
+    } catch (error: any) {
+        console.error('Error generating PDF:', error);
+        res.status(500).json({ message: "Error generating PDF", error: error.message });
+    }
+});
+
 export default router;

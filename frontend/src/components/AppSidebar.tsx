@@ -354,6 +354,8 @@ export const navItems: NavItem[] = [
       { label: "Analytics", path: "/exams/analytics" },
       // { label: "Generate Report Cards", path: "/exams/generate-reports" },
       // { label: "ScholarSheet (A4 Card)", path: "/exams/scholar-sheet" },
+      { label: "Generate Report Cards", path: "/exams/generate-reports" },
+      { label: "Generated Report Cards", path: "/exams/generated-reports" },
       { label: "Result Card", path: "/exams/scholar-sheet" },
       { label: "Class Report Cards", path: "/exams/class-reports" },
       { label: "Result Sheet", path: "/exams/result-sheet" },

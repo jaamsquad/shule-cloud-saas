@@ -7,7 +7,7 @@
 import { useState, useMemo } from "react";
 import {
     CheckCircle2, AlertCircle, Loader2, Plus, X, ChevronDown,
-    Printer, Eye, FileText, GraduationCap, Home, ChevronRight, Settings
+    Printer, Eye, FileText, GraduationCap, Home, ChevronRight, Settings, Zap
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -149,11 +149,19 @@ export default function GenerateReportCards() {
             </div>
 
             <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 pt-6 space-y-4">
-                <div>
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-800">Generate Report Cards</h1>
-                    <p className="text-sm text-slate-400 mt-0.5">
-                        Select the End Term exam for each class, add optional internal assessments, then generate.
-                    </p>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-800">Generate Report Cards</h1>
+                        <p className="text-sm text-slate-400 mt-0.5">
+                            Select the End Term exam for each class, add optional internal assessments, then generate.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => navigate("/exams/generated-reports")}
+                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all whitespace-nowrap flex-shrink-0">
+                        <Zap className="w-4 h-4" />
+                        <span>View Generated</span>
+                    </button>
                 </div>
 
                 {/* Info banner */}
