@@ -28,6 +28,10 @@ export default function GenerateReportCards() {
     const [configs, setConfigs] = useState<Record<string, { mainExamId: string; additionalIds: string[] }>>({});
     const [generating, setGenerating] = useState<string | null>(null); // classId being generated
     const [expandedClass, setExpandedClass] = useState<string | null>(null);
+    const [selectedYear, setSelectedYear] = useState<string>("");
+    const [selectedTerm, setSelectedTerm] = useState<string>("");
+    const [selectedClassId, setSelectedClassId] = useState<string>("");
+    const [selectedStreamId, setSelectedStreamId] = useState<string>("");
 
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: classes = [] } = useQuery<any[]>({
@@ -46,6 +50,14 @@ export default function GenerateReportCards() {
         queryKey: ["v2_academic_years"],
         queryFn: async () => (await api.get("/v2/academic-years")).data || [],
     });
+    const { data: v2Classes = [] } = useQuery<any[]>({
+        queryKey: ["v2_classes"],
+        queryFn: async () => (await api.get("/v2/classes")).data || [],
+    });
+    const { data: allStreams = [] } = useQuery<any[]>({
+        queryKey: ["v2_streams_all"],
+        queryFn: async () => (await api.get("/v2/streams")).data || [],
+    });
 
     // Saved generations (which classes have been generated)
     const { data: generations = [] } = useQuery<any[]>({
@@ -57,12 +69,49 @@ export default function GenerateReportCards() {
     const activeTerm = v2Terms.find((t: any) => t.isActive);
     const activeYear = v2Years.find((y: any) => y.isActive);
     const currentTermLabel = activeTerm ? activeTerm.name : "";
+    const selectedClassName = selectedClassId ? (v2Classes.find((c: any) => String(c._id) === selectedClassId)?.name || "") : "";
+    const selectedStreamName = selectedStreamId ? (allStreams.find((s: any) => String(s._id) === selectedStreamId)?.name || "") : "";
+
+    const normalizeExamLabel = (exam: any) => {
+        if (!exam) return "";
+        const name = exam.examName || exam.name || exam.type || "Exam";
+        const yearLabel = selectedYear || exam.academicYear || activeYear?.year || "";
+        const termLabel = selectedTerm || exam.term || currentTermLabel;
+        return `${yearLabel} ${String(termLabel).toUpperCase()} - ${name}`.replace(/\s+/g, " ").trim();
+    };
+
+    const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const filteredClasses = useMemo(() => {
+        const selectedClass = selectedClassId ? v2Classes.find((c: any) => String(c._id) === selectedClassId) : null;
+        const selectedStream = selectedStreamId ? allStreams.find((s: any) => String(s._id) === selectedStreamId) : null;
+
+        return classes.filter((cls: any) => {
+            const className = norm(`${cls.levelName || cls.name}`);
+            if (selectedClassId && selectedClass) {
+                const selectedName = norm(selectedClass.name || selectedClass.levelName || "");
+                if (!className.includes(selectedName) && !selectedName.includes(className)) {
+                    return false;
+                }
+            }
+            if (selectedStream) {
+                if (String(selectedStream.classId) !== String(cls._id) && !className.includes(norm(selectedStream.name))) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }, [classes, selectedClassId, selectedStreamId, v2Classes, allStreams]);
+
+    const visibleClasses = filteredClasses;
 
     // Main (End Term / Final) exams — not internal assessments
-    const mainExams = useMemo(() => exams.filter((e: any) => !isInternal(e)), [exams]);
+    const mainExams = useMemo(() => exams.filter((e: any) => !isInternal(e)
+        && (!selectedTerm || norm(e.term) === norm(selectedTerm))
+        && (!selectedYear || String(e.academicYear) === selectedYear)),
+        [exams, selectedTerm, selectedYear]);
     // Internal exams for a given term
     const internalExamsForTerm = (term: string) =>
-        exams.filter((e: any) => isInternal(e) && (!term || (e.term || "").toLowerCase().includes(term.toLowerCase())));
+        exams.filter((e: any) => isInternal(e) && (!term || norm(e.term) === norm(term)));
 
     const getGeneration = (classId: string) =>
         generations.find((g: any) => g.classId === classId || g.className === classId);
@@ -93,14 +142,19 @@ export default function GenerateReportCards() {
 
     // ── Generate mutation ─────────────────────────────────────────────────────
     const generateMut = useMutation({
-        mutationFn: async ({ classId, className, mainExamId, additionalIds }: any) => {
+        mutationFn: async ({ classId, classV2Id, className, mainExamId, additionalIds, term, academicYear, streamId, streamName }: any) => {
             const exam = exams.find((e: any) => e._id === mainExamId);
             return api.post("/report_card_generations", {
-                classId, className,
-                mainExamId, mainExamName: exam?.examName || "",
-                additionalExamIds: additionalIds,
-                term: exam?.term || currentTermLabel,
-                academicYear: exam?.academicYear || activeYear?.year || "",
+                classId,
+                classV2Id: classV2Id || null,
+                className,
+                mainExamId,
+                mainExamName: exam?.examName || exam?.name || "",
+                additionalExamIds: additionalIds || [],
+                term: term || exam?.term || currentTermLabel,
+                academicYear: academicYear || exam?.academicYear || activeYear?.year || "",
+                streamId: streamId || null,
+                streamName: streamName || null,
                 generatedAt: new Date().toISOString(),
             });
         },
@@ -115,8 +169,20 @@ export default function GenerateReportCards() {
     const handleGenerate = async (cls: any) => {
         const cfg = getConfig(cls._id);
         if (!cfg.mainExamId) { toast.error("Please select the main exam first"); return; }
+        const className = cls.levelName || cls.name;
+        const matchedV2Class = v2Classes.find((c: any) => norm(c.name) === norm(className) || norm(c.levelName) === norm(className) || norm(c.className) === norm(className));
         setGenerating(cls._id);
-        generateMut.mutate({ classId: cls._id, className: cls.levelName || cls.name, mainExamId: cfg.mainExamId, additionalIds: cfg.additionalIds });
+        generateMut.mutate({
+            classId: cls._id,
+            classV2Id: matchedV2Class?._id || null,
+            className,
+            mainExamId: cfg.mainExamId,
+            additionalIds: cfg.additionalIds,
+            term: selectedTerm || exams.find((e: any) => e._id === cfg.mainExamId)?.term || currentTermLabel,
+            academicYear: selectedYear || exams.find((e: any) => e._id === cfg.mainExamId)?.academicYear || activeYear?.year || "",
+            streamId: selectedStreamId || null,
+            streamName: selectedStreamName || null,
+        });
     };
 
     const Field = ({ label, children }: any) => (
@@ -149,7 +215,7 @@ export default function GenerateReportCards() {
             </div>
 
             <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 pt-6 space-y-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-xl sm:text-2xl font-black text-slate-800">Generate Report Cards</h1>
                         <p className="text-sm text-slate-400 mt-0.5">
@@ -162,6 +228,38 @@ export default function GenerateReportCards() {
                         <Zap className="w-4 h-4" />
                         <span>View Generated</span>
                     </button>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Academic Year</label>
+                        <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="mt-1 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
+                            <option value="">All Years</option>
+                            {v2Years.map((y: any) => <option key={y._id || y.year} value={String(y.year)}>{y.year}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Term</label>
+                        <select value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} className="mt-1 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
+                            <option value="">All Terms</option>
+                            {v2Terms.map((t: any) => <option key={t._id || t.name} value={t.name}>{t.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Class</label>
+                        <select value={selectedClassId} onChange={e => { setSelectedClassId(e.target.value); setSelectedStreamId(""); }} className="mt-1 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
+                            <option value="">All Classes</option>
+                            {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase">Stream</label>
+                        <select value={selectedStreamId} onChange={e => setSelectedStreamId(e.target.value)} disabled={!selectedClassId} className="mt-1 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white disabled:bg-slate-50 text-sm focus:outline-none focus:border-[#5C67F2]">
+                            <option value="">All Streams</option>
+                            {allStreams.filter((s: any) => !selectedClassId || String(s.classId) === selectedClassId)
+                                .map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 {/* Info banner */}
@@ -180,9 +278,15 @@ export default function GenerateReportCards() {
                         <GraduationCap className="w-10 h-10" />
                         <p className="font-bold text-sm">No classes found — create classes first</p>
                     </div>
+                ) : visibleClasses.length === 0 ? (
+                    <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 py-16 flex flex-col items-center gap-3 text-gray-400">
+                        <GraduationCap className="w-10 h-10" />
+                        <p className="font-bold text-sm">No classes match the selected year, term, class or stream.</p>
+                        <p className="text-xs text-slate-500">Clear a filter to view more classes.</p>
+                    </div>
                 ) : (
                     <div className="space-y-3">
-                        {classes.map((cls: any) => {
+                        {visibleClasses.map((cls: any) => {
                             const classId   = cls._id;
                             const className = cls.levelName || cls.name;
                             const cfg       = getConfig(classId);

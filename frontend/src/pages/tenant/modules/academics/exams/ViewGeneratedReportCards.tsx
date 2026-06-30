@@ -13,11 +13,14 @@ import { toast } from "sonner";
 interface GeneratedCard {
     _id: string;
     classId: string;
+    classV2Id?: string;
     className: string;
     mainExamId: string;
     mainExamName: string;
     term: string;
     academicYear: string;
+    streamId?: string;
+    streamName?: string;
     generatedAt: string;
     pdfUrl?: string;
     totalStudents?: number;
@@ -37,6 +40,13 @@ export default function ViewGeneratedReportCards() {
     const [downloading, setDownloading] = useState<string | null>(null);
     const [expandedExams, setExpandedExams] = useState<Set<string>>(new Set());
 
+    const normalizeExamName = (name: string) => {
+        if (!name) return "";
+        return name.trim().replace(/\s+/g, " ").split(" ").map(word =>
+            word.toLowerCase() === "t" ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(" ");
+    };
+
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: v2Terms = [] } = useQuery<any[]>({
         queryKey: ["v2_all_terms"],
@@ -47,6 +57,15 @@ export default function ViewGeneratedReportCards() {
         queryKey: ["v2_academic_years"],
         queryFn: async () => (await api.get("/v2/academic-years")).data || [],
     });
+
+    const activeYear = v2Years.find(y => y.isActive);
+    const activeTerm = v2Terms.find(t => t.isActive);
+
+    const pageTitle = selectedYear && selectedTerm
+        ? `${selectedYear} ${selectedTerm.toUpperCase()} Report Cards`
+        : activeYear && activeTerm
+            ? `${activeYear.year} ${activeTerm.name.toUpperCase()} Report Cards`
+            : "Generated Report Cards";
 
     // Fetch all generated report cards
     const { data: generatedCards = [], isLoading } = useQuery<GeneratedCard[]>({
@@ -98,10 +117,11 @@ export default function ViewGeneratedReportCards() {
         const grouped: Record<string, ExamGroup> = {};
         filtered.forEach(card => {
             const key = card.mainExamId;
+            const name = normalizeExamName(card.mainExamName || card.term || "Exam");
             if (!grouped[key]) {
                 grouped[key] = {
                     examId: card.mainExamId,
-                    examName: card.mainExamName,
+                    examName: name,
                     cards: []
                 };
             }
@@ -140,8 +160,15 @@ export default function ViewGeneratedReportCards() {
     };
 
     const handleViewCard = (card: GeneratedCard) => {
-        // Navigate to Scholar Sheet with class and exam parameters
-        navigate(`/exams/scholar-sheet?examId=${card.mainExamId}&class=${card.classId}`, {
+        // Navigate to Scholar Sheet with class, optional stream, and exam parameters
+        const classIdParam = card.classV2Id || card.classId;
+        const params = new URLSearchParams({
+            examId: card.mainExamId,
+            classId: classIdParam,
+            wholeClass: "true",
+        });
+        if (card.streamId) params.set("streamId", card.streamId);
+        navigate(`/exams/scholar-sheet?${params.toString()}`, {
             state: { className: card.className, examName: card.mainExamName }
         });
     };
@@ -155,9 +182,6 @@ export default function ViewGeneratedReportCards() {
         }
         setExpandedExams(newExpanded);
     };
-
-    const activeYear = v2Years.find(y => y.isActive);
-    const activeTerm = v2Terms.find(t => t.isActive);
 
     const totalCards = useMemo(() => {
         return examGroups.reduce((sum, group) => sum + group.cards.length, 0);
@@ -187,7 +211,7 @@ export default function ViewGeneratedReportCards() {
             <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-6 space-y-4">
                 {/* Title */}
                 <div>
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-800">Generated Report Cards</h1>
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-800">{pageTitle}</h1>
                     <p className="text-sm text-slate-400 mt-0.5">
                         View and download report cards grouped by exam. Filter by year and term.
                     </p>

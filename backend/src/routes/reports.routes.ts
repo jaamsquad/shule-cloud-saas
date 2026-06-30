@@ -1488,6 +1488,44 @@ router.get('/reports/shared/departments', async (req: Request, res: Response) =>
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
+router.get('/report_card_generations', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const generations = await db.collection('report_card_generations').find({}).sort({ generatedAt: -1 }).toArray();
+        res.json(generations);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+router.post('/report_card_generations', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const payload = req.body;
+        if (!payload?.classId || !payload?.mainExamId) {
+            return res.status(400).json({ message: 'classId and mainExamId are required' });
+        }
+        const generation = {
+            classId: String(payload.classId),
+            classV2Id: payload.classV2Id ? String(payload.classV2Id) : null,
+            className: payload.className || '',
+            mainExamId: String(payload.mainExamId),
+            mainExamName: payload.mainExamName || '',
+            additionalExamIds: Array.isArray(payload.additionalExamIds) ? payload.additionalExamIds.map((id: any) => String(id)) : [],
+            term: payload.term || '',
+            academicYear: payload.academicYear || '',
+            streamId: payload.streamId || null,
+            streamName: payload.streamName || null,
+            generatedAt: payload.generatedAt || new Date().toISOString(),
+        };
+        const result = await db.collection('report_card_generations').insertOne(generation);
+        generation._id = result.insertedId;
+        res.status(201).json(generation);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
 // 8. GET /api/v1/report_card_generations/:id/pdf
 // Download generated report card as PDF
 router.get('/report_card_generations/:id/pdf', async (req: Request, res: Response) => {

@@ -24,46 +24,78 @@ export default function ScholarSheetPage() {
     const [deepLink, setDeepLink] = useState<{ studentId: string; examId: string } | null>(null);
     useEffect(() => {
         const p = new URLSearchParams(window.location.search);
-        const s = p.get("studentId"); const e = p.get("examId");
-        if (s && e) { setDeepLink({ studentId: s, examId: e }); setExamId(e); setStudentId(s); }
+        const s = p.get("studentId");
+        const e = p.get("examId");
+        const c = p.get("classId");
+        const stream = p.get("streamId");
+        const w = p.get("wholeClass");
+
+        if (c) {
+            setClassId(c);
+            setStudentId("");
+            setStudentSearch("");
+        }
+        if (stream) {
+            setStreamId(stream);
+        }
+        if (w === "true") {
+            setWholeClass(true);
+        }
+        if (s && e) {
+            setDeepLink({ studentId: s, examId: e });
+            setExamId(e);
+            setStudentId(s);
+        } else if (e) {
+            setExamId(e);
+        }
     }, []);
 
     // v2 classes (levels) + streams for the chosen class.
     const { data: v2classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
-    const { data: v2streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
+    const { data: legacyClasses = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
+    const resolvedClass = useMemo(() => {
+        const foundV2 = v2classes.find((c: any) => String(c._id) === String(classId));
+        if (foundV2) return foundV2;
+        const legacy = legacyClasses.find((c: any) => String(c._id) === String(classId));
+        if (legacy) {
+            return v2classes.find((c: any) => {
+                const legacyName = norm(legacy.name || legacy.levelName || legacy.className);
+                return norm(c.name) === legacyName || norm(c.levelName) === legacyName || norm(c.className) === legacyName;
+            }) || legacy;
+        }
+        return null;
+    }, [classId, v2classes, legacyClasses]);
+    const effectiveClassId = String(resolvedClass?._id || classId || "");
+    const { data: v2streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", effectiveClassId], enabled: !!effectiveClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: effectiveClassId } })).data || [] });
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
 
     const cls = v2classes.find((c: any) => String(c._id) === String(classId));
+    const legacyClass = legacyClasses.find((c: any) => String(c._id) === String(classId));
     const stream = v2streams.find((s: any) => String(s._id) === String(streamId));
-    // Label used for exam naming + headers: "Form 4 East" or just "Form 4".
-    const classLabel = cls ? (stream ? (stream.fullName || `${cls.name} ${stream.name}`) : cls.name) : "";
+    const classNameSource = cls || legacyClass;
+    const classLabel = classNameSource ? (stream ? (stream.fullName || `${classNameSource.name || classNameSource.levelName || classNameSource.className} ${stream.name}`) : (classNameSource.name || classNameSource.levelName || classNameSource.className)) : "";
 
     // Student membership: match by v2 classId/streamId when present, else fall
     // back to a normalized comparison of the student's class/stream TEXT.
     const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const classStudents = useMemo(() => {
-        if (!classId || !cls) return [];
-        const wantClass = new Set([norm(cls.name), norm(cls.className), norm(cls.level)].filter(Boolean));
+        if (!classId || (!cls && !legacyClass)) return [];
+        const source = cls || legacyClass;
+        const wantClass = new Set([norm(source.name), norm(source.className), norm(source.levelName), norm(source.level)].filter(Boolean));
         const wantStream = stream ? norm(stream.name) : "";
         return students.filter((s: any) => {
-            // Strong match: v2 ids stored on the student.
             const idClassMatch = String(s.classId) === String(classId);
             const idStreamMatch = !streamId || String(s.streamId) === String(streamId);
             if (idClassMatch) return idStreamMatch;
-            // Text fallback: student's class text matches the class level…
             const sc = norm(s.studentClass || s.currentClass || s.class || s.className);
             const ss = norm(s.stream || s.streamName);
             const classOk = [...wantClass].some(w => w && (sc === w || sc.startsWith(w)));
-            if (!classOk) {
-                // …or the full "Form 4 East" label matches.
-                if (sc !== norm(classLabel)) return false;
-            }
-            // If a stream is chosen, the student's stream must match it.
+            if (!classOk && sc !== norm(classLabel)) return false;
             if (wantStream) return ss === wantStream || sc.endsWith(wantStream) || sc === norm(classLabel);
             return true;
         });
-    }, [students, classId, streamId, cls, stream, classLabel]);
+    }, [students, classId, streamId, cls, legacyClass, stream, classLabel]);
 
     // Filtered list for the searchable student box.
     const studentMatches = useMemo(() => {
