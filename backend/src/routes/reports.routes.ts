@@ -1549,7 +1549,7 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
 
         // Import PDF generation functions
         const { reportCardHtml, htmlToPdf } = require('../services/report-card-pdf.service');
-        const school = await db.collection('school').findOne({}) || {};
+        const school = (await db.collection('school').findOne({})) as any || {};
 
         // Generate combined PDF with all student report cards
         let allHtml = `
