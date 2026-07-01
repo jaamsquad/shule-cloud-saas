@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
-import { CalendarDays, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, CalendarWeek, CalendarClock, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -29,7 +29,8 @@ interface CalendarPageProps {
 }
 
 export default function CalendarPage({ apiClient }: CalendarPageProps) {
-  const [view, setView] = useState<"month" | "agenda">("month");
+  type CalendarView = "month" | "week" | "day";
+  const [view, setView] = useState<CalendarView>("month");
   const [search, setSearch] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [draft, setDraft] = useState({ title: "", description: "", category: "academic", eventDate: formatDate(new Date()), startTime: "", endTime: "", venue: "", organizer: "" });
@@ -37,15 +38,30 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
   const qc = useQueryClient();
   const client = apiClient ?? api;
 
+  const parseDate = (value: string) => new Date(`${value}T00:00:00`);
+  const getVisibleRange = (viewMode: CalendarView, value: string) => {
+    const base = parseDate(value);
+    if (viewMode === "day") return { start: base, end: base };
+    if (viewMode === "week") {
+      const day = base.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      const start = new Date(base);
+      start.setDate(base.getDate() + diff);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return { start, end };
+    }
+    const start = new Date(base.getFullYear(), base.getMonth(), 1);
+    const end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    return { start, end };
+  };
+
+  const visibleRange = useMemo(() => getVisibleRange(view, selectedDate), [view, selectedDate]);
+
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["calendar-events", selectedDate],
+    queryKey: ["calendar-events", selectedDate, view],
     queryFn: async () => {
-      const start = new Date(selectedDate);
-      start.setDate(1);
-      const end = new Date(selectedDate);
-      end.setMonth(end.getMonth() + 1);
-      end.setDate(0);
-      const r = await client.get(`/calendar/events?start=${formatDate(start)}&end=${formatDate(end)}`);
+      const r = await client.get(`/calendar/events?start=${formatDate(visibleRange.start)}&end=${formatDate(visibleRange.end)}`);
       return Array.isArray(r.data) ? r.data : [];
     },
   });
@@ -97,9 +113,13 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
     return (events as any[]).filter((item: any) => !q || (item.title + " " + (item.description || "")).toLowerCase().includes(q));
   }, [events, search]);
 
-  const setMonth = (delta: number) => {
+  const shiftSelectedDate = (delta: number) => {
     const current = createDate(selectedDate);
-    current.setMonth(current.getMonth() + delta);
+    if (view === "month") {
+      current.setMonth(current.getMonth() + delta);
+    } else {
+      current.setDate(current.getDate() + delta * (view === "week" ? 7 : 1));
+    }
     setSelectedDate(formatDate(current));
   };
 
@@ -114,8 +134,21 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
             <h1 className="text-3xl font-black text-slate-900">Central scheduling hub</h1>
             <p className="text-sm text-slate-500">Create, review, and track school events across academic, sports, fees, transport, and more.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setView(view === "month" ? "agenda" : "month")} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">{view === "month" ? "Agenda view" : "Month view"}</button>
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              { mode: "month" as CalendarView, label: "Month view", Icon: CalendarDays },
+              { mode: "week" as CalendarView, label: "Week view", Icon: CalendarWeek },
+              { mode: "day" as CalendarView, label: "Day view", Icon: CalendarClock },
+            ]).map(({ mode, label, Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setView(mode)}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${view === mode ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
             <button onClick={() => setShowModal(true)} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
               <Plus className="h-4 w-4" /> New event
             </button>
@@ -126,9 +159,15 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <button onClick={() => setMonth(-1)} className="rounded-lg border border-slate-200 p-2"><ChevronLeft className="h-4 w-4" /></button>
-                <div className="text-lg font-black text-slate-800">{new Date(selectedDate).toLocaleDateString("en", { month: "long", year: "numeric" })}</div>
-                <button onClick={() => setMonth(1)} className="rounded-lg border border-slate-200 p-2"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => shiftSelectedDate(-1)} className="rounded-lg border border-slate-200 p-2"><ChevronLeft className="h-4 w-4" /></button>
+                <div className="text-lg font-black text-slate-800">
+                  {view === "month"
+                    ? new Date(selectedDate).toLocaleDateString("en", { month: "long", year: "numeric" })
+                    : view === "week"
+                    ? `Week of ${visibleRange.start.toLocaleDateString("en", { month: "short", day: "numeric" })}`
+                    : new Date(selectedDate).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                </div>
+                <button onClick={() => shiftSelectedDate(1)} className="rounded-lg border border-slate-200 p-2"><ChevronRight className="h-4 w-4" /></button>
               </div>
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
                 <Search className="h-4 w-4 text-slate-400" />
@@ -158,9 +197,49 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
                   );
                 })}
               </div>
+            ) : view === "week" ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-7 gap-2">
+                  {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => (
+                    <div key={day} className="text-center text-xs font-semibold uppercase text-slate-400">{day}</div>
+                  ))}
+                  {Array.from({ length: 7 }).map((_, index) => {
+                    const date = new Date(visibleRange.start);
+                    date.setDate(visibleRange.start.getDate() + index);
+                    const dateKey = formatDate(date);
+                    const matches = filteredEvents.filter((e: any) => e.eventDate === dateKey);
+                    const isSelected = selectedDate === dateKey;
+                    return (
+                      <button
+                        key={dateKey}
+                        type="button"
+                        onClick={() => setSelectedDate(dateKey)}
+                        className={`min-h-28 rounded-2xl border p-3 text-left ${isSelected ? 'ring-2 ring-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold">{date.getDate()}</div>
+                          <div className="text-[10px] text-slate-500">{date.toLocaleDateString('en', { month: 'short' })}</div>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          {matches.slice(0, 3).map((event: any) => (
+                            <div key={event._id} className={`truncate rounded-md px-2 py-1 text-[10px] font-semibold ${CATEGORY_COLORS[event.category] || CATEGORY_COLORS.other}`}>
+                              {event.title}
+                            </div>
+                          ))}
+                          {matches.length > 3 && <div className="text-[10px] font-semibold text-slate-500">+{matches.length - 3} more</div>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-500">Selected day</div>
+                  <div className="text-base font-black text-slate-900">{new Date(selectedDate).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}</div>
+                </div>
+              </div>
             ) : (
               <div className="space-y-3">
-                {filteredEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">No events found for this window.</div> : filteredEvents.map((event: any) => (
+                {filteredEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">No events found for this day.</div> : filteredEvents.map((event: any) => (
                   <div key={event._id} className="rounded-2xl border border-slate-200 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
