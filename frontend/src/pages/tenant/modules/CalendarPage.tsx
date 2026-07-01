@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
-import { CalendarDays, CalendarWeek, CalendarClock, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, CalendarRange, CalendarClock, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -137,7 +137,7 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
           <div className="flex flex-wrap items-center gap-2">
             {([
               { mode: "month" as CalendarView, label: "Month view", Icon: CalendarDays },
-              { mode: "week" as CalendarView, label: "Week view", Icon: CalendarWeek },
+              { mode: "week" as CalendarView, label: "Week view", Icon: CalendarRange },
               { mode: "day" as CalendarView, label: "Day view", Icon: CalendarClock },
             ]).map(({ mode, label, Icon }) => (
               <button

@@ -421,7 +421,8 @@ export default function Dashboard() {
     const fmt = (n: number) => `KSh ${(Number(n) || 0).toLocaleString()}`;
 
     return (
-        <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
+        <>
+            <div className="flex-1 bg-[#f4f7f6] min-h-screen p-6">
 
             {/* ── Top 4 Metric Cards ───────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -1038,5 +1039,6 @@ export default function Dashboard() {
                 </div>
             </div>
         )}
+        </>
     );
 }
