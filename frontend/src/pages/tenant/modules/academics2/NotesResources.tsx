@@ -194,8 +194,6 @@ export default function NotesResources() {
                     </div>
                 </div>
             )}
-            </div>
-
         </div>
     );
 }
