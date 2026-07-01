@@ -18,7 +18,7 @@ const MODULES: { key: string; label: string }[] = [
     { key: "transport", label: "Transport" }, { key: "pos", label: "Point of Sale" },
     { key: "live_class", label: "Live Class & LMS" }, { key: "communications", label: "Communications" },
     { key: "fees", label: "Fees" }, { key: "accounts", label: "Accounts" }, { key: "salary", label: "Salary" },
-    { key: "exams", label: "Exams" }, { key: "timetable", label: "Timetable" }, { key: "attendance", label: "Attendance" },
+    { key: "exams", label: "Exams" }, { key: "timetable", label: "Timetable" }, { key: "calendar", label: "Calendar" }, { key: "attendance", label: "Attendance" },
     { key: "cafeteria", label: "Cafeteria" }, { key: "sports", label: "Sports" }, { key: "trips", label: "Trips" },
     { key: "frontdesk", label: "Front Desk" }, { key: "secretary", label: "Secretary" }, { key: "certificates", label: "Certificates" },
     { key: "reports", label: "Reports" },
