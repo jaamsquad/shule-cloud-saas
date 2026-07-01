@@ -45,6 +45,7 @@ import requestsRoutes from './modules/requests/requests.routes';
 import blogRoutes from './routes/blog.routes';
 import smsRoutes from './routes/sms.routes';
 import liveClassRoutes from './modules/liveclass/liveclass.routes';
+import calendarRoutes from './routes/calendar.routes';
 
 console.log('[App] Bootstrapping institutional backend system...');
 const app = express();
@@ -344,6 +345,7 @@ app.use('/api/v1', requestsRoutes);       // Request Management & Approval Workf
 app.use('/api/v1', blogRoutes);           // Blog (super-owner admin + public)
 app.use('/api/v1', smsRoutes);            // SMS gateway (school admin + Android app)
 app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton)
+app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/auth', ownerAuthRoutes);

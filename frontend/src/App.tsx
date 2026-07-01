@@ -325,6 +325,7 @@ import InvoiceDetail from "./pages/tenant/modules/InvoiceDetail";
 import FeesReport from "./pages/tenant/modules/FeesReport";
 import DeleteFees from "./pages/tenant/modules/DeleteFees";
 import TransportManagement from "./pages/tenant/modules/TransportManagement";
+import CalendarPage from "./pages/tenant/modules/CalendarPage";
 import BusPickup from "./pages/tenant/modules/transport/BusPickup";
 import TransportSettings from "./pages/tenant/modules/transport/TransportSettings";
 
@@ -849,6 +850,11 @@ const App = () => {
               <Route path="/accounts/income" element={<AddIncome />} />
               <Route path="/accounts/expense" element={<AddExpense />} />
               <Route path="/accounts/statement" element={<AccountStatement />} />
+
+              {/* Calendar */}
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/calendar/events" element={<CalendarPage />} />
+              <Route path="/calendar/upcoming" element={<CalendarPage />} />
 
               {/* Timetable */}
               <Route path="/timetable" element={<TimetableWrapper />} />

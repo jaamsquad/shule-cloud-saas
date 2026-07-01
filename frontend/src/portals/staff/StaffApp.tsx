@@ -15,7 +15,8 @@ import StaffResources from "./pages/StaffResources";
 import StaffLeave from "./pages/StaffLeave";
 import AnnouncementsView from "../AnnouncementsView";
 import LiveRoom from "../../pages/tenant/modules/LiveRoom";
-import { staffApi } from "./staffApi";
+import CalendarPage from "../../pages/tenant/modules/CalendarPage";
+import { staffApi, staffCalendarApi } from "./staffApi";
 
 export default function StaffApp() {
     return (
@@ -37,6 +38,9 @@ export default function StaffApp() {
                 <Route path="/resources" element={<StaffContent type="resources" />} />
                 <Route path="/shared-resources" element={<StaffResources />} />
                 <Route path="/leave" element={<StaffLeave />} />
+                <Route path="/calendar" element={<CalendarPage apiClient={staffCalendarApi} />} />
+                <Route path="/calendar/events" element={<CalendarPage apiClient={staffCalendarApi} />} />
+                <Route path="/calendar/upcoming" element={<CalendarPage apiClient={staffCalendarApi} />} />
                 <Route path="/assignments" element={<StaffContent type="assignments" />} />
                 <Route path="/homework" element={<StaffContent type="homework" />} />
                 <Route path="/announcements" element={<AnnouncementsView api={staffApi} endpoint="/staff-portal/announcements" queryKey="staff_ann" />} />

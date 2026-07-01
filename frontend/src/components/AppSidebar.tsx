@@ -266,6 +266,11 @@ export const navItems: NavItem[] = [
       { label: "Sync History", path: "/nemis/history" },
       { label: "Settings", path: "/nemis/settings" },
   ] },
+  { label: "Calendar", icon: Calendar, moduleKey: "calendar", children: [
+      { label: "School Calendar", path: "/calendar" },
+      { label: "Calendar Events", path: "/calendar/events" },
+      { label: "Upcoming Events", path: "/calendar/upcoming" },
+  ] },
   { label: "Timetable", icon: Calendar, moduleKey: "timetable", children: [
       { label: "Weekdays", path: "/timetable/weekdays" },
       { label: "Time Periods", path: "/timetable/periods" },

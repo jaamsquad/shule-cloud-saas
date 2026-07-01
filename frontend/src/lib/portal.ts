@@ -78,9 +78,9 @@ export function tenantDisplayName(): string {
  * automatically attaches the portal's bearer token and the tenant subdomain
  * header so the backend resolves the correct school database.
  */
-export function makePortalApi(tokenKey: string) {
-    // Portal endpoints live on the auth router → /api/v1/auth/*
-    const inst = axios.create({ baseURL: `${API_ORIGIN}/api/v1/auth` });
+export function makePortalApi(tokenKey: string, basePath: string = "/auth") {
+    const normalizedBasePath = basePath && basePath !== "/" ? (basePath.startsWith("/") ? basePath : `/${basePath}`) : "";
+    const inst = axios.create({ baseURL: `${API_ORIGIN}/api/v1${normalizedBasePath}` });
     inst.interceptors.request.use(cfg => {
         const token = localStorage.getItem(tokenKey);
         if (token) cfg.headers.Authorization = `Bearer ${token}`;

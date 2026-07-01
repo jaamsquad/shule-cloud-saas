@@ -1,6 +1,7 @@
 import { makePortalApi } from "../portal";
 
 export const staffApi = makePortalApi("staff_token");
+export const staffCalendarApi = makePortalApi("staff_token", "");
 
 export interface StaffInfo {
     _id: string;
