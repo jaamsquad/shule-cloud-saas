@@ -894,144 +894,85 @@ export default function Dashboard() {
                             <button onClick={openCreateEvent} className="text-[11px] font-black text-[#5C67F2]">+ Add Event</button>
                         </div>
 
-                        <div className="flex items-center justify-between mb-3 gap-2">
+                        <div className="mb-3 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1">
-                                <button onClick={() => calendarView === "day" ? shiftSelectedDate(-1) : changeMonthView(-1)} className="rounded-lg border border-slate-200 p-1.5">
+                                <button onClick={() => changeMonthView(-1)} className="rounded-lg border border-slate-200 p-1.5">
                                     <ChevronLeft className="w-3.5 h-3.5 text-slate-600" />
                                 </button>
-                                <button onClick={() => calendarView === "day" ? shiftSelectedDate(1) : changeMonthView(1)} className="rounded-lg border border-slate-200 p-1.5">
+                                <button onClick={() => changeMonthView(1)} className="rounded-lg border border-slate-200 p-1.5">
                                     <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
                                 </button>
                             </div>
-                            <div className="flex items-center gap-1 rounded-lg border border-slate-200 p-1">
-                                {(["month", "week", "day"] as const).map(view => (
-                                    <button key={view} onClick={() => setCalendarView(view)} className={`rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-wide ${calendarView === view ? "bg-[#5C67F2] text-white" : "text-slate-500"}`}>
-                                        {view}
-                                    </button>
-                                ))}
+                            <div className="text-sm font-black text-slate-700">
+                                {parseDateValue(selectedDate).toLocaleString("default", { month: "long", year: "numeric" })}
                             </div>
                         </div>
 
-                        <div className="mb-2 text-sm font-black text-slate-700">
-                            {calendarView === "month" ? parseDateValue(selectedDate).toLocaleString("default", { month: "long", year: "numeric" }) : calendarView === "week" ? `Week of ${parseDateValue(selectedDate).toLocaleDateString("default", { month: "short", day: "numeric" })}` : parseDateValue(selectedDate).toDateString()}
+                        <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                            {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((dayName) => (
+                                <div key={dayName} className={`text-[9px] font-bold ${dayName === "SUN" || dayName === "SAT" ? "text-[#ff5e6c]" : "text-[#8b91db]"}`}>
+                                    {dayName}
+                                </div>
+                            ))}
                         </div>
 
-                        {calendarView === "month" ? (
-                            <>
-                                <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                                    {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d => (
-                                        <div key={d} className={`text-[9px] font-bold ${d === "SUN" || d === "SAT" ? "text-[#ff5e6c]" : "text-[#8b91db]"}`}>{d}</div>
-                                    ))}
-                                </div>
-                                <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold">
-                                    {(() => {
-                                        const base = parseDateValue(selectedDate);
-                                        const firstDay = new Date(base.getFullYear(), base.getMonth(), 1).getDay();
-                                        const totalDays = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
-                                        const cells: Array<{ date: string; inMonth: boolean }> = [];
-                                        for (let i = 0; i < firstDay; i++) {
-                                            const d = new Date(base.getFullYear(), base.getMonth(), i - firstDay + 1);
-                                            cells.push({ date: formatDateValue(d), inMonth: false });
-                                        }
-                                        for (let day = 1; day <= totalDays; day++) {
-                                            const d = new Date(base.getFullYear(), base.getMonth(), day);
-                                            cells.push({ date: formatDateValue(d), inMonth: true });
-                                        }
-                                        return cells.map(cell => {
-                                            const isToday = cell.date === new Date().toLocaleDateString("en-CA");
-                                            const isSelected = cell.date === selectedDate;
-                                            const dayEvents = calendarEventsByDate[cell.date] || [];
-                                            return (
-                                                <div
-                                                    key={cell.date}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    onClick={() => setSelectedDate(cell.date)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === "Enter" || e.key === " ") {
-                                                            e.preventDefault();
-                                                            setSelectedDate(cell.date);
-                                                        }
-                                                    }}
-                                                    className={`min-h-16 rounded-lg border p-1 text-left cursor-pointer ${cell.inMonth ? "border-slate-200" : "border-slate-100 bg-slate-50/70 text-slate-400"} ${isSelected ? "ring-2 ring-[#5C67F2]" : ""}`}
-                                                >
-                                                    <div className={`text-[11px] font-black ${isToday ? "text-[#ff5e6c]" : "text-slate-700"}`}>{new Date(cell.date).getDate()}</div>
-                                                    <div className="mt-1 space-y-1">
-                                                        {dayEvents.slice(0, 2).map((event: any) => (
-                                                            <div
-                                                                key={event._id}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    canEditEvent(event) && openEditEvent(event);
-                                                                }}
-                                                                className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left cursor-pointer"
-                                                            >
-                                                                {event.title}
-                                                            </div>
-                                                        ))}
-                                                        {dayEvents.length > 2 && <div className="text-[9px] font-semibold text-slate-500">+{dayEvents.length - 2} more</div>}
+                        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold">
+                            {(() => {
+                                const base = parseDateValue(selectedDate);
+                                const firstDay = new Date(base.getFullYear(), base.getMonth(), 1).getDay();
+                                const totalDays = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+                                const cells: Array<{ date: string; inMonth: boolean }> = [];
+                                for (let i = 0; i < firstDay; i++) {
+                                    const d = new Date(base.getFullYear(), base.getMonth(), i - firstDay + 1);
+                                    cells.push({ date: formatDateValue(d), inMonth: false });
+                                }
+                                for (let day = 1; day <= totalDays; day++) {
+                                    const d = new Date(base.getFullYear(), base.getMonth(), day);
+                                    cells.push({ date: formatDateValue(d), inMonth: true });
+                                }
+                                return cells.map((cell) => {
+                                    const isToday = cell.date === new Date().toLocaleDateString("en-CA");
+                                    const isSelected = cell.date === selectedDate;
+                                    const dayEvents = calendarEventsByDate[cell.date] || [];
+                                    return (
+                                        <button
+                                            key={cell.date}
+                                            onClick={() => setSelectedDate(cell.date)}
+                                            className={`min-h-16 rounded-lg border p-1 text-left ${cell.inMonth ? "border-slate-200" : "border-slate-100 bg-slate-50/70 text-slate-400"} ${isSelected ? "ring-2 ring-[#5C67F2]" : ""}`}
+                                        >
+                                            <div className={`text-[11px] font-black ${isToday ? "text-[#ff5e6c]" : "text-slate-700"}`}>{new Date(cell.date).getDate()}</div>
+                                            <div className="mt-1 space-y-1">
+                                                {dayEvents.slice(0, 2).map((event: any) => (
+                                                    <div key={event._id} className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left">
+                                                        {event.title}
                                                     </div>
-                                                </div>
-                                            );
-                                        });
-                                    })()}
-                                </div>
-                            </>
-                        ) : calendarView === "week" ? (
-                            <div className="grid grid-cols-7 gap-2">
-                                {(() => {
-                                    const start = new Date(parseDateValue(selectedDate));
-                                    const day = start.getDay();
-                                    const diff = day === 0 ? -6 : 1 - day;
-                                    start.setDate(start.getDate() + diff);
-                                    return Array.from({ length: 7 }, (_, idx) => {
-                                        const d = new Date(start);
-                                        d.setDate(start.getDate() + idx);
-                                        const date = formatDateValue(d);
-                                        const dayEvents = calendarEventsByDate[date] || [];
-                                        return (
-                                            <div key={date} className={`rounded-xl border p-2 ${selectedDate === date ? "border-[#5C67F2] bg-indigo-50/60" : "border-slate-100"}`}>
-                                                <button onClick={() => setSelectedDate(date)} className="w-full text-left mb-2">
-                                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">{d.toLocaleString("default", { weekday: "short" })}</div>
-                                                    <div className={`text-sm font-black ${selectedDate === date ? "text-[#5C67F2]" : "text-slate-700"}`}>{d.getDate()}</div>
-                                                </button>
-                                                <div className="space-y-1">
-                                                    {dayEvents.slice(0, 2).map((event: any) => (
-                                                        <div
-                                                            key={event._id}
-                                                            onClick={() => canEditEvent(event) && openEditEvent(event)}
-                                                            className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left cursor-pointer"
-                                                        >
-                                                            {event.title}
-                                                        </div>
-                                                    ))}
-                                                    {dayEvents.length > 2 && <div className="text-[9px] font-semibold text-slate-500">+{dayEvents.length - 2} more</div>}
-                                                </div>
+                                                ))}
+                                                {dayEvents.length > 2 && <div className="text-[9px] font-semibold text-slate-500">+{dayEvents.length - 2} more</div>}
                                             </div>
-                                        );
-                                    });
-                                })()}
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {selectedDateEvents.length === 0 ? (
-                                    <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No events for this day.</div>
-                                ) : selectedDateEvents.map((event: any) => (
-                                    <div key={event._id} className="rounded-2xl border border-slate-100 p-3">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div>
-                                                <div className="text-sm font-black text-slate-800">{event.title}</div>
-                                                <div className="text-[11px] text-slate-500">{event.startTime || "All day"}{event.endTime ? ` - ${event.endTime}` : ""}</div>
-                                            </div>
-                                            {canEditEvent(event) && (
-                                                <button onClick={() => openEditEvent(event)} className="text-[11px] font-semibold text-[#5C67F2]">Edit</button>
-                                            )}
+                                        </button>
+                                    );
+                                });
+                            })()}
+                        </div>
+
+                        <div className="mt-4 space-y-3">
+                            {selectedDateEvents.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No events for this day.</div>
+                            ) : selectedDateEvents.map((event: any) => (
+                                <div key={event._id} className="rounded-2xl border border-slate-100 p-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <div className="text-sm font-black text-slate-800">{event.title}</div>
+                                            <div className="text-[11px] text-slate-500">{event.startTime || "All day"}{event.endTime ? ` - ${event.endTime}` : ""}</div>
                                         </div>
-                                        {event.description && <p className="mt-2 text-xs text-slate-500">{event.description}</p>}
+                                        {canEditEvent(event) && (
+                                            <button onClick={() => openEditEvent(event)} className="text-[11px] font-semibold text-[#5C67F2]">Edit</button>
+                                        )}
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                    {event.description && <p className="mt-2 text-xs text-slate-500">{event.description}</p>}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
