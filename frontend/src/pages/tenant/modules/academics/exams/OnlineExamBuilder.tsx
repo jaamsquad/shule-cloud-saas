@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Trash2, ArrowLeft, Send, Settings, FileText, GripVertical, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -67,17 +67,55 @@ export default function OnlineExamBuilder() {
 
 function NewExamButton({ classes, subjects, onCreated }: any) {
     const [open, setOpen] = useState(false);
-    const [f, setF] = useState({ examName: "", category: "CAT", classId: "", streamId: "", subjectId: "", durationMinutes: 60, passMark: 0 });
+    const [f, setF] = useState({
+        examName: "", category: "CAT", classId: "", streamId: "", subjectId: "",
+        durationMinutes: 60, passMark: 0,
+        academicYear: "", term: "", termId: "",
+        startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
+    });
+    const { data: years = [] } = useQuery<any[]>({ queryKey: ["v2_academic_years"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
+    const { data: terms = [] } = useQuery<any[]>({ queryKey: ["v2_terms"], queryFn: async () => (await api.get("/v2/terms")).data || [] });
+    const activeYear = years.find((y: any) => y.isActive);
+    const activeTerm = terms.find((t: any) => t.isActive);
+    const yearTermOptions = terms.filter((t: any) => {
+        if (!f.academicYear) return true;
+        const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
+        return String(year?.year) === String(f.academicYear);
+    });
+    useEffect(() => {
+        if (!open || !activeYear || !activeTerm) return;
+        if (!f.academicYear && !f.termId) {
+            setF(prev => ({ ...prev,
+                academicYear: String(activeYear.year),
+                term: activeTerm.name,
+                termId: activeTerm._id,
+            }));
+        }
+    }, [open, activeYear, activeTerm, f.academicYear, f.termId]);
     const { data: streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", f.classId], enabled: !!f.classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: f.classId } })).data || [] });
     const create = useMutation({
         mutationFn: async () => {
             const cls = classes.find((c: any) => String(c._id) === f.classId);
             const stream = streams.find((s: any) => String(s._id) === f.streamId);
             const subject = subjects.find((s: any) => String(s._id) === f.subjectId);
+            const startAt = f.startDate ? `${f.startDate}T${f.startTime || "00:00"}` : null;
+            const endAt = f.endDate ? `${f.endDate}T${f.endTime || "23:59"}` : null;
             return (await api.post("/online-exams", {
-                examName: f.examName, category: f.category, durationMinutes: Number(f.durationMinutes), passMark: Number(f.passMark),
-                classId: f.classId, className: cls?.name || "", streamId: f.streamId || "", streamName: stream?.name || "",
-                subjectId: f.subjectId, subjectName: subject?.name || subject?.subjectName || "",
+                examName: f.examName,
+                category: f.category,
+                durationMinutes: Number(f.durationMinutes),
+                passMark: Number(f.passMark),
+                classId: f.classId,
+                className: cls?.name || "",
+                streamId: f.streamId || "",
+                streamName: stream?.name || "",
+                subjectId: f.subjectId,
+                subjectName: subject?.name || subject?.subjectName || "",
+                academicYear: f.academicYear,
+                term: f.term,
+                termId: f.termId,
+                startAt,
+                endAt,
             })).data;
         },
         onSuccess: (d: any) => { toast.success("Exam created — add questions."); setOpen(false); onCreated(d._id); },
@@ -97,6 +135,39 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
                         <select value={f.streamId} onChange={e => setF({ ...f, streamId: e.target.value })} disabled={!f.classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"><option value="">All streams</option>{streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}</select>
                         <input value={f.durationMinutes} onChange={e => setF({ ...f, durationMinutes: Number(e.target.value) })} type="number" placeholder="Duration (min)" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
                         <input value={f.passMark} onChange={e => setF({ ...f, passMark: Number(e.target.value) })} type="number" placeholder="Pass mark" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <select value={f.academicYear} onChange={e => setF({ ...f, academicYear: e.target.value, termId: "", term: "" })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                            <option value="">— Academic Year —</option>
+                            {years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}{y.isActive ? " (Active)" : ""}</option>)}
+                        </select>
+                        <select value={f.termId} onChange={e => {
+                            const term = terms.find((t: any) => String(t._id) === e.target.value);
+                            const year = years.find((y: any) => String(y._id) === String(term?.academicYearId));
+                            setF({ ...f, termId: e.target.value, term: term?.name || "", academicYear: year ? String(year.year) : f.academicYear });
+                        }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                            <option value="">— Term —</option>
+                            {yearTermOptions.map((t: any) => {
+                                const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
+                                return <option key={t._id} value={t._id}>{t.name}{year ? ` · ${year.year}` : ""}{t.isActive ? " (Active)" : ""}</option>;
+                            })}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Start</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <input value={f.startDate} onChange={e => setF({ ...f, startDate: e.target.value })} type="date" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                <input value={f.startTime} onChange={e => setF({ ...f, startTime: e.target.value })} type="time" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">End</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <input value={f.endDate} onChange={e => setF({ ...f, endDate: e.target.value })} type="date" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                <input value={f.endTime} onChange={e => setF({ ...f, endTime: e.target.value })} type="time" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="flex gap-2 mt-5">
@@ -188,6 +259,7 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
 function MarkingPanel({ examId }: { examId: string }) {
     const { data, refetch, isLoading } = useQuery({ queryKey: ["online_marking", examId], queryFn: async () => (await api.get(`/online-exams/${examId}/marking`)).data });
     const manualQs: any[] = data?.manualQuestions || [];
+    const autoQs: any[] = data?.autoQuestions || [];
     const attempts: any[] = data?.attempts || [];
     const [open, setOpen] = useState<string>("");   // attemptId being marked
     const [marks, setMarks] = useState<Record<string, any>>({});
@@ -213,11 +285,31 @@ function MarkingPanel({ examId }: { examId: string }) {
                             <div>
                                 <p className="font-bold text-slate-800">{a.studentName}</p>
                                 <p className="text-[11px] text-slate-400">Auto {a.autoScore ?? 0}{a.finalScore != null ? ` · Final ${a.finalScore}` : a.needsManual ? " · awaiting marking" : ""}</p>
+                                {autoQs.length > 0 && a.perQuestion && (
+                                    <p className="text-[11px] text-slate-400">Auto questions: {autoQs.filter(q => a.perQuestion?.[q._id]?.correct === true).length}/{autoQs.length} correct</p>
+                                )}
                             </div>
                             <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
                         </div>
                         {editing && (
                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                                {autoQs.length > 0 && a.perQuestion && (
+                                    <div className="space-y-3 border-t border-slate-100 pt-3">
+                                        <h3 className="text-sm font-bold text-slate-800">Auto-marked questions</h3>
+                                        {autoQs.map((q: any) => {
+                                            const pq = a.perQuestion?.[q._id] || { awarded: 0, correct: null };
+                                            return (
+                                                <div key={q._id} className="bg-slate-50 rounded-xl p-3">
+                                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                                        <p className="text-xs font-bold text-slate-600 truncate">{q.questionText}</p>
+                                                        <span className="text-[11px] font-bold text-slate-500">{pq.awarded}/{q.marks}</span>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500">{pq.correct === true ? "Correct" : pq.correct === false ? "Incorrect" : "Reviewed"}</p>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                                 {manualQs.map((q: any) => (
                                     <div key={q._id} className="bg-slate-50 rounded-xl p-3">
                                         <p className="text-xs font-bold text-slate-600 mb-1">{q.questionText} <span className="text-slate-400">({q.marks} marks)</span></p>

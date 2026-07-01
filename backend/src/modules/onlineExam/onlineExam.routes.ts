@@ -72,6 +72,11 @@ router.post('/online-exams', async (req: Request, res: Response) => {
     try {
         const database = db(req); const c = ctx(req); const b = req.body || {};
         if (!b.examName) return res.status(400).json({ message: 'Exam name is required' });
+        const startAt = b.startAt ? new Date(b.startAt) : null;
+        const endAt = b.endAt ? new Date(b.endAt) : null;
+        if (startAt && endAt && startAt.getTime() > endAt.getTime()) {
+            return res.status(400).json({ message: 'Exam start time must be before end time' });
+        }
         const doc = {
             examName: b.examName,
             academicYear: b.academicYear || '', term: b.term || '', termId: b.termId || null,
@@ -81,8 +86,7 @@ router.post('/online-exams', async (req: Request, res: Response) => {
             streamId: b.streamId || '', streamName: b.streamName || '',
             subjectId: b.subjectId || '', subjectName: b.subjectName || '',
             teacherId: b.teacherId || c.actorId, teacherName: b.teacherName || c.actorName,
-            startAt: b.startAt ? new Date(b.startAt) : null,
-            endAt: b.endAt ? new Date(b.endAt) : null,
+            startAt, endAt,
             durationMinutes: Number(b.durationMinutes) || 60,
             totalMarks: Number(b.totalMarks) || 0,
             passMark: Number(b.passMark) || 0,
@@ -227,15 +231,17 @@ router.get('/online-exams/:id/marking', async (req: Request, res: Response) => {
         const database = db(req);
         const questions = await database.collection('online_exam_questions').find({ examId: req.params.id, deletedAt: { $exists: false } }).sort({ order: 1 }).toArray();
         const manualQ = questions.filter((q: any) => !(AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false)));
+        const autoQ = questions.filter((q: any) => AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false));
         const attempts = await database.collection('online_exam_attempts').find({ examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } }).toArray();
         res.json({
             manualQuestions: manualQ.map((q: any) => ({ _id: String(q._id), questionText: q.questionText, marks: q.marks, type: q.type, rubric: q.rubric || '' })),
+            autoQuestions: autoQ.map((q: any) => ({ _id: String(q._id), questionText: q.questionText, marks: q.marks, type: q.type })),
             attempts: attempts.map((a: any) => ({
                 _id: String(a._id), studentName: a.studentName, status: a.status,
                 autoScore: a.autoScore, finalScore: a.finalScore, needsManual: a.needsManual,
                 // Only expose the student's answers to the manual questions + any saved awards.
                 answers: Object.fromEntries(manualQ.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
-                marks: a.manualMarks || {}, comments: a.manualComments || {},
+                marks: a.manualMarks || {}, comments: a.manualComments || {}, perQuestion: a.perQuestion || {},
             })),
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
