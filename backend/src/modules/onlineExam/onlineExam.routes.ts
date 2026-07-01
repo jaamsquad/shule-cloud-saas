@@ -15,6 +15,11 @@ const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 const oid = (id: string) => { try { return new ObjectId(String(id)); } catch { return null; } };
 const now = () => new Date();
+const parseDateValue = (value: any) => {
+    if (!value) return null;
+    const date = new Date(String(value));
+    return isNaN(date.getTime()) ? null : date;
+};
 
 // Branch + actor context from the request (multi-branch scoping + audit).
 const ctx = (req: any) => ({
@@ -72,8 +77,10 @@ router.post('/online-exams', async (req: Request, res: Response) => {
     try {
         const database = db(req); const c = ctx(req); const b = req.body || {};
         if (!b.examName) return res.status(400).json({ message: 'Exam name is required' });
-        const startAt = b.startAt ? new Date(b.startAt) : null;
-        const endAt = b.endAt ? new Date(b.endAt) : null;
+        const startAt = b.startAt ? parseDateValue(b.startAt) : null;
+        const endAt = b.endAt ? parseDateValue(b.endAt) : null;
+        if (b.startAt && !startAt) return res.status(400).json({ message: 'Invalid exam start time' });
+        if (b.endAt && !endAt) return res.status(400).json({ message: 'Invalid exam end time' });
         if (startAt && endAt && startAt.getTime() > endAt.getTime()) {
             return res.status(400).json({ message: 'Exam start time must be before end time' });
         }
@@ -103,14 +110,40 @@ router.post('/online-exams', async (req: Request, res: Response) => {
 
 // Update exam (settings/schedule/etc). Cannot edit a Published exam's questions
 // silently — but metadata edits are allowed; publishing is a separate action.
+// Schedule (startAt/endAt) can only be edited before the exam starts.
 router.patch('/online-exams/:id', async (req: Request, res: Response) => {
     try {
         const database = db(req);
+        const exam = await database.collection('online_exams').findOne({ _id: oid(req.params.id)! });
+        if (!exam) return res.status(404).json({ message: 'Exam not found' });
+        
+        const now_ms = now().getTime();
+        const examStarted = exam.startAt && new Date(exam.startAt).getTime() <= now_ms;
+        
+        // Prevent schedule edits if exam has started
+        if (examStarted && (req.body.startAt !== undefined || req.body.endAt !== undefined)) {
+            return res.status(403).json({ message: 'Cannot change exam schedule after it has started' });
+        }
+        
         const update: any = { updatedAt: now() };
         const allowed = ['examName', 'academicYear', 'term', 'termId', 'category', 'classId', 'className',
             'streamId', 'streamName', 'subjectId', 'subjectName', 'teacherId', 'teacherName',
             'startAt', 'endAt', 'durationMinutes', 'totalMarks', 'passMark', 'instructions'];
-        allowed.forEach(f => { if (req.body[f] !== undefined) update[f] = (f === 'startAt' || f === 'endAt') ? (req.body[f] ? new Date(req.body[f]) : null) : req.body[f]; });
+        if (req.body.startAt !== undefined && req.body.startAt !== null && req.body.startAt !== '') {
+            const parsed = parseDateValue(req.body.startAt);
+            if (!parsed) return res.status(400).json({ message: 'Invalid exam start time' });
+            update.startAt = parsed;
+        } else if (req.body.startAt !== undefined) {
+            update.startAt = null;
+        }
+        if (req.body.endAt !== undefined && req.body.endAt !== null && req.body.endAt !== '') {
+            const parsed = parseDateValue(req.body.endAt);
+            if (!parsed) return res.status(400).json({ message: 'Invalid exam end time' });
+            update.endAt = parsed;
+        } else if (req.body.endAt !== undefined) {
+            update.endAt = null;
+        }
+        allowed.filter(f => f !== 'startAt' && f !== 'endAt').forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
         if (req.body.settings) update.settings = { ...DEFAULT_SETTINGS, ...req.body.settings };
         await database.collection('online_exams').updateOne({ _id: oid(req.params.id)! }, { $set: update });
         await audit(database, req, 'EXAM_UPDATED', req.params.id);

@@ -18,6 +18,13 @@ const TYPES: { v: string; label: string; auto: boolean }[] = [
 ];
 const CATS = ["CAT", "Midterm", "End Term", "Holiday Assignment", "Mock", "Revision"];
 
+function buildLocalTimestamp(date: string, time: string) {
+    if (!date) return null;
+    const local = `${date}T${time || "00:00"}`;
+    const dt = new Date(local);
+    return isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
 // Teacher authoring for Online Examinations — create exams (scoped to class/stream/
 // subject) and add questions of every type. Publishing makes them visible to students.
 export default function OnlineExamBuilder() {
@@ -98,8 +105,10 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
             const cls = classes.find((c: any) => String(c._id) === f.classId);
             const stream = streams.find((s: any) => String(s._id) === f.streamId);
             const subject = subjects.find((s: any) => String(s._id) === f.subjectId);
-            const startAt = f.startDate ? `${f.startDate}T${f.startTime || "00:00"}` : null;
-            const endAt = f.endDate ? `${f.endDate}T${f.endTime || "23:59"}` : null;
+            const startAt = f.startDate ? buildLocalTimestamp(f.startDate, f.startTime || "00:00") : null;
+            const endAt = f.endDate ? buildLocalTimestamp(f.endDate, f.endTime || "23:59") : null;
+            if (f.startDate && !startAt) throw new Error("Invalid exam start date/time");
+            if (f.endDate && !endAt) throw new Error("Invalid exam end date/time");
             return (await api.post("/online-exams", {
                 examName: f.examName,
                 category: f.category,
@@ -182,8 +191,13 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
 function ExamEditor({ examId, classes, subjects, onBack }: any) {
     const qc = useQueryClient();
     const [view, setView] = useState<"build" | "mark">("build");
+    const [showSchedule, setShowSchedule] = useState(false);
+    const [scheduleForm, setScheduleForm] = useState({ startDate: "", startTime: "", endDate: "", endTime: "" });
     const { data: exam, refetch } = useQuery({ queryKey: ["online_exam", examId], queryFn: async () => (await api.get(`/online-exams/${examId}`)).data });
     const questions: any[] = exam?.questions || [];
+    
+    const now_ms = Date.now();
+    const examStarted = exam?.startAt && new Date(exam.startAt).getTime() <= now_ms;
 
     const setStatus = useMutation({
         mutationFn: async (status: string) => (await api.post(`/online-exams/${examId}/status`, { status })).data,
@@ -200,6 +214,18 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
         onSuccess: (d: any) => toast.success(d.message || "Results published to report cards"),
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
+    
+    const updateSchedule = useMutation({
+        mutationFn: async () => {
+            const startAt = scheduleForm.startDate ? buildLocalTimestamp(scheduleForm.startDate, scheduleForm.startTime || "00:00") : null;
+            const endAt = scheduleForm.endDate ? buildLocalTimestamp(scheduleForm.endDate, scheduleForm.endTime || "23:59") : null;
+            if (scheduleForm.startDate && !startAt) throw new Error("Invalid start time");
+            if (scheduleForm.endDate && !endAt) throw new Error("Invalid end time");
+            return (await api.patch(`/online-exams/${examId}`, { startAt, endAt })).data;
+        },
+        onSuccess: () => { toast.success("Schedule updated"); setShowSchedule(false); refetch(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen p-6">
@@ -210,7 +236,8 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                         <h1 className="text-xl font-black text-slate-800">{exam?.examName}</h1>
                         <p className="text-xs text-slate-400">{exam?.subjectName} · {exam?.className}{exam?.streamName ? ` ${exam.streamName}` : ""} · {questions.length} questions · {exam?.totalMarks} marks</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-end">
+                        {!examStarted && <button onClick={() => { if (!showSchedule) { setScheduleForm({ startDate: exam?.startAt ? exam.startAt.split("T")[0] : "", startTime: exam?.startAt ? exam.startAt.split("T")[1]?.slice(0, 5) : "00:00", endDate: exam?.endAt ? exam.endAt.split("T")[0] : "", endTime: exam?.endAt ? exam.endAt.split("T")[1]?.slice(0, 5) : "23:59" }); } setShowSchedule(!showSchedule); }} className="h-10 px-4 rounded-xl bg-amber-500 text-white font-bold text-sm flex items-center gap-1.5"><Settings className="w-4 h-4" /> {showSchedule ? "Cancel" : "Edit Schedule"}</button>}
                         {exam?.status !== "Published" && <button onClick={() => setStatus.mutate("Published")} className="h-10 px-4 rounded-xl bg-emerald-500 text-white font-bold text-sm flex items-center gap-1.5"><Send className="w-4 h-4" /> Publish</button>}
                         {exam?.status === "Published" && <button onClick={() => setStatus.mutate("Closed")} className="h-10 px-4 rounded-xl bg-slate-700 text-white font-bold text-sm">Close</button>}
                         {(exam?.status === "Published" || exam?.status === "Closed") && (
@@ -221,11 +248,43 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                     </div>
                 </div>
 
+                {/* Schedule edit form */}
+                {showSchedule && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-4">
+                        <h3 className="font-black text-slate-800 mb-3">Edit Exam Schedule</h3>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Start</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input type="date" value={scheduleForm.startDate} onChange={e => setScheduleForm(f => ({ ...f, startDate: e.target.value }))} className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                    <input type="time" value={scheduleForm.startTime} onChange={e => setScheduleForm(f => ({ ...f, startTime: e.target.value }))} className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">End</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input type="date" value={scheduleForm.endDate} onChange={e => setScheduleForm(f => ({ ...f, endDate: e.target.value }))} className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                    <input type="time" value={scheduleForm.endTime} onChange={e => setScheduleForm(f => ({ ...f, endTime: e.target.value }))} className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={() => scheduleForm.startDate && scheduleForm.endDate ? updateSchedule.mutate() : toast.error("Pick both start and end dates")} disabled={updateSchedule.isPending} className="h-10 px-4 rounded-xl bg-blue-500 text-white font-bold text-sm disabled:opacity-50">{updateSchedule.isPending ? "Saving..." : "Save Schedule"}</button>
+                    </div>
+                )}
+
                 {/* Build / Mark toggle */}
                 <div className="flex gap-2 mb-4">
                     <button onClick={() => setView("build")} className={`h-9 px-4 rounded-lg font-bold text-sm ${view === "build" ? "bg-[#5C67F2] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Questions</button>
                     <button onClick={() => setView("mark")} className={`h-9 px-4 rounded-lg font-bold text-sm ${view === "mark" ? "bg-[#5C67F2] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>Mark Submissions</button>
                 </div>
+
+                {/* Schedule display */}
+                {exam?.startAt && exam?.endAt && (
+                    <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 mb-4 text-xs font-bold text-slate-600">
+                        <p>📅 <strong>Start:</strong> {new Date(exam.startAt).toLocaleString()}</p>
+                        <p>📅 <strong>End:</strong> {new Date(exam.endAt).toLocaleString()}</p>
+                    </div>
+                )}
 
                 {view === "build" ? (
                     <>
