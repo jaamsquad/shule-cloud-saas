@@ -942,17 +942,36 @@ export default function Dashboard() {
                                             const isSelected = cell.date === selectedDate;
                                             const dayEvents = calendarEventsByDate[cell.date] || [];
                                             return (
-                                                <button key={cell.date} onClick={() => setSelectedDate(cell.date)} className={`min-h-16 rounded-lg border p-1 text-left ${cell.inMonth ? "border-slate-200" : "border-slate-100 bg-slate-50/70 text-slate-400"} ${isSelected ? "ring-2 ring-[#5C67F2]" : ""}`}>
+                                                <div
+                                                    key={cell.date}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={() => setSelectedDate(cell.date)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter" || e.key === " ") {
+                                                            e.preventDefault();
+                                                            setSelectedDate(cell.date);
+                                                        }
+                                                    }}
+                                                    className={`min-h-16 rounded-lg border p-1 text-left cursor-pointer ${cell.inMonth ? "border-slate-200" : "border-slate-100 bg-slate-50/70 text-slate-400"} ${isSelected ? "ring-2 ring-[#5C67F2]" : ""}`}
+                                                >
                                                     <div className={`text-[11px] font-black ${isToday ? "text-[#ff5e6c]" : "text-slate-700"}`}>{new Date(cell.date).getDate()}</div>
                                                     <div className="mt-1 space-y-1">
                                                         {dayEvents.slice(0, 2).map((event: any) => (
-                                                            <button key={event._id} onClick={(e) => { e.stopPropagation(); canEditEvent(event) && openEditEvent(event); }} className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left">
+                                                            <div
+                                                                key={event._id}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    canEditEvent(event) && openEditEvent(event);
+                                                                }}
+                                                                className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left cursor-pointer"
+                                                            >
                                                                 {event.title}
-                                                            </button>
+                                                            </div>
                                                         ))}
                                                         {dayEvents.length > 2 && <div className="text-[9px] font-semibold text-slate-500">+{dayEvents.length - 2} more</div>}
                                                     </div>
-                                                </button>
+                                                </div>
                                             );
                                         });
                                     })()}
@@ -978,9 +997,13 @@ export default function Dashboard() {
                                                 </button>
                                                 <div className="space-y-1">
                                                     {dayEvents.slice(0, 2).map((event: any) => (
-                                                        <button key={event._id} onClick={() => canEditEvent(event) && openEditEvent(event)} className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left">
+                                                        <div
+                                                            key={event._id}
+                                                            onClick={() => canEditEvent(event) && openEditEvent(event)}
+                                                            className="block w-full truncate rounded-md bg-[#5C67F2]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#5C67F2] text-left cursor-pointer"
+                                                        >
                                                             {event.title}
-                                                        </button>
+                                                        </div>
                                                     ))}
                                                     {dayEvents.length > 2 && <div className="text-[9px] font-semibold text-slate-500">+{dayEvents.length - 2} more</div>}
                                                 </div>
