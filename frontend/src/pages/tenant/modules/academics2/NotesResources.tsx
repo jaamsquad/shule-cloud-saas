@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File } from "lucide-react";
+import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
@@ -10,8 +10,7 @@ const TYPES = [
     { key: "Worksheet",   icon: File,         color: "text-indigo-600", bg: "bg-indigo-50" },
     { key: "Video",       icon: Video,        color: "text-rose-600",   bg: "bg-rose-50" },
     { key: "External Link", icon: Link2,      color: "text-emerald-600",bg: "bg-emerald-50" },
-    { key: "Document",    icon: Download,     color: "text-amber-600",  bg: "bg-amber-50" },
-    { key: "Other",       icon: ExternalLink, color: "text-slate-600",  bg: "bg-slate-50" },
+    { key: "Document",    icon: Download,     color: "text-amber-600",  bg: "bg-amber-50" },    { key: "Lesson Page", icon: BookOpen,    color: "text-violet-600", bg: "bg-violet-50" },    { key: "Other",       icon: ExternalLink, color: "text-slate-600",  bg: "bg-slate-50" },
 ];
 
 const emptyForm = { title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true };
@@ -46,11 +45,20 @@ export default function NotesResources() {
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["academic_resources"] }); toast.success("Resource removed"); setConfirmDelete(null); },
     });
 
+    const [videoOpen, setVideoOpen] = useState<{ src: string; title: string } | null>(null);
+
     const filtered = resources.filter((r: any) => {
         const matchQ = !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase());
         const matchT = typeFilter === "ALL" || r.type === typeFilter;
         return matchQ && matchT;
     });
+
+    const getVideoEmbedUrl = (url: string) => {
+        if (!url) return "";
+        const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([\w-]{11})/i);
+        if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`;
+        return url;
+    };
 
     const getTypeConfig = (type: string) => TYPES.find(t => t.key === type) || TYPES[TYPES.length - 1];
 
@@ -105,6 +113,7 @@ export default function NotesResources() {
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         {filtered.map((res: any) => {
                             const tc = getTypeConfig(res.type);
+                            const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
                                 <div key={res._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 flex flex-col gap-3 hover:shadow-md hover:border-slate-200 transition-all">
                                     <div className="flex items-start gap-3">
@@ -113,26 +122,45 @@ export default function NotesResources() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase ${tc.bg} ${tc.color}`}>{res.type}</span>
-                                                {res.subjectName && <span className="text-[9px] text-slate-400 font-bold truncate">{res.subjectName}</span>}
-                                                {res.className && <span className="text-[9px] text-slate-400 font-bold">· {res.className}</span>}
+                                            <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px]">
+                                                <span className={`px-2 py-0.5 rounded-lg font-black uppercase ${tc.bg} ${tc.color}`}>{res.type}</span>
+                                                {res.subjectName && <span className="text-slate-400 truncate">{res.subjectName}</span>}
+                                                {res.className && <span className="text-slate-400">· {res.className}</span>}
                                             </div>
                                         </div>
                                     </div>
-                                    {res.description && <p className="text-[10px] text-slate-500 font-medium leading-relaxed">{res.description}</p>}
-                                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
+                                    {(res.introduction || res.objectives) && (
+                                        <div className="text-[10px] text-slate-500 space-y-1">
+                                            {res.introduction && <p><span className="font-black">Intro:</span> {res.introduction}</p>}
+                                            {res.objectives && <p><span className="font-black">Objectives:</span> {res.objectives}</p>}
+                                        </div>
+                                    )}
+                                    {res.lessonNotes && <p className="text-[10px] text-slate-500 max-h-[6rem] overflow-hidden">{res.lessonNotes}</p>}
+                                    <div className="flex flex-wrap gap-2">
+                                        {res.assignment && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700">Assignment</span>}
+                                        {res.quizAvailable && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700">Quiz available</span>}
+                                        {res.videoUrl && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Video</span>}
+                                    </div>
+                                    <div className="mt-1 flex flex-col gap-2">
                                         {res.fileData ? (
                                             <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
-                                                className="flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
                                                 <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
                                             </a>
                                         ) : res.url ? (
                                             <a href={res.url} target="_blank" rel="noopener noreferrer"
-                                                className="flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
                                                 <ExternalLink className="w-3.5 h-3.5" /> Open Resource
                                             </a>
-                                        ) : <span className="text-[9px] text-slate-300 font-bold uppercase">No link</span>}
+                                        ) : null}
+                                        {embed && (
+                                            <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                <Video className="w-3.5 h-3.5" /> Watch Video
+                                            </button>
+                                        )}
+                                        {!res.fileData && !res.url && !embed && <span className="text-[9px] text-slate-300 font-bold uppercase">No link</span>}
+                                    </div>
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                                         {res.isPublic === false && <span className="text-[8px] text-amber-500 font-black uppercase">Staff only</span>}
                                         <div className="flex gap-1.5">
                                             <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-7 h-7 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3 h-3" /></button>
@@ -149,6 +177,23 @@ export default function NotesResources() {
                         })}
                     </div>
                 )}
+            </div>
+            {videoOpen && (
+                <div className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl overflow-hidden w-full max-w-4xl shadow-2xl">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                            <div>
+                                <p className="text-sm font-bold text-slate-900 truncate">{videoOpen.title}</p>
+                                <p className="text-[10px] text-slate-400">Lesson video</p>
+                            </div>
+                            <button onClick={() => setVideoOpen(null)} className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900">×</button>
+                        </div>
+                        <div className="aspect-[16/9] bg-black">
+                            <iframe title={videoOpen.title} src={videoOpen.src} className="w-full h-full" allowFullScreen style={{ border: 0 }} />
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
 
         </div>

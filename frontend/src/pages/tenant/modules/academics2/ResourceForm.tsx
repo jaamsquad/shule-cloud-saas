@@ -20,7 +20,26 @@ export default function ResourceForm() {
     const qc = useQueryClient();
     const isEdit = !!id;
 
-    const [form, setForm] = useState({ title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true, fileData: "", fileName: "", fileType: "" });
+    const [form, setForm] = useState({
+        title: "",
+        type: "Notes",
+        subjectId: "",
+        subjectName: "",
+        classId: "",
+        className: "",
+        url: "",
+        videoUrl: "",
+        introduction: "",
+        objectives: "",
+        lessonNotes: "",
+        assignment: "",
+        quizAvailable: false,
+        description: "",
+        isPublic: true,
+        fileData: "",
+        fileName: "",
+        fileType: "",
+    });
 
     const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -43,7 +62,26 @@ export default function ResourceForm() {
     });
 
     useEffect(() => {
-        if (existing) setForm({ title: existing.title || "", type: existing.type || "Notes", subjectId: existing.subjectId || "", subjectName: existing.subjectName || "", classId: existing.classId || "", className: existing.className || "", url: existing.url || "", description: existing.description || "", isPublic: existing.isPublic !== false, fileData: existing.fileData || "", fileName: existing.fileName || "", fileType: existing.fileType || "" });
+        if (existing) setForm({
+            title: existing.title || "",
+            type: existing.type || "Notes",
+            subjectId: existing.subjectId || "",
+            subjectName: existing.subjectName || "",
+            classId: existing.classId || "",
+            className: existing.className || "",
+            url: existing.url || "",
+            videoUrl: existing.videoUrl || "",
+            introduction: existing.introduction || "",
+            objectives: existing.objectives || "",
+            lessonNotes: existing.lessonNotes || "",
+            assignment: existing.assignment || "",
+            quizAvailable: existing.quizAvailable || false,
+            description: existing.description || "",
+            isPublic: existing.isPublic !== false,
+            fileData: existing.fileData || "",
+            fileName: existing.fileName || "",
+            fileType: existing.fileType || "",
+        });
     }, [existing]);
 
     const saveMut = useMutation({
@@ -90,82 +128,115 @@ export default function ResourceForm() {
                 ) : (
                     <div className="space-y-6">
                         <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
-                            {/* Title */}
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Title*</div>
-                                <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Form 2 Mathematics Notes — Chapter 3" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                            </div>
-
-                            {/* Type selector */}
-                            <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Resource Type</p>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {TYPES.map(t => (
-                                        <button key={t.key} onClick={() => setForm({ ...form, type: t.key })}
-                                            className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${form.type === t.key ? `${t.bg} ${t.color} border-current shadow-sm` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
-                                            <t.icon className="w-4 h-4 flex-shrink-0" />
-                                            <span className="text-[10px] font-black uppercase tracking-wide">{t.key}</span>
-                                        </button>
-                                    ))}
+                            <div className="grid gap-6">
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Title*</div>
+                                    <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Introduction to Fractions" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                 </div>
-                            </div>
 
-                            {/* URL */}
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">URL / Link (Google Drive, YouTube, OneDrive…)</div>
-                                <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://..." className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                            </div>
-
-                            {/* File upload (PDF / Word / PowerPoint / Image) */}
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Or Upload File (PDF, Word, PowerPoint, Image · max 4MB)</div>
-                                {form.fileData ? (
-                                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-4 h-11">
-                                        <File className="w-4 h-4 text-[#5C67F2]" />
-                                        <span className="text-xs font-bold text-slate-600 flex-1 truncate">{form.fileName}</span>
-                                        <button type="button" onClick={() => setForm(f => ({ ...f, fileData: "", fileName: "", fileType: "" }))} className="text-slate-400 hover:text-rose-500 text-[10px] font-black uppercase">Remove</button>
+                                <div className="grid md:grid-cols-2 gap-5">
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Subject</div>
+                                        <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                            <option value="">— All Subjects —</option>
+                                            {subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}
+                                        </select>
                                     </div>
-                                ) : (
-                                    <label className="flex items-center gap-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 h-11 cursor-pointer hover:border-[#5C67F2] text-slate-500 text-xs font-bold">
-                                        <Download className="w-4 h-4" /> Choose a file…
-                                        <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" onChange={onFile} className="hidden" />
-                                    </label>
-                                )}
-                            </div>
-
-                            {/* Subject + Class */}
-                            <div className="grid grid-cols-2 gap-5">
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Subject</div>
-                                    <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        <option value="">— All Subjects —</option>
-                                        {subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}
-                                    </select>
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class</div>
+                                        <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                            <option value="">— All Classes —</option>
+                                            {classes.map((c: any) => <option key={c._id} value={c._id}>{c.levelName || c.className || c.name}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class</div>
-                                    <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        <option value="">— All Classes —</option>
-                                        {classes.map((c: any) => <option key={c._id} value={c._id}>{c.levelName || c.className || c.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
 
-                            {/* Description */}
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Description</div>
-                                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} placeholder="Brief description of this resource..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
-                            </div>
-
-                            {/* Visibility */}
-                            <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-4 border border-slate-100">
                                 <div>
-                                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Visible to Students</p>
-                                    <p className="text-[9px] text-slate-400 font-bold mt-0.5">Students can see and access this resource</p>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Resource Format</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {TYPES.map(t => (
+                                            <button key={t.key} onClick={() => setForm({ ...form, type: t.key })}
+                                                className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${form.type === t.key ? `${t.bg} ${t.color} border-current shadow-sm` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                                                <t.icon className="w-4 h-4 flex-shrink-0" />
+                                                <span className="text-[10px] font-black uppercase tracking-wide">{t.key}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <button onClick={() => setForm({ ...form, isPublic: !form.isPublic })} className={`w-12 h-7 rounded-full transition-all relative ${form.isPublic ? "bg-[#5C67F2]" : "bg-slate-200"}`}>
-                                    <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${form.isPublic ? "right-1" : "left-1"}`} />
-                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">Lesson Page</p>
+                                    <p className="text-[10px] text-slate-400">Write a complete lesson page that students and teachers can view inside the portal.</p>
+                                </div>
+                                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase text-slate-500">
+                                    {form.quizAvailable ? "Quiz available" : "No quiz"}
+                                </div>
+                            </div>
+
+                            <div className="grid gap-5">
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Introduction</div>
+                                    <textarea value={form.introduction} onChange={e => setForm({ ...form, introduction: e.target.value })} rows={4} placeholder="Add a short introduction to the lesson..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+                                </div>
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Objectives</div>
+                                    <textarea value={form.objectives} onChange={e => setForm({ ...form, objectives: e.target.value })} rows={4} placeholder="List learning objectives, separated by bullets or lines..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+                                </div>
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Lesson Notes</div>
+                                    <textarea value={form.lessonNotes} onChange={e => setForm({ ...form, lessonNotes: e.target.value })} rows={6} placeholder="Write the lesson notes, explanations, examples and teacher tips..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-5">
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Video Link</div>
+                                        <input type="url" value={form.videoUrl} onChange={e => setForm({ ...form, videoUrl: e.target.value })} placeholder="YouTube or lesson video link" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                    </div>
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Assignment / Activity</div>
+                                        <textarea value={form.assignment} onChange={e => setForm({ ...form, assignment: e.target.value })} rows={3} placeholder="Add assignment instructions or attached activity details..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Quiz</div>
+                                    <button onClick={() => setForm({ ...form, quizAvailable: !form.quizAvailable })} className={`w-16 h-8 rounded-full transition-all ${form.quizAvailable ? "bg-[#5C67F2]" : "bg-slate-200"}`}>
+                                        <div className={`h-6 w-6 rounded-full bg-white shadow transition-all ${form.quizAvailable ? "translate-x-8" : "translate-x-0"}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">Attachments & Links</p>
+                                    <p className="text-[10px] text-slate-400">Upload lesson resources or add a direct link.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">File Upload</div>
+                                    {form.fileData ? (
+                                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-4 h-11">
+                                            <File className="w-4 h-4 text-[#5C67F2]" />
+                                            <span className="text-xs font-bold text-slate-600 flex-1 truncate">{form.fileName}</span>
+                                            <button type="button" onClick={() => setForm(f => ({ ...f, fileData: "", fileName: "", fileType: "" }))} className="text-slate-400 hover:text-rose-500 text-[10px] font-black uppercase">Remove</button>
+                                        </div>
+                                    ) : (
+                                        <label className="flex items-center gap-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 h-11 cursor-pointer hover:border-[#5C67F2] text-slate-500 text-xs font-bold">
+                                            <Download className="w-4 h-4" /> Choose a file…
+                                            <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" onChange={onFile} className="hidden" />
+                                        </label>
+                                    )}
+                                </div>
+                                <div className="relative">
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">External / Video Link</div>
+                                    <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="Resource link / document URL" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                </div>
                             </div>
                         </div>
 
@@ -173,7 +244,7 @@ export default function ResourceForm() {
                             <button onClick={() => navigate("/academics/resources")} className="h-12 px-8 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-black text-xs uppercase tracking-widest rounded-xl transition-all">Cancel</button>
                             <button onClick={handleSubmit} disabled={saveMut.isPending} className="h-12 px-8 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all">
                                 {saveMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                                {isEdit ? "Save Changes" : "Add Resource"}
+                                {isEdit ? "Save Changes" : "Create Lesson Page"}
                             </button>
                         </div>
                     </div>
