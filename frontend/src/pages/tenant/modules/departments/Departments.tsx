@@ -59,9 +59,9 @@ export default function Departments() {
                 <Stat label="Pending Leave" value={summary?.pendingLeave ?? "—"} color="text-amber-600" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="flex flex-col lg:flex-row gap-5 items-start">
                 {/* List */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 h-fit">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 h-fit w-full lg:w-72 flex-shrink-0">
                     <p className="text-xs font-black text-slate-400 uppercase mb-3">Departments</p>
                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-indigo-400" /> : departments.length === 0 ? (
                         <p className="text-sm text-slate-400 py-6 text-center">No departments yet.</p>
@@ -78,7 +78,7 @@ export default function Departments() {
                 </div>
 
                 {/* Detail */}
-                <div className="lg:col-span-2">
+                <div className="flex-1 min-w-0 w-full">
                     {!selected ? (
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center text-slate-400 text-sm">Select a department to manage it.</div>
                     ) : (

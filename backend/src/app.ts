@@ -31,6 +31,7 @@ import mpesaRoutes from './routes/mpesa.routes';
 import integrationsRoutes from './routes/integrations.routes';
 import departmentsRoutes from './routes/departments.routes';
 import markApprovalsRoutes from './routes/markApprovals.routes';
+import assistantRoutes from './routes/assistant.routes';
 import cafeteriaRoutes from './routes/cafeteria.routes';
 import studentIdRoutes from './routes/studentId.routes';
 import modulesRoutes from './routes/modules.routes';
@@ -331,6 +332,7 @@ app.use('/api', mpesaRoutes);             // also served at /api/mpesa/callback 
 app.use('/api/v1', integrationsRoutes);   // tenancy-aware M-PESA settings
 app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
+app.use('/api/v1', assistantRoutes);      // Smart Assistant (logic-based insights)
 app.use('/api/v1', cafeteriaRoutes);      // kitchen meal service + canteen quick sale
 app.use('/api/v1', studentIdRoutes);      // student ID card: QR + barcode + print-ready PDF
 app.use('/api', studentIdRoutes);         // also at /api/student-id (per the spec)

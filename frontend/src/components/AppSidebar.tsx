@@ -94,10 +94,13 @@ export const navItems: NavItem[] = [
       { label: "Academic Requisitions", path: "/admin/requisitions" },
       { label: "Clearance Requests", path: "/admin/clearance" },
   ] },
+  { label: "Departments", icon: Building2, moduleKey: "employees", children: [
+      { label: "Department Management", path: "/departments" },
+      { label: "HOD Dashboard", path: "/dashboard/hod" },
+  ] },
   { label: "Employees", icon: Briefcase, moduleKey: "employees", children: [
       { label: "All Employees", path: "/staff" },
       { label: "Teachers", path: "/staff/teachers" },
-      { label: "Departments", path: "/departments" },
       { label: "Add New", path: "/staff/new" },
       { label: "Staff ID Cards", path: "/staff/id-cards" },
       { label: "Job Letter", path: "/staff/job-letter" },
