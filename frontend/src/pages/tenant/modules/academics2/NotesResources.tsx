@@ -64,8 +64,8 @@ export default function NotesResources() {
 
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div className="flex-1 min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(92,103,242,0.12),_transparent_25%),linear-gradient(135deg,_#f8fafc_0%,_#eef2ff_100%)] flex flex-col pb-20 font-sans">
+            <div className="bg-white/90 backdrop-blur border-b border-slate-200/70 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Academics</span><span className="text-gray-300">/</span>
@@ -73,103 +73,110 @@ export default function NotesResources() {
                 </div>
                 <button onClick={() => navigate("/academics/resources/new")}
                     className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
-                    <Plus className="w-4 h-4" /> Upload Resource
+                    <Plus className="w-4 h-4" /> Create Lesson Page
                 </button>
             </div>
 
-            <div className="flex-1 max-w-7xl mx-auto w-full px-6 pt-8">
-                <div className="mb-6">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Notes & Resources</h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Share notes, worksheets, videos, and external links with students and staff</p>
-                </div>
-
-                {/* Stats by type */}
-                <div className="flex gap-2 mb-6 flex-wrap">
-                    <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
-                        All ({resources.length})
-                    </button>
-                    {TYPES.map(t => {
-                        const count = resources.filter((r: any) => r.type === t.key).length;
-                        return (
-                            <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === t.key ? `${t.bg} ${t.color} border-current` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
-                                <t.icon className="w-3 h-3" />{t.key} ({count})
+            <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+                <div className="mb-8 rounded-[2rem] border border-slate-200/70 bg-white/80 p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#5C67F2]">Lesson Library</p>
+                            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight mt-1">Notes & Resources</h1>
+                            <p className="text-slate-500 text-sm mt-2">Share teaching content, lesson pages, worksheets, and videos in one place.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                                All ({resources.length})
                             </button>
-                        );
-                    })}
+                            {TYPES.map(t => {
+                                const count = resources.filter((r: any) => r.type === t.key).length;
+                                return (
+                                    <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === t.key ? `${t.bg} ${t.color} border-current` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                                        <t.icon className="w-3 h-3" />{t.key} ({count})
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="relative max-w-md w-full">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject..."
+                                className="w-full h-11 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
+                        </div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} items showing</div>
+                    </div>
                 </div>
 
-                <div className="relative mb-6 max-w-sm">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject..."
-                        className="w-full h-11 pl-12 pr-4 bg-white border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 shadow-sm" />
-                </div>
-
-                {/* Resource cards grid */}
                 {isLoading ? (
-                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading...</div>
+                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading lesson pages...</div>
                 ) : filtered.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-40 gap-2 text-slate-300 text-xs font-bold uppercase"><FileText className="w-8 h-8" />No resources found</div>
+                    <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-300 text-xs font-bold uppercase rounded-[2rem] border border-dashed border-slate-200 bg-white/70"><FileText className="w-8 h-8" />No lesson pages found</div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid gap-5 xl:grid-cols-2">
                         {filtered.map((res: any) => {
                             const tc = getTypeConfig(res.type);
                             const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
-                                <div key={res._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 flex flex-col gap-3 hover:shadow-md hover:border-slate-200 transition-all">
-                                    <div className="flex items-start gap-3">
-                                        <div className={`w-10 h-10 rounded-2xl ${tc.bg} flex items-center justify-center flex-shrink-0`}>
-                                            <tc.icon className={`w-5 h-5 ${tc.color}`} />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
-                                            <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[9px]">
-                                                <span className={`px-2 py-0.5 rounded-lg font-black uppercase ${tc.bg} ${tc.color}`}>{res.type}</span>
-                                                {res.subjectName && <span className="text-slate-400 truncate">{res.subjectName}</span>}
-                                                {res.className && <span className="text-slate-400">· {res.className}</span>}
+                                <div key={res._id} className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm overflow-hidden hover:shadow-md transition-all">
+                                    <div className={`px-5 py-4 border-b ${tc.bg}`}>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-start gap-3">
+                                                <div className={`w-10 h-10 rounded-2xl ${tc.bg} flex items-center justify-center flex-shrink-0 border border-white/80`}>
+                                                    <tc.icon className={`w-5 h-5 ${tc.color}`} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
+                                                    <div className="flex flex-wrap items-center gap-2 mt-1 text-[9px]">
+                                                        <span className={`px-2 py-0.5 rounded-lg font-black uppercase ${tc.bg} ${tc.color}`}>{res.type}</span>
+                                                        {res.subjectName && <span className="text-slate-500 truncate">{res.subjectName}</span>}
+                                                        {res.className && <span className="text-slate-500">· {res.className}</span>}
+                                                    </div>
+                                                </div>
                                             </div>
+                                            {res.isPublic === false && <span className="text-[8px] text-amber-600 font-black uppercase">Staff only</span>}
                                         </div>
                                     </div>
-                                    {(res.introduction || res.objectives) && (
-                                        <div className="text-[10px] text-slate-500 space-y-1">
-                                            {res.introduction && <p><span className="font-black">Intro:</span> {res.introduction}</p>}
-                                            {res.objectives && <p><span className="font-black">Objectives:</span> {res.objectives}</p>}
+                                    <div className="p-5 space-y-3">
+                                        {res.introduction && <p className="text-sm text-slate-600 line-clamp-3">{res.introduction}</p>}
+                                        {res.objectives && <p className="text-[11px] text-slate-500"><span className="font-black text-slate-700">Objectives:</span> {res.objectives}</p>}
+                                        {res.lessonNotes && <p className="text-[11px] text-slate-500 line-clamp-3">{res.lessonNotes}</p>}
+                                        <div className="flex flex-wrap gap-2 pt-1">
+                                            {res.assignment && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700">Assignment</span>}
+                                            {res.quizAvailable && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700">Quiz available</span>}
+                                            {res.videoUrl && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Video</span>}
                                         </div>
-                                    )}
-                                    {res.lessonNotes && <p className="text-[10px] text-slate-500 max-h-[6rem] overflow-hidden">{res.lessonNotes}</p>}
-                                    <div className="flex flex-wrap gap-2">
-                                        {res.assignment && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700">Assignment</span>}
-                                        {res.quizAvailable && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700">Quiz available</span>}
-                                        {res.videoUrl && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Video</span>}
-                                    </div>
-                                    <div className="mt-1 flex flex-col gap-2">
-                                        {res.fileData ? (
-                                            <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
-                                                className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
-                                                <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
-                                            </a>
-                                        ) : res.url ? (
-                                            <a href={res.url} target="_blank" rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
-                                                <ExternalLink className="w-3.5 h-3.5" /> Open Resource
-                                            </a>
-                                        ) : null}
-                                        {embed && (
-                                            <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
-                                                <Video className="w-3.5 h-3.5" /> Watch Video
-                                            </button>
-                                        )}
-                                        {!res.fileData && !res.url && !embed && <span className="text-[9px] text-slate-300 font-bold uppercase">No link</span>}
-                                    </div>
-                                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                                        {res.isPublic === false && <span className="text-[8px] text-amber-500 font-black uppercase">Staff only</span>}
-                                        <div className="flex gap-1.5">
-                                            <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-7 h-7 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3 h-3" /></button>
-                                            {confirmDelete === res._id ? (
-                                                <><button onClick={() => delMut.mutate(res._id)} className="w-7 h-7 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3 h-3" /></button>
-                                                <button onClick={() => setConfirmDelete(null)} className="w-7 h-7 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3 h-3" /></button></>
-                                            ) : (
-                                                <button onClick={() => setConfirmDelete(res._id)} className="w-7 h-7 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            {res.fileData ? (
+                                                <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
+                                                    className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                    <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
+                                                </a>
+                                            ) : res.url ? (
+                                                <a href={res.url} target="_blank" rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                    <ExternalLink className="w-3.5 h-3.5" /> Open Resource
+                                                </a>
+                                            ) : null}
+                                            {embed && (
+                                                <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                    <Video className="w-3.5 h-3.5" /> Watch Video
+                                                </button>
                                             )}
+                                        </div>
+                                        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em]">Ready to teach</span>
+                                            <div className="flex gap-1.5">
+                                                <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                                {confirmDelete === res._id ? (
+                                                    <><button onClick={() => delMut.mutate(res._id)} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => setConfirmDelete(null)} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>
+                                                ) : (
+                                                    <button onClick={() => setConfirmDelete(res._id)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

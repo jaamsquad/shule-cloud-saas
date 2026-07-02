@@ -97,14 +97,16 @@ export default function ResourceForm() {
         saveMut.mutate({ ...form, subjectName: subj?.name || subj?.subjectName || "", className: cls?.className || cls?.name || "" });
     };
 
+    const selectedType = TYPES.find(t => t.key === form.type) || TYPES[0];
+
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div className="flex-1 min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(92,103,242,0.12),_transparent_25%),linear-gradient(135deg,_#f8fafc_0%,_#eef2ff_100%)] flex flex-col pb-20 font-sans">
+            <div className="bg-white/90 backdrop-blur border-b border-slate-200/70 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-3 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <button onClick={() => navigate("/academics/resources")} className="font-bold text-gray-500 hover:text-[#5C67F2]">Notes & Resources</button>
                     <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">{isEdit ? "Edit Resource" : "Upload Resource"}</span>
+                    <span className="font-black text-[#5C67F2]">{isEdit ? "Edit Lesson Page" : "Create Lesson Page"}</span>
                 </div>
                 <div className="flex gap-3">
                     <button onClick={() => navigate("/academics/resources")} className="h-10 px-5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 transition-all">
@@ -112,141 +114,183 @@ export default function ResourceForm() {
                     </button>
                     <button onClick={handleSubmit} disabled={saveMut.isPending} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100 transition-all">
                         {saveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        {isEdit ? "Save Changes" : "Add Resource"}
+                        {isEdit ? "Save Changes" : "Publish Lesson"}
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 max-w-2xl mx-auto w-full px-6 pt-8">
-                <div className="mb-6">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">{isEdit ? "Edit Resource" : "Upload Resource"}</h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Share notes, worksheets, videos, and external links</p>
+            <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+                <div className="mb-8">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#5C67F2] border border-indigo-100 shadow-sm">
+                        <FileText className="w-3.5 h-3.5" /> Lesson Page Builder
+                    </div>
+                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight mt-3">{isEdit ? "Edit this lesson page" : "Build a complete lesson page"}</h1>
+                    <p className="text-slate-500 text-sm mt-2 max-w-2xl">Turn a simple upload into a polished teaching resource with objectives, notes, attachments, assignments, and video support.</p>
                 </div>
 
                 {isEdit && isLoading ? (
-                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading...</div>
+                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading lesson...</div>
                 ) : (
-                    <div className="space-y-6">
-                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
-                            <div className="grid gap-6">
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Title*</div>
-                                    <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Introduction to Fractions" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                    <div className="grid gap-8 xl:grid-cols-[1.4fr,0.7fr]">
+                        <div className="space-y-6">
+                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-7">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Lesson basics</p>
+                                        <h2 className="text-lg font-black text-slate-900 mt-1">What should this lesson be called?</h2>
+                                    </div>
+                                    <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase ${selectedType.bg} ${selectedType.color}`}>
+                                        <selectedType.icon className="w-3.5 h-3.5" /> {selectedType.key}
+                                    </div>
                                 </div>
 
-                                <div className="grid md:grid-cols-2 gap-5">
+                                <div className="mt-6 grid gap-5 md:grid-cols-2">
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Title*</div>
+                                        <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Introduction to Fractions" className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
+                                    </div>
                                     <div className="relative">
                                         <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Subject</div>
-                                        <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                        <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700">
                                             <option value="">— All Subjects —</option>
                                             {subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}
                                         </select>
                                     </div>
                                     <div className="relative">
                                         <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class</div>
-                                        <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                        <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })} className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700">
                                             <option value="">— All Classes —</option>
                                             {classes.map((c: any) => <option key={c._id} value={c._id}>{c.levelName || c.className || c.name}</option>)}
                                         </select>
                                     </div>
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Visibility</div>
+                                        <select value={form.isPublic ? "public" : "staff"} onChange={e => setForm({ ...form, isPublic: e.target.value === "public" })} className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700">
+                                            <option value="public">Visible to students</option>
+                                            <option value="staff">Staff only</option>
+                                        </select>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Resource Format</p>
-                                    <div className="grid grid-cols-3 gap-3">
+                                <div className="mt-6">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-3">Resource format</p>
+                                    <div className="grid sm:grid-cols-3 gap-3">
                                         {TYPES.map(t => (
                                             <button key={t.key} onClick={() => setForm({ ...form, type: t.key })}
-                                                className={`flex items-center gap-2 px-4 py-3 rounded-2xl border transition-all ${form.type === t.key ? `${t.bg} ${t.color} border-current shadow-sm` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
-                                                <t.icon className="w-4 h-4 flex-shrink-0" />
+                                                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border transition-all ${form.type === t.key ? `${t.bg} ${t.color} border-current shadow-sm` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                                                <t.icon className="w-4 h-4" />
                                                 <span className="text-[10px] font-black uppercase tracking-wide">{t.key}</span>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </section>
 
-                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">Lesson Page</p>
-                                    <p className="text-[10px] text-slate-400">Write a complete lesson page that students and teachers can view inside the portal.</p>
+                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-7">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Lesson content</p>
+                                        <h2 className="text-lg font-black text-slate-900 mt-1">Make it feel like a real lesson page</h2>
+                                    </div>
+                                    <div className="rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase text-slate-500">{form.quizAvailable ? "Quiz included" : "No quiz yet"}</div>
                                 </div>
-                                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase text-slate-500">
-                                    {form.quizAvailable ? "Quiz available" : "No quiz"}
-                                </div>
-                            </div>
-
-                            <div className="grid gap-5">
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Introduction</div>
-                                    <textarea value={form.introduction} onChange={e => setForm({ ...form, introduction: e.target.value })} rows={4} placeholder="Add a short introduction to the lesson..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
-                                </div>
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Objectives</div>
-                                    <textarea value={form.objectives} onChange={e => setForm({ ...form, objectives: e.target.value })} rows={4} placeholder="List learning objectives, separated by bullets or lines..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
-                                </div>
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Lesson Notes</div>
-                                    <textarea value={form.lessonNotes} onChange={e => setForm({ ...form, lessonNotes: e.target.value })} rows={6} placeholder="Write the lesson notes, explanations, examples and teacher tips..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
-                                </div>
-                                <div className="grid md:grid-cols-2 gap-5">
+                                <div className="mt-6 grid gap-5">
                                     <div className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Video Link</div>
-                                        <input type="url" value={form.videoUrl} onChange={e => setForm({ ...form, videoUrl: e.target.value })} placeholder="YouTube or lesson video link" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Introduction</div>
+                                        <textarea value={form.introduction} onChange={e => setForm({ ...form, introduction: e.target.value })} rows={4} placeholder="Add a short introduction to the lesson..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700 resize-none" />
                                     </div>
                                     <div className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Assignment / Activity</div>
-                                        <textarea value={form.assignment} onChange={e => setForm({ ...form, assignment: e.target.value })} rows={3} placeholder="Add assignment instructions or attached activity details..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 resize-none" />
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Objectives</div>
+                                        <textarea value={form.objectives} onChange={e => setForm({ ...form, objectives: e.target.value })} rows={4} placeholder="List learning objectives, separated by bullets or lines..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700 resize-none" />
                                     </div>
-                                </div>
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Quiz</div>
-                                    <button onClick={() => setForm({ ...form, quizAvailable: !form.quizAvailable })} className={`w-16 h-8 rounded-full transition-all ${form.quizAvailable ? "bg-[#5C67F2]" : "bg-slate-200"}`}>
-                                        <div className={`h-6 w-6 rounded-full bg-white shadow transition-all ${form.quizAvailable ? "translate-x-8" : "translate-x-0"}`} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8 space-y-6">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">Attachments & Links</p>
-                                    <p className="text-[10px] text-slate-400">Upload lesson resources or add a direct link.</p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">File Upload</div>
-                                    {form.fileData ? (
-                                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-4 h-11">
-                                            <File className="w-4 h-4 text-[#5C67F2]" />
-                                            <span className="text-xs font-bold text-slate-600 flex-1 truncate">{form.fileName}</span>
-                                            <button type="button" onClick={() => setForm(f => ({ ...f, fileData: "", fileName: "", fileType: "" }))} className="text-slate-400 hover:text-rose-500 text-[10px] font-black uppercase">Remove</button>
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Lesson Notes</div>
+                                        <textarea value={form.lessonNotes} onChange={e => setForm({ ...form, lessonNotes: e.target.value })} rows={6} placeholder="Write the lesson notes, explanations, examples and teacher tips..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700 resize-none" />
+                                    </div>
+                                    <div className="grid md:grid-cols-2 gap-5">
+                                        <div className="relative">
+                                            <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Video Link</div>
+                                            <input type="url" value={form.videoUrl} onChange={e => setForm({ ...form, videoUrl: e.target.value })} placeholder="YouTube or lesson video link" className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
                                         </div>
-                                    ) : (
-                                        <label className="flex items-center gap-2 bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 h-11 cursor-pointer hover:border-[#5C67F2] text-slate-500 text-xs font-bold">
-                                            <Download className="w-4 h-4" /> Choose a file…
-                                            <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" onChange={onFile} className="hidden" />
-                                        </label>
-                                    )}
+                                        <div className="relative">
+                                            <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Assignment / Activity</div>
+                                            <textarea value={form.assignment} onChange={e => setForm({ ...form, assignment: e.target.value })} rows={3} placeholder="Add assignment instructions or attached activity details..." className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700 resize-none" />
+                                        </div>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-500">Add a quiz</p>
+                                            <p className="text-[11px] text-slate-500 mt-1">Enable this when learners should complete a quick assessment after the lesson.</p>
+                                        </div>
+                                        <button onClick={() => setForm({ ...form, quizAvailable: !form.quizAvailable })} className={`w-16 h-8 rounded-full transition-all ${form.quizAvailable ? "bg-[#5C67F2]" : "bg-slate-200"}`}>
+                                            <div className={`h-6 w-6 rounded-full bg-white shadow transition-all ${form.quizAvailable ? "translate-x-8" : "translate-x-0"}`} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">External / Video Link</div>
-                                    <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="Resource link / document URL" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                            </section>
+
+                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-7">
+                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Resources & links</p>
+                                <div className="mt-6 space-y-4">
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">File Upload</div>
+                                        {form.fileData ? (
+                                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 h-14">
+                                                <File className="w-4 h-4 text-[#5C67F2]" />
+                                                <span className="text-sm font-semibold text-slate-600 flex-1 truncate">{form.fileName}</span>
+                                                <button type="button" onClick={() => setForm(f => ({ ...f, fileData: "", fileName: "", fileType: "" }))} className="text-slate-400 hover:text-rose-500 text-[10px] font-black uppercase">Remove</button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex items-center gap-2 bg-slate-50 border border-dashed border-slate-300 rounded-2xl px-4 h-14 cursor-pointer hover:border-[#5C67F2] text-slate-500 text-sm font-semibold">
+                                                <Download className="w-4 h-4" /> Choose a file…
+                                                <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,image/*" onChange={onFile} className="hidden" />
+                                            </label>
+                                        )}
+                                    </div>
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">External Link</div>
+                                        <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="Resource link / document URL" className="w-full h-12 px-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
+                                    </div>
                                 </div>
-                            </div>
+                            </section>
                         </div>
 
-                        <div className="flex justify-end gap-4 pb-8">
-                            <button onClick={() => navigate("/academics/resources")} className="h-12 px-8 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-black text-xs uppercase tracking-widest rounded-xl transition-all">Cancel</button>
-                            <button onClick={handleSubmit} disabled={saveMut.isPending} className="h-12 px-8 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all">
-                                {saveMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                                {isEdit ? "Save Changes" : "Create Lesson Page"}
-                            </button>
-                        </div>
+                        <aside className="space-y-6">
+                            <section className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-xl sticky top-24">
+                                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Preview</p>
+                                <h2 className="text-xl font-black mt-2">{form.title || "Untitled lesson"}</h2>
+                                <p className="text-sm text-slate-300 mt-3">{form.introduction || "Add an introduction and the lesson will look ready for students to open."}</p>
+                                <div className="mt-6 space-y-3 text-sm">
+                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                                        <span className="text-slate-300">Objectives</span>
+                                        <span className="font-black">{form.objectives ? "Added" : "Pending"}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                                        <span className="text-slate-300">Lesson notes</span>
+                                        <span className="font-black">{form.lessonNotes ? "Added" : "Pending"}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                                        <span className="text-slate-300">Quiz</span>
+                                        <span className="font-black">{form.quizAvailable ? "On" : "Off"}</span>
+                                    </div>
+                                </div>
+                                <div className="mt-6 flex gap-3">
+                                    <button onClick={handleSubmit} disabled={saveMut.isPending} className="flex-1 h-11 rounded-2xl bg-[#5C67F2] hover:bg-indigo-500 text-white text-sm font-black uppercase tracking-wide transition-all">
+                                        {saveMut.isPending ? "Saving..." : "Publish"}
+                                    </button>
+                                    <button onClick={() => navigate("/academics/resources")} className="flex-1 h-11 rounded-2xl border border-slate-700 text-sm font-black uppercase tracking-wide text-slate-300">Cancel</button>
+                                </div>
+                            </section>
+
+                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-6">
+                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Tips</p>
+                                <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                                    <li>• Keep the introduction short and inspiring.</li>
+                                    <li>• Add clear objectives so learners know what to expect.</li>
+                                    <li>• Include video or a worksheet when the lesson needs extra support.</li>
+                                </ul>
+                            </section>
+                        </aside>
                     </div>
                 )}
             </div>

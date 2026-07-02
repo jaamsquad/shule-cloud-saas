@@ -109,27 +109,44 @@ export default function StaffContent({ type }: { type: string }) {
                 ) : items.length === 0 ? (
                     <div className="text-center py-10 text-slate-400"><FileText className="w-10 h-10 mx-auto mb-2 opacity-40" /><p className="text-sm font-semibold">Nothing here yet. Create your first {cfg.title.replace(/s$/, "").toLowerCase()}.</p></div>
                 ) : (
-                    <div className="space-y-2">
-                        {items.map((it: any) => (
-                            <div key={it._id} className="flex items-center justify-between border-b border-black/5 py-3">
-                                <div className="min-w-0">
-                                    <p className="font-bold text-slate-700 text-sm truncate">{it[cfg.primary] || "Untitled"}</p>
-                                    <p className="text-xs text-slate-400">
-                                        {[it.className, it.subject, it.dueDate, it.week, it.term, it.status].filter(Boolean).join(" · ")}
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    {hasSubmissions && (
-                                        <button onClick={() => setSubmissionsItem(it)} title="View submissions" className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:text-indigo-500"><Inbox className="w-4 h-4" /> Submissions</button>
+                    <div className="space-y-3">
+                        {items.map((it: any) => {
+                            const isResources = type === "resources";
+                            return (
+                                <div key={it._id} className={`rounded-2xl border border-slate-200/70 p-4 ${isResources ? "bg-slate-50/80" : "bg-white"}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="font-black text-slate-800 text-sm truncate">{it[cfg.primary] || "Untitled"}</p>
+                                            <p className="text-xs text-slate-400 mt-1">
+                                                {[it.className, it.subject, it.dueDate, it.week, it.term, it.status].filter(Boolean).join(" · ")}
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {hasSubmissions && (
+                                                <button onClick={() => setSubmissionsItem(it)} title="View submissions" className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:text-indigo-500"><Inbox className="w-4 h-4" /> Submissions</button>
+                                            )}
+                                            {(it.attachment || it.url) && (
+                                                <button onClick={() => setViewing({ src: it.attachment || it.url, name: it.attachmentName })} title="View" className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-indigo-500"><Eye className="w-4 h-4" /></button>
+                                            )}
+                                            <button onClick={() => setEditing(it)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-[#159a52]"><Pencil className="w-4 h-4" /></button>
+                                            <button onClick={() => del.mutate(it._id)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                    {isResources && (
+                                        <div className="mt-3 space-y-2 text-sm text-slate-600">
+                                            {it.introduction && <p className="text-xs text-slate-500">{it.introduction}</p>}
+                                            {it.objectives && <p className="text-[11px] text-slate-500"><span className="font-black text-slate-700">Objectives:</span> {it.objectives}</p>}
+                                            {it.lessonNotes && <p className="text-[11px] text-slate-500 line-clamp-3">{it.lessonNotes}</p>}
+                                            <div className="flex flex-wrap gap-2 pt-1">
+                                                {it.assignment && <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black uppercase">Assignment</span>}
+                                                {it.quizAvailable && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">Quiz</span>}
+                                                {it.videoUrl && <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-black uppercase">Video</span>}
+                                            </div>
+                                        </div>
                                     )}
-                                    {(it.attachment || it.url) && (
-                                        <button onClick={() => setViewing({ src: it.attachment || it.url, name: it.attachmentName })} title="View" className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-indigo-500"><Eye className="w-4 h-4" /></button>
-                                    )}
-                                    <button onClick={() => setEditing(it)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-[#159a52]"><Pencil className="w-4 h-4" /></button>
-                                    <button onClick={() => del.mutate(it._id)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </PanelCard>
