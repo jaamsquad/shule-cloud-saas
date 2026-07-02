@@ -92,36 +92,80 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             .filter((v, i, a) => v && a.indexOf(v) === i);
         const examDocs = await database.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray().catch(() => []);
         const examMeta: Record<string, any> = {}; examDocs.forEach((e: any) => examMeta[String(e._id)] = e);
-        // Short, readable column titles, e.g. "MID TERM", "END TERM".
-        const colTitle = (e: any) => String(e?.type || e?.examType || e?.examName || 'EXAM').toUpperCase().slice(0, 12);
-        const examColumns = examIds.map(id => ({ examId: id, title: colTitle(examMeta[id]) }));
+
+        // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
+        // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
+        // "END-TERM". When several exams of the same type cover the same subject
+        // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
+        const typeOf = (e: any): string => {
+            const t = norm(e?.type || e?.examType || e?.examName || '');
+            if (/mid\s*term|midterm/.test(t)) return 'MIDTERM';
+            if (/\bcat\b|assignment|quiz|online|opener|opening/.test(t)) return 'CAT';
+            if (/end\s*term|final/.test(t)) return 'END-TERM';
+            return String(e?.type || e?.examType || 'EXAM').toUpperCase().slice(0, 12);
+        };
+        // The main/End-Term exam always defines the leading column's type.
+        const mainType = typeOf(examMeta[String(gen.mainExamId)] || examMeta[examId]) || 'END-TERM';
+        // Map each pinned examId → its type, and each type → the examIds under it.
+        const typeByExam: Record<string, string> = {};
+        const examIdsByType: Record<string, string[]> = {};
+        examIds.forEach(id => {
+            const ty = typeOf(examMeta[id]) || 'EXAM';
+            typeByExam[id] = ty;
+            (examIdsByType[ty] ||= []).push(id);
+        });
+        // Column order: END-TERM (or the main's type) first, then CAT, MIDTERM, rest.
+        const typeOrder = (ty: string) => ty === mainType ? 0 : ty === 'END-TERM' ? 1 : ty === 'CAT' ? 2 : ty === 'MIDTERM' ? 3 : 4;
+        let examColumns: Array<{ type: string; title: string; examIds: string[] }> =
+            Object.keys(examIdsByType)
+                .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b))
+                .map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
         let multiExam = examColumns.length > 1;
 
         // Marks across ALL exams in the set (for positions + per-student aggregate).
         const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
 
-        // Keep ONLY exam columns that actually have marks for THIS student. This
-        // drops phantom/empty columns (e.g. a pinned exam with no marks) so the card
-        // shows just the real exams — one column when only End Term exists, and extra
-        // columns (Mid Term / CAT) only when those were marked for this term.
+        // Keep ONLY type-columns that actually have marks for THIS student. This
+        // drops phantom/empty columns (e.g. a pinned CAT with no marks) so the card
+        // shows just the real assessment types.
         const myExamIdsWithMarks = new Set(allMarks.filter((m: any) => String(m.studentId) === sid).map((m: any) => String(m.examId)));
         if (myExamIdsWithMarks.size > 0) {
-            const kept = examColumns.filter(c => myExamIdsWithMarks.has(c.examId));
-            if (kept.length) { examColumns.length = 0; kept.forEach(c => examColumns.push(c)); }
+            const kept = examColumns.filter(c => c.examIds.some(id => myExamIdsWithMarks.has(id)));
+            if (kept.length) examColumns = kept;
         }
         multiExam = examColumns.length > 1;
 
-        // Per-student aggregate across the whole exam set (for positions).
-        const agg: Record<string, { total: number; points: number; n: number; cls: string; stream: string }> = {};
+        // Per-student aggregate for POSITIONS. We rank against everyone who sat the
+        // MAIN End-Term exam (that defines the level cohort), so positions are stable
+        // regardless of which extra CAT/Mid Term columns this student happens to have.
         const students = await database.collection('students').find({}).toArray().catch(() => []);
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
-        // Per-subject AGGREGATED pct per student (avg across the exam set) for subject position.
+        // Marks used for ranking: the End-Term (main) exam across ALL students. If for
+        // some reason that's empty, fall back to the full pinned exam set.
+        const rankExamId = String(gen.mainExamId || examId);
+        const rankMarksMain = await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []);
+        const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
+
+        // Normalized class identity for a student — prefer the v2 classId, else the
+        // normalized class-name text. Used so "FORM 4 WEST" == "Form 4 West".
+        const myClassId = String(student.classId || '');
+        const classKeyOf = (id: string): { cid: string; name: string } => {
+            const meta = sMeta[id] || {};
+            return { cid: String(meta.classId || ''), name: norm(meta.studentClass || meta.currentClass || meta.class || meta.className || '') };
+        };
+        const myKey = { cid: myClassId, name: norm(myClass) };
+        const sameClass = (id: string) => {
+            const k = classKeyOf(id);
+            if (myKey.cid && k.cid) return k.cid === myKey.cid;
+            return !!k.name && (k.name === myKey.name || k.name.startsWith(myKey.name) || myKey.name.startsWith(k.name));
+        };
+
+        const agg: Record<string, { total: number; points: number; n: number }> = {};
         const subjPctByStudent: Record<string, Record<string, { sum: number; n: number }>> = {};
-        for (const m of allMarks) {
+        for (const m of rankMarks) {
             const id = String(m.studentId); const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
             const g = gradeOf(pct);
-            const meta = sMeta[id] || {};
-            (agg[id] ||= { total: 0, points: 0, n: 0, cls: meta.studentClass || meta.currentClass || '', stream: meta.stream || meta.streamName || '' });
+            (agg[id] ||= { total: 0, points: 0, n: 0 });
             agg[id].total += N(m.marksObtained); agg[id].points += g.points; agg[id].n += 1;
             const sub = m.subjectName || m.subject || 'Subject';
             ((subjPctByStudent[sub] ||= {})[id] ||= { sum: 0, n: 0 });
@@ -133,10 +177,10 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             subjMarks[sub] = Object.entries(byStu).map(([id, v]) => ({ sid: id, pct: v.n ? v.sum / v.n : 0 }));
         }
         const rows = Object.entries(agg).map(([id, a]) => ({ id, ...a, mean: a.n ? a.total / a.n : 0, meanPoints: a.n ? a.points / a.n : 0 }));
-        // Level (whole-exam) position by total points; class position within same class.
+        // Level (whole-cohort) position by total points; class position within same class.
         const levelSorted = [...rows].sort((x, y) => y.points - x.points);
         const levelPos = levelSorted.findIndex(r => r.id === sid) + 1;
-        const classmates = rows.filter(r => r.cls === myClass);
+        const classmates = rows.filter(r => sameClass(r.id));
         const classSorted = [...classmates].sort((x, y) => y.points - x.points);
         const classPos = classSorted.findIndex(r => r.id === sid) + 1;
 
@@ -200,25 +244,37 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             });
             if (termMarks.length) {
                 mine = termMarks;
-                // Rebuild columns from the exams actually present in the fallback marks.
-                const ids = Array.from(new Set(termMarks.map((m: any) => String(m.examId))));
-                examColumns.length = 0;
-                ids.forEach(id => examColumns.push({ examId: id, title: String(eById[id]?.type || eById[id]?.examType || eById[id]?.examName || 'EXAM').toUpperCase().slice(0, 12) }));
+                // Rebuild TYPE columns from the exams actually present in the fallback marks.
+                const byType: Record<string, string[]> = {};
+                termMarks.forEach((m: any) => {
+                    const ty = typeOf(eById[String(m.examId)]) || 'EXAM';
+                    typeByExam[String(m.examId)] = ty;
+                    (byType[ty] ||= []).push(String(m.examId));
+                });
+                examColumns = Object.keys(byType)
+                    .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b))
+                    .map(ty => ({ type: ty, title: ty, examIds: Array.from(new Set(byType[ty])) }));
             }
         }
-        const bySubject: Record<string, Record<string, any>> = {};
+        // Group this student's marks by subject, then by assessment TYPE. A subject
+        // may have several exams of the same type (e.g. two CATs) — keep them all so
+        // the cell can average them.
+        const bySubject: Record<string, Record<string, any[]>> = {};
         for (const m of mine) {
             const sub = m.subjectName || m.subject || 'Subject';
-            (bySubject[sub] ||= {})[String(m.examId)] = m;
+            const ty = typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
+            ((bySubject[sub] ||= {})[ty] ||= []).push(m);
         }
         let totalMarks = 0, totalPoints = 0;
-        const subjects = Object.entries(bySubject).map(([sub, byExam]) => {
-            // One cell per exam column.
+        const subjects = Object.entries(bySubject).map(([sub, byType]) => {
+            // One cell per TYPE column = AVERAGE (%) of that subject's exams of that type.
             const cells = examColumns.map(col => {
-                const m = byExam[col.examId];
-                if (!m) return { mark: null as number | null, outOf: 100, pct: null as number | null };
-                const max = N(m.totalMarks) || 100; const mark = N(m.marksObtained);
-                return { mark, outOf: max, pct: max > 0 ? (mark / max) * 100 : 0 };
+                const ms = byType[col.type] || [];
+                const pcts = ms.map((m: any) => { const max = N(m.totalMarks) || 100; return max > 0 ? (N(m.marksObtained) / max) * 100 : 0; });
+                if (!pcts.length) return { mark: null as number | null, outOf: 100, pct: null as number | null };
+                const avgPct = pcts.reduce((a: number, p: number) => a + p, 0) / pcts.length;
+                // Display the averaged mark out of 100 so mixed maxima combine cleanly.
+                return { mark: Math.round(avgPct), outOf: 100, pct: avgPct };
             });
             // Aggregate = average of available exam percentages → a 0-100 score.
             const present = cells.filter(c => c.pct !== null) as Array<{ mark: number; outOf: number; pct: number }>;
@@ -226,7 +282,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const g = gradeOf(aggPct);
             const aggMark = Math.round(aggPct);     // aggregate expressed out of 100
             totalMarks += aggMark; totalPoints += g.points;
-            const list = (subjMarks[sub] || []).filter(x => agg[x.sid]?.cls === myClass).sort((a, b) => b.pct - a.pct);
+            const list = (subjMarks[sub] || []).filter(x => sameClass(x.sid)).sort((a, b) => b.pct - a.pct);
             const pos = list.findIndex(x => x.sid === sid) + 1;
             const tName = teacherForSubject(sub);
             const initials = initialsOf(tName);

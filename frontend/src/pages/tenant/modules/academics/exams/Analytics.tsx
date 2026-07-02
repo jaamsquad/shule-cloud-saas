@@ -306,23 +306,34 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
 function SubjectSheet({ examId, form }: { examId: string; form: string }) {
     const school = useSchool();
     const [subject, setSubject] = useState("");
+    const [streamFilter, setStreamFilter] = useState("");
     const { data: subs } = useQuery({ queryKey: ["an_subjects", examId, form], queryFn: async () => (await api.get("/analytics/subjects", { params: { examId, form } })).data });
     const subjects: string[] = subs?.subjects || [];
     const active = subject || subjects[0] || "";
     const { data, isLoading } = useQuery({ queryKey: ["an_subject_sheet", examId, form, active], enabled: !!active, queryFn: async () => (await api.get("/analytics/subject-sheet", { params: { examId, form, subject: active } })).data });
-    const students = data?.students || [];
+    const allStudents = data?.students || [];
+    const streamOpts = streamOptions(allStudents);
+    // Filter by stream, then re-rank within the stream so positions read 1..n.
+    const students = (streamFilter ? allStudents.filter((s: any) => norm(s.stream) === norm(streamFilter)) : allStudents)
+        .map((s: any, i: number) => ({ ...s, position: streamFilter ? i + 1 : s.position }));
+    const average = streamFilter && students.length
+        ? Math.round(students.reduce((a: number, s: any) => a + (Number(s.marks) || 0), 0) / students.length)
+        : (data?.average ?? 0);
 
     const print = () => {
         const rows = students.map((s: any) => `<tr><td>${s.position}</td><td>${s.adm}</td><td style="text-align:left">${s.name}</td><td>${s.stream || ""}</td><td>${s.marks}</td><td>${s.grade}</td><td>${s.points}</td></tr>`).join("");
         const body = `<table><thead><tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th><th>Marks</th><th>Grade</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
-        printDoc(school, `${active.toUpperCase()} — ${form || "All"}`, `Average: ${data?.average ?? 0}% · ${students.length} students`, body);
+        printDoc(school, `${active.toUpperCase()} — ${form || "All"}${streamFilter ? ` (${streamFilter})` : ""}`, `Average: ${average}% · ${students.length} students`, body);
     };
 
     return (
         <Card title={<span className="flex items-center justify-between w-full"><span>Subject Performance</span><button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button></span>}>
-            <select value={active} onChange={e => setSubject(e.target.value)} className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white mb-3">
-                {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+                <select value={active} onChange={e => setSubject(e.target.value)} className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white">
+                    {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <StreamFilter value={streamFilter} onChange={setStreamFilter} streams={streamOpts} count={students.length} />
+            </div>
             {isLoading ? <Spin /> : students.length === 0 ? <Empty msg="No marks for this subject." /> : (
                 <table className="w-full text-sm">
                     <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th><th className="text-center">Marks</th><th className="text-center">Grade</th><th className="text-center">Pts</th></tr></thead>
@@ -393,20 +404,26 @@ function ClassLevels({ examId, form }: { examId: string; form?: string | null })
 
 function MeritList({ examId, form }: { examId: string; form: string }) {
     const school = useSchool();
+    const [streamFilter, setStreamFilter] = useState("");
     const { data, isLoading } = useQuery({ queryKey: ["an_merit", examId, form], queryFn: async () => (await api.get("/analytics/merit-list", { params: { examId, form } })).data });
     if (isLoading) return <Spin />;
-    const students = data?.students || [];
+    const allStudents = data?.students || [];
+    const streamOpts = streamOptions(allStudents);
+    // Filter by stream, then re-rank within the filtered set so positions read 1..n.
+    const students = (streamFilter ? allStudents.filter((s: any) => norm(s.stream) === norm(streamFilter)) : allStudents)
+        .map((s: any, i: number) => ({ ...s, position: streamFilter ? i + 1 : s.position }));
     const subjects = Array.from(new Set(students.flatMap((s: any) => s.subjects.map((x: any) => x.name)))) as string[];
 
     const print = () => {
         const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th>${subjects.map(s => `<th>${s}</th>`).join("")}<th>Pts</th></tr>`;
         const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td><td>${st.stream || ""}</td>${subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("")}<td><b>${st.totalPoints}</b></td></tr>`).join("");
         const body = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
-        printDoc(school, `MERIT LIST — ${form || "All"}`, `${form || "All classes"} · ${students.length} students`, body, true);
+        printDoc(school, `MERIT LIST — ${form || "All"}${streamFilter ? ` (${streamFilter})` : ""}`, `${streamFilter || form || "All classes"} · ${students.length} students`, body, true);
     };
 
     return (
         <Card title={<span className="flex items-center justify-between w-full"><span className="flex items-center gap-2"><Trophy className="w-4 h-4" style={{ color: GREEN }} /> Merit List</span><button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button></span>}>
+            <StreamFilter value={streamFilter} onChange={setStreamFilter} streams={streamOpts} count={students.length} />
             <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                     <thead><tr className="text-slate-400 uppercase"><th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th>{subjects.map(s => <th key={s} className="text-center px-1">{s.slice(0, 4)}</th>)}<th className="text-center">Pts</th></tr></thead>
@@ -427,19 +444,23 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
 
 function MostImproved({ examId }: { examId: string }) {
     const school = useSchool();
+    const [streamFilter, setStreamFilter] = useState("");
     const { data, isLoading } = useQuery({ queryKey: ["an_improved", examId], queryFn: async () => (await api.get("/analytics/most-improved", { params: { examId } })).data });
     if (isLoading) return <Spin />;
-    const students = data?.students || [];
+    const allStudents = data?.students || [];
+    const streamOpts = streamOptions(allStudents);
+    const students = streamFilter ? allStudents.filter((s: any) => norm(s.stream) === norm(streamFilter)) : allStudents;
 
     const print = () => {
         const rows = students.map((s: any, i: number) => `<tr><td>${i + 1}</td><td>${s.adm}</td><td style="text-align:left">${s.name}</td><td>${s.stream || ""}</td><td>${s.from} → ${s.to}</td><td><b>${s.change > 0 ? "+" : ""}${s.change}</b></td></tr>`).join("");
         const body = `<table><thead><tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th><th>From → To</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
-        printDoc(school, "MOST IMPROVED STUDENTS", data?.comparedTo ? `Compared to ${data.comparedTo}` : "", body);
+        printDoc(school, `MOST IMPROVED STUDENTS${streamFilter ? ` (${streamFilter})` : ""}`, data?.comparedTo ? `Compared to ${data.comparedTo}` : "", body);
     };
 
     return (
         <Card title={<span className="flex items-center justify-between w-full"><span className="flex items-center gap-2"><Award className="w-4 h-4" style={{ color: GREEN }} /> Most Improved {data?.comparedTo ? <span className="text-[11px] text-slate-400 font-normal">vs {data.comparedTo}</span> : null}</span>{students.length > 0 && <button onClick={print} className="text-xs font-bold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5" style={{ background: GREEN }}><Printer className="w-3.5 h-3.5" /> Print</button>}</span>}>
-            {students.length === 0 ? <Empty msg="No previous exam to compare, or no improvement yet." /> : (
+            <StreamFilter value={streamFilter} onChange={setStreamFilter} streams={streamOpts} count={students.length} />
+            {allStudents.length === 0 ? <Empty msg="No previous exam to compare, or no improvement yet." /> : (
                 <table className="w-full text-sm">
                     <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-2">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th><th className="text-right">From → To</th><th className="text-center">Change</th></tr></thead>
                     <tbody>
@@ -458,6 +479,24 @@ function MostImproved({ examId }: { examId: string }) {
 }
 
 // ── Bits ──
+const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+// Distinct, sorted stream labels present in a list of student rows.
+const streamOptions = (rows: any[]): string[] =>
+    Array.from(new Set((rows || []).map((s: any) => String(s.stream || "").trim()).filter(Boolean))).sort();
+// Reusable "filter by stream" dropdown used by Merit / Subjects / Most Improved.
+const StreamFilter = ({ value, onChange, streams, count }: { value: string; onChange: (v: string) => void; streams: string[]; count?: number }) => {
+    if (streams.length <= 1) return null;   // nothing to filter when a single (or no) stream
+    return (
+        <div className="flex items-center gap-2 mb-3">
+            <span className="text-[11px] font-black uppercase tracking-wide text-slate-400">Stream</span>
+            <select value={value} onChange={e => onChange(e.target.value)} className="h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white font-bold text-slate-700">
+                <option value="">All Streams</option>
+                {streams.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {count != null && <span className="text-[11px] text-slate-400">{count} student{count !== 1 ? "s" : ""}</span>}
+        </div>
+    );
+};
 const Spin = () => <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div>;
 const Empty = ({ msg }: { msg: string }) => <div className="py-16 text-center text-slate-400 font-bold">{msg}</div>;
 const Card = ({ title, children }: any) => <div className="bg-white rounded-2xl border border-slate-100 p-4"><h3 className="font-black text-slate-700 text-sm mb-3">{title}</h3>{children}</div>;
