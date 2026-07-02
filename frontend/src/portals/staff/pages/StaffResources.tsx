@@ -8,6 +8,15 @@ import type { StaffCtx } from "../StaffLayout";
 
 const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, "Lesson Page": Video, Other: ExternalLink };
 
+const getVideoEmbedUrl = (url: string) => {
+    if (!url) return "";
+    const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})/i);
+    if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&modestbranding=1`;
+    const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+    if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+    return url;
+};
+
 export default function StaffResources() {
     const { api } = useOutletContext<StaffCtx>();
     const [viewing, setViewing] = useState<{ src: string; name?: string } | null>(null);
@@ -70,7 +79,7 @@ export default function StaffResources() {
                                             <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
                                         ) : <span className="text-[10px] text-slate-300 font-bold uppercase">No file</span>}
                                         {r.videoUrl && (
-                                            <button onClick={() => setVideoOpen({ src: r.videoUrl, title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><Video className="w-3.5 h-3.5" /> Play</button>
+                                            <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#5C67F2] uppercase"><Video className="w-3.5 h-3.5" /> Play</button>
                                         )}
                                     </div>
                                 </div>
@@ -91,7 +100,7 @@ export default function StaffResources() {
                             <button onClick={() => setVideoOpen(null)} className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900">×</button>
                         </div>
                         <div className="aspect-[16/9] bg-black">
-                            <iframe title={videoOpen.title} src={videoOpen.src} className="w-full h-full" allowFullScreen style={{ border: 0 }} />
+                            <iframe title={videoOpen.title} src={videoOpen.src} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ border: 0 }} />
                         </div>
                     </div>
                 </div>
