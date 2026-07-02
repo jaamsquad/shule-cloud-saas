@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
     Building2, Plus, Loader2, X, Users, Crown, CalendarDays, FileText, Trash2,
     Check, Clock, UserPlus, Pencil, ClipboardCheck, ShieldCheck, History as HistoryIcon,
     FolderOpen, Bell, Download, Package, Sparkles, AlertTriangle,
+    ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -246,6 +247,8 @@ function Overview({ dept, staff, onChange }: { dept: any; staff: any[]; onChange
 
 function Members({ dept, staff }: { dept: any; staff: any[] }) {
     const qc = useQueryClient();
+    const navigate = useNavigate();
+    const { isAdmin } = usePermissions();
     const [staffId, setStaffId] = useState("");
     const [role, setRole] = useState("Teacher");
     const { data: members = [] } = useQuery({ queryKey: ["dept_members", dept._id], queryFn: async () => { const r = await api.get(`/departments/${dept._id}/members`); return Array.isArray(r.data) ? r.data : []; } });
@@ -268,9 +271,19 @@ function Members({ dept, staff }: { dept: any; staff: any[] }) {
             {members.length === 0 ? <p className="text-sm text-slate-400 text-center py-6">No members yet.</p> : (
                 <div className="space-y-1.5">
                     {members.map((m: any) => (
-                        <div key={m._id} className="flex items-center justify-between border-b border-slate-50 py-2.5">
-                            <div className="flex items-center gap-2"><Users className="w-4 h-4 text-slate-300" /><div><p className="text-sm font-bold text-slate-700">{m.staffName} {m.isHead && <Crown className="w-3.5 h-3.5 text-amber-500 inline" />}</p><p className="text-xs text-slate-400">{m.role}</p></div></div>
-                            <button onClick={() => remove.mutate(m._id)} className="text-slate-400 hover:text-rose-500"><Trash2 className="w-4 h-4" /></button>
+                        <div key={m._id} className="flex items-center justify-between border-b border-slate-50 py-2.5 rounded-lg hover:bg-slate-50 transition-colors">
+                            <button
+                                onClick={() => { if (isAdmin && m.staffId) navigate(`/staff/profile/${m.staffId}?dept=${dept._id}`); }}
+                                disabled={!isAdmin || !m.staffId}
+                                className={`flex items-center gap-2 flex-1 min-w-0 text-left px-2 ${isAdmin && m.staffId ? "cursor-pointer" : "cursor-default"}`}>
+                                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 text-[#5C67F2] font-black text-xs">{(m.staffName || "?").charAt(0)}</div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-700 flex items-center gap-1.5 truncate">{m.staffName} {m.isHead && <Crown className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}</p>
+                                    <p className="text-xs text-slate-400">{m.role}{m.subjects?.length ? ` · ${m.subjects.join(", ")}` : ""}</p>
+                                </div>
+                                {isAdmin && m.staffId && <ChevronRightIcon className="w-4 h-4 text-slate-300 flex-shrink-0 ml-auto" />}
+                            </button>
+                            <button onClick={() => remove.mutate(m._id)} className="text-slate-400 hover:text-rose-500 px-2 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>
                         </div>
                     ))}
                 </div>

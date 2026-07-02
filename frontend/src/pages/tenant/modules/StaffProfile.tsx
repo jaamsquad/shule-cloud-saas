@@ -40,6 +40,12 @@ export default function StaffProfile() {
         queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; },
     });
 
+    // Departments this staff belongs to (and their role in each).
+    const { data: departments = [] } = useQuery<any[]>({
+        queryKey: ["staff_departments"],
+        queryFn: async () => { const r = await api.get("/departments"); return Array.isArray(r.data) ? r.data : []; },
+    });
+
     // ── Photo upload ──────────────────────────────────────────────────────────
     const photoMut = useMutation({
         mutationFn: (avatar: string) => api.patch(`/staff/${id}`, { avatar }),
@@ -181,6 +187,13 @@ export default function StaffProfile() {
     const grouped: Record<string, string[]> = {};
     assignments.forEach((a: any) => { if (!grouped[a.subjectName]) grouped[a.subjectName] = []; if (a.className) grouped[a.subjectName].push(a.className); });
     const hasPortal = !!employee.portalUsername;
+    // Departments this staff heads or belongs to.
+    const myDepartments = departments.filter((d: any) => String(d.headOfDepartment) === String(employee._id))
+        .map((d: any) => ({ name: d.name, role: "Head of Department", isHead: true }))
+        // (membership-based roles are shown from the department members endpoint elsewhere;
+        //  here we surface headship + any department name recorded on the staff record)
+        .concat(employee.department && !departments.some((d: any) => String(d.headOfDepartment) === String(employee._id) && d.name === employee.department)
+            ? [{ name: employee.department, role: employee.designation || "Member", isHead: false }] : []);
 
     const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—";
 
@@ -256,6 +269,21 @@ export default function StaffProfile() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Quick stats strip */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+                        {[
+                            { label: "Subjects Taught", value: Object.keys(grouped).length, color: "text-[#5C67F2]" },
+                            { label: "Classes", value: Array.from(new Set(assignments.map((a: any) => a.className).filter(Boolean))).length, color: "text-emerald-600" },
+                            { label: "Departments", value: myDepartments.length, color: "text-teal-600" },
+                            { label: "Class Teacher", value: classTeacher ? "Yes" : "No", color: classTeacher ? "text-amber-600" : "text-slate-400" },
+                        ].map(s => (
+                            <div key={s.label} className="bg-slate-50 rounded-2xl p-4 text-center">
+                                <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{s.label}</p>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -401,6 +429,26 @@ export default function StaffProfile() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Departments */}
+                        {myDepartments.length > 0 && (
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+                                    <span className="w-1 h-4 bg-teal-400 rounded-full" /> Departments
+                                </h3>
+                                <div className="space-y-2">
+                                    {myDepartments.map((d: any, i: number) => (
+                                        <div key={i} className="flex items-center justify-between px-4 py-3 bg-teal-50/60 border border-teal-100 rounded-xl">
+                                            <div className="flex items-center gap-2">
+                                                <School className="w-4 h-4 text-teal-600" />
+                                                <span className="text-sm font-black text-teal-800">{d.name}</span>
+                                            </div>
+                                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${d.isHead ? "bg-amber-100 text-amber-700" : "bg-white text-teal-600 border border-teal-200"}`}>{d.role}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Additional personal info */}
                         {(employee.fatherName || employee.religion || employee.bloodGroup) && (
