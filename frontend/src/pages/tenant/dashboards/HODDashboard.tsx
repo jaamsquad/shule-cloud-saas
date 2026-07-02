@@ -183,9 +183,13 @@ export default function HODDashboard() {
                             {!data.teachingProgress?.tracked ? (
                                 <Empty msg="Schemes of work & lesson plans aren't tracked for this department yet." />
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <ProgressRow label="Schemes of Work" total={data.teachingProgress.schemes.total} done={data.teachingProgress.schemes.completed} />
                                     <ProgressRow label="Lesson Plans" total={data.teachingProgress.lessonPlans.total} done={data.teachingProgress.lessonPlans.completed} />
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1"><span className="font-bold text-slate-700">Scheme Coverage</span><span className="text-xs text-slate-400">{data.teachingProgress.coverage ?? 0}%</span></div>
+                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${data.teachingProgress.coverage ?? 0}%`, background: GREEN }} /></div>
+                                    </div>
                                 </div>
                             )}
                         </Card>

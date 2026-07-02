@@ -1,12 +1,19 @@
 import { useState } from "react";
 import {
     Search, Save, AlertCircle, Loader2, Home, Users, CheckCircle,
-    XCircle, ChevronDown, ArrowLeft, Calculator
+    XCircle, ChevronDown, ArrowLeft, Calculator, Lock, Send
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+
+// Approval-batch status → badge colours (mirrors the HOD Marks Approval tab).
+const BATCH_BADGE: Record<string, string> = {
+    Approved: "bg-emerald-100 text-emerald-700", Submitted: "bg-blue-100 text-blue-700",
+    Returned: "bg-amber-100 text-amber-700", Rejected: "bg-rose-100 text-rose-700",
+    Locked: "bg-slate-800 text-white", Draft: "bg-slate-100 text-slate-500",
+};
 
 interface MarkEntry {
     _id?: string;
@@ -181,6 +188,35 @@ export default function ExamMarks() {
         onError: (e: any) => toast.error(e?.response?.data?.message || "Failed to save marks"),
     });
 
+    // ── Approval status of this (exam × subject) batch, so the teacher sees whether
+    //    it's Submitted / Approved / Locked / Returned, and can Submit for approval.
+    const subjectName = selectedSubject?.name || selectedSubject?.subjectName || "";
+    const { data: batchStatus } = useQuery<{ status?: string; _id?: string } | null>({
+        queryKey: ["mark_batch_status", selectedExam?._id, subjectName],
+        enabled: !!selectedExam?._id && !!subjectName,
+        queryFn: async () => {
+            const r = await api.get(`/mark-approvals`, { params: { examId: selectedExam._id, subject: subjectName } });
+            const list = Array.isArray(r.data) ? r.data : [];
+            return list[0] || null;
+        },
+    });
+    const status = batchStatus?.status || "";
+    const isLockedStatus = status === "Approved" || status === "Locked";
+
+    const submitMutation = useMutation({
+        mutationFn: async () => api.post("/mark-approvals/submit", {
+            examId: selectedExam._id,
+            examName: selectedExam.examName || selectedExam.name,
+            subject: subjectName,
+            className: selectedClass?.name || selectedClass?.className,
+        }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["mark_batch_status", selectedExam?._id, subjectName] });
+            toast.success("Marks submitted to HOD for approval");
+        },
+        onError: (e: any) => toast.error(e?.response?.data?.message || "Failed to submit"),
+    });
+
     const loadStudents = () => {
         if (!selectedExam || !selectedClass || !selectedSubject || students.length === 0) {
             return toast.error("Ensure exam, class, subject are selected and students are loaded.");
@@ -285,9 +321,19 @@ export default function ExamMarks() {
                     <span className="font-black text-[#5C67F2]">Add / Update Exam Marks</span>
                 </div>
                 {setupReady && (
-                    <button onClick={handleSave} disabled={saveMutation.isPending} className="flex items-center gap-2 px-6 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
-                        {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {status && (
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase ${BATCH_BADGE[status] || "bg-slate-100 text-slate-500"}`}>{status}</span>
+                        )}
+                        <button onClick={handleSave} disabled={saveMutation.isPending || isLockedStatus} title={isLockedStatus ? "Locked by HOD — ask them to unlock to edit" : ""} className="flex items-center gap-2 px-6 py-2 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
+                            {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : isLockedStatus ? <><Lock className="w-3.5 h-3.5" /> Locked</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
+                        </button>
+                        {!isLockedStatus && status !== "Submitted" && (
+                            <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md transition-all disabled:opacity-60">
+                                {submitMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Submit for Approval
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -508,8 +554,8 @@ export default function ExamMarks() {
                         </div>
                         <div className="px-6 py-4 border-t border-gray-100 bg-slate-50/50 flex items-center justify-between">
                             <p className="text-xs font-bold text-slate-400">{entries.filter(e => e.marksObtained !== "").length} / {entries.length} marks entered</p>
-                            <button onClick={handleSave} disabled={saveMutation.isPending} className="flex items-center gap-2 px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
-                                {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
+                            <button onClick={handleSave} disabled={saveMutation.isPending || isLockedStatus} title={isLockedStatus ? "Locked by HOD — ask them to unlock to edit" : ""} className="flex items-center gap-2 px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white rounded-full font-black text-xs tracking-widest uppercase shadow-md shadow-indigo-100 transition-all disabled:opacity-60">
+                                {saveMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : isLockedStatus ? <><Lock className="w-3.5 h-3.5" /> Locked</> : <><Save className="w-3.5 h-3.5" /> Save All Marks</>}
                             </button>
                         </div>
                     </div>

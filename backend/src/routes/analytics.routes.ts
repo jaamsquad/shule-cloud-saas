@@ -51,7 +51,9 @@ const meanGradeFromPoints = (scale: any[], meanPoints: number) => {
 // ─── Core: build per-student results for an exam ───────────────────────────────
 // Returns one row per student: { studentId, name, adm, stream, subjects[], totalMarks,
 // meanPct, totalPoints, meanPoints, meanGrade }.
-async function buildExamResults(database: Db, examId: string) {
+// Exported so the Department Analysis (departments.routes) can reuse the exact same
+// results-building + grading logic instead of duplicating it.
+export async function buildExamResults(database: Db, examId: string) {
     const marks = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
     const { scale, grade } = await loadScale(database);
 

@@ -299,6 +299,32 @@ router.post('/academics/exam-marks/bulk', async (req, res) => {
         const { entries } = req.body;
         if (!Array.isArray(entries) || entries.length === 0) return res.status(400).json({ message: 'No entries provided' });
 
+        // ── Lock enforcement ──────────────────────────────────────────────────────
+        // If an (exam × subject) batch has been Approved or Locked by an HOD, block
+        // further edits — only an admin/principal may overwrite. This keeps approved
+        // results tamper-proof while still allowing authorized corrections.
+        const role = String((req as any).tenantContext?.user?.role || '').toLowerCase();
+        const isAdmin = ['super_admin', 'school_admin', 'admin', 'principal', 'super admin', 'school admin'].includes(role);
+        if (!isAdmin) {
+            const NORMB = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+            const pairs = new Map<string, { examId: string; subject: string }>();
+            entries.forEach((e: any) => {
+                const examId = String(e.examId || ''); const subject = e.subjectName || e.subject || '';
+                if (examId && subject) pairs.set(`${examId}::${NORMB(subject)}`, { examId, subject });
+            });
+            if (pairs.size) {
+                const examIds = [...new Set([...pairs.values()].map(p => p.examId))];
+                const locked = await db.collection('mark_approvals')
+                    .find({ examId: { $in: examIds }, status: { $in: ['Approved', 'Locked'] } })
+                    .toArray().catch(() => []);
+                const blocked = locked.filter((b: any) => pairs.has(`${String(b.examId)}::${b.subjectNorm}`));
+                if (blocked.length) {
+                    const names = [...new Set(blocked.map((b: any) => `${b.subject} (${b.status})`))].join(', ');
+                    return res.status(423).json({ message: `These marks are locked by the HOD and cannot be edited: ${names}. Ask the HOD to unlock first.` });
+                }
+            }
+        }
+
         // Stamp each mark with the student's class + academic year AT SAVE TIME, so a
         // student's records stay attributed to the class they were in (history per class).
         const period = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null);
