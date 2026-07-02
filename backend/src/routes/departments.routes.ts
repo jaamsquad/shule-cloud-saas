@@ -232,8 +232,6 @@ router.get('/departments/:id/hod-dashboard', requireDeptAccess('param', 'id'), a
             const mean = v.n ? v.sum / v.n : 0;
             return { subject: name, meanPct: Math.round(mean * 10) / 10, grade: gradeOf(mean).grade, entries: v.n };
         }).sort((a, b) => b.meanPct - a.meanPct);
-        // Backfill the subjects list from marks when the department has none configured.
-        if (!subjects.length) subjects = subjectPerformance.map(s => s.subject);
 
         // Exams awaiting approval that touch a department subject. Uses the same
         // approvalStatus convention as questions/question-papers ('Pending').
@@ -341,7 +339,8 @@ router.get('/departments/:id/cbc', requireDeptAccess('param', 'id'), async (req:
         const dep: any = await d.collection('departments').findOne({ _id: oid(req.params.id) as any });
         if (!dep) return res.status(404).json({ message: 'Department not found' });
         const subjectSet = new Set((Array.isArray(dep.subjects) ? dep.subjects : []).map(NORM));
-        const inDept = (s: string) => subjectSet.size === 0 || subjectSet.has(NORM(s));
+        // Strict: only subjects explicitly assigned to this department count.
+        const inDept = (s: string) => subjectSet.has(NORM(s));
 
         const [areas, activities, assessments, competencies] = await Promise.all([
             d.collection('cbc_learning_areas').find({}).toArray().catch(() => []),
@@ -428,7 +427,8 @@ router.get('/departments/:id/examinations', requireDeptAccess('param', 'id'), as
         const dep: any = await d.collection('departments').findOne({ _id: oid(req.params.id) as any });
         if (!dep) return res.status(404).json({ message: 'Department not found' });
         const subjectSet = new Set((Array.isArray(dep.subjects) ? dep.subjects : []).map(NORM));
-        const inDept = (s: string) => subjectSet.size === 0 || subjectSet.has(NORM(s));
+        // Strict: only subjects explicitly assigned to this department count.
+        const inDept = (s: string) => subjectSet.has(NORM(s));
 
         const [questions, papers, schedules, subjectDefs, onlineExams] = await Promise.all([
             d.collection('questions').find({}).toArray().catch(() => []),
@@ -514,7 +514,8 @@ router.get('/departments/:id/supervision', requireDeptAccess('param', 'id'), asy
         const dep: any = await d.collection('departments').findOne({ _id: oid(req.params.id) as any });
         if (!dep) return res.status(404).json({ message: 'Department not found' });
         const subjectSet = new Set((Array.isArray(dep.subjects) ? dep.subjects : []).map(NORM));
-        const inDept = (s: string) => subjectSet.size === 0 || subjectSet.has(NORM(s));
+        // Strict: only subjects explicitly assigned to this department count.
+        const inDept = (s: string) => subjectSet.has(NORM(s));
         const isDone = (x: any) => /complete|done|approved|published/i.test(String(x.status || ''));
         const coverageOf = (s: any) => {
             const weeks = Array.isArray(s.weeks) ? s.weeks : [];
@@ -725,7 +726,8 @@ router.get('/departments/:id/timetable', requireDeptAccess('param', 'id'), async
         const dep: any = await d.collection('departments').findOne({ _id: oid(req.params.id) as any });
         if (!dep) return res.status(404).json({ message: 'Department not found' });
         const subjectSet = new Set((Array.isArray(dep.subjects) ? dep.subjects : []).map(NORM));
-        const inDept = (s: string) => subjectSet.size === 0 || subjectSet.has(NORM(s));
+        // Strict: only subjects explicitly assigned to this department count.
+        const inDept = (s: string) => subjectSet.has(NORM(s));
 
         const [slots, periods] = await Promise.all([
             d.collection('timetable_slots').find({}).toArray().catch(() => []),
@@ -842,7 +844,8 @@ router.get('/departments/:id/reports/:kind', requireDeptAccess('param', 'id'), a
         const dep: any = await d.collection('departments').findOne({ _id: oid(req.params.id) as any });
         if (!dep) return res.status(404).json({ message: 'Department not found' });
         const subjectSet = new Set((Array.isArray(dep.subjects) ? dep.subjects : []).map(NORM));
-        const inDept = (s: string) => subjectSet.size === 0 || subjectSet.has(NORM(s));
+        // Strict: only subjects explicitly assigned to this department count.
+        const inDept = (s: string) => subjectSet.has(NORM(s));
         const kind = req.params.kind;
         let columns: string[] = []; let rows: any[][] = [];
 

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
     Building2, Plus, Loader2, X, Users, Crown, CalendarDays, FileText, Trash2,
     Check, Clock, UserPlus, Pencil, ClipboardCheck, ShieldCheck, History as HistoryIcon,
@@ -26,13 +27,21 @@ const Stat = ({ label, value, color }: { label: string; value: any; color: strin
 
 export default function Departments() {
     const qc = useQueryClient();
+    const { isAdmin } = usePermissions();
     const [selected, setSelected] = useState<any | null>(null);
     const [tab, setTab] = useState<"overview" | "members" | "meetings" | "leave" | "marks" | "analysis" | "supervision" | "exams" | "cbc" | "timetable" | "resources" | "notices" | "reports" | "assets" | "audit">("overview");
     const [editDept, setEditDept] = useState<any | null>(null);
 
-    const { data: summary } = useQuery({ queryKey: ["dept_summary"], queryFn: async () => (await api.get("/departments/summary")).data });
+    const { data: summary } = useQuery({ queryKey: ["dept_summary"], queryFn: async () => (await api.get("/departments/summary")).data, enabled: isAdmin });
     const { data: departments = [], isLoading } = useQuery({ queryKey: ["departments"], queryFn: async () => { const r = await api.get("/departments"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: staff = [] } = useQuery({ queryKey: ["staff_for_dept"], queryFn: async () => { const r = await api.get("/staff"); return Array.isArray(r.data) ? r.data : []; } });
+
+    // A department head (non-admin) is scoped by the API to their own department(s).
+    // Auto-select it and hide the picker so they land straight on their data.
+    const isHodView = !isAdmin && departments.length <= 1;
+    useEffect(() => {
+        if (isHodView && departments.length === 1 && !selected) { setSelected(departments[0]); setTab("overview"); }
+    }, [isHodView, departments, selected]);
 
     const invalidate = () => { qc.invalidateQueries({ queryKey: ["departments"] }); qc.invalidateQueries({ queryKey: ["dept_summary"] }); };
 
@@ -47,38 +56,48 @@ export default function Departments() {
             <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                     <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><Building2 className="w-5 h-5 text-indigo-600" /></div>
-                    <div><h1 className="text-xl font-black text-slate-800">Department Management</h1><p className="text-xs text-slate-500">Departments, HODs, members, meetings & leave</p></div>
+                    <div><h1 className="text-xl font-black text-slate-800">{isHodView ? "My Department" : "Department Management"}</h1><p className="text-xs text-slate-500">{isHodView ? "Your department's data, analysis, marks & supervision" : "Departments, HODs, members, meetings & leave"}</p></div>
                 </div>
-                <button onClick={() => setEditDept({})} className="inline-flex items-center gap-2 bg-[#5C67F2] text-white text-sm font-bold px-4 py-2 rounded-lg"><Plus className="w-4 h-4" /> New Department</button>
+                {isAdmin && <button onClick={() => setEditDept({})} className="inline-flex items-center gap-2 bg-[#5C67F2] text-white text-sm font-bold px-4 py-2 rounded-lg"><Plus className="w-4 h-4" /> New Department</button>}
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                <Stat label="Departments" value={summary?.total ?? "—"} color="text-slate-800" />
-                <Stat label="Active" value={summary?.active ?? "—"} color="text-emerald-600" />
-                <Stat label="Staff Assigned" value={summary?.totalStaffAssigned ?? "—"} color="text-indigo-600" />
-                <Stat label="Pending Leave" value={summary?.pendingLeave ?? "—"} color="text-amber-600" />
-            </div>
+            {/* Admin-only summary stats */}
+            {isAdmin && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                    <Stat label="Departments" value={summary?.total ?? "—"} color="text-slate-800" />
+                    <Stat label="Active" value={summary?.active ?? "—"} color="text-emerald-600" />
+                    <Stat label="Staff Assigned" value={summary?.totalStaffAssigned ?? "—"} color="text-indigo-600" />
+                    <Stat label="Pending Leave" value={summary?.pendingLeave ?? "—"} color="text-amber-600" />
+                </div>
+            )}
 
-            <div className="flex flex-col lg:flex-row gap-5 items-start">
-                {/* List */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 h-fit w-full lg:w-72 flex-shrink-0">
+            {/* Department picker — a horizontal strip ON TOP (admins, or an HOD with >1 dept).
+                A single-department HOD skips this and goes straight to their data. */}
+            {!isHodView && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-5">
                     <p className="text-xs font-black text-slate-400 uppercase mb-3">Departments</p>
                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-indigo-400" /> : departments.length === 0 ? (
-                        <p className="text-sm text-slate-400 py-6 text-center">No departments yet.</p>
-                    ) : departments.map((d: any) => (
-                        <button key={d._id} onClick={() => { setSelected(d); setTab("overview"); }}
-                            className={`w-full text-left p-3 rounded-xl mb-1.5 border transition-colors ${selected?._id === d._id ? "border-[#5C67F2] bg-[#5C67F2]/5" : "border-transparent hover:bg-slate-50"}`}>
-                            <div className="flex items-center justify-between">
-                                <p className="font-bold text-slate-700 text-sm">{d.name}</p>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.status === "Inactive" ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}`}>{d.status || "Active"}</span>
-                            </div>
-                            <p className="text-xs text-slate-400">{d.code || d.type || ""} · {d.memberCount || 0} members{d.headName ? ` · HOD: ${d.headName}` : ""}</p>
-                        </button>
-                    ))}
+                        <p className="text-sm text-slate-400 py-4 text-center">No departments yet.</p>
+                    ) : (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                            {departments.map((d: any) => (
+                                <button key={d._id} onClick={() => { setSelected(d); setTab("overview"); }}
+                                    className={`text-left p-3 rounded-xl border transition-colors flex-shrink-0 w-60 ${selected?._id === d._id ? "border-[#5C67F2] bg-[#5C67F2]/5" : "border-slate-100 hover:bg-slate-50"}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="font-bold text-slate-700 text-sm truncate">{d.name}</p>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${d.status === "Inactive" ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}`}>{d.status || "Active"}</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 truncate">{d.code || d.type || ""} · {d.memberCount || 0} members{d.headName ? ` · HOD: ${d.headName}` : ""}</p>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
+            )}
 
-                {/* Detail */}
-                <div className="flex-1 min-w-0 w-full">
+            <div className="w-full">
+                {/* Detail — full width */}
+                <div className="min-w-0 w-full">
                     {!selected ? (
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center text-slate-400 text-sm">Select a department to manage it.</div>
                     ) : (

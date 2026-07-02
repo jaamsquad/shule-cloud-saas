@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
     Bot, X, ChevronLeft, Loader2, Eye, Download, MessageSquare, Printer,
@@ -30,7 +31,22 @@ const CAT_META: Record<string, { icon: string; color: string }> = {
 const PIE = ["#5C67F2", "#16A34A", "#F59E0B", "#DC2626", "#0EA5E9", "#7C3AED", "#DB2777"];
 const ACTION_ICON: Record<string, any> = { eye: Eye, download: Download, message: MessageSquare, printer: Printer, check: CheckCircle2 };
 
+// Maps a card's quick-action `action` name → a real app route. Params from the
+// action are appended as query string so the target page can pre-filter.
+const ACTION_ROUTE: Record<string, string> = {
+    viewStudents: "/students",
+    markAttendance: "/attendance/students",
+    sendSms: "/communications/sms",
+    viewDefaulters: "/fees/defaulters",
+    viewPayments: "/fees/collect",
+    viewDiscipline: "/students/discipline",
+    viewAdmissions: "/students/admissions",
+    allocateMpesa: "/fees/payment-inbox",
+    viewOverdue: "/library",
+};
+
 export default function SmartAssistant() {
+    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [category, setCategory] = useState<string | null>(null);
     const [card, setCard] = useState<any | null>(null);
@@ -52,17 +68,53 @@ export default function SmartAssistant() {
     const reset = () => { setCard(null); };
     const backToCats = () => { setCategory(null); setCard(null); };
 
+    // Export the current card as CSV.
+    const exportCsv = () => {
+        if (!card) return;
+        const rows: any[][] = (card.breakdown || []).map((b: any) => [b.label, b.value]);
+        if (rows.length === 0 && card.stat) rows.push([card.stat.label || "Value", card.stat.value]);
+        const esc = (v: any) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+        const csv = ["Label,Value", ...rows.map(r => r.map(esc).join(","))].join("\n");
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+        const el = document.createElement("a"); el.href = url; el.download = `${card.id}.csv`; el.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast.success("Exported");
+    };
+
+    // Print the current card (summary + stat + breakdown) in a clean window.
+    const printCard = () => {
+        if (!card) return;
+        const w = window.open("", "_blank", "width=800,height=900");
+        if (!w) { toast.error("Allow pop-ups to print"); return; }
+        const rows = (card.breakdown || []).map((b: any) => `<tr><td>${b.label}</td><td style="text-align:right">${b.value}</td></tr>`).join("");
+        w.document.write(`<!DOCTYPE html><html><head><title>${card.title}</title><style>
+            body{font-family:Arial,sans-serif;color:#111;padding:24px}h1{font-size:18px;margin:0 0 4px}
+            .stat{font-size:32px;font-weight:800;color:#5C67F2;margin:8px 0}table{width:100%;border-collapse:collapse;margin-top:12px}
+            td{border-bottom:1px solid #eee;padding:6px 4px;font-size:13px}.muted{color:#666;font-size:12px}
+        </style></head><body>
+            <h1>${card.title}</h1><p>${card.summary}</p>
+            ${card.stat ? `<div class="stat">${card.stat.value} <span class="muted">${card.stat.label || ""}</span></div>` : ""}
+            ${rows ? `<table>${rows}</table>` : ""}
+            <p class="muted" style="margin-top:20px">ShuleCloud Smart Assistant · ${new Date().toLocaleString()}</p>
+            <script>window.onload=()=>{setTimeout(()=>window.print(),250)}</script>
+        </body></html>`);
+        w.document.close();
+    };
+
     const onAction = (a: any) => {
-        // Actions are deterministic hooks; wire to real flows as they land.
-        if (a.action === "export" && card) {
-            const rows = (card.breakdown || []).map((b: any) => [b.label, b.value]);
-            const csv = ["Label,Value", ...rows.map((r: any[]) => r.join(","))].join("\n");
-            const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-            const el = document.createElement("a"); el.href = url; el.download = `${card.id}.csv`; el.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (a.action === "export") return exportCsv();
+        if (a.action === "print") return printCard();
+        const route = ACTION_ROUTE[a.action];
+        if (route) {
+            // Pass through useful params (status/date/template) so the target pre-filters.
+            const qs = new URLSearchParams();
+            Object.entries(a.params || {}).forEach(([k, v]) => { if (v != null && v !== "") qs.set(k, String(v)); });
+            const url = qs.toString() ? `${route}?${qs}` : route;
+            setOpen(false);
+            navigate(url);
             return;
         }
-        toast.info(`${a.label} — coming soon`);
+        toast.info(`${a.label} — no destination configured`);
     };
 
     return (
