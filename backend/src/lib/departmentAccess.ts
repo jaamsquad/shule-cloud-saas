@@ -97,6 +97,18 @@ export const requireDeptAccess = (source: 'param' | 'body' | 'query' = 'param', 
         }
     };
 
+/**
+ * Express middleware: allow ONLY organization/school administrators (and
+ * principals). Used to protect actions an HOD must never perform — e.g.
+ * (re)assigning a department head. Department heads are blocked with 403.
+ */
+export const requireAdmin = () =>
+    async (req: Request, res: Response, next: NextFunction) => {
+        const role = roleOf(req);
+        if (!role || ADMIN_ROLES.has(role)) return next();
+        return res.status(403).json({ message: 'Only an administrator can perform this action.' });
+    };
+
 /** Convenience: does the department own this subject (case-insensitive name match)? */
 export async function departmentOwnsSubject(db: Db, departmentId: string, subjectName: string): Promise<boolean> {
     const id = (() => { try { return new ObjectId(departmentId); } catch { return null; } })();

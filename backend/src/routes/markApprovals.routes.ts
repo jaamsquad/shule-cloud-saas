@@ -99,7 +99,11 @@ router.get('/mark-approvals/overview', async (req: Request, res: Response) => {
         }
         const expectedNorm = new Set(expected.map(NORM));
 
-        const subjects = Array.from(new Set([...subjectsWithMarks.keys(), ...expectedNorm])).map(n => ({
+        // When scoped to a department, show ONLY that department's subjects (with their
+        // status — including 'Missing' when a subject has no marks). Without a
+        // department, fall back to every subject that has marks for the exam.
+        const keys = departmentId ? [...expectedNorm] : [...subjectsWithMarks.keys()];
+        const subjects = keys.map(n => ({
             subject: subjectLabel.get(n) || expected.find(e => NORM(e) === n) || n,
             entries: subjectsWithMarks.get(n) || 0,
             hasMarks: subjectsWithMarks.has(n),

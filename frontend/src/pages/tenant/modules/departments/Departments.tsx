@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
@@ -25,11 +26,19 @@ const Stat = ({ label, value, color }: { label: string; value: any; color: strin
     </div>
 );
 
+export const DEPT_TABS = ["overview", "members", "marks", "analysis", "supervision", "exams", "cbc", "timetable", "resources", "notices", "reports", "assets", "meetings", "leave", "audit"] as const;
+export type DeptTab = typeof DEPT_TABS[number];
+export const deptTabLabel = (t: string) => t === "marks" ? "Marks Approval" : t === "cbc" ? "CBC" : t === "notices" ? "Notices" : t.charAt(0).toUpperCase() + t.slice(1);
+
 export default function Departments() {
     const qc = useQueryClient();
     const { isAdmin } = usePermissions();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [selected, setSelected] = useState<any | null>(null);
-    const [tab, setTab] = useState<"overview" | "members" | "meetings" | "leave" | "marks" | "analysis" | "supervision" | "exams" | "cbc" | "timetable" | "resources" | "notices" | "reports" | "assets" | "audit">("overview");
+    // Active tab is driven by ?tab= so the sidebar can deep-link to it.
+    const urlTab = (searchParams.get("tab") || "overview") as DeptTab;
+    const tab: DeptTab = DEPT_TABS.includes(urlTab) ? urlTab : "overview";
+    const setTab = (t: DeptTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set("tab", t); return p; }, { replace: true });
     const [editDept, setEditDept] = useState<any | null>(null);
 
     const { data: summary } = useQuery({ queryKey: ["dept_summary"], queryFn: async () => (await api.get("/departments/summary")).data, enabled: isAdmin });
@@ -40,7 +49,7 @@ export default function Departments() {
     // Auto-select it and hide the picker so they land straight on their data.
     const isHodView = !isAdmin && departments.length <= 1;
     useEffect(() => {
-        if (isHodView && departments.length === 1 && !selected) { setSelected(departments[0]); setTab("overview"); }
+        if (isHodView && departments.length === 1 && !selected) { setSelected(departments[0]); }
     }, [isHodView, departments, selected]);
 
     const invalidate = () => { qc.invalidateQueries({ queryKey: ["departments"] }); qc.invalidateQueries({ queryKey: ["dept_summary"] }); };
@@ -81,7 +90,7 @@ export default function Departments() {
                     ) : (
                         <div className="flex gap-2 overflow-x-auto pb-1">
                             {departments.map((d: any) => (
-                                <button key={d._id} onClick={() => { setSelected(d); setTab("overview"); }}
+                                <button key={d._id} onClick={() => { setSelected(d); }}
                                     className={`text-left p-3 rounded-xl border transition-colors flex-shrink-0 w-60 ${selected?._id === d._id ? "border-[#5C67F2] bg-[#5C67F2]/5" : "border-slate-100 hover:bg-slate-50"}`}>
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="font-bold text-slate-700 text-sm truncate">{d.name}</p>
@@ -107,16 +116,17 @@ export default function Departments() {
                                     <h2 className="font-black text-slate-800">{selected.name}</h2>
                                     <p className="text-xs text-slate-400">{[selected.code, selected.type].filter(Boolean).join(" · ")}</p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setEditDept(selected)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Pencil className="w-4 h-4" /></button>
-                                    <button onClick={() => { if (confirm(`Delete ${selected.name}?`)) delDept.mutate(selected._id); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
-                                </div>
+                                {isAdmin && (
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setEditDept(selected)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Pencil className="w-4 h-4" /></button>
+                                        <button onClick={() => { if (confirm(`Delete ${selected.name}?`)) delDept.mutate(selected._id); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex border-b border-slate-100 px-3 overflow-x-auto">
-                                {(["overview", "members", "marks", "analysis", "supervision", "exams", "cbc", "timetable", "resources", "notices", "reports", "assets", "meetings", "leave", "audit"] as const).map(t => {
-                                    const label = t === "marks" ? "Marks Approval" : t === "cbc" ? "CBC" : t === "notices" ? "Notices" : t;
-                                    return <button key={t} onClick={() => setTab(t)} className={`px-4 py-3 text-xs font-bold capitalize border-b-2 whitespace-nowrap ${tab === t ? "border-[#5C67F2] text-[#5C67F2]" : "border-transparent text-slate-400 hover:text-slate-600"}`}>{label}</button>;
-                                })}
+                                {DEPT_TABS.map(t => (
+                                    <button key={t} onClick={() => setTab(t)} className={`px-4 py-3 text-xs font-bold capitalize border-b-2 whitespace-nowrap ${tab === t ? "border-[#5C67F2] text-[#5C67F2]" : "border-transparent text-slate-400 hover:text-slate-600"}`}>{deptTabLabel(t)}</button>
+                                ))}
                             </div>
                             <div className="p-5">
                                 {tab === "overview" && <Overview dept={selected} staff={staff} onChange={() => { invalidate(); }} />}
@@ -200,6 +210,7 @@ function DeptForm({ initial, onClose, onSaved }: { initial: any; onClose: () => 
 }
 
 function Overview({ dept, staff, onChange }: { dept: any; staff: any[]; onChange: () => void }) {
+    const { isAdmin } = usePermissions();
     const { data } = useQuery({ queryKey: ["dept_dash", dept._id], queryFn: async () => (await api.get(`/departments/${dept._id}/dashboard`)).data });
     const [hod, setHod] = useState("");
     const qc = useQueryClient();
@@ -216,16 +227,19 @@ function Overview({ dept, staff, onChange }: { dept: any; staff: any[]; onChange
                 <Stat label="Upcoming Meetings" value={data?.upcomingMeetings ?? "—"} color="text-indigo-600" />
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4"><p className="text-sm font-black text-slate-800 flex items-center gap-1"><Crown className="w-4 h-4 text-amber-500" /> {data?.head || "No HOD"}</p><p className="text-xs font-bold text-slate-400 uppercase">Head</p></div>
             </div>
-            <div className="border border-slate-100 rounded-xl p-4">
-                <p className="text-xs font-black text-slate-500 uppercase mb-2">Assign Head of Department</p>
-                <div className="flex gap-2">
-                    <select value={hod} onChange={e => setHod(e.target.value)} className="flex-1 h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white">
-                        <option value="">— Select staff —</option>
-                        {staff.map((s: any) => <option key={s._id} value={s._id}>{s.employeeName} {s.designation ? `(${s.designation})` : ""}</option>)}
-                    </select>
-                    <button onClick={() => setHead.mutate()} disabled={!hod || setHead.isPending} className="bg-amber-500 text-white text-xs font-bold px-4 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"><Crown className="w-3.5 h-3.5" /> Set HOD</button>
+            {/* Only administrators may (re)assign the Head of Department. */}
+            {isAdmin && (
+                <div className="border border-slate-100 rounded-xl p-4">
+                    <p className="text-xs font-black text-slate-500 uppercase mb-2">Assign Head of Department</p>
+                    <div className="flex gap-2">
+                        <select value={hod} onChange={e => setHod(e.target.value)} className="flex-1 h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white">
+                            <option value="">— Select staff —</option>
+                            {staff.map((s: any) => <option key={s._id} value={s._id}>{s.employeeName} {s.designation ? `(${s.designation})` : ""}</option>)}
+                        </select>
+                        <button onClick={() => setHead.mutate()} disabled={!hod || setHead.isPending} className="bg-amber-500 text-white text-xs font-bold px-4 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"><Crown className="w-3.5 h-3.5" /> Set HOD</button>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

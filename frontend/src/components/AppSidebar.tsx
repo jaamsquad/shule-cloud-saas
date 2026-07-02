@@ -97,6 +97,20 @@ export const navItems: NavItem[] = [
   { label: "Departments", icon: Building2, moduleKey: "employees", children: [
       { label: "Department Management", path: "/departments" },
       { label: "HOD Dashboard", path: "/dashboard/hod" },
+      { label: "Overview", path: "/departments?tab=overview" },
+      { label: "Members", path: "/departments?tab=members" },
+      { label: "Marks Approval", path: "/departments?tab=marks" },
+      { label: "Analysis", path: "/departments?tab=analysis" },
+      { label: "Supervision", path: "/departments?tab=supervision" },
+      { label: "Exams", path: "/departments?tab=exams" },
+      { label: "CBC", path: "/departments?tab=cbc" },
+      { label: "Timetable", path: "/departments?tab=timetable" },
+      { label: "Resources", path: "/departments?tab=resources" },
+      { label: "Notices", path: "/departments?tab=notices" },
+      { label: "Reports", path: "/departments?tab=reports" },
+      { label: "Assets", path: "/departments?tab=assets" },
+      { label: "Meetings", path: "/departments?tab=meetings" },
+      { label: "Audit", path: "/departments?tab=audit" },
   ] },
   { label: "Employees", icon: Briefcase, moduleKey: "employees", children: [
       { label: "All Employees", path: "/staff" },
@@ -664,7 +678,11 @@ export default function AppSidebar() {
                           const acts = (perms.crud && perms.crud[mod]) || [];
                           return acts.includes("create");
                         }).map((child, idx) => {
-                          const isChildActive = location.pathname === child.path || (child.path.includes('#') && location.pathname === child.path.split('#')[0]);
+                          // Query-param children (e.g. /departments?tab=members) match on
+                          // the full path+search; plain children match on pathname.
+                          const isChildActive = child.path.includes('?')
+                            ? (location.pathname + location.search) === child.path
+                            : location.pathname === child.path || (child.path.includes('#') && location.pathname === child.path.split('#')[0]);
 
                           return (
                             <li key={idx} className="relative">

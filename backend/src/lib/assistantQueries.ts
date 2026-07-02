@@ -88,27 +88,51 @@ def('students.enrolled', 'Students', 'How many students are enrolled?', async ({
     };
 });
 
+// Match a stored attendance `date` against a YYYY-MM-DD string, tolerating the
+// field being a string ("2026-07-02", maybe with a time) or a Date object.
+const recDateStr = (r: any): string => {
+    const d = r.date ?? r.attendanceDate ?? r.day;
+    if (!d) return '';
+    if (d instanceof Date) return todayStr(d);
+    const s = String(d);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+};
+
 async function attendanceToday(db: Db, scope: ScopeResult, filters: QueryFilters) {
-    const date = filters.date || todayStr();
+    const wanted = filters.date || todayStr();
     const all = await db.collection('students').find(scope.isAdmin ? {} : scope.studentFilter).toArray().catch(() => []);
     const students = filterStudents(all, filters);
     const idSet = new Set(students.map(s => String(s._id)));
-    const records = await db.collection('student_attendance').find({ date }).toArray().catch(() => []);
-    const mine = records.filter((r: any) => idSet.has(String(r.studentId)));
+
+    // Pull this student-set's attendance once, then bucket by date (robust to string
+    // vs Date and to a time component on the date field).
+    const allRecs = await db.collection('student_attendance').find({}).toArray().catch(() => []);
+    const relevant = allRecs.filter((r: any) => idSet.has(String(r.studentId)));
+    let date = wanted;
+    let mine = relevant.filter((r: any) => recDateStr(r) === wanted);
+    let stale = false;
+    // If nothing was marked for the requested day, fall back to the most recent day
+    // that actually has attendance — so the card shows real numbers, clearly dated.
+    if (mine.length === 0 && relevant.length > 0) {
+        const dates = Array.from(new Set(relevant.map(recDateStr).filter(Boolean))).sort();
+        const latest = dates[dates.length - 1];
+        if (latest) { date = latest; mine = relevant.filter((r: any) => recDateStr(r) === latest); stale = latest !== wanted; }
+    }
+
     const present = mine.filter(isPresent), absent = mine.filter(isAbsent), late = mine.filter(isLate);
-    // Absentees by class.
     const sById: Record<string, any> = {}; students.forEach(s => { sById[String(s._id)] = s; });
     const byClass: Record<string, number> = {};
     absent.forEach((a: any) => { const c = classOf(sById[String(a.studentId)] || {}) || 'Unknown'; byClass[c] = (byClass[c] || 0) + 1; });
     const rate = mine.length ? (present.length / mine.length) * 100 : 0;
-    return { date, total: students.length, marked: mine.length, present, absent, late, byClass, rate, sById };
+    return { date, stale, total: students.length, marked: mine.length, present, absent, late, byClass, rate, sById };
 }
 
 def('students.present', 'Students', 'How many students are present today?', async ({ db, scope, filters }) => {
     const a = await attendanceToday(db, scope, filters);
+    const when = a.marked === 0 ? 'No attendance has been marked yet.' : a.stale ? `Latest attendance is from ${a.date}.` : '';
     return {
         id: 'students.present', title: 'Present Today',
-        summary: `${a.present.length} students are present today (${a.rate.toFixed(1)}% attendance).`,
+        summary: a.marked === 0 ? 'No attendance has been marked yet — nothing to report.' : `${a.present.length} students are present (${a.rate.toFixed(1)}% attendance).${a.stale ? ` ${when}` : ''}`,
         stat: { value: a.present.length, label: `of ${a.marked} marked` },
         chart: { type: 'pie', title: 'Attendance', data: [{ label: 'Present', value: a.present.length }, { label: 'Absent', value: a.absent.length }, { label: 'Late', value: a.late.length }] },
         actions: [{ label: 'Mark Attendance', icon: 'check', action: 'markAttendance' }, ...studentListActions()],
@@ -120,7 +144,7 @@ def('students.absent', 'Students', 'How many students are absent today?', async 
     const top = Object.entries(a.byClass).sort((x, y) => y[1] - x[1]);
     return {
         id: 'students.absent', title: 'Absent Today',
-        summary: `Today, ${a.absent.length} students are absent.`,
+        summary: a.marked === 0 ? 'No attendance has been marked yet — nothing to report.' : `${a.absent.length} students are absent${a.stale ? ` (as of ${a.date})` : ' today'}.`,
         stat: { value: `${a.rate.toFixed(1)}%`, label: 'Attendance rate' },
         breakdown: top.map(([label, value]) => ({ label, value })),
         chart: { type: 'bar', title: 'Absentees by class', data: top.map(([label, value]) => ({ label, value })) },

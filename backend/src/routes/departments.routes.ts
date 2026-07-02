@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { requireDeptAccess, resolveDeptAccess } from '../lib/departmentAccess';
+import { requireDeptAccess, resolveDeptAccess, requireAdmin } from '../lib/departmentAccess';
 import { recordAudit } from '../lib/audit';
 import { buildExamResults } from './analytics.routes';
 
@@ -66,7 +66,8 @@ router.delete('/departments/:id', requireDeptAccess('param', 'id'), async (req: 
 });
 
 // ── Head of Department ─────────────────────────────────────────────────────────
-router.post('/departments/:id/head', async (req: Request, res: Response) => {
+// Admin-only: a department head must not be able to (re)assign the HOD.
+router.post('/departments/:id/head', requireAdmin(), async (req: Request, res: Response) => {
     try {
         const id = oid(req.params.id); if (!id) return res.status(400).json({ message: 'Invalid id' });
         const { staffId, staffName, appointmentDate, acting } = req.body || {};
