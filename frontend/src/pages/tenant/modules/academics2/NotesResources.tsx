@@ -64,8 +64,8 @@ export default function NotesResources() {
 
 
     return (
-        <div className="flex-1 min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(92,103,242,0.12),_transparent_25%),linear-gradient(135deg,_#f8fafc_0%,_#eef2ff_100%)] flex flex-col pb-20 font-sans">
-            <div className="bg-white/90 backdrop-blur border-b border-slate-200/70 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div className="flex-1 min-h-screen bg-slate-50 text-slate-700 flex flex-col pb-20 font-sans">
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Academics</span><span className="text-gray-300">/</span>
@@ -78,21 +78,21 @@ export default function NotesResources() {
             </div>
 
             <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
-                <div className="mb-8 rounded-[2rem] border border-slate-200/70 bg-white/80 p-6 shadow-sm">
+                <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#5C67F2]">Lesson Library</p>
-                            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight mt-1">Notes & Resources</h1>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">Lesson Library</p>
+                            <h1 className="text-2xl font-semibold text-slate-900 mt-1">Notes & Resources</h1>
                             <p className="text-slate-500 text-sm mt-2">Share teaching content, lesson pages, worksheets, and videos in one place.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                            <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
                                 All ({resources.length})
                             </button>
                             {TYPES.map(t => {
                                 const count = resources.filter((r: any) => r.type === t.key).length;
                                 return (
-                                    <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all ${typeFilter === t.key ? `${t.bg} ${t.color} border-current` : "bg-white text-slate-500 border-slate-100 hover:border-slate-200"}`}>
+                                    <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === t.key ? `${t.bg} ${t.color} border-current` : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
                                         <t.icon className="w-3 h-3" />{t.key} ({count})
                                     </button>
                                 );
@@ -104,7 +104,7 @@ export default function NotesResources() {
                         <div className="relative max-w-md w-full">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject..."
-                                className="w-full h-11 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
+                                className="w-full h-11 pl-12 pr-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
                         </div>
                         <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} items showing</div>
                     </div>
@@ -120,7 +120,7 @@ export default function NotesResources() {
                             const tc = getTypeConfig(res.type);
                             const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
-                                <div key={res._id} className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm overflow-hidden hover:shadow-md transition-all">
+                                <div key={res._id} className="bg-white rounded-3xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden hover:shadow-sm transition-all">
                                     <div className={`px-5 py-4 border-b ${tc.bg}`}>
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex items-start gap-3">

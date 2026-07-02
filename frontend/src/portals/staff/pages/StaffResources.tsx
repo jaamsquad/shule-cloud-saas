@@ -40,7 +40,7 @@ export default function StaffResources() {
                         {filtered.map((r: any) => {
                             const Icon = ICON[r.type] || FileText;
                             return (
-                                <div key={r._id} className="bg-white rounded-[1.5rem] border border-slate-200/70 shadow-sm p-5 flex flex-col gap-3">
+                                <div key={r._id} className="bg-white rounded-2xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-5 flex flex-col gap-3">
                                     <div className="flex items-start gap-3">
                                         <div className="w-11 h-11 rounded-2xl bg-[#5C67F2]/10 flex items-center justify-center text-[#5C67F2] flex-shrink-0"><Icon className="w-5 h-5" /></div>
                                         <div className="flex-1 min-w-0">

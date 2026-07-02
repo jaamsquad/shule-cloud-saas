@@ -100,32 +100,32 @@ export default function ResourceForm() {
     const selectedType = TYPES.find(t => t.key === form.type) || TYPES[0];
 
     return (
-        <div className="flex-1 min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(92,103,242,0.12),_transparent_25%),linear-gradient(135deg,_#f8fafc_0%,_#eef2ff_100%)] flex flex-col pb-20 font-sans">
-            <div className="bg-white/90 backdrop-blur border-b border-slate-200/70 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+        <div className="flex-1 min-h-screen bg-slate-50 text-slate-700 flex flex-col pb-20 font-sans">
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                 <div className="flex items-center gap-3 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
-                    <button onClick={() => navigate("/academics/resources")} className="font-bold text-gray-500 hover:text-[#5C67F2]">Notes & Resources</button>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">{isEdit ? "Edit Lesson Page" : "Create Lesson Page"}</span>
+                    <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-slate-300">/</span>
+                    <button onClick={() => navigate("/academics/resources")} className="font-semibold text-slate-500 hover:text-[#5C67F2]">Notes & Resources</button>
+                    <span className="text-slate-300">/</span>
+                    <span className="font-semibold text-[#5C67F2]">{isEdit ? "Edit Lesson Page" : "Create Lesson Page"}</span>
                 </div>
                 <div className="flex gap-3">
-                    <button onClick={() => navigate("/academics/resources")} className="h-10 px-5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 transition-all">
+                    <button onClick={() => navigate("/academics/resources")} className="h-10 px-4 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-[0.2em] rounded-xl flex items-center gap-2 transition-all">
                         <ArrowLeft className="w-4 h-4" /> Cancel
                     </button>
-                    <button onClick={handleSubmit} disabled={saveMut.isPending} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100 transition-all">
+                    <button onClick={handleSubmit} disabled={saveMut.isPending} className="h-10 px-4 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-semibold text-xs uppercase tracking-[0.2em] rounded-xl flex items-center gap-2 shadow-sm transition-all">
                         {saveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        {isEdit ? "Save Changes" : "Publish Lesson"}
+                        {isEdit ? "Save" : "Publish"}
                     </button>
                 </div>
             </div>
 
             <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
                 <div className="mb-8">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] text-[#5C67F2] border border-indigo-100 shadow-sm">
-                        <FileText className="w-3.5 h-3.5" /> Lesson Page Builder
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500 border border-slate-200">
+                        <FileText className="w-3.5 h-3.5" /> Academic CMS
                     </div>
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight mt-3">{isEdit ? "Edit this lesson page" : "Build a complete lesson page"}</h1>
-                    <p className="text-slate-500 text-sm mt-2 max-w-2xl">Turn a simple upload into a polished teaching resource with objectives, notes, attachments, assignments, and video support.</p>
+                    <h1 className="text-2xl font-semibold text-slate-900 mt-3">{isEdit ? "Edit this lesson page" : "Create a lesson page"}</h1>
+                    <p className="text-slate-500 text-sm mt-2 max-w-2xl">Add clear objectives, notes, resources, and assignments in a calm, structured format.</p>
                 </div>
 
                 {isEdit && isLoading ? (
@@ -186,13 +186,13 @@ export default function ResourceForm() {
                                 </div>
                             </section>
 
-                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-7">
+                            <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Lesson content</p>
-                                        <h2 className="text-lg font-black text-slate-900 mt-1">Make it feel like a real lesson page</h2>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Lesson content</p>
+                                        <h2 className="text-lg font-semibold text-slate-900 mt-1">Write the lesson details</h2>
                                     </div>
-                                    <div className="rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase text-slate-500">{form.quizAvailable ? "Quiz included" : "No quiz yet"}</div>
+                                    <div className="rounded-full border border-slate-200 px-3 py-1 text-[10px] font-semibold uppercase text-slate-500">{form.quizAvailable ? "Quiz included" : "No quiz yet"}</div>
                                 </div>
                                 <div className="mt-6 grid gap-5">
                                     <div className="relative">
@@ -229,8 +229,8 @@ export default function ResourceForm() {
                                 </div>
                             </section>
 
-                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-7">
-                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Resources & links</p>
+                            <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Resources & links</p>
                                 <div className="mt-6 space-y-4">
                                     <div className="relative">
                                         <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">File Upload</div>
@@ -256,34 +256,34 @@ export default function ResourceForm() {
                         </div>
 
                         <aside className="space-y-6">
-                            <section className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-xl sticky top-24">
-                                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Preview</p>
-                                <h2 className="text-xl font-black mt-2">{form.title || "Untitled lesson"}</h2>
-                                <p className="text-sm text-slate-300 mt-3">{form.introduction || "Add an introduction and the lesson will look ready for students to open."}</p>
+                            <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sticky top-24">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">Preview</p>
+                                <h2 className="text-lg font-semibold mt-2 text-slate-900">{form.title || "Untitled lesson"}</h2>
+                                <p className="text-sm text-slate-500 mt-3">{form.introduction || "Add an introduction and the lesson will feel ready for students to open."}</p>
                                 <div className="mt-6 space-y-3 text-sm">
-                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
-                                        <span className="text-slate-300">Objectives</span>
-                                        <span className="font-black">{form.objectives ? "Added" : "Pending"}</span>
+                                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
+                                        <span className="text-slate-500">Objectives</span>
+                                        <span className="font-semibold">{form.objectives ? "Added" : "Pending"}</span>
                                     </div>
-                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
-                                        <span className="text-slate-300">Lesson notes</span>
-                                        <span className="font-black">{form.lessonNotes ? "Added" : "Pending"}</span>
+                                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
+                                        <span className="text-slate-500">Lesson notes</span>
+                                        <span className="font-semibold">{form.lessonNotes ? "Added" : "Pending"}</span>
                                     </div>
-                                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
-                                        <span className="text-slate-300">Quiz</span>
-                                        <span className="font-black">{form.quizAvailable ? "On" : "Off"}</span>
+                                    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
+                                        <span className="text-slate-500">Quiz</span>
+                                        <span className="font-semibold">{form.quizAvailable ? "On" : "Off"}</span>
                                     </div>
                                 </div>
                                 <div className="mt-6 flex gap-3">
-                                    <button onClick={handleSubmit} disabled={saveMut.isPending} className="flex-1 h-11 rounded-2xl bg-[#5C67F2] hover:bg-indigo-500 text-white text-sm font-black uppercase tracking-wide transition-all">
+                                    <button onClick={handleSubmit} disabled={saveMut.isPending} className="flex-1 h-11 rounded-2xl bg-[#5C67F2] hover:bg-indigo-500 text-white text-sm font-semibold uppercase tracking-wide transition-all">
                                         {saveMut.isPending ? "Saving..." : "Publish"}
                                     </button>
-                                    <button onClick={() => navigate("/academics/resources")} className="flex-1 h-11 rounded-2xl border border-slate-700 text-sm font-black uppercase tracking-wide text-slate-300">Cancel</button>
+                                    <button onClick={() => navigate("/academics/resources")} className="flex-1 h-11 rounded-2xl border border-slate-200 text-sm font-semibold uppercase tracking-wide text-slate-600">Cancel</button>
                                 </div>
                             </section>
 
-                            <section className="bg-white rounded-[2rem] border border-slate-200/70 shadow-sm p-6">
-                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Tips</p>
+                            <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Tips</p>
                                 <ul className="mt-4 space-y-2 text-sm text-slate-600">
                                     <li>• Keep the introduction short and inspiring.</li>
                                     <li>• Add clear objectives so learners know what to expect.</li>

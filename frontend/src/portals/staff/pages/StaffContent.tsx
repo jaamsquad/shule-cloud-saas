@@ -113,7 +113,7 @@ export default function StaffContent({ type }: { type: string }) {
                         {items.map((it: any) => {
                             const isResources = type === "resources";
                             return (
-                                <div key={it._id} className={`rounded-2xl border border-slate-200/70 p-4 ${isResources ? "bg-slate-50/80" : "bg-white"}`}>
+                                <div key={it._id} className={`rounded-2xl border border-slate-200 p-4 ${isResources ? "bg-slate-50" : "bg-white"}`}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <p className="font-black text-slate-800 text-sm truncate">{it[cfg.primary] || "Untitled"}</p>
