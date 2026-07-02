@@ -113,8 +113,12 @@ export default function Departments() {
 }
 
 function DeptForm({ initial, onClose, onSaved }: { initial: any; onClose: () => void; onSaved: (d?: any) => void }) {
-    const [form, setForm] = useState<any>({ status: "Active", ...initial });
+    const [form, setForm] = useState<any>({ status: "Active", subjects: [], ...initial });
     const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+    const { data: allSubjects = [] } = useQuery({ queryKey: ["subjects"], queryFn: async () => { const r = await api.get("/subjects"); return Array.isArray(r.data) ? r.data : []; } });
+    const subjectNames: string[] = Array.from(new Set(allSubjects.map((s: any) => s.name || s.subjectName || s.title).filter(Boolean))) as string[];
+    const selected: string[] = Array.isArray(form.subjects) ? form.subjects : [];
+    const toggleSubject = (name: string) => set("subjects", selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name]);
     const save = useMutation({
         mutationFn: async () => form._id ? api.patch(`/departments/${form._id}`, form) : api.post("/departments", form),
         onSuccess: (r: any) => { toast.success("Saved"); onSaved(r.data?._id ? r.data : form); },
@@ -133,6 +137,25 @@ function DeptForm({ initial, onClose, onSaved }: { initial: any; onClose: () => 
                     <div><label className="block text-xs font-bold text-slate-600 mb-1">Type</label><select value={form.type || ""} onChange={e => set("type", e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white"><option value="">— Select —</option>{DEPT_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
                     <div><label className="block text-xs font-bold text-slate-600 mb-1">Status</label><select value={form.status} onChange={e => set("status", e.target.value)} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm bg-white"><option>Active</option><option>Inactive</option></select></div>
                     <div className="sm:col-span-2"><label className="block text-xs font-bold text-slate-600 mb-1">Description</label><textarea value={form.description || ""} onChange={e => set("description", e.target.value)} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" /></div>
+                    <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Department Subjects <span className="font-normal text-slate-400">— power the HOD dashboard</span></label>
+                        {subjectNames.length === 0 ? (
+                            <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 border border-dashed border-slate-200">No subjects found. Create subjects first, then edit this department.</p>
+                        ) : (
+                            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-1">
+                                {subjectNames.map(name => {
+                                    const on = selected.includes(name);
+                                    return (
+                                        <button key={name} type="button" onClick={() => toggleSubject(name)}
+                                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors ${on ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "bg-white border-slate-200 text-slate-600 hover:border-[#5C67F2]"}`}>
+                                            {on && <Check className="w-3 h-3 inline mr-1" />}{name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {selected.length > 0 && <p className="text-[11px] text-slate-400 mt-1">{selected.length} subject{selected.length !== 1 ? "s" : ""} assigned</p>}
+                    </div>
                 </div>
                 <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
                     <button onClick={onClose} className="text-sm font-bold text-slate-500 px-4 py-2">Cancel</button>
