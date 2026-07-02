@@ -10,8 +10,8 @@
  */
 import { useState, useMemo } from "react";
 import {
-    CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronRight, ChevronLeft,
-    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap
+    CheckCircle2, AlertCircle, Loader2, ChevronRight, ChevronLeft,
+    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap, RefreshCw
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -98,6 +98,27 @@ export default function GenerateReportCards() {
     const endTermExam = exams.find((e: any) => e._id === endTermExamId);
 
     const streamsForClass = (cid: string) => allStreams.filter((s: any) => !cid || String(s.classId) === cid);
+
+    // Existing generation matching the current Step-2 selection (class + stream + term + year).
+    // Used to show an "Already generated → Regenerate?" state on the class step.
+    const existingGeneration = useMemo(() => {
+        if (!classId) return null;
+        const v2c = v2Classes.find((c: any) => String(c._id) === classId);
+        const targetName = v2c ? norm(v2c.name || v2c.levelName || "") : "";
+        const termLabel = norm(selectedTerm || endTermExam?.term || currentTermLabel);
+        const yearLabel = String(selectedYear || endTermExam?.academicYear || activeYear?.year || "");
+        return generations.find((g: any) => {
+            const cn = norm(g.className);
+            const classMatch = targetName && (cn.includes(targetName) || targetName.includes(cn));
+            if (!classMatch) return false;
+            // Stream: a chosen stream must match; "All streams" matches records with no stream
+            if (streamId) { if (String(g.streamId) !== String(streamId)) return false; }
+            else if (g.streamId) return false;
+            if (termLabel && norm(g.term) !== termLabel) return false;
+            if (yearLabel && String(g.academicYear) !== yearLabel) return false;
+            return true;
+        }) || null;
+    }, [classId, streamId, selectedTerm, selectedYear, endTermExam, currentTermLabel, activeYear, generations, v2Classes]);
 
     // Classes shown in step 2 — match the v2 class picker to the legacy /academics/classes rows
     const matchLegacyClasses = (v2ClassId: string) => {
@@ -406,18 +427,47 @@ export default function GenerateReportCards() {
                             </div>
                         </div>
 
+                        {/* Already-generated notice for this class + stream + term + year */}
+                        {existingGeneration && (
+                            <div className="mt-8 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-emerald-800">Already Generated</p>
+                                    <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                                        Report cards for <strong>{existingGeneration.className}</strong>
+                                        {existingGeneration.streamName ? ` · ${existingGeneration.streamName}` : " · All streams"}
+                                        {" "}({existingGeneration.academicYear} · {existingGeneration.term}) already exist
+                                        {existingGeneration.mainExamName ? <> using <strong>{existingGeneration.mainExamName}</strong></> : null}.
+                                        Regenerating replaces them with your current exam selection.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex items-center justify-between mt-10">
                             <button onClick={() => setStep(1)}
                                 className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-black uppercase text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all">
                                 <ChevronLeft className="w-4 h-4" /> Back
                             </button>
-                            <button
-                                onClick={handleGenerate}
-                                disabled={!classId || generating}
-                                className="flex items-center gap-2 px-8 py-3 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-sm uppercase tracking-widest rounded-full shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                                Generate
-                            </button>
+                            {existingGeneration ? (
+                                <button
+                                    onClick={handleGenerate}
+                                    disabled={!classId || generating}
+                                    className="flex items-center gap-2 px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white font-black text-sm uppercase tracking-widest rounded-full shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                    {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    Regenerate Again?
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleGenerate}
+                                    disabled={!classId || generating}
+                                    className="flex items-center gap-2 px-8 py-3 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-black text-sm uppercase tracking-widest rounded-full shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                                    {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                    Generate
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}

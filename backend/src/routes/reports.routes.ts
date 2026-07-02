@@ -1518,6 +1518,14 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             streamName: payload.streamName || null,
             generatedAt: payload.generatedAt || new Date().toISOString(),
         };
+        // Regenerate = replace: drop any prior generation for the same
+        // class + stream + term + year so we don't accumulate duplicates.
+        await db.collection('report_card_generations').deleteMany({
+            classId: generation.classId,
+            streamId: generation.streamId,
+            term: generation.term,
+            academicYear: generation.academicYear,
+        }).catch(() => { /* non-fatal: fall through to insert */ });
         const result = await db.collection('report_card_generations').insertOne(generation);
         res.status(201).json({ ...generation, _id: result.insertedId });
     } catch (error: any) {
