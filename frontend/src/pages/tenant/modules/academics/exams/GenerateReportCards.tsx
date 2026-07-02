@@ -151,17 +151,42 @@ export default function GenerateReportCards() {
         });
     };
 
+    // Find the ONE legacy class row that corresponds to a specific stream, e.g.
+    // v2 class "FORM 1" + stream "North" → legacy "Form 1 North". Falls back to a
+    // synthetic row so we always attribute the generation to the right class+stream.
+    const legacyClassForStream = (v2ClassId: string, stream: any) => {
+        const v2c = v2Classes.find((c: any) => String(c._id) === v2ClassId);
+        const base = norm(v2c?.name || v2c?.levelName || "");
+        const want = norm(`${v2c?.name || ""} ${stream.name}`);
+        const exact = classes.find((cls: any) => norm(cls.levelName || cls.name) === want);
+        if (exact) return exact;
+        // A legacy row that includes both the class base AND the stream name.
+        const both = classes.find((cls: any) => { const cn = norm(cls.levelName || cls.name); return cn.includes(base) && cn.includes(norm(stream.name)); });
+        return both || { _id: `${v2ClassId}:${stream._id}`, name: `${v2c?.name || ""} ${stream.name}`.trim(), levelName: `${v2c?.name || ""} ${stream.name}`.trim() };
+    };
+
     const generateMut = useMutation({
         mutationFn: async () => {
+            const v2ClassName = v2Classes.find((c: any) => String(c._id) === classId)?.name || "";
+            if (streamId) {
+                // ── Specific stream → exactly ONE record for THAT stream ──
+                const stream = allStreams.find((s: any) => String(s._id) === streamId);
+                if (!stream) throw new Error("Stream not found");
+                const cls = legacyClassForStream(classId, stream);
+                await generateOne(cls, { id: String(stream._id), name: stream.name });
+                return { count: 1, className: v2ClassName };
+            }
+            // ── "All streams" → one record PER stream (each correctly attributed) ──
+            const streams = streamsForClass(classId);
+            if (streams.length > 0) {
+                await Promise.all(streams.map((s: any) => generateOne(legacyClassForStream(classId, s), { id: String(s._id), name: s.name })));
+                return { count: streams.length, className: v2ClassName };
+            }
+            // No streams at all → a single class-level record.
             const targetClasses = matchLegacyClasses(classId);
             if (targetClasses.length === 0) throw new Error("No matching class found to generate");
-
-            const stream = streamId ? allStreams.find((s: any) => String(s._id) === streamId) : null;
-            const streamMeta = stream ? { id: String(stream._id), name: stream.name } : { id: null, name: null };
-
-            // One generation record per matched legacy class (usually 1)
-            await Promise.all(targetClasses.map(cls => generateOne(cls, streamMeta)));
-            return { count: targetClasses.length, className: v2Classes.find((c: any) => String(c._id) === classId)?.name || "" };
+            await generateOne(targetClasses[0], { id: null, name: null });
+            return { count: 1, className: v2ClassName };
         },
         onSuccess: (res) => {
             qc.invalidateQueries({ queryKey: ["report_card_generations"] });

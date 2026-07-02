@@ -45,6 +45,7 @@ export default function ViewGeneratedReportCards() {
     const [selectedTerm, setSelectedTerm] = useState<string>("");
     const [selectedClassId, setSelectedClassId] = useState<string>("");
     const [selectedStreamId, setSelectedStreamId] = useState<string>("");
+    const [searched, setSearched] = useState(false);   // results show only after Search
     const [downloading, setDownloading] = useState<string | null>(null);
     const [expandedExams, setExpandedExams] = useState<Set<string>>(new Set());
 
@@ -229,7 +230,7 @@ export default function ViewGeneratedReportCards() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="text-[11px] font-black text-amber-700 uppercase tracking-wide">Academic Year</label>
-                            <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}
+                            <select value={selectedYear} onChange={(e) => { setSelectedYear(e.target.value); setSearched(false); }}
                                 className="mt-1.5 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
                                 <option value="">All Years</option>
                                 {years.map(year => <option key={year} value={year}>{year}</option>)}
@@ -237,7 +238,7 @@ export default function ViewGeneratedReportCards() {
                         </div>
                         <div>
                             <label className="text-[11px] font-black text-amber-700 uppercase tracking-wide">Term</label>
-                            <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}
+                            <select value={selectedTerm} onChange={(e) => { setSelectedTerm(e.target.value); setSearched(false); }}
                                 className="mt-1.5 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
                                 <option value="">All Terms</option>
                                 {terms.map(term => <option key={term} value={term}>{term}</option>)}
@@ -248,22 +249,27 @@ export default function ViewGeneratedReportCards() {
                     {/* Pill search bar — Choose Class · Choose Stream */}
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                         <div className="flex-1 flex items-center gap-2 bg-white border-2 border-slate-200 rounded-full px-4 py-2">
-                            <select value={selectedClassId} onChange={e => { setSelectedClassId(e.target.value); setSelectedStreamId(""); }}
+                            <select value={selectedClassId} onChange={e => { setSelectedClassId(e.target.value); setSelectedStreamId(""); setSearched(false); }}
                                 className="flex-1 h-9 bg-transparent text-sm font-bold text-slate-700 focus:outline-none">
                                 <option value="">Choose Class</option>
                                 {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
                             </select>
                             <div className="w-px h-6 bg-slate-200" />
-                            <select value={selectedStreamId} onChange={e => setSelectedStreamId(e.target.value)} disabled={!selectedClassId}
+                            <select value={selectedStreamId} onChange={e => { setSelectedStreamId(e.target.value); setSearched(false); }} disabled={!selectedClassId}
                                 className="flex-1 h-9 bg-transparent text-sm font-bold text-slate-700 focus:outline-none disabled:text-slate-300">
                                 <option value="">Choose Stream</option>
                                 {streamsForClass(selectedClassId).map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                             </select>
                             <Search className="w-4 h-4 text-slate-400" />
                         </div>
-                        {(selectedClassId || selectedStreamId || selectedYear || selectedTerm) && (
+                        <button
+                            onClick={() => setSearched(true)}
+                            className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-sky-600 hover:from-teal-600 hover:to-sky-700 text-white font-black text-sm uppercase tracking-wide rounded-xl shadow-md transition-all">
+                            Search <Search className="w-4 h-4" />
+                        </button>
+                        {searched && (
                             <button
-                                onClick={() => { setSelectedClassId(""); setSelectedStreamId(""); setSelectedYear(""); setSelectedTerm(""); }}
+                                onClick={() => { setSelectedClassId(""); setSelectedStreamId(""); setSelectedYear(""); setSelectedTerm(""); setSearched(false); }}
                                 className="px-5 py-3 text-xs font-black uppercase text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
                                 Clear
                             </button>
@@ -271,8 +277,13 @@ export default function ViewGeneratedReportCards() {
                     </div>
                 </div>
 
-                {/* Results */}
-                {isLoading ? (
+                {/* Results — shown only after Search */}
+                {!searched ? (
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-16 flex flex-col items-center gap-3 text-gray-400">
+                        <Search className="w-10 h-10 opacity-50" />
+                        <p className="font-bold text-sm">Choose year, term, class &amp; stream, then Search.</p>
+                    </div>
+                ) : isLoading ? (
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-sm py-20 flex flex-col items-center gap-3 text-gray-400">
                         <Loader2 className="w-8 h-8 animate-spin text-[#5C67F2]" />
                         <p className="text-sm font-medium">Loading report cards...</p>

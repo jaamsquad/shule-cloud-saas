@@ -125,14 +125,16 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // Marks across ALL exams in the set (for positions + per-student aggregate).
         const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
 
-        // Keep ONLY type-columns that actually have marks for THIS student. This
-        // drops phantom/empty columns (e.g. a pinned CAT with no marks) so the card
-        // shows just the real assessment types.
-        const myExamIdsWithMarks = new Set(allMarks.filter((m: any) => String(m.studentId) === sid).map((m: any) => String(m.examId)));
-        if (myExamIdsWithMarks.size > 0) {
-            const kept = examColumns.filter(c => c.examIds.some(id => myExamIdsWithMarks.has(id)));
-            if (kept.length) examColumns = kept;
-        }
+        // Column visibility: a type-column is shown when EITHER it was explicitly
+        // pinned in the generation (End Term + the chosen CAT/Mid Term) OR any student
+        // in the class has marks for it. This guarantees the CAT/MIDTERM headers
+        // appear whenever those exams were included at generation time — a student
+        // with no CAT mark simply shows "-" in that column rather than the column
+        // vanishing. We only drop columns that were neither pinned nor ever marked.
+        const pinnedExamIds = new Set<string>([String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))].filter(Boolean));
+        const anyMarkedExamIds = new Set(allMarks.map((m: any) => String(m.examId)));
+        const keep = examColumns.filter(c => c.examIds.some(id => pinnedExamIds.has(id) || anyMarkedExamIds.has(id)));
+        if (keep.length) examColumns = keep;
         multiExam = examColumns.length > 1;
 
         // Per-student aggregate for POSITIONS. We rank against everyone who sat the
@@ -1574,14 +1576,19 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             streamName: payload.streamName || null,
             generatedAt: payload.generatedAt || new Date().toISOString(),
         };
-        // Regenerate = replace: drop any prior generation for the same
-        // class + stream + term + year so we don't accumulate duplicates.
-        await db.collection('report_card_generations').deleteMany({
-            classId: generation.classId,
-            streamId: generation.streamId,
-            term: generation.term,
-            academicYear: generation.academicYear,
-        }).catch(() => { /* non-fatal: fall through to insert */ });
+        // Regenerate = replace. Drop ANY prior generation for the same target
+        // (matched by className OR classId, plus stream + term + year) so we never
+        // accumulate duplicates — even when the legacy classId varies between runs.
+        const nrm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const priors = await db.collection('report_card_generations').find({
+            term: generation.term, academicYear: generation.academicYear,
+        }).toArray().catch(() => []);
+        const dupeIds = priors.filter((p: any) => {
+            const sameStream = String(p.streamId || '') === String(generation.streamId || '');
+            const sameClass = String(p.classId) === generation.classId || (generation.className && nrm(p.className) === nrm(generation.className));
+            return sameStream && sameClass;
+        }).map((p: any) => p._id);
+        if (dupeIds.length) await db.collection('report_card_generations').deleteMany({ _id: { $in: dupeIds } }).catch(() => {});
         const result = await db.collection('report_card_generations').insertOne(generation);
         res.status(201).json({ ...generation, _id: result.insertedId });
     } catch (error: any) {

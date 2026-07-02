@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
-import { CalendarDays, CalendarRange, CalendarClock, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, CalendarRange, CalendarClock, Plus, Search, Sparkles, Loader2, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -33,10 +33,26 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
   const [view, setView] = useState<CalendarView>("month");
   const [search, setSearch] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
-  const [draft, setDraft] = useState({ title: "", description: "", category: "academic", eventDate: formatDate(new Date()), startTime: "", endTime: "", venue: "", organizer: "" });
+  const emptyDraft = { title: "", description: "", category: "academic", eventDate: formatDate(new Date()), startTime: "", endTime: "", venue: "", organizer: "" };
+  const [draft, setDraft] = useState<any>(emptyDraft);
+  const [editingId, setEditingId] = useState<string | null>(null);   // null = creating
   const [showModal, setShowModal] = useState(false);
   const qc = useQueryClient();
   const client = apiClient ?? api;
+
+  const refreshCalendar = () => {
+    qc.invalidateQueries({ queryKey: ["calendar-events"] });
+    qc.invalidateQueries({ queryKey: ["calendar-summary"] });
+  };
+  // Open the modal to CREATE a new event (optionally on a given date).
+  const openCreate = (date?: string) => { setEditingId(null); setDraft({ ...emptyDraft, eventDate: date || selectedDate }); setShowModal(true); };
+  // Open the modal to EDIT an existing event. Synced (read-only) events can't be edited.
+  const openEdit = (event: any) => {
+    if (event.isSynced || String(event._id).startsWith("sync-")) { toast.info("Auto-synced events are read-only. Edit the source record instead."); return; }
+    setEditingId(String(event._id));
+    setDraft({ title: event.title || "", description: event.description || "", category: event.category || "other", eventDate: event.eventDate, startTime: event.startTime || "", endTime: event.endTime || "", venue: event.venue || "", organizer: event.organizer || "" });
+    setShowModal(true);
+  };
 
   const parseDate = (value: string) => new Date(`${value}T00:00:00`);
   const getVisibleRange = (viewMode: CalendarView, value: string) => {
@@ -74,16 +90,21 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
     },
   });
 
-  const createEvent = useMutation({
-    mutationFn: (payload: any) => client.post("/calendar/events", payload),
+  // One mutation for both create and edit (PATCH when editingId is set).
+  const saveEvent = useMutation({
+    mutationFn: (payload: any) => editingId ? client.patch(`/calendar/events/${editingId}`, payload) : client.post("/calendar/events", payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["calendar-events"] });
-      qc.invalidateQueries({ queryKey: ["calendar-summary"] });
-      toast.success("Event created");
-      setShowModal(false);
-      setDraft({ title: "", description: "", category: "academic", eventDate: selectedDate, startTime: "", endTime: "", venue: "", organizer: "" });
+      refreshCalendar();
+      toast.success(editingId ? "Event updated" : "Event created");
+      setShowModal(false); setEditingId(null); setDraft(emptyDraft);
     },
-    onError: (e: any) => toast.error(e.response?.data?.message || "Could not create event"),
+    onError: (e: any) => toast.error(e.response?.data?.message || "Could not save event"),
+  });
+
+  const deleteEvent = useMutation({
+    mutationFn: (id: string) => client.delete(`/calendar/events/${id}`),
+    onSuccess: () => { refreshCalendar(); toast.success("Event deleted"); setShowModal(false); setEditingId(null); setDraft(emptyDraft); },
+    onError: (e: any) => toast.error(e.response?.data?.message || "Could not delete event"),
   });
 
   const calendarDays = useMemo(() => {
@@ -149,7 +170,7 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
                 <Icon className="h-4 w-4" /> {label}
               </button>
             ))}
-            <button onClick={() => setShowModal(true)} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+            <button onClick={() => openCreate()} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
               <Plus className="h-4 w-4" /> New event
             </button>
           </div>
@@ -239,19 +260,19 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">No events found for this day.</div> : filteredEvents.map((event: any) => (
-                  <div key={event._id} className="rounded-2xl border border-slate-200 p-4">
+                {filteredEvents.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">No events found for this day. <button onClick={() => openCreate()} className="font-bold text-indigo-600 hover:underline">Add one</button></div> : filteredEvents.map((event: any) => (
+                  <button key={event._id} onClick={() => openEdit(event)} className="w-full text-left rounded-2xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-black text-slate-900">{event.title}</div>
-                        <div className="text-xs text-slate-500">{event.eventDate} {event.startTime ? `• ${event.startTime}` : ''}</div>
+                        <div className="text-sm font-black text-slate-900">{event.title}{event.isSynced && <span className="ml-2 text-[9px] font-bold text-slate-400 uppercase">synced</span>}</div>
+                        <div className="text-xs text-slate-500">{event.eventDate} {event.startTime ? `• ${event.startTime}${event.endTime ? `–${event.endTime}` : ""}` : ''}{event.venue ? ` • ${event.venue}` : ""}</div>
                       </div>
                       <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase ${CATEGORY_COLORS[event.category] || CATEGORY_COLORS.other}`}>
                         {event.category}
                       </span>
                     </div>
                     {event.description && <p className="mt-2 text-sm text-slate-600">{event.description}</p>}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -279,14 +300,39 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
               </div>
             </div>
 
+            {/* Selected-day events — click a day in the grid, manage its events here */}
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-black text-slate-900">{new Date(selectedDate).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}</h2>
+                <button onClick={() => openCreate()} className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-600"><Plus className="h-3.5 w-3.5" /> Add</button>
+              </div>
+              {(() => {
+                const dayEvents = filteredEvents.filter((e: any) => e.eventDate === selectedDate);
+                return dayEvents.length === 0 ? <p className="text-sm text-slate-400 text-center py-4">No events on this day.</p> : (
+                  <div className="space-y-2">
+                    {dayEvents.map((event: any) => (
+                      <button key={event._id} onClick={() => openEdit(event)} className="w-full text-left rounded-xl border border-slate-100 p-3 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-slate-800 truncate">{event.title}</span>
+                          <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${CATEGORY_COLORS[event.category] || CATEGORY_COLORS.other}`}>{event.category}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{event.startTime ? `${event.startTime}${event.endTime ? `–${event.endTime}` : ""}` : "All day"}{event.venue ? ` · ${event.venue}` : ""}{event.isSynced ? " · synced" : ""}</div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-black text-slate-900">Upcoming events</h2>
               <div className="mt-4 space-y-3">
-                {(summary?.upcoming || []).slice(0, 5).map((event: any) => (
-                  <div key={event._id} className="rounded-2xl border border-slate-100 p-3">
+                {(summary?.upcoming || []).length === 0 && <p className="text-sm text-slate-400 text-center py-3">No upcoming events.</p>}
+                {(summary?.upcoming || []).slice(0, 6).map((event: any) => (
+                  <button key={event._id} onClick={() => { setSelectedDate(event.eventDate); openEdit(event); }} className="w-full text-left rounded-2xl border border-slate-100 p-3 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors">
                     <div className="text-sm font-semibold text-slate-800">{event.title}</div>
-                    <div className="text-xs text-slate-500">{event.eventDate} {event.startTime ? `• ${event.startTime}` : ''}</div>
-                  </div>
+                    <div className="text-xs text-slate-500">{new Date(event.eventDate).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })} {event.startTime ? `• ${event.startTime}` : ''}</div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -299,10 +345,10 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
           <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-7 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-slate-900">Create calendar event</h3>
-                <p className="text-sm text-slate-500">Add a one-off event that can be used by staff, parents, and students.</p>
+                <h3 className="text-xl font-black text-slate-900">{editingId ? "Edit calendar event" : "Create calendar event"}</h3>
+                <p className="text-sm text-slate-500">{editingId ? "Update or remove this event." : "Add a one-off event that can be used by staff, parents, and students."}</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600">Close</button>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600">Close</button>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
@@ -340,11 +386,18 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
                 <input value={draft.organizer} onChange={(e) => setDraft({ ...draft, organizer: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2" />
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
-              <button onClick={() => createEvent.mutate(draft)} disabled={createEvent.isPending} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-                {createEvent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Save event
-              </button>
+            <div className="mt-6 flex items-center justify-between gap-3">
+              {editingId ? (
+                <button onClick={() => { if (confirm("Delete this event?")) deleteEvent.mutate(editingId); }} disabled={deleteEvent.isPending} className="flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50">
+                  {deleteEvent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
+                </button>
+              ) : <span />}
+              <div className="flex gap-3">
+                <button onClick={() => { setShowModal(false); setEditingId(null); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
+                <button onClick={() => { if (!draft.title.trim()) { toast.error("Title is required"); return; } saveEvent.mutate(draft); }} disabled={saveEvent.isPending} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                  {saveEvent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {editingId ? "Update event" : "Save event"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -25,6 +25,7 @@ const NATIVE_GROUP_DASHBOARD: Record<string, string> = {
   "Live Class & LMS": "/lms",
   "Point of Sale": "/pos-admin/analytics",
   Reports: "/reports",
+  Calendar: "/calendar",
 };
 
 // Resolve where a group's parent label should navigate (its overview page).
