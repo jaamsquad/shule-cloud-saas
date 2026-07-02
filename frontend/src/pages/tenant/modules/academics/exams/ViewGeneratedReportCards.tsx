@@ -8,10 +8,11 @@
 import { useState, useMemo } from "react";
 import {
     Home, ChevronRight, Download, Eye, Loader2, Calendar, BookOpen,
-    FileText, Search, ChevronDown, CheckCircle2, GraduationCap
+    FileText, Search, ChevronDown, CheckCircle2, GraduationCap, Trash2
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -41,6 +42,8 @@ const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim
 
 export default function ViewGeneratedReportCards() {
     const navigate = useNavigate();
+    const qc = useQueryClient();
+    const { isAdmin } = usePermissions();
     const [selectedYear, setSelectedYear] = useState<string>("");
     const [selectedTerm, setSelectedTerm] = useState<string>("");
     const [selectedClassId, setSelectedClassId] = useState<string>("");
@@ -185,6 +188,20 @@ export default function ViewGeneratedReportCards() {
         setExpandedExams(next);
     };
 
+    const refresh = () => qc.invalidateQueries({ queryKey: ["report_card_generations"] });
+    // Delete one generated report record (admin only).
+    const deleteOne = useMutation({
+        mutationFn: async (id: string) => api.delete(`/report_card_generations/${id}`),
+        onSuccess: () => { toast.success("Report deleted"); refresh(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to delete"),
+    });
+    // Delete a whole exam's generated set (admin only).
+    const deleteGroup = useMutation({
+        mutationFn: async (group: ExamGroup) => api.post(`/report_card_generations/bulk-delete`, { mainExamId: group.examId }),
+        onSuccess: (r: any) => { toast.success(`Deleted ${r.data?.deleted ?? ""} report(s)`); refresh(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to delete"),
+    });
+
     const totalCards = useMemo(() => examGroups.reduce((sum, group) => sum + group.cards.length, 0), [examGroups]);
 
     return (
@@ -310,15 +327,12 @@ export default function ViewGeneratedReportCards() {
                             return (
                                 <div key={group.examId} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
                                     {/* Exam Header */}
-                                    <button
-                                        onClick={() => toggleExam(group.examId)}
-                                        className="w-full px-4 sm:px-5 py-4 flex items-center justify-between hover:bg-emerald-50/40 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className="w-full px-4 sm:px-5 py-4 flex items-center justify-between hover:bg-emerald-50/40 transition-colors">
+                                        <button onClick={() => toggleExam(group.examId)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                                             <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
                                                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                                             </div>
-                                            <div className="text-left flex-1 min-w-0">
+                                            <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <h3 className="font-black text-gray-900 text-sm">{group.examName}</h3>
                                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">✓ Generated</span>
@@ -327,9 +341,19 @@ export default function ViewGeneratedReportCards() {
                                                     {group.cards.length} class{group.cards.length !== 1 ? 'es' : ''}
                                                 </p>
                                             </div>
+                                        </button>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => { if (confirm(`Delete all ${group.cards.length} report(s) for "${group.examName}"? This cannot be undone.`)) deleteGroup.mutate(group); }}
+                                                    disabled={deleteGroup.isPending}
+                                                    className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-black uppercase text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-100 transition-colors disabled:opacity-50">
+                                                    <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete All</span>
+                                                </button>
+                                            )}
+                                            <button onClick={() => toggleExam(group.examId)}><ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} /></button>
                                         </div>
-                                        <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-                                    </button>
+                                    </div>
 
                                     {/* Exam Cards List */}
                                     {open && (
@@ -378,6 +402,15 @@ export default function ViewGeneratedReportCards() {
                                                             <Eye className="w-3.5 h-3.5" />
                                                             <span className="hidden sm:inline">View Cards</span>
                                                         </button>
+                                                        {isAdmin && (
+                                                            <button
+                                                                onClick={() => { if (confirm(`Delete the generated report for ${card.className}${card.streamName ? ` · ${card.streamName}` : ""}?`)) deleteOne.mutate(String(card._id)); }}
+                                                                disabled={deleteOne.isPending}
+                                                                title="Delete this report"
+                                                                className="flex items-center justify-center w-9 h-9 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors border border-rose-100 disabled:opacity-50">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}

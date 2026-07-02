@@ -1596,6 +1596,43 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
     }
 });
 
+// Admin-only guard: only organization/school administrators & principals may
+// delete generated report-card records.
+const ADMIN_ROLES = new Set(['super_admin', 'school_admin', 'admin', 'principal', 'super admin', 'school admin']);
+const isAdminReq = (req: Request) => {
+    const role = String((req as any).tenantContext?.user?.role || '').toLowerCase();
+    return !role || ADMIN_ROLES.has(role);
+};
+
+// DELETE one generated report record (admin only).
+router.delete('/report_card_generations/:id', async (req: Request, res: Response) => {
+    try {
+        if (!isAdminReq(req)) return res.status(403).json({ message: 'Only an administrator can delete generated reports.' });
+        const db = getRequestDb(req);
+        let _id: ObjectId; try { _id = new ObjectId(req.params.id); } catch { return res.status(400).json({ message: 'Invalid id' }); }
+        const r = await db.collection('report_card_generations').deleteOne({ _id });
+        if (!r.deletedCount) return res.status(404).json({ message: 'Not found' });
+        res.json({ message: 'Deleted' });
+    } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
+// Bulk delete — all records for an exam (admin only). Filter by mainExamId, and
+// optionally term/academicYear. Used to clear a whole exam's generated set.
+router.post('/report_card_generations/bulk-delete', async (req: Request, res: Response) => {
+    try {
+        if (!isAdminReq(req)) return res.status(403).json({ message: 'Only an administrator can delete generated reports.' });
+        const db = getRequestDb(req);
+        const { mainExamId, term, academicYear } = req.body || {};
+        const q: any = {};
+        if (mainExamId) q.mainExamId = String(mainExamId);
+        if (term) q.term = term;
+        if (academicYear) q.academicYear = String(academicYear);
+        if (Object.keys(q).length === 0) return res.status(400).json({ message: 'Provide mainExamId (and optionally term/year).' });
+        const r = await db.collection('report_card_generations').deleteMany(q);
+        res.json({ message: 'Deleted', deleted: r.deletedCount });
+    } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
 // 8. GET /api/v1/report_card_generations/:id/pdf
 // Download generated report card as PDF
 router.get('/report_card_generations/:id/pdf', async (req: Request, res: Response) => {

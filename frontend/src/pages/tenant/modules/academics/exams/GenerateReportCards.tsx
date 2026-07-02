@@ -11,10 +11,11 @@
 import { useState, useMemo } from "react";
 import {
     CheckCircle2, AlertCircle, Loader2, ChevronRight, ChevronLeft,
-    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap, RefreshCw
+    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap, RefreshCw, Trash2
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -29,6 +30,7 @@ const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim
 export default function GenerateReportCards() {
     const navigate = useNavigate();
     const qc = useQueryClient();
+    const { isAdmin } = usePermissions();
 
     // Wizard step: 1=select exams, 2=choose class, 3=success, 4=browse reports
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -105,20 +107,25 @@ export default function GenerateReportCards() {
         if (!classId) return null;
         const v2c = v2Classes.find((c: any) => String(c._id) === classId);
         const targetName = v2c ? norm(v2c.name || v2c.levelName || "") : "";
+        const selStream = streamId ? allStreams.find((s: any) => String(s._id) === streamId) : null;
+        const streamName = selStream ? norm(selStream.name) : "";
         const termLabel = norm(selectedTerm || endTermExam?.term || currentTermLabel);
         const yearLabel = String(selectedYear || endTermExam?.academicYear || activeYear?.year || "");
         return generations.find((g: any) => {
             const cn = norm(g.className);
             const classMatch = targetName && (cn.includes(targetName) || targetName.includes(cn));
             if (!classMatch) return false;
-            // Stream: a chosen stream must match; "All streams" matches records with no stream
-            if (streamId) { if (String(g.streamId) !== String(streamId)) return false; }
-            else if (g.streamId) return false;
+            if (streamId) {
+                // Chosen stream: match by streamId AND the record's className must match the
+                // chosen stream (guards against stale records whose class ≠ their stream).
+                if (String(g.streamId) !== String(streamId)) return false;
+                if (streamName && !cn.includes(streamName)) return false;
+            } else if (g.streamId) return false;  // "All streams" → only stream-less records
             if (termLabel && norm(g.term) !== termLabel) return false;
             if (yearLabel && String(g.academicYear) !== yearLabel) return false;
             return true;
         }) || null;
-    }, [classId, streamId, selectedTerm, selectedYear, endTermExam, currentTermLabel, activeYear, generations, v2Classes]);
+    }, [classId, streamId, selectedTerm, selectedYear, endTermExam, currentTermLabel, activeYear, generations, v2Classes, allStreams]);
 
     // Classes shown in step 2 — match the v2 class picker to the legacy /academics/classes rows
     const matchLegacyClasses = (v2ClassId: string) => {
@@ -224,6 +231,13 @@ export default function GenerateReportCards() {
             state: { className: g.className, examName: g.mainExamName }
         });
     };
+
+    // Delete a generated report (admin only).
+    const deleteGen = useMutation({
+        mutationFn: async (id: string) => api.delete(`/report_card_generations/${id}`),
+        onSuccess: () => { toast.success("Report deleted"); qc.invalidateQueries({ queryKey: ["report_card_generations"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to delete"),
+    });
 
     const resetWizard = () => {
         setStep(1);
@@ -608,6 +622,15 @@ export default function GenerateReportCards() {
                                                     {g.mainExamName}{g.additionalExamIds?.length > 0 ? ` + ${g.additionalExamIds.length} internal` : ""} · {g.term} {g.academicYear}
                                                 </p>
                                             </div>
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => { if (confirm(`Delete the generated report for ${g.className}${g.streamName ? ` · ${g.streamName}` : ""}?`)) deleteGen.mutate(String(g._id)); }}
+                                                    disabled={deleteGen.isPending}
+                                                    title="Delete this report"
+                                                    className="flex items-center justify-center w-9 h-9 text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-100 transition-all flex-shrink-0 disabled:opacity-50">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handleViewCard(g)}
                                                 className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-black uppercase text-[#5C67F2] bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-100 transition-all flex-shrink-0">
