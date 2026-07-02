@@ -90,19 +90,34 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // comes first so its column leads. De-duplicated.
         const examIds: string[] = [String(examId), String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))]
             .filter((v, i, a) => v && a.indexOf(v) === i);
-        const examDocs = await database.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray().catch(() => []);
-        const examMeta: Record<string, any> = {}; examDocs.forEach((e: any) => examMeta[String(e._id)] = e);
+        const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
+        // Additional assessments may be regular exams OR online exams, so look in both
+        // collections — otherwise online CAT/Mid Term docs are missed and their column
+        // falls back to a generic "EXAM" title with no type.
+        const [regularExamDocs, onlineExamDocs] = await Promise.all([
+            database.collection('exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+            database.collection('online_exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+        ]);
+        const examMeta: Record<string, any> = {};
+        [...regularExamDocs, ...onlineExamDocs].forEach((e: any) => { if (!examMeta[String(e._id)]) examMeta[String(e._id)] = e; });
 
         // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
         // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
         // "END-TERM". When several exams of the same type cover the same subject
         // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
         const typeOf = (e: any): string => {
-            const t = norm(e?.type || e?.examType || e?.examName || '');
+            // Consider every field that might carry the assessment type/name, across
+            // both regular exams (type: "CAT"/"Mid Term"/…) and online exams.
+            const t = norm([e?.type, e?.examType, e?.category, e?.assessmentType, e?.examName, e?.title, e?.name].filter(Boolean).join(' '));
             if (/mid\s*term|midterm/.test(t)) return 'MIDTERM';
-            if (/\bcat\b|assignment|quiz|online|opener|opening/.test(t)) return 'CAT';
+            if (/\bcat\b|assignment|quiz|opener|opening/.test(t)) return 'CAT';
             if (/end\s*term|final/.test(t)) return 'END-TERM';
-            return String(e?.type || e?.examType || 'EXAM').toUpperCase().slice(0, 12);
+            if (/mock/.test(t)) return 'MOCK';
+            // An online assessment with no clearer type still reads as a CAT.
+            if (/online/.test(t)) return 'CAT';
+            // Prefer a real type field over the generic fallback.
+            const explicit = String(e?.type || e?.examType || e?.category || '').trim();
+            return (explicit || 'EXAM').toUpperCase().slice(0, 12);
         };
         // The main/End-Term exam always defines the leading column's type.
         const mainType = typeOf(examMeta[String(gen.mainExamId)] || examMeta[examId]) || 'END-TERM';
@@ -123,7 +138,27 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         let multiExam = examColumns.length > 1;
 
         // Marks across ALL exams in the set (for positions + per-student aggregate).
-        const allMarks = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+        const allMarks: any[] = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+
+        // Supplement with ONLINE-exam attempt scores for any online exams in the set
+        // whose results haven't been published into exam_marks yet, so their CAT/Mid
+        // Term columns still show real marks. Normalized to the exam_marks shape.
+        const onlineIds = onlineExamDocs.map((e: any) => String(e._id));
+        if (onlineIds.length) {
+            const attempts = await database.collection('online_exam_attempts')
+                .find({ examId: { $in: onlineIds }, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
+                .toArray().catch(() => []);
+            const onlineById: Record<string, any> = {}; onlineExamDocs.forEach((e: any) => onlineById[String(e._id)] = e);
+            const haveInMarks = new Set(allMarks.map((m: any) => `${String(m.examId)}|${String(m.studentId)}`));
+            attempts.forEach((a: any) => {
+                const key = `${String(a.examId)}|${String(a.studentId)}`;
+                if (haveInMarks.has(key)) return;   // already published to exam_marks
+                const ex = onlineById[String(a.examId)] || {};
+                const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
+                const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
+                allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total });
+            });
+        }
 
         // Column visibility: a type-column is shown when EITHER it was explicitly
         // pinned in the generation (End Term + the chosen CAT/Mid Term) OR any student
