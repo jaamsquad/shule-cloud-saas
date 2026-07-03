@@ -9,12 +9,25 @@ import api from "@/lib/api";
 // changes which curricula appear in class pickers and how classes behave.
 const MODE_LABEL: Record<string, string> = { traditional: "Marks & Grades", competency: "Competencies & Levels" };
 
+// Client-side fallback so the page is never blank if the curriculum API is down.
+// Mirrors the backend built-in registry (lib/curriculum.ts).
+const BUILTIN_CURRICULA = [
+    { code: "844", name: "8-4-4", active: true, assessmentMode: "traditional", terminology: { subjectPlural: "Subjects" }, reportLayout: "844", levelPrefix: "Form", promotion: "class", examTypes: ["CAT", "Mid Term", "End Term", "Mock"] },
+    { code: "CBC", name: "CBC (Competency-Based)", active: true, assessmentMode: "competency", terminology: { subjectPlural: "Learning Areas" }, reportLayout: "cbc", levelPrefix: "Grade", promotion: "grade", examTypes: ["Assessment Activity", "Competency Task", "Project", "Practical"] },
+    { code: "Cambridge", name: "Cambridge", active: true, assessmentMode: "traditional", terminology: { subjectPlural: "Subjects" }, reportLayout: "cambridge", levelPrefix: "Year", promotion: "class", examTypes: ["Checkpoint", "Progression Test", "IGCSE", "AS/A Level"] },
+];
+
 export default function CurriculumSettings() {
     const qc = useQueryClient();
     const [busy, setBusy] = useState<string | null>(null);
     const { data: curricula = [], isLoading } = useQuery({
         queryKey: ["curricula_all"],
-        queryFn: async () => { const r = await api.get("/curricula"); return Array.isArray(r.data) ? r.data : []; },
+        queryFn: async () => {
+            try { const r = await api.get("/curricula"); if (Array.isArray(r.data) && r.data.length) return r.data; } catch { /* fall through */ }
+            // Fallback to the built-in set so the page is never blank (e.g. before the
+            // curriculum service is available). These mirror the backend defaults.
+            return BUILTIN_CURRICULA;
+        },
     });
 
     const toggle = useMutation({
@@ -35,6 +48,12 @@ export default function CurriculumSettings() {
 
             {isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
+            ) : curricula.length === 0 ? (
+                <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center text-slate-400 max-w-2xl">
+                    <GraduationCap className="w-10 h-10 mx-auto mb-2" />
+                    <p className="font-bold text-sm text-slate-600">Couldn't load curricula.</p>
+                    <p className="text-xs mt-1">The curriculum service may be unavailable. If you just updated the app, restart the server and reload this page.</p>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-6xl">
                     {curricula.map((c: any) => (

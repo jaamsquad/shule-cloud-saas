@@ -684,9 +684,19 @@ function MarksApproval({ dept }: { dept: any }) {
     const batchBySubject: Record<string, any> = {};
     batches.forEach((b: any) => { batchBySubject[(b.subject || "").toLowerCase().trim()] = b; });
 
+    const refetchApproval = () => { qc.invalidateQueries({ queryKey: ["mark_overview", activeExam, dept._id] }); qc.invalidateQueries({ queryKey: ["mark_batches", activeExam] }); };
     const act = useMutation({
         mutationFn: async ({ id, action, note }: { id: string; action: string; note?: string }) => api.patch(`/mark-approvals/${id}/${action}`, { note }),
-        onSuccess: () => { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["mark_overview", activeExam, dept._id] }); qc.invalidateQueries({ queryKey: ["mark_batches", activeExam] }); },
+        onSuccess: () => { toast.success("Updated"); refetchApproval(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+    // Direct moderation by subject — works even for "Draft" subjects that have marks
+    // but were never formally submitted (creates the batch on the fly).
+    const activeExamObj = exams.find((e: any) => e._id === activeExam);
+    const directModerate = useMutation({
+        mutationFn: async ({ subject, action, note }: { subject: string; action: string; note?: string }) =>
+            api.post(`/mark-approvals/moderate`, { examId: activeExam, examName: activeExamObj?.examName || activeExamObj?.name || "", subject, className: activeExamObj?.classLevel || "", action, note }),
+        onSuccess: () => { toast.success("Updated"); refetchApproval(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 
@@ -723,22 +733,19 @@ function MarksApproval({ dept }: { dept: any }) {
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[s.status] || "bg-slate-100 text-slate-500"}`}>{s.status}</span>
-                                        {batch && (
+                                        {/* Approve/Reject available whenever marks exist and aren't locked —
+                                            including Draft (marks saved but never submitted). Uses the
+                                            direct-moderate endpoint when there's no batch yet. */}
+                                        {s.hasMarks && !["Approved", "Locked"].includes(s.status) && (
                                             <>
-                                                {["Submitted", "Returned", "Rejected"].includes(s.status) && s.hasMarks && (
-                                                    <button onClick={() => act.mutate({ id: batch._id, action: "approve" })} className="text-[10px] font-bold bg-emerald-500 text-white px-2.5 py-1 rounded inline-flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Approve</button>
-                                                )}
-                                                {s.status === "Submitted" && (
-                                                    <>
-                                                        <button onClick={() => act.mutate({ id: batch._id, action: "return", note: "Please correct" })} className="text-[10px] font-bold border border-amber-200 text-amber-600 px-2.5 py-1 rounded">Return</button>
-                                                        <button onClick={() => act.mutate({ id: batch._id, action: "reject" })} className="text-[10px] font-bold border border-rose-200 text-rose-600 px-2.5 py-1 rounded">Reject</button>
-                                                    </>
-                                                )}
-                                                {s.status === "Approved" && <button onClick={() => act.mutate({ id: batch._id, action: "lock" })} className="text-[10px] font-bold bg-slate-800 text-white px-2.5 py-1 rounded">Lock</button>}
-                                                {s.status === "Locked" && <button onClick={() => act.mutate({ id: batch._id, action: "unlock" })} className="text-[10px] font-bold border border-slate-300 text-slate-600 px-2.5 py-1 rounded">Unlock</button>}
-                                                <button onClick={() => setHistoryFor(batch)} title="Moderation history" className="text-slate-400 hover:text-[#5C67F2]"><HistoryIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => batch ? act.mutate({ id: batch._id, action: "approve" }) : directModerate.mutate({ subject: s.subject, action: "approve" })} className="text-[10px] font-bold bg-emerald-500 text-white px-2.5 py-1 rounded inline-flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Approve</button>
+                                                <button onClick={() => batch ? act.mutate({ id: batch._id, action: "return", note: "Please correct" }) : directModerate.mutate({ subject: s.subject, action: "return", note: "Please correct" })} className="text-[10px] font-bold border border-amber-200 text-amber-600 px-2.5 py-1 rounded">Return</button>
+                                                <button onClick={() => batch ? act.mutate({ id: batch._id, action: "reject" }) : directModerate.mutate({ subject: s.subject, action: "reject" })} className="text-[10px] font-bold border border-rose-200 text-rose-600 px-2.5 py-1 rounded">Reject</button>
                                             </>
                                         )}
+                                        {s.status === "Approved" && <button onClick={() => batch ? act.mutate({ id: batch._id, action: "lock" }) : directModerate.mutate({ subject: s.subject, action: "lock" })} className="text-[10px] font-bold bg-slate-800 text-white px-2.5 py-1 rounded">Lock</button>}
+                                        {s.status === "Locked" && <button onClick={() => batch ? act.mutate({ id: batch._id, action: "unlock" }) : directModerate.mutate({ subject: s.subject, action: "unlock" })} className="text-[10px] font-bold border border-slate-300 text-slate-600 px-2.5 py-1 rounded">Unlock</button>}
+                                        {batch && <button onClick={() => setHistoryFor(batch)} title="Moderation history" className="text-slate-400 hover:text-[#5C67F2]"><HistoryIcon className="w-3.5 h-3.5" /></button>}
                                     </div>
                                 </div>
                             );

@@ -161,6 +161,49 @@ router.post('/mark-approvals/submit', async (req: Request, res: Response) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ── HOD moderates a subject DIRECTLY (by exam+subject) ───────────────────────
+// Lets the HOD approve/reject/return marks that exist but were never formally
+// submitted (status "Draft"), creating the approval batch on the fly. This is what
+// makes Marks Approval usable when teachers save marks without clicking Submit.
+router.post('/mark-approvals/moderate', async (req: Request, res: Response) => {
+    try {
+        const d = db(req);
+        const { examId, examName, subject, className, action, note } = req.body || {};
+        if (!examId || !subject || !action) return res.status(400).json({ message: 'examId, subject and action are required' });
+        if (!['approve', 'reject', 'return', 'lock', 'unlock'].includes(action)) return res.status(400).json({ message: 'Unknown action' });
+
+        // Authorize: HOD must own a department that owns this subject (admins pass).
+        if (!(await canModerateSubject(req, d, subject))) {
+            return res.status(403).json({ message: 'You cannot moderate this subject.' });
+        }
+
+        const a = actor(req);
+        const status: Status = action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : action === 'return' ? 'Returned' : action === 'lock' ? 'Locked' : 'Approved';
+        const verb = action === 'unlock' ? 'Unlocked' : status;
+        const entries = await d.collection('exam_marks').countDocuments({ examId: String(examId), $or: [{ subjectName: subject }, { subject }] }).catch(() => 0);
+        const owners = await departmentsForSubject(d, subject);
+        const key = { examId: String(examId), subjectNorm: NORM(subject) };
+        const event = { action: verb, by: a.name, byId: a.staffId, at: now(), note: note || '' };
+        await d.collection('mark_approvals').updateOne(
+            key,
+            {
+                $set: { examId: String(examId), examName: examName || '', subject, subjectNorm: NORM(subject), className: className || '', entries, status, departmentIds: owners.map(o => o.id), departmentNames: owners.map(o => o.name), moderatedBy: a.name, moderatedById: a.staffId, moderatedAt: now(), lastNote: note || '', updatedAt: now() },
+                $setOnInsert: { createdAt: now() },
+                $push: { history: event },
+            } as any,
+            { upsert: true },
+        );
+        // Reflect approval on the underlying marks (gates student visibility).
+        const approvedNow = status === 'Approved' || status === 'Locked';
+        await d.collection('exam_marks').updateMany(
+            { examId: String(examId), $or: [{ subjectName: subject }, { subject }] },
+            { $set: { approvalStatus: status, approved: approvedNow } },
+        ).catch(() => {});
+        await recordAudit(req, { action: verb, entity: 'marks', entityId: `${examId}:${subject}`, meta: { subject, examId } });
+        res.json({ message: `Marks ${verb.toLowerCase()}`, status });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── HOD transitions: approve / reject / return / lock / unlock ────────────────
 const TRANSITIONS: Record<string, { to: Status; verb: string }> = {
     approve: { to: 'Approved', verb: 'Approved' },
