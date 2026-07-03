@@ -428,6 +428,7 @@ export const navItems: NavItem[] = [
       { label: "Discount Type", path: "/settings/discount-type", locked: true },
       { label: "Rules & Regulations", path: "/settings/rules" },
       { label: "Marks Grading", path: "/settings/grading" },
+      { label: "Grading Templates", path: "/settings/grading-templates" },
       { label: "Curriculum Settings", path: "/settings/curriculum" },
       { label: "Report Card Templates", path: "/settings/report-templates" },
       { label: "Theme & Language", path: "/settings/theme" },

@@ -33,6 +33,7 @@ import departmentsRoutes from './routes/departments.routes';
 import markApprovalsRoutes from './routes/markApprovals.routes';
 import assistantRoutes from './routes/assistant.routes';
 import curriculumRoutes from './routes/curriculum.routes';
+import gradingTemplatesRoutes from './routes/gradingTemplates.routes';
 import cafeteriaRoutes from './routes/cafeteria.routes';
 import studentIdRoutes from './routes/studentId.routes';
 import modulesRoutes from './routes/modules.routes';
@@ -335,6 +336,7 @@ app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
 app.use('/api/v1', assistantRoutes);      // Smart Assistant (logic-based insights)
 app.use('/api/v1', curriculumRoutes);     // Curriculum engine (class → behavior config)
+app.use('/api/v1', gradingTemplatesRoutes); // Named grading-scale templates
 app.use('/api/v1', cafeteriaRoutes);      // kitchen meal service + canteen quick sale
 app.use('/api/v1', studentIdRoutes);      // student ID card: QR + barcode + print-ready PDF
 app.use('/api', studentIdRoutes);         // also at /api/student-id (per the spec)

@@ -184,16 +184,34 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         const byClass: Record<string, any[]> = {};
         rows.forEach(r => { (byClass[levelOf(r.className || r.stream)] ||= []).push(r); });
         const grades = scale.map((s: any) => s.grade);
+
+        // Curriculum per class level (resolved from v2 classes / label) so each card
+        // uses ITS OWN grading style: CBC → EE/ME/AE/BE performance levels; 8-4-4 →
+        // KCSE letter grades.
+        const v2ClassesEarly = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+        const curByLevel: Record<string, string> = {};
+        v2ClassesEarly.forEach((c: any) => { curByLevel[levelOf(c.name).toLowerCase()] = canonicalCode(c.curriculumType ?? c.curriculum ?? ''); });
+        const CBC_GRADES = ['EE', 'ME', 'AE', 'BE'];
+        // Mean points (0–12) → CBC performance level.
+        const cbcLevelFromPoints = (pts: number): string => pts >= 10 ? 'EE' : pts >= 7 ? 'ME' : pts >= 4 ? 'AE' : 'BE';
+
         const classes = Object.entries(byClass).map(([name, list]) => {
+            const cur = curByLevel[name.toLowerCase()] || canonicalCode(curriculumFromClassLabel(name));
+            const isCbc = cur === 'CBC';
+            const classGrades = isCbc ? CBC_GRADES : grades;
             const breakdown: Record<string, number> = {};
-            grades.forEach((g: string) => breakdown[g] = 0);
-            list.forEach(r => { breakdown[r.meanGrade] = (breakdown[r.meanGrade] || 0) + 1; });
+            classGrades.forEach((g: string) => breakdown[g] = 0);
+            list.forEach(r => {
+                const key = isCbc ? cbcLevelFromPoints(r.meanPoints) : r.meanGrade;
+                breakdown[key] = (breakdown[key] || 0) + 1;
+            });
             const meanPoints = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
             const meanPct = list.reduce((a, r) => a + r.meanPct, 0) / list.length;
             return {
                 name, students: list.length, noMarks: false,
                 meanPoints: round(meanPoints, 2), meanPct: round(meanPct, 2),
-                meanGrade: meanGradeFromPoints(scale, meanPoints), breakdown,
+                meanGrade: isCbc ? cbcLevelFromPoints(meanPoints) : meanGradeFromPoints(scale, meanPoints),
+                breakdown, grades: classGrades, curriculum: cur,
             };
         });
 
@@ -210,21 +228,16 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         for (const lvl of wantedLevels) {
             if (have.has(lvl.toLowerCase())) continue;
             have.add(lvl.toLowerCase());
-            const emptyBreakdown: Record<string, number> = {}; grades.forEach((g: string) => emptyBreakdown[g] = 0);
-            classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown });
+            const cur = curByLevel[lvl.toLowerCase()] || canonicalCode(curriculumFromClassLabel(lvl));
+            const g = cur === 'CBC' ? CBC_GRADES : grades;
+            const emptyBreakdown: Record<string, number> = {}; g.forEach((x: string) => emptyBreakdown[x] = 0);
+            classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown, grades: g, curriculum: cur });
         }
         classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-        // Curriculum-aware: tag each class card with its curriculum so analytics can
-        // filter/group by curriculum (CBC vs 8-4-4). Resolved from the v2 class record
-        // by name, else inferred from the label.
-        const curByName: Record<string, string> = {};
-        v2Classes.forEach((c: any) => { curByName[levelOf(c.name).toLowerCase()] = canonicalCode(c.curriculumType ?? c.curriculum ?? ''); });
-        const withCurriculum = classes.map(c => ({
-            ...c,
-            curriculum: curByName[c.name.toLowerCase()] || canonicalCode(curriculumFromClassLabel(c.name)),
-        }));
-        res.json({ classes: withCurriculum, grades });
+        // Each class already carries its own `curriculum` + `grades`. Return the
+        // school-default `grades` too for any consumer that wants the fallback set.
+        res.json({ classes, grades });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

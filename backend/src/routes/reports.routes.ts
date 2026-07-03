@@ -26,7 +26,18 @@ async function loadGrading(database: Db, classId?: string) {
         { grade: 'D+', from: 40, upto: 44, points: 4, remark: 'AIM HIGHER' }, { grade: 'D', from: 35, upto: 39, points: 3, remark: 'AIM HIGHER' },
         { grade: 'D-', from: 30, upto: 34, points: 2, remark: 'WEAK' }, { grade: 'E', from: 0, upto: 29, points: 1, remark: 'PULL UP YOUR SOCKS' },
     ];
-    let rec: any = classId ? await database.collection('grading_criteria').findOne({ classId }).catch(() => null) : null;
+    // Resolution order: the class's assigned GRADING TEMPLATE → a class-specific
+    // grading_criteria → the global grading_criteria → built-in default.
+    let rec: any = null;
+    if (classId) {
+        const clsOid = (() => { try { return new ObjectId(classId); } catch { return null; } })();
+        const cls: any = clsOid ? await database.collection('v2_classes').findOne({ _id: clsOid }).catch(() => null) : null;
+        if (cls?.gradingTemplateId) {
+            const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
+            if (tOid) rec = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null);
+        }
+        if (!rec) rec = await database.collection('grading_criteria').findOne({ classId }).catch(() => null);
+    }
     if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
     const raw = (rec?.grades || rec?.gradingScale || []);
     const scale = raw.length ? raw.map((g: any, i: number) => ({
@@ -333,27 +344,37 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // ── "Change" column: this student's subject % vs the PREVIOUS exam ──────────
         // Find the exam chronologically before the main exam, then this student's
         // per-subject % in it, so we can show improvement/drop per subject.
+        // Always compute the change data (cheap) so the "Change" column has values
+        // the moment the setting is toggled on — no report re-fetch needed.
         let prevPctBySubject: Record<string, number> = {};
-        if (rcSettings.showChange) {
+        {
             const allStudentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
             const examsAll2 = await database.collection('exams').find({}).toArray().catch(() => []);
             const eById2: Record<string, any> = {}; examsAll2.forEach((e: any) => eById2[String(e._id)] = e);
             const yOf = (e: any) => N(e?.academicYear ?? e?.year);
             const tOf = (e: any) => N(String(e?.term || '').match(/\d+/)?.[0] || 0);
+            // A finer chronological key: year, term, then creation time — so the
+            // "previous" exam can be an EARLIER exam in the SAME term (e.g. a CAT or
+            // Mid Term before the End Term), not only a previous term.
+            const timeOf = (e: any) => { const d = new Date(e?.createdAt || e?.startDate || e?.date || 0).getTime(); return isNaN(d) ? 0 : d; };
+            const orderKey = (e: any) => yOf(e) * 1e15 + tOf(e) * 1e13 + timeOf(e);
             const mainE = examMeta[String(gen.mainExamId)] || exam;
-            const mainKey = yOf(mainE) * 10 + tOf(mainE);
-            // Previous = the marks whose exam sorts immediately before the main exam.
+            const mainOrder = orderKey(mainE);
+            const mainExamIds = new Set(examIds.map(String));   // exclude the exams already ON this card
+            // Prior marks = any of this student's marks whose exam sorts BEFORE the main
+            // exam and isn't one of the exams already shown as a column.
             const priorMarks = allStudentMarks
                 .map((m: any) => ({ m, e: eById2[String(m.examId)] }))
-                .filter((x: any) => x.e && (yOf(x.e) * 10 + tOf(x.e)) < mainKey);
-            // Keep the latest prior exam per subject.
+                .filter((x: any) => x.e && !mainExamIds.has(String(x.m.examId)) && orderKey(x.e) < mainOrder);
+            // Keep the LATEST prior exam per subject (keyed by NORMALIZED subject name
+            // so it matches the current subject regardless of case/spacing).
             const bestBySub: Record<string, { key: number; pct: number }> = {};
             priorMarks.forEach(({ m, e }: any) => {
-                const sub = m.subjectName || m.subject || 'Subject'; const key = yOf(e) * 10 + tOf(e);
+                const sub = norm(m.subjectName || m.subject || 'Subject'); const key = orderKey(e);
                 const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
                 if (!bestBySub[sub] || key > bestBySub[sub].key) bestBySub[sub] = { key, pct };
             });
-            prevPctBySubject = Object.fromEntries(Object.entries(bestBySub).map(([s, v]) => [s, v.pct]));
+            prevPctBySubject = Object.fromEntries(Object.entries(bestBySub).map(([s, v]) => [s, v.pct]));  // {normSubject: pct}
         }
 
         let totalMarks = 0, totalPoints = 0;
@@ -378,8 +399,9 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const tName = teacherForSubject(sub);
             const initials = initialsOf(tName);
             // Change vs previous exam (percentage points, rounded). null when no prior.
-            const prevPct = prevPctBySubject[sub];
-            const change = (rcSettings.showChange && prevPct !== undefined) ? Math.round(aggPct - prevPct) : null;
+            // Always computed; the frontend shows the column only when the setting is on.
+            const prevPct = prevPctBySubject[norm(sub)];
+            const change = (prevPct !== undefined) ? Math.round(aggPct - prevPct) : null;
             return {
                 subject: sub,
                 cells,                                  // per-exam columns

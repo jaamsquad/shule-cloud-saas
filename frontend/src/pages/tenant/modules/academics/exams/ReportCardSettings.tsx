@@ -20,7 +20,14 @@ export default function ReportCardSettings() {
 
     const save = useMutation({
         mutationFn: async (body: any) => (await api.patch("/report-card-settings", body)).data,
-        onSuccess: (d) => { setS(d); qc.invalidateQueries({ queryKey: ["rc_settings"] }); toast.success("Report card settings saved"); },
+        onSuccess: (d) => {
+            setS(d);
+            qc.invalidateQueries({ queryKey: ["rc_settings"] });
+            // Report cards embed these settings in their data — force them to refetch
+            // so the change shows immediately instead of using cached card data.
+            qc.invalidateQueries({ queryKey: ["scholar_sheet"] });
+            toast.success("Report card settings saved");
+        },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 

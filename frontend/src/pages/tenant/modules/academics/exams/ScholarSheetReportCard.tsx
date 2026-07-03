@@ -15,6 +15,13 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
         enabled: !preloaded && !!studentId && !!examId,
         queryFn: async () => (await api.get(`/reports/scholar-sheet/${studentId}`, { params: { examId } })).data,
     });
+    // Display settings fetched LIVE (short cache) so toggling Report Card Settings
+    // takes effect immediately — even when the card data itself is cached/preloaded.
+    const { data: liveSettings } = useQuery({
+        queryKey: ["rc_settings"],
+        queryFn: async () => (await api.get("/report-card-settings")).data,
+        staleTime: 10_000,
+    });
     const data = preloaded || fetched;
 
     if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
@@ -61,7 +68,9 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
     };
 
     // ── Report-card display settings (from Report Card Settings page) ────────────
-    const settings = d.settings || {};
+    // Prefer the LIVE settings (fetched above) so changes apply instantly; fall back
+    // to whatever was embedded in the card data, then to defaults.
+    const settings = liveSettings || d.settings || {};
     const col = settings.columns || {};
     const showCol = (k: string) => col[k] !== false;              // default on
     const showKcpe = showKcpeProp !== false && settings.showKcpe !== false;
