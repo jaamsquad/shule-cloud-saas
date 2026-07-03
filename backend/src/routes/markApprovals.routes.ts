@@ -46,6 +46,49 @@ async function canModerateSubject(req: Request, database: Db, subject: string): 
     return owners.some(o => access.can(o.id));
 }
 
+/** Find the email of the teacher responsible for a subject's marks: prefer the
+ *  submitter (staffId), else the teacher linked to the subject via staff_subjects. */
+async function teacherEmailForSubject(database: Db, subject: string, submittedById?: string): Promise<{ email: string; name: string } | null> {
+    let teacher: any = null;
+    if (submittedById) {
+        try { teacher = await database.collection('staff').findOne({ _id: new ObjectId(String(submittedById)) }); } catch { /* */ }
+    }
+    if (!teacher) {
+        // Resolve via staff_subjects (who teaches this subject), then look up the staff.
+        const want = NORM(subject);
+        const link: any = (await database.collection('staff_subjects').find({}).toArray().catch(() => []))
+            .find((l: any) => NORM(l.subjectName || l.subject) === want && (l.teacherId || l.staffId));
+        const tid = link?.teacherId || link?.staffId;
+        if (tid) { try { teacher = await database.collection('staff').findOne({ _id: new ObjectId(String(tid)) }); } catch { /* */ } }
+    }
+    if (!teacher) return null;
+    const email = teacher.email || teacher.workEmail || '';
+    if (!email) return null;
+    return { email, name: teacher.employeeName || teacher.name || 'Teacher' };
+}
+
+/** Email the subject's teacher that their marks were rejected/returned. Best-effort. */
+async function emailRejection(database: Db, opts: { subject: string; examName: string; className: string; action: 'reject' | 'return'; by: string; note: string; submittedById?: string }): Promise<void> {
+    try {
+        const t = await teacherEmailForSubject(database, opts.subject, opts.submittedById);
+        if (!t) return;
+        const verb = opts.action === 'reject' ? 'rejected' : 'returned for correction';
+        const note = opts.note ? `<p><b>Reviewer's note:</b> ${opts.note}</p>` : '';
+        await sendEmail(database, {
+            to: [t.email],
+            subject: `Marks ${verb}: ${opts.subject} — ${opts.examName || 'Exam'}`,
+            html: `<div style="font-family:Arial,sans-serif;color:#111">
+                <h2 style="color:#5C67F2">Marks ${verb}</h2>
+                <p>Dear ${t.name},</p>
+                <p>The marks for <b>${opts.subject}</b> in <b>${opts.examName || 'the exam'}</b> ${opts.className ? `(${opts.className})` : ''} were <b>${verb}</b> by ${opts.by}.</p>
+                <p>Please recheck the marks, make the necessary corrections, and <b>resubmit for approval</b>.</p>
+                ${note}
+                <p style="color:#888;font-size:12px;margin-top:20px">ShuleCloud · ${new Date().toLocaleString()}</p>
+            </div>`,
+        }).catch(() => { /* email is best-effort */ });
+    } catch { /* never block on email */ }
+}
+
 // ── List approval batches ────────────────────────────────────────────────────
 // Filter by examId, subject, status, or departmentId. HODs see only batches for
 // subjects their department(s) own; admins see all.
@@ -200,6 +243,10 @@ router.post('/mark-approvals/moderate', async (req: Request, res: Response) => {
             { $set: { approvalStatus: status, approved: approvedNow } },
         ).catch(() => {});
         await recordAudit(req, { action: verb, entity: 'marks', entityId: `${examId}:${subject}`, meta: { subject, examId } });
+        // Email the subject teacher on reject/return.
+        if (action === 'reject' || action === 'return') {
+            await emailRejection(d, { subject, examName: examName || '', className: className || '', action, by: a.name, note: note || '' });
+        }
         res.json({ message: `Marks ${verb.toLowerCase()}`, status });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -252,28 +299,10 @@ router.patch('/mark-approvals/:id/:action', async (req: Request, res: Response) 
 
         await recordAudit(req, { action: t.verb, entity: 'marks', entityId: `${batch.examId}:${batch.subject}`, meta: { subject: batch.subject, examId: batch.examId, note: req.body?.note || '' } });
 
-        // On REJECT or RETURN, email the submitting teacher to recheck & resubmit.
-        if ((req.params.action === 'reject' || req.params.action === 'return') && batch.submittedById) {
-            try {
-                const teacher: any = await d.collection('staff').findOne({ _id: new ObjectId(String(batch.submittedById)) }).catch(() => null);
-                const email = teacher?.email || teacher?.workEmail || '';
-                if (email) {
-                    const verb = req.params.action === 'reject' ? 'rejected' : 'returned for correction';
-                    const note = req.body?.note ? `<p><b>Reviewer's note:</b> ${req.body.note}</p>` : '';
-                    await sendEmail(d, {
-                        to: [email],
-                        subject: `Marks ${verb}: ${batch.subject} — ${batch.examName || 'Exam'}`,
-                        html: `<div style="font-family:Arial,sans-serif;color:#111">
-                            <h2 style="color:#5C67F2">Marks ${verb}</h2>
-                            <p>Dear ${teacher?.employeeName || teacher?.name || 'Teacher'},</p>
-                            <p>The marks you submitted for <b>${batch.subject}</b> in <b>${batch.examName || 'the exam'}</b> (${batch.className || ''}) were <b>${verb}</b> by ${a.name}.</p>
-                            <p>Please recheck the marks, make the necessary corrections, and <b>resubmit for approval</b>.</p>
-                            ${note}
-                            <p style="color:#888;font-size:12px;margin-top:20px">ShuleCloud · ${new Date().toLocaleString()}</p>
-                        </div>`,
-                    }).catch(() => { /* email is best-effort */ });
-                }
-            } catch { /* never block the transition on email failure */ }
+        // On REJECT or RETURN, email the subject teacher (submitter, else whoever
+        // teaches the subject) to recheck & resubmit.
+        if (req.params.action === 'reject' || req.params.action === 'return') {
+            await emailRejection(d, { subject: batch.subject, examName: batch.examName || '', className: batch.className || '', action: req.params.action, by: a.name, note: req.body?.note || '', submittedById: batch.submittedById });
         }
 
         res.json({ message: `Marks ${t.verb.toLowerCase()}`, status: t.to });

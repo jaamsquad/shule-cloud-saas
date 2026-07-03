@@ -1932,6 +1932,15 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
             return res.status(403).json({ message: 'Marks entry is disabled for this exam by the administrator' });
         }
     } catch { /* ignore */ }
+    // Lock enforcement: once the HOD/admin has Approved or Locked this (exam × subject)
+    // batch, the teacher can no longer edit its marks until it's unlocked.
+    try {
+        const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
+        const batch = await db.collection('mark_approvals').findOne({
+            examId: String(examId), subjectNorm: nrmS, status: { $in: ['Approved', 'Locked'] },
+        });
+        if (batch) return res.status(423).json({ message: `These marks are ${String(batch.status).toLowerCase()} by the HOD and can no longer be edited. Ask the HOD to unlock first.` });
+    } catch { /* non-fatal */ }
     const total = Number(outOf || 100);
     let saved = 0;
     for (const m of marks) {
@@ -1949,6 +1958,17 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         saved++;
     }
     res.json({ message: `Saved ${saved} marks`, saved });
+}));
+
+// Approval status of a teacher's (exam × subject) marks batch — so the staff
+// portal can show Locked/Approved/Submitted and disable editing when locked.
+router.get('/staff-portal/marks-status', authed(async (req, res, db) => {
+    const examId = String(req.query.examId || '');
+    const subject = String(req.query.subject || '');
+    if (!examId || !subject) return res.json({ status: 'Draft' });
+    const nrmS = subject.toLowerCase().replace(/\s+/g, ' ').trim();
+    const batch = await db.collection('mark_approvals').findOne({ examId, subjectNorm: nrmS });
+    res.json({ status: batch?.status || 'Draft', locked: batch ? ['Approved', 'Locked'].includes(batch.status) : false });
 }));
 
 // Results the teacher can view — per student, per class, for subjects they teach.

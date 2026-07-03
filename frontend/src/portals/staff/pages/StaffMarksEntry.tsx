@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Save, PencilLine } from "lucide-react";
+import { Loader2, Save, PencilLine, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { PageTitle, PanelCard } from "../../PortalShell";
 import type { StaffCtx } from "../StaffLayout";
@@ -35,6 +35,15 @@ export default function StaffMarksEntry() {
 
     const exam = exams.find((e: any) => e._id === examId);
     const outOf = Number(exam?.totalMarks) || 100;   // from the exam's Total Marks setting
+
+    // Approval status of this (exam × subject) — locked marks can't be edited.
+    const { data: markStatus } = useQuery({
+        queryKey: ["staff_marks_status", examId, subject],
+        enabled: !!examId && !!subject,
+        queryFn: async () => (await api.get(`/staff-portal/marks-status`, { params: { examId, subject } })).data,
+    });
+    const isLocked = !!markStatus?.locked;
+    const statusLabel = markStatus?.status || "";
 
     const save = useMutation({
         mutationFn: async () => (await api.post("/staff-portal/marks", {
@@ -83,10 +92,16 @@ export default function StaffMarksEntry() {
             {examId && pair && (
                 <PanelCard title={`${className} — ${subject}`}
                     action={
-                        <button disabled={save.isPending || rows.length === 0} onClick={() => save.mutate()}
-                            className="inline-flex items-center gap-1.5 bg-white text-[#0f5132] text-xs font-bold px-3 py-1.5 rounded disabled:opacity-50">
-                            {save.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save Marks
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {statusLabel && statusLabel !== "Draft" && (
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isLocked ? "bg-slate-800 text-white" : statusLabel === "Returned" || statusLabel === "Rejected" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{statusLabel}</span>
+                            )}
+                            <button disabled={save.isPending || rows.length === 0 || isLocked} onClick={() => save.mutate()}
+                                title={isLocked ? "Locked by HOD — ask them to unlock to edit" : ""}
+                                className="inline-flex items-center gap-1.5 bg-white text-[#0f5132] text-xs font-bold px-3 py-1.5 rounded disabled:opacity-50">
+                                {save.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isLocked ? <Lock className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} {isLocked ? "Locked" : "Save Marks"}
+                            </button>
+                        </div>
                     }>
                     {isFetching ? (
                         <div className="flex items-center gap-2 text-slate-400 text-sm py-8 justify-center">
