@@ -17,7 +17,7 @@ const router = Router();
 const N = (v: any) => Number(v) || 0;
 const RND = (n: number, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 
-async function loadGrading(database: Db, classId?: string) {
+async function loadGrading(database: Db, classId?: string, className?: string) {
     const DEF = [
         { grade: 'A', from: 80, upto: 100, points: 12, remark: 'EXCELLENT' }, { grade: 'A-', from: 75, upto: 79, points: 11, remark: 'V.GOOD' },
         { grade: 'B+', from: 70, upto: 74, points: 10, remark: 'GOOD' }, { grade: 'B', from: 65, upto: 69, points: 9, remark: 'GOOD' },
@@ -29,15 +29,25 @@ async function loadGrading(database: Db, classId?: string) {
     // Resolution order: the class's assigned GRADING TEMPLATE → a class-specific
     // grading_criteria → the global grading_criteria → built-in default.
     let rec: any = null;
+    // Resolve the v2 class by its _id OR by NAME (a student may be keyed by class
+    // text, not the v2 id), then read the grading template assigned to it.
+    const nrm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const level = (s: string) => { const m = String(s || '').match(/(form|grade)\s*\d+/i); return m ? m[0] : String(s || ''); };
+    let cls: any = null;
     if (classId) {
         const clsOid = (() => { try { return new ObjectId(classId); } catch { return null; } })();
-        const cls: any = clsOid ? await database.collection('v2_classes').findOne({ _id: clsOid }).catch(() => null) : null;
-        if (cls?.gradingTemplateId) {
-            const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
-            if (tOid) rec = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null);
-        }
-        if (!rec) rec = await database.collection('grading_criteria').findOne({ classId }).catch(() => null);
+        if (clsOid) cls = await database.collection('v2_classes').findOne({ _id: clsOid }).catch(() => null);
     }
+    if (!cls && className) {
+        const v2 = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+        const want = nrm(className); const wantLevel = nrm(level(className));
+        cls = v2.find((c: any) => nrm(c.name) === want || nrm(c.name) === wantLevel || nrm(level(c.name)) === wantLevel) || null;
+    }
+    if (cls?.gradingTemplateId) {
+        const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
+        if (tOid) rec = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null);
+    }
+    if (!rec && classId) rec = await database.collection('grading_criteria').findOne({ classId }).catch(() => null);
     if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
     const raw = (rec?.grades || rec?.gradingScale || []);
     const scale = raw.length ? raw.map((g: any, i: number) => ({
@@ -67,10 +77,10 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             || await database.collection('tenant_profile').findOne({}).catch(() => null) || {};
         const profile: any = { ...(tenant || {}), ...extra, name: tenant?.instituteName || tenant?.name || extra?.name };
         const classId = String(student.classId || '');
-        const { gradeOf, meanGrade } = await loadGrading(database, classId);
-
         const myClass = student.studentClass || student.currentClass || '';
         const myStream = student.stream || student.streamName || '';
+        // Grading resolves via the class's assigned template (by id OR name).
+        const { gradeOf, meanGrade } = await loadGrading(database, classId, myClass);
 
         // ── Curriculum resolution (engine) ────────────────────────────────────────
         // The class's assigned curriculum decides the report card mode/layout/
