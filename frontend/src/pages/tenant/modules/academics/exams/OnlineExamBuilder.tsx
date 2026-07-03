@@ -56,7 +56,8 @@ export default function OnlineExamBuilder() {
                                     <div className="flex items-start justify-between">
                                         <div className="min-w-0">
                                             <h3 className="font-black text-slate-800 truncate">{e.examName}</h3>
-                                            <p className="text-xs text-slate-400">{e.subjectName} · {e.className}{e.streamName ? ` ${e.streamName}` : ""}</p>
+                                            {e.parentExamName && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">under {e.parentExamName}</span>}
+                                            <p className="text-xs text-slate-400 mt-0.5">{e.subjectName} · {e.className}{e.streamName ? ` ${e.streamName}` : ""}</p>
                                         </div>
                                         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${e.status === "Published" ? "bg-emerald-100 text-emerald-700" : e.status === "Closed" ? "bg-slate-200 text-slate-600" : "bg-amber-100 text-amber-700"}`}>{e.status}</span>
                                     </div>
@@ -75,11 +76,15 @@ export default function OnlineExamBuilder() {
 function NewExamButton({ classes, subjects, onCreated }: any) {
     const [open, setOpen] = useState(false);
     const [f, setF] = useState({
-        examName: "", category: "CAT", classId: "", streamId: "", subjectId: "",
+        examName: "", parentExamId: "", category: "CAT", classId: "", streamId: "", subjectId: "",
         durationMinutes: 60, passMark: 0,
         academicYear: "", term: "", termId: "",
         startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
     });
+    // Parent (main) assessments: existing CAT / Mid Term exams this online exam rolls
+    // up into. Every subject's online exam under the same parent shares one column.
+    const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
+    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
     const { data: years = [] } = useQuery<any[]>({ queryKey: ["v2_academic_years"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
     const { data: terms = [] } = useQuery<any[]>({ queryKey: ["v2_terms"], queryFn: async () => (await api.get("/v2/terms")).data || [] });
     const activeYear = years.find((y: any) => y.isActive);
@@ -111,6 +116,7 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
             if (f.endDate && !endAt) throw new Error("Invalid exam end date/time");
             return (await api.post("/online-exams", {
                 examName: f.examName,
+                parentExamId: f.parentExamId,
                 category: f.category,
                 durationMinutes: Number(f.durationMinutes),
                 passMark: Number(f.passMark),
@@ -134,9 +140,19 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
-                <h2 className="text-lg font-black text-slate-800 mb-4">New Online Exam</h2>
+                <h2 className="text-lg font-black text-slate-800 mb-1">New Online Exam</h2>
+                <p className="text-xs text-slate-400 mb-4">Attach this to a main assessment so every subject's marks roll up together.</p>
                 <div className="space-y-3">
-                    <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="Exam name" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                    {/* Parent (main) assessment — required */}
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-amber-700 tracking-wide">Main Assessment (CAT / Mid Term) *</label>
+                        <select value={f.parentExamId} onChange={e => { const p = parentExams.find((x: any) => x._id === e.target.value); setF({ ...f, parentExamId: e.target.value, category: p?.type || p?.examType || f.category }); }} className="mt-1 w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                            <option value="">— Select main assessment —</option>
+                            {parentExams.map((e: any) => <option key={e._id} value={e._id}>{e.examName || e.name} · {e.type || e.examType}{e.term ? ` · ${e.term}` : ""}</option>)}
+                        </select>
+                        {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No CAT / Mid Term exam found. Create one first in Create Exam, then teachers add their subject exams under it.</p>}
+                    </div>
+                    <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
                     <div className="grid grid-cols-2 gap-3">
                         <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">{CATS.map(c => <option key={c}>{c}</option>)}</select>
                         <select value={f.subjectId} onChange={e => setF({ ...f, subjectId: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Subject —</option>{subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}</select>
@@ -181,7 +197,7 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
                 </div>
                 <div className="flex gap-2 mt-5">
                     <button onClick={() => setOpen(false)} className="h-11 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm">Cancel</button>
-                    <button onClick={() => f.examName && f.classId && f.subjectId ? create.mutate() : toast.error("Name, class, subject required")} disabled={create.isPending} className="flex-1 h-11 rounded-xl bg-[#5C67F2] text-white font-bold text-sm">{create.isPending ? "Creating…" : "Create & Add Questions"}</button>
+                    <button onClick={() => f.parentExamId && f.examName && f.classId && f.subjectId ? create.mutate() : toast.error("Main assessment, name, class & subject required")} disabled={create.isPending} className="flex-1 h-11 rounded-xl bg-[#5C67F2] text-white font-bold text-sm">{create.isPending ? "Creating…" : "Create & Add Questions"}</button>
                 </div>
             </div>
         </div>

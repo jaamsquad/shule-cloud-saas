@@ -46,7 +46,7 @@ router.get('/online-exams', async (req: Request, res: Response) => {
         const database = db(req); const c = ctx(req);
         const q: any = { deletedAt: { $exists: false } };
         if (c.branchId && req.query.all !== '1') q.branchId = c.branchId;
-        ['classId', 'streamId', 'subjectId', 'status', 'category', 'term', 'academicYear', 'teacherId'].forEach(f => {
+        ['classId', 'streamId', 'subjectId', 'status', 'category', 'term', 'academicYear', 'teacherId', 'parentExamId'].forEach(f => {
             if (req.query[f]) q[f] = String(req.query[f]);
         });
         const exams = await database.collection('online_exams').find(q).sort({ createdAt: -1 }).toArray();
@@ -77,6 +77,11 @@ router.post('/online-exams', async (req: Request, res: Response) => {
     try {
         const database = db(req); const c = ctx(req); const b = req.body || {};
         if (!b.examName) return res.status(400).json({ message: 'Exam name is required' });
+        // Every online exam must belong to a PARENT assessment (a main CAT / Mid Term
+        // exam), so all subjects' marks roll up into one column on the report card.
+        if (!b.parentExamId) return res.status(400).json({ message: 'Select the main assessment (CAT / Mid Term) this exam belongs to.' });
+        const parentExam: any = await database.collection('exams').findOne({ _id: oid(b.parentExamId)! }).catch(() => null);
+        if (!parentExam) return res.status(400).json({ message: 'Main assessment not found.' });
         const startAt = b.startAt ? parseDateValue(b.startAt) : null;
         const endAt = b.endAt ? parseDateValue(b.endAt) : null;
         if (b.startAt && !startAt) return res.status(400).json({ message: 'Invalid exam start time' });
@@ -86,8 +91,14 @@ router.post('/online-exams', async (req: Request, res: Response) => {
         }
         const doc = {
             examName: b.examName,
-            academicYear: b.academicYear || '', term: b.term || '', termId: b.termId || null,
-            category: b.category || 'CAT',
+            // Parent (main) assessment this online exam rolls up into.
+            parentExamId: String(b.parentExamId),
+            parentExamName: parentExam.examName || parentExam.name || '',
+            // Inherit term/year/category from the parent so all children stay aligned.
+            academicYear: b.academicYear || parentExam.academicYear || '',
+            term: b.term || parentExam.term || '',
+            termId: b.termId || parentExam.termId || null,
+            category: b.category || parentExam.type || 'CAT',
             branchId: b.branchId || c.branchId || '',
             classId: b.classId || '', className: b.className || '',
             streamId: b.streamId || '', streamName: b.streamName || '',
@@ -126,7 +137,7 @@ router.patch('/online-exams/:id', async (req: Request, res: Response) => {
         }
         
         const update: any = { updatedAt: now() };
-        const allowed = ['examName', 'academicYear', 'term', 'termId', 'category', 'classId', 'className',
+        const allowed = ['examName', 'parentExamId', 'parentExamName', 'academicYear', 'term', 'termId', 'category', 'classId', 'className',
             'streamId', 'streamName', 'subjectId', 'subjectName', 'teacherId', 'teacherName',
             'startAt', 'endAt', 'durationMinutes', 'totalMarks', 'passMark', 'instructions'];
         if (req.body.startAt !== undefined && req.body.startAt !== null && req.body.startAt !== '') {
@@ -317,8 +328,11 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
         const exam: any = await database.collection('online_exams').findOne({ _id: oid(req.params.id)! });
         if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
-        // 1) Ensure a linked exam in the main `exams` collection (create once).
-        let mainExamId: string = exam.mainExamId || '';
+        // 1) Marks roll up into the PARENT (main) assessment so every subject's CAT /
+        //    Mid Term lands in ONE exam → one report-card column. Prefer the parent
+        //    the teacher attached; fall back to the legacy per-exam record for older
+        //    online exams created before parents were required.
+        let mainExamId: string = exam.parentExamId || exam.mainExamId || '';
         if (!mainExamId) {
             const examDoc = {
                 examName: exam.examName,
