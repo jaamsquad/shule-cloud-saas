@@ -811,7 +811,9 @@ router.get('/student-portal/marks', async (req, res) => {
         const authHeader = req.headers.authorization;
         if (!authHeader) return res.status(401).json({ message: 'No token' });
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId }).toArray();
+        // Only APPROVED marks reach the student (un-approved batches are hidden until
+        // the HOD/admin approves). Legacy marks with no flag stay visible.
+        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
         res.json(marks);
     } catch (e: any) {
         res.status(401).json({ message: 'Invalid or expired token' });
@@ -838,7 +840,8 @@ router.get('/student-portal/exam-results', async (req, res) => {
         if (!authHeader) return res.status(401).json({ message: 'No token' });
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
 
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId }).toArray();
+        // Only approved marks are shown to the student.
+        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
         const exams = await db.collection('exams').find({}).toArray();
         const examMap: Record<string, any> = {};
         exams.forEach((e: any) => { examMap[e._id.toString()] = e; });

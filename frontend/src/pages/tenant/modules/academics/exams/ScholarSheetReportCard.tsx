@@ -7,7 +7,7 @@ import api from "@/lib/api";
 // Subjects are curriculum-driven (from the class) and grades use the chosen
 // grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function ScholarSheetReportCard({ studentId, examId, showKcpe = true, hideToolbar = false, preloaded }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any }) {
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, hideToolbar = false, preloaded }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any }) {
     // When the parent page has already fetched the data (whole-class print), use
     // it directly so the card never shows a spinner mid-print. Otherwise fetch.
     const { data: fetched, isLoading } = useQuery({
@@ -60,6 +60,22 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
         return "BE";                       // Below
     };
 
+    // ── Report-card display settings (from Report Card Settings page) ────────────
+    const settings = d.settings || {};
+    const col = settings.columns || {};
+    const showCol = (k: string) => col[k] !== false;              // default on
+    const showKcpe = showKcpeProp !== false && settings.showKcpe !== false;
+    const showPositions = settings.showPositions !== false;
+    const showChange = !!settings.showChange;
+    // Arrow + colour for a change value (percentage points).
+    const changeCell = (v: number | null | undefined) => {
+        if (v === null || v === undefined) return "-";
+        if (v > 0) return `▲ +${v}`;
+        if (v < 0) return `▼ ${v}`;
+        return "0";
+    };
+    const changeColor = (v: number | null | undefined) => (v == null || v === 0) ? "#000" : v > 0 ? "#15803d" : "#b91c1c";
+
     return (
         <div className="bg-white">
             {/* Toolbar (screen only; hidden when the parent page provides its own) */}
@@ -108,10 +124,10 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                 {/* Summary row */}
                 <table style={{ marginTop: 2 }}><tbody>
                     <tr style={{ fontWeight: 700, textAlign: "center" }}>
-                        <td>{isCbc ? "Total" : "Total Marks"}</td><td>Mean Score</td><td>Total Points</td><td>Mean Point</td><td>{isCbc ? "Overall Level" : "Mean Grade"}</td><td>Class Pos</td><td>Level Pos(Overall)</td>
+                        <td>{isCbc ? "Total" : "Total Marks"}</td><td>Mean Score</td><td>Total Points</td><td>Mean Point</td><td>{isCbc ? "Overall Level" : "Mean Grade"}</td>{showPositions && <><td>Class Pos</td><td>Level Pos(Overall)</td></>}
                     </tr>
                     <tr style={{ textAlign: "center" }}>
-                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{isCbc ? perfLevel(Number(d.summary.meanPoint) || 0) : d.summary.meanGrade}</td><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td>
+                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{isCbc ? perfLevel(Number(d.summary.meanPoint) || 0) : d.summary.meanGrade}</td>{showPositions && <><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td></>}
                     </tr>
                 </tbody></table>
 
@@ -129,9 +145,12 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                         <td>{subjectHeader}</td>
                         {cols.map((c, ci) => <td key={ci} style={{ textAlign: "center" }}>{c.title}</td>)}
                         {multiExam && <td style={{ textAlign: "center" }}>{isCbc ? "OVERALL" : "AGGREGATE"}</td>}
-                        {!isCbc && <td style={{ textAlign: "center" }}>Point</td>}
-                        <td style={{ textAlign: "center" }}>{isCbc ? "Level" : "Grade"}</td>
-                        <td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
+                        {!isCbc && showCol("point") && <td style={{ textAlign: "center" }}>Point</td>}
+                        {showCol("grade") && <td style={{ textAlign: "center" }}>{isCbc ? "Level" : "Grade"}</td>}
+                        {showChange && <td style={{ textAlign: "center" }}>Change</td>}
+                        {showCol("pos") && <td style={{ textAlign: "center" }}>Pos</td>}
+                        {showCol("remarks") && <td>Remarks</td>}
+                        {showCol("initials") && <td style={{ textAlign: "center" }}>Initials</td>}
                     </tr>
                     {(d.subjects || []).map((s: any, i: number) => {
                         // Per-exam cells (fall back to the single aggregate when no cells).
@@ -147,11 +166,12 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                                 <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
                                 {cols.map((_c, ci) => <td key={ci} style={{ textAlign: "center" }}>{cellLabel(cells[ci])}</td>)}
                                 {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc ? perfLevel(s.point) : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
-                                {!isCbc && <td style={{ textAlign: "center" }}>{s.point}</td>}
-                                <td style={{ textAlign: "center" }}>{isCbc ? perfLevel(s.point) : s.grade}</td>
-                                <td style={{ textAlign: "center" }}>{s.position}</td>
-                                <td style={{ textTransform: "uppercase" }}>{s.remark}</td>
-                                <td style={{ textAlign: "center" }}>{s.initials || "-"}</td>
+                                {!isCbc && showCol("point") && <td style={{ textAlign: "center" }}>{s.point}</td>}
+                                {showCol("grade") && <td style={{ textAlign: "center" }}>{isCbc ? perfLevel(s.point) : s.grade}</td>}
+                                {showChange && <td style={{ textAlign: "center", color: changeColor(s.change), fontWeight: 700 }}>{changeCell(s.change)}</td>}
+                                {showCol("pos") && <td style={{ textAlign: "center" }}>{s.position}</td>}
+                                {showCol("remarks") && <td style={{ textTransform: "uppercase" }}>{s.remark}</td>}
+                                {showCol("initials") && <td style={{ textAlign: "center" }}>{s.initials || "-"}</td>}
                             </tr>
                         );
                     })}

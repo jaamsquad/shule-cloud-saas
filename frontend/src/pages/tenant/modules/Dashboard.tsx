@@ -250,6 +250,15 @@ export default function Dashboard() {
         },
     });
 
+    // Marks awaiting HOD/admin approval — teacher-submitted batches (exam × subject).
+    // Scoped by the backend to the user's departments (admins see all).
+    const canApproveMarks = can("exams") || perms.isAdmin;
+    const { data: pendingMarks = [] } = useQuery<any[]>({
+        queryKey: ["dashboard_pending_marks"],
+        enabled: canApproveMarks,
+        queryFn: async () => { try { const r = await api.get("/mark-approvals", { params: { status: "Submitted" } }); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+
     const { data: absentStudents = [] } = useQuery<any[]>({
         queryKey: ["dashboard_absent_students", today],
         enabled: canAttendance,
@@ -542,6 +551,28 @@ export default function Dashboard() {
                         <CheckCircle2 className="w-16 h-16 text-[#ff5e6c] opacity-50" />
                     </div>
                 </div>
+
+                {/* Marks awaiting approval (HOD / admin) */}
+                {canApproveMarks && pendingMarks.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100 flex flex-col">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-amber-700 font-bold text-sm uppercase tracking-wider">Marks Awaiting Approval</h3>
+                        <span className="text-lg font-black text-amber-600 bg-amber-50 rounded-full w-8 h-8 flex items-center justify-center">{pendingMarks.length}</span>
+                    </div>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {pendingMarks.slice(0, 6).map((b: any) => (
+                            <div key={b._id} className="flex items-center justify-between border-b border-slate-50 py-1.5">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-700 truncate">{b.subject}</p>
+                                    <p className="text-[11px] text-slate-400 truncate">{b.examName || ""}{b.submittedBy ? ` · by ${b.submittedBy}` : ""} · {b.entries} entries</p>
+                                </div>
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">Submitted</span>
+                            </div>
+                        ))}
+                    </div>
+                    <button onClick={() => navigate("/departments?tab=marks")} className="mt-3 text-xs font-black text-amber-700 hover:underline self-start">Review &amp; approve →</button>
+                </div>
+                )}
 
                 {/* Quick attendance summary */}
                 {canAttendance && (

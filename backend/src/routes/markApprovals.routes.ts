@@ -15,6 +15,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { resolveDeptAccess } from '../lib/departmentAccess';
 import { recordAudit } from '../lib/audit';
+import { sendEmail } from '../services/communications.service';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -149,6 +150,12 @@ router.post('/mark-approvals/submit', async (req: Request, res: Response) => {
             } as any,
             { upsert: true },
         );
+        // Mark this batch's marks as pending (submitted, not yet approved) so they
+        // stay hidden from students until the HOD/admin approves.
+        await d.collection('exam_marks').updateMany(
+            { examId: String(examId), $or: [{ subjectName: subject }, { subject }] },
+            { $set: { approvalStatus: 'Submitted', approved: false } },
+        ).catch(() => {});
         await recordAudit(req, { action: 'Submitted', entity: 'marks', entityId: `${examId}:${subject}`, meta: { subject, examId, entries } });
         res.json({ message: 'Marks submitted for approval', entries });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -191,7 +198,41 @@ router.patch('/mark-approvals/:id/:action', async (req: Request, res: Response) 
                 $push: { history: event },
             } as any,
         );
+        // Reflect the batch's approval on its underlying marks so student-facing
+        // reads (report cards, portals) can gate on it. Approved/Locked → visible;
+        // Submitted/Returned/Rejected → hidden from students until approved.
+        const approvedNow = t.to === 'Approved' || t.to === 'Locked';
+        await d.collection('exam_marks').updateMany(
+            { examId: String(batch.examId), $or: [{ subjectName: batch.subject }, { subject: batch.subject }] },
+            { $set: { approvalStatus: t.to, approved: approvedNow } },
+        ).catch(() => { /* non-fatal */ });
+
         await recordAudit(req, { action: t.verb, entity: 'marks', entityId: `${batch.examId}:${batch.subject}`, meta: { subject: batch.subject, examId: batch.examId, note: req.body?.note || '' } });
+
+        // On REJECT or RETURN, email the submitting teacher to recheck & resubmit.
+        if ((req.params.action === 'reject' || req.params.action === 'return') && batch.submittedById) {
+            try {
+                const teacher: any = await d.collection('staff').findOne({ _id: new ObjectId(String(batch.submittedById)) }).catch(() => null);
+                const email = teacher?.email || teacher?.workEmail || '';
+                if (email) {
+                    const verb = req.params.action === 'reject' ? 'rejected' : 'returned for correction';
+                    const note = req.body?.note ? `<p><b>Reviewer's note:</b> ${req.body.note}</p>` : '';
+                    await sendEmail(d, {
+                        to: [email],
+                        subject: `Marks ${verb}: ${batch.subject} — ${batch.examName || 'Exam'}`,
+                        html: `<div style="font-family:Arial,sans-serif;color:#111">
+                            <h2 style="color:#5C67F2">Marks ${verb}</h2>
+                            <p>Dear ${teacher?.employeeName || teacher?.name || 'Teacher'},</p>
+                            <p>The marks you submitted for <b>${batch.subject}</b> in <b>${batch.examName || 'the exam'}</b> (${batch.className || ''}) were <b>${verb}</b> by ${a.name}.</p>
+                            <p>Please recheck the marks, make the necessary corrections, and <b>resubmit for approval</b>.</p>
+                            ${note}
+                            <p style="color:#888;font-size:12px;margin-top:20px">ShuleCloud · ${new Date().toLocaleString()}</p>
+                        </div>`,
+                    }).catch(() => { /* email is best-effort */ });
+                }
+            } catch { /* never block the transition on email failure */ }
+        }
+
         res.json({ message: `Marks ${t.verb.toLowerCase()}`, status: t.to });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

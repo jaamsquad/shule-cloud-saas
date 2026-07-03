@@ -72,6 +72,14 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         } else {
             curriculumConfig = await getCurriculumConfig(database, curriculumFromClassLabel(myClass));
         }
+
+        // Report-card display settings (KCPE/positions/columns/change).
+        const rcSettingsDoc = await database.collection('report_card_settings').findOne({}).catch(() => null);
+        const rcSettings = {
+            showKcpe: true, showPositions: true, showChange: false,
+            ...(rcSettingsDoc || {}),
+            columns: { point: true, grade: true, pos: true, remarks: true, initials: true, ...(rcSettingsDoc?.columns || {}) },
+        };
         // Clean display label: avoid duplicating the stream when studentClass
         // already ends with it (e.g. "Form 1 East" + stream "East" → "Form 1 East").
         const classFull = (() => {
@@ -118,21 +126,18 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
         // "END-TERM". When several exams of the same type cover the same subject
         // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
+        // Each DISTINCT exam becomes its own column, labelled by its type/name
+        // (e.g. "CAT 1", "CAT 2", "MID TERM", "END TERM") — so every exam picked for
+        // this term that has marks shows as a separate column. Only the End-Term main
+        // is normalised so the leading column reads "END-TERM".
         const typeOf = (e: any): string => {
-            // Consider every field that might carry the assessment type/name, across
-            // both regular exams (type: "CAT"/"Mid Term"/…) and online exams.
-            const t = norm([e?.type, e?.examType, e?.category, e?.assessmentType, e?.examName, e?.title, e?.name].filter(Boolean).join(' '));
-            if (/mid\s*term|midterm/.test(t)) return 'MIDTERM';
-            if (/\bcat\b|assignment|quiz|opener|opening/.test(t)) return 'CAT';
+            const raw = String(e?.type || e?.examType || e?.category || e?.examName || e?.title || e?.name || '').trim();
+            const t = norm(raw);
             if (/end\s*term|final/.test(t)) return 'END-TERM';
-            if (/mock/.test(t)) return 'MOCK';
-            // An online assessment with no clearer type still reads as a CAT.
-            if (/online/.test(t)) return 'CAT';
-            // Prefer a real type field over the generic fallback.
-            const explicit = String(e?.type || e?.examType || e?.category || '').trim();
-            return (explicit || 'EXAM').toUpperCase().slice(0, 12);
+            // Otherwise keep the exam's own label (CAT 1 / CAT 2 / Mid Term / Mock …).
+            return (raw || 'EXAM').toUpperCase().slice(0, 14);
         };
-        // The main/End-Term exam always defines the leading column's type.
+        // The main exam defines the leading column's type.
         const mainType = typeOf(examMeta[String(gen.mainExamId)] || examMeta[examId]) || 'END-TERM';
         // Map each pinned examId → its type, and each type → the examIds under it.
         const typeByExam: Record<string, string> = {};
@@ -142,16 +147,23 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             typeByExam[id] = ty;
             (examIdsByType[ty] ||= []).push(id);
         });
-        // Column order: END-TERM (or the main's type) first, then CAT, MIDTERM, rest.
-        const typeOrder = (ty: string) => ty === mainType ? 0 : ty === 'END-TERM' ? 1 : ty === 'CAT' ? 2 : ty === 'MIDTERM' ? 3 : 4;
+        // Column order: the main exam's column first, then END-TERM, then every other
+        // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…).
+        const typeOrder = (ty: string) => ty === mainType ? 0 : ty === 'END-TERM' ? 1 : 2;
         let examColumns: Array<{ type: string; title: string; examIds: string[] }> =
             Object.keys(examIdsByType)
-                .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b))
+                .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b, undefined, { numeric: true }))
                 .map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
         let multiExam = examColumns.length > 1;
 
         // Marks across ALL exams in the set (for positions + per-student aggregate).
-        const allMarks: any[] = await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+        // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
+        // the report card stays stable after generation — later exam_marks edits don't
+        // change it until the class is regenerated. Otherwise read live.
+        const frozen: any[] = Array.isArray(gen.frozenMarks) ? gen.frozenMarks : [];
+        const allMarks: any[] = frozen.length
+            ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
+            : await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
 
         // Supplement with ONLINE-exam attempt scores for any online exams in the set
         // whose results haven't been published into exam_marks yet, so their CAT/Mid
@@ -173,17 +185,19 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             });
         }
 
-        // Column visibility rule:
-        //   • The MAIN (End-Term) column ALWAYS shows.
-        //   • A CAT / MIDTERM (or any extra) column shows ONLY when at least one of
-        //     its exams has marks for someone in the class. So: when no CAT/Mid Term
-        //     was added at generation, there are no such examIds → no column (hidden);
-        //     when they WERE added and marks exist, the column appears.
+        // Column visibility rule (airtight):
+        //   • The MAIN column (the type of the opened/End-Term exam) ALWAYS shows.
+        //   • Every OTHER column shows ONLY if at least one of its exams has marks for
+        //     someone in the class. So an empty/phantom column (e.g. a stale pinned id
+        //     that resolves to the generic "EXAM" and has no marks) is ALWAYS dropped.
         const mainColType = mainType;
         const anyMarkedExamIds = new Set(allMarks.map((m: any) => String(m.examId)));
-        const keep = examColumns.filter(c =>
-            c.type === mainColType || c.examIds.some(id => anyMarkedExamIds.has(id)));
-        if (keep.length) examColumns = keep;
+        const columnHasMarks = (c: { examIds: string[] }) => c.examIds.some(id => anyMarkedExamIds.has(id));
+        examColumns = examColumns.filter(c => c.type === mainColType || columnHasMarks(c));
+        // Safety net: never show a bare "EXAM" fallback column that carries no marks.
+        examColumns = examColumns.filter(c => c.type !== 'EXAM' || columnHasMarks(c));
+        // Guarantee at least the main column survives.
+        if (examColumns.length === 0) examColumns = [{ type: mainColType, title: mainColType, examIds: examIdsByType[mainColType] || [String(examId)] }];
         multiExam = examColumns.length > 1;
 
         // Per-student aggregate for POSITIONS. We rank against everyone who sat the
@@ -316,6 +330,32 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const ty = typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
             ((bySubject[sub] ||= {})[ty] ||= []).push(m);
         }
+        // ── "Change" column: this student's subject % vs the PREVIOUS exam ──────────
+        // Find the exam chronologically before the main exam, then this student's
+        // per-subject % in it, so we can show improvement/drop per subject.
+        let prevPctBySubject: Record<string, number> = {};
+        if (rcSettings.showChange) {
+            const allStudentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+            const examsAll2 = await database.collection('exams').find({}).toArray().catch(() => []);
+            const eById2: Record<string, any> = {}; examsAll2.forEach((e: any) => eById2[String(e._id)] = e);
+            const yOf = (e: any) => N(e?.academicYear ?? e?.year);
+            const tOf = (e: any) => N(String(e?.term || '').match(/\d+/)?.[0] || 0);
+            const mainE = examMeta[String(gen.mainExamId)] || exam;
+            const mainKey = yOf(mainE) * 10 + tOf(mainE);
+            // Previous = the marks whose exam sorts immediately before the main exam.
+            const priorMarks = allStudentMarks
+                .map((m: any) => ({ m, e: eById2[String(m.examId)] }))
+                .filter((x: any) => x.e && (yOf(x.e) * 10 + tOf(x.e)) < mainKey);
+            // Keep the latest prior exam per subject.
+            const bestBySub: Record<string, { key: number; pct: number }> = {};
+            priorMarks.forEach(({ m, e }: any) => {
+                const sub = m.subjectName || m.subject || 'Subject'; const key = yOf(e) * 10 + tOf(e);
+                const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
+                if (!bestBySub[sub] || key > bestBySub[sub].key) bestBySub[sub] = { key, pct };
+            });
+            prevPctBySubject = Object.fromEntries(Object.entries(bestBySub).map(([s, v]) => [s, v.pct]));
+        }
+
         let totalMarks = 0, totalPoints = 0;
         const subjects = Object.entries(bySubject).map(([sub, byType]) => {
             // One cell per TYPE column = AVERAGE (%) of that subject's exams of that type.
@@ -337,11 +377,15 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const pos = list.findIndex(x => x.sid === sid) + 1;
             const tName = teacherForSubject(sub);
             const initials = initialsOf(tName);
+            // Change vs previous exam (percentage points, rounded). null when no prior.
+            const prevPct = prevPctBySubject[sub];
+            const change = (rcSettings.showChange && prevPct !== undefined) ? Math.round(aggPct - prevPct) : null;
             return {
                 subject: sub,
                 cells,                                  // per-exam columns
                 mark: aggMark, outOf: 100, total: aggMark,   // aggregate (back-compat fields)
                 point: g.points, grade: g.grade, position: `${pos}/${list.length}`, remark: g.remark, initials,
+                change,
             };
         });
         const subjN = subjects.length || 1;
@@ -401,6 +445,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             reportLayout: curriculumConfig.reportLayout,               // '844' | 'cbc' | 'cambridge'
             terminology: curriculumConfig.terminology,
             performanceLevels: curriculumConfig.performanceLevels || null,
+            settings: rcSettings,   // report-card display settings (KCPE/positions/columns/change)
             issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
             termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
             examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, classFull),
@@ -1601,6 +1646,32 @@ router.get('/reports/shared/departments', async (req: Request, res: Response) =>
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
+// ── Report Card Settings ──────────────────────────────────────────────────────
+// Controls what the report card shows: KCPE fields, positions, and each optional
+// column (Point/Grade/Pos/Remarks/Initials/Change). One doc per tenant.
+const DEFAULT_RC_SETTINGS = {
+    showKcpe: true,
+    showPositions: true,
+    showChange: false,       // "Change" column: improvement/drop vs previous exam
+    columns: { point: true, grade: true, pos: true, remarks: true, initials: true },
+};
+router.get('/report-card-settings', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const doc = await db.collection('report_card_settings').findOne({}).catch(() => null);
+        res.json({ ...DEFAULT_RC_SETTINGS, ...(doc || {}), columns: { ...DEFAULT_RC_SETTINGS.columns, ...(doc?.columns || {}) } });
+    } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+router.patch('/report-card-settings', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const { _id, ...body } = req.body || {};
+        await db.collection('report_card_settings').updateOne({}, { $set: { ...body, updatedAt: new Date() } }, { upsert: true });
+        const doc = await db.collection('report_card_settings').findOne({});
+        res.json({ ...DEFAULT_RC_SETTINGS, ...(doc || {}), columns: { ...DEFAULT_RC_SETTINGS.columns, ...(doc?.columns || {}) } });
+    } catch (error: any) { res.status(500).json({ message: error.message }); }
+});
+
 router.get('/report_card_generations', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
@@ -1618,6 +1689,12 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
         if (!payload?.classId || !payload?.mainExamId) {
             return res.status(400).json({ message: 'classId and mainExamId are required' });
         }
+        const examSet = [String(payload.mainExamId), ...(Array.isArray(payload.additionalExamIds) ? payload.additionalExamIds.map((id: any) => String(id)) : [])].filter(Boolean);
+        // SNAPSHOT: freeze the marks AS THEY ARE NOW so the generated report card is
+        // stable — later edits to exam_marks don't change it until regenerated.
+        const frozenMarks = await db.collection('exam_marks').find({ examId: { $in: examSet } })
+            .project({ studentId: 1, examId: 1, subjectId: 1, subjectName: 1, marksObtained: 1, totalMarks: 1, className: 1 })
+            .toArray().catch(() => []);
         const generation = {
             classId: String(payload.classId),
             classV2Id: payload.classV2Id ? String(payload.classV2Id) : null,
@@ -1630,6 +1707,9 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             streamId: payload.streamId || null,
             streamName: payload.streamName || null,
             generatedAt: payload.generatedAt || new Date().toISOString(),
+            // Frozen snapshot of marks at generation time (stringified ids).
+            frozenMarks: frozenMarks.map((m: any) => ({ studentId: String(m.studentId), examId: String(m.examId), subjectId: m.subjectId != null ? String(m.subjectId) : '', subjectName: m.subjectName || '', marksObtained: N(m.marksObtained), totalMarks: N(m.totalMarks) || 100, className: m.className || '' })),
+            frozenAt: new Date().toISOString(),
         };
         // Regenerate = replace. Drop ANY prior generation for the same target
         // (matched by className OR classId, plus stream + term + year) so we never
