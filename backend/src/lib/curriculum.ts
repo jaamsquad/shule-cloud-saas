@@ -65,14 +65,7 @@ export const DEFAULT_CURRICULA: Record<string, CurriculumConfig> = {
         ],
         levelPrefix: 'Grade',
     },
-    'Cambridge': {
-        code: 'Cambridge', name: 'Cambridge', aliases: ['cambridge', 'igcse', 'ib', 'international'],
-        active: true, assessmentMode: 'traditional',
-        terminology: { subject: 'Subject', subjectPlural: 'Subjects', assessment: 'Exam', assessmentPlural: 'Exams', score: 'Marks', grade: 'Grade' },
-        reportLayout: 'cambridge', examTypes: ['Checkpoint', 'Progression Test', 'IGCSE', 'AS/A Level'],
-        lessonPlanTemplate: 'traditional', promotion: 'class',
-        performanceLevels: KCSE_LEVELS, levelPrefix: 'Year',
-    },
+    // Only CBC and 8-4-4 are offered. (Cambridge removed.)
 };
 
 const norm = (v: any) => String(v ?? '').toLowerCase().replace(/[\s._-]+/g, ' ').trim();

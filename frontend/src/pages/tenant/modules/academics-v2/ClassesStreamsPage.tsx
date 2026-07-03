@@ -175,7 +175,7 @@ export default function ClassesStreamsPage() {
                                     <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Curriculum Type</div>
                                     <select value={classForm.curriculumType} onChange={e => setClassForm({ ...classForm, curriculumType: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
                                         {curricula.length === 0
-                                            ? <><option value="844">8-4-4</option><option value="CBC">CBC (Competency-Based)</option><option value="Cambridge">Cambridge</option></>
+                                            ? <><option value="844">8-4-4</option><option value="CBC">CBC (Competency-Based)</option></>
                                             : curricula.map((c: any) => <option key={c.code} value={c.code}>{c.name}</option>)}
                                     </select>
                                 </div>

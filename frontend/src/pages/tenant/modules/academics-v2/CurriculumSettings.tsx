@@ -14,7 +14,6 @@ const MODE_LABEL: Record<string, string> = { traditional: "Marks & Grades", comp
 const BUILTIN_CURRICULA = [
     { code: "844", name: "8-4-4", active: true, assessmentMode: "traditional", terminology: { subjectPlural: "Subjects" }, reportLayout: "844", levelPrefix: "Form", promotion: "class", examTypes: ["CAT", "Mid Term", "End Term", "Mock"] },
     { code: "CBC", name: "CBC (Competency-Based)", active: true, assessmentMode: "competency", terminology: { subjectPlural: "Learning Areas" }, reportLayout: "cbc", levelPrefix: "Grade", promotion: "grade", examTypes: ["Assessment Activity", "Competency Task", "Project", "Practical"] },
-    { code: "Cambridge", name: "Cambridge", active: true, assessmentMode: "traditional", terminology: { subjectPlural: "Subjects" }, reportLayout: "cambridge", levelPrefix: "Year", promotion: "class", examTypes: ["Checkpoint", "Progression Test", "IGCSE", "AS/A Level"] },
 ];
 
 export default function CurriculumSettings() {

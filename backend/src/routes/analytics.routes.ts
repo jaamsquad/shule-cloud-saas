@@ -3,6 +3,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
+import { makeGradingCache } from '../lib/grading';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -56,14 +57,24 @@ const meanGradeFromPoints = (scale: any[], meanPoints: number) => {
 // results-building + grading logic instead of duplicating it.
 export async function buildExamResults(database: Db, examId: string) {
     const marks = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
-    const { scale, grade } = await loadScale(database);
+    // Grade PER CLASS using the class's assigned template (grading cache avoids
+    // re-querying). The overall `scale` (for grade-list axes) is the global one.
+    const gradingFor = makeGradingCache(database);
+    const { scale } = await loadScale(database);
+
+    // Pre-load each student's classId so per-student grading can resolve the template.
+    const studentIdsAll = Array.from(new Set(marks.map((m: any) => String(m.studentId))));
+    const studentDocsAll = studentIdsAll.length ? await database.collection('students').find({}).toArray().catch(() => []) : [];
+    const sClassById: Record<string, { id: string; name: string }> = {};
+    studentDocsAll.forEach((s: any) => { sClassById[String(s._id)] = { id: String(s.classId || ''), name: s.studentClass || s.className || s.currentClass || '' }; });
 
     const byStudent: Record<string, any> = {};
     for (const m of marks) {
         const sid = String(m.studentId);
         const max = num(m.totalMarks) || 100;
         const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
-        const g = grade(pct);
+        const scls = sClassById[sid] || { id: '', name: m.classAtTime || '' };
+        const g = (await gradingFor(scls.id, scls.name || m.classAtTime)).gradeOf(pct);
         (byStudent[sid] ||= { studentId: sid, subjects: [], classAtTime: m.classAtTime }).subjects.push({
             name: m.subjectName || m.subject || 'Subject', marks: num(m.marksObtained), max, pct: round(pct, 1),
             grade: g.grade, points: g.points,
