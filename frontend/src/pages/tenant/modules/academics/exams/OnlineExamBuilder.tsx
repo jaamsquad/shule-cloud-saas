@@ -375,10 +375,18 @@ function MarkingPanel({ examId }: { examId: string }) {
 
     if (isLoading) return <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#5C67F2]" /></div>;
     if (attempts.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-400 font-bold">No submissions yet.</div>;
-    if (manualQs.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-500 font-bold">All questions are auto-marked — nothing to grade manually. Use "Publish to Report Cards".</div>;
+
+    // When every question is auto-marked there's nothing to mark manually — but we
+    // still SHOW the submissions and their scores (read-only) so you can review them.
+    const autoOnly = manualQs.length === 0;
 
     return (
         <div className="space-y-2">
+            {autoOnly && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-blue-700 mb-2">
+                    All questions are auto-marked — scores below are final. Use “Publish to Report Cards” to release them.
+                </div>
+            )}
             {attempts.map((a: any) => {
                 const editing = open === a._id;
                 return (
@@ -391,7 +399,10 @@ function MarkingPanel({ examId }: { examId: string }) {
                                     <p className="text-[11px] text-slate-400">Auto questions: {autoQs.filter(q => a.perQuestion?.[q._id]?.correct === true).length}/{autoQs.length} correct</p>
                                 )}
                             </div>
-                            <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
+                            {/* Only offer manual marking when there ARE manual questions. */}
+                            {!autoOnly
+                                ? <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
+                                : <span className="text-lg font-black text-emerald-600">{a.finalScore ?? a.autoScore ?? 0}</span>}
                         </div>
                         {editing && (
                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">

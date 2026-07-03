@@ -136,7 +136,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                         <td>{isCbc ? "Total" : "Total Marks"}</td><td>Mean Score</td><td>Total Points</td><td>Mean Point</td><td>{isCbc ? "Overall Level" : "Mean Grade"}</td>{showPositions && <><td>Class Pos</td><td>Level Pos(Overall)</td></>}
                     </tr>
                     <tr style={{ textAlign: "center" }}>
-                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{isCbc ? perfLevel(Number(d.summary.meanPoint) || 0) : d.summary.meanGrade}</td>{showPositions && <><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td></>}
+                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{d.summary.meanGrade}</td>{showPositions && <><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td></>}
                     </tr>
                 </tbody></table>
 
@@ -164,27 +164,25 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                     {(d.subjects || []).map((s: any, i: number) => {
                         // Per-exam cells (fall back to the single aggregate when no cells).
                         const cells = s.cells && s.cells.length ? s.cells : [{ mark: s.mark, outOf: s.outOf }];
-                        // CBC shows a performance level per assessment instead of a raw mark.
-                        // CBC shows the mark AND its performance level, e.g. "90/100 (EE)".
-                        // Traditional shows the mark; the level maps from the % using the
-                        // CBC bands (curriculum), independent of the grading template's letters.
-                        const cbcLevelOfCell = (cell: any) => {
-                            const pct = cell.outOf ? (cell.mark / cell.outOf) * 100 : cell.mark;
-                            return perfLevel(pct >= 80 ? 12 : pct >= 65 ? 9 : pct >= 45 ? 5 : 1);
-                        };
+                        // The GRADE always comes from the backend, which resolves the
+                        // class's assigned grading TEMPLATE (letters, EE/ME/AE/BE, or
+                        // custom like EE1/AE1). We never hardcode grade bands here.
+                        // For CBC, each cell shows the mark + its grade "90/100 (EE)".
+                        const gradeOfCell = (cell: any) => cell?.grade || s.grade || "";
                         const cellLabel = (cell: any) => {
                             if (!cell || cell.mark === null || cell.mark === undefined) return "-";
                             const marks = `${Math.round(cell.mark)}/${Math.round(cell.outOf)}`;
-                            if (isCbc) return `${marks} (${cbcLevelOfCell(cell)})`;
+                            const gr = gradeOfCell(cell);
+                            if (isCbc && gr) return `${marks} (${gr})`;
                             return marks;
                         };
                         return (
                             <tr key={i}>
                                 <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
                                 {cols.map((_c, ci) => <td key={ci} style={{ textAlign: "center" }}>{cellLabel(cells[ci])}</td>)}
-                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc ? `${Math.round(s.mark)}/${Math.round(s.outOf)} (${perfLevel(s.point)})` : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
+                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc && s.grade ? `${Math.round(s.mark)}/${Math.round(s.outOf)} (${s.grade})` : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
                                 {!isCbc && showCol("point") && <td style={{ textAlign: "center" }}>{s.point}</td>}
-                                {showCol("grade") && <td style={{ textAlign: "center" }}>{isCbc ? perfLevel(s.point) : s.grade}</td>}
+                                {showCol("grade") && <td style={{ textAlign: "center" }}>{s.grade}</td>}
                                 {showChange && <td style={{ textAlign: "center", color: changeColor(s.change), fontWeight: 700 }}>{changeCell(s.change)}</td>}
                                 {showCol("pos") && <td style={{ textAlign: "center" }}>{s.position}</td>}
                                 {showCol("remarks") && <td style={{ textTransform: "uppercase" }}>{s.remark}</td>}

@@ -239,11 +239,27 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const meta = sMeta[id] || {};
             return { cid: String(meta.classId || ''), name: norm(meta.studentClass || meta.currentClass || meta.class || meta.className || '') };
         };
-        const myKey = { cid: myClassId, name: norm(myClass) };
-        const sameClass = (id: string) => {
+        // Class level (Form/Grade N) from any class label, e.g. "Form 4 West" → "form 4".
+        const levelOfLabel = (s: string) => { const m = norm(s).match(/(form|grade)\s*\d+/); return m ? m[0] : norm(s); };
+        // Stream label from a student, e.g. "West".
+        const streamOf = (id: string): string => {
+            const meta = sMeta[id] || {};
+            return norm(meta.stream || meta.streamName || '');
+        };
+        const myKey = { cid: myClassId, name: norm(myClass), level: levelOfLabel(myClass), stream: norm(myStream) };
+
+        // Same CLASS LEVEL (all streams of Form 4): used for the LEVEL position.
+        const sameClassLevel = (id: string) => {
             const k = classKeyOf(id);
-            if (myKey.cid && k.cid) return k.cid === myKey.cid;
-            return !!k.name && (k.name === myKey.name || k.name.startsWith(myKey.name) || myKey.name.startsWith(k.name));
+            return levelOfLabel(k.name) === myKey.level && !!myKey.level;
+        };
+        // Same STREAM (exactly Form 4 West): used for CLASS position + subject position.
+        const sameStream = (id: string) => {
+            if (!sameClassLevel(id)) return false;
+            // When we know the stream, match it; otherwise fall back to full class name.
+            if (myKey.stream) return streamOf(id) === myKey.stream;
+            const k = classKeyOf(id);
+            return k.name === myKey.name;
         };
 
         const agg: Record<string, { total: number; points: number; n: number }> = {};
@@ -263,11 +279,13 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             subjMarks[sub] = Object.entries(byStu).map(([id, v]) => ({ sid: id, pct: v.n ? v.sum / v.n : 0 }));
         }
         const rows = Object.entries(agg).map(([id, a]) => ({ id, ...a, mean: a.n ? a.total / a.n : 0, meanPoints: a.n ? a.points / a.n : 0 }));
-        // Level (whole-cohort) position by total points; class position within same class.
-        const levelSorted = [...rows].sort((x, y) => y.points - x.points);
+        // LEVEL position = rank within the whole CLASS (all streams of Form 4) — NOT
+        // the whole school. CLASS position = rank within the student's own STREAM.
+        const levelmates = rows.filter(r => sameClassLevel(r.id));
+        const levelSorted = [...levelmates].sort((x, y) => y.points - x.points);
         const levelPos = levelSorted.findIndex(r => r.id === sid) + 1;
-        const classmates = rows.filter(r => sameClass(r.id));
-        const classSorted = [...classmates].sort((x, y) => y.points - x.points);
+        const streammates = rows.filter(r => sameStream(r.id));
+        const classSorted = [...streammates].sort((x, y) => y.points - x.points);
         const classPos = classSorted.findIndex(r => r.id === sid) + 1;
 
         // Resolve the teacher who teaches each subject for THIS class, as initials
@@ -396,18 +414,20 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             // is always the % (used for grading/aggregate).
             const cells = examColumns.map(col => {
                 const ms = byType[col.type] || [];
-                if (!ms.length) return { mark: null as number | null, outOf: 100, pct: null as number | null };
+                if (!ms.length) return { mark: null as number | null, outOf: 100, pct: null as number | null, grade: '' };
                 const rows = ms.map((m: any) => ({ obtained: N(m.marksObtained), outOf: N(m.totalMarks) || 100 }));
                 const avgPct = rows.reduce((a, r) => a + (r.outOf > 0 ? (r.obtained / r.outOf) * 100 : 0), 0) / rows.length;
+                // Per-cell grade from the class's resolved template (letters / EE-ME / EE1…).
+                const cellGrade = gradeOf(avgPct).grade;
                 const sameOutOf = rows.every(r => r.outOf === rows[0].outOf);
                 if (sameOutOf) {
                     // Real out-of preserved (e.g. 17/20, or the sum across two /20 CATs → /40).
                     const totalObtained = rows.reduce((a, r) => a + r.obtained, 0);
                     const totalOutOf = rows.reduce((a, r) => a + r.outOf, 0);
-                    return { mark: Math.round(totalObtained), outOf: Math.round(totalOutOf), pct: avgPct };
+                    return { mark: Math.round(totalObtained), outOf: Math.round(totalOutOf), pct: avgPct, grade: cellGrade };
                 }
                 // Mixed maxima → normalise to a percentage.
-                return { mark: Math.round(avgPct), outOf: 100, pct: avgPct };
+                return { mark: Math.round(avgPct), outOf: 100, pct: avgPct, grade: cellGrade };
             });
             // Aggregate = average of available exam percentages → a 0-100 score.
             const present = cells.filter(c => c.pct !== null) as Array<{ mark: number; outOf: number; pct: number }>;
@@ -415,7 +435,8 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const g = gradeOf(aggPct);
             const aggMark = Math.round(aggPct);     // aggregate expressed out of 100
             totalMarks += aggMark; totalPoints += g.points;
-            const list = (subjMarks[sub] || []).filter(x => sameClass(x.sid)).sort((a, b) => b.pct - a.pct);
+            // Subject position ranks the student within their STREAM.
+            const list = (subjMarks[sub] || []).filter(x => sameStream(x.sid)).sort((a, b) => b.pct - a.pct);
             const pos = list.findIndex(x => x.sid === sid) + 1;
             const tName = teacherForSubject(sub);
             const initials = initialsOf(tName);
@@ -495,7 +516,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             examColumns,            // [{ examId, title }] — one per exam in the set
             multiExam,              // true when >1 exam (show columns + aggregate)
             student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: classFull, house: student.house || '', photo: student.photo || student.image || '' },
-            summary: { totalMarks: `${RND(totalMarks)}/${subjN * 100}`, meanScore, totalPoints, meanPoint, meanGrade: meanGrade(meanPoint), classPos: `${classPos}/${classmates.length}`, levelPos: `${levelPos}/${rows.length}` },
+            summary: { totalMarks: `${RND(totalMarks)}/${subjN * 100}`, meanScore, totalPoints, meanPoint, meanGrade: meanGrade(meanPoint), classPos: `${classPos}/${streammates.length}`, levelPos: `${levelPos}/${levelmates.length}` },
             kcpe: { marks: kcpeMarks || '-', rank: student.kcpeRank || '-', mean: kcpeMean || '-', valueAdded: valueAdded ?? '-' },
             subjects,
             chart,
