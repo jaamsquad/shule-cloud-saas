@@ -111,18 +111,36 @@ export default function Analytics() {
 }
 
 function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: string) => void }) {
+    const [curFilter, setCurFilter] = useState("");
     const { data, isLoading } = useQuery({ queryKey: ["an_overview", examId], queryFn: async () => (await api.get("/analytics/overview", { params: { examId } })).data });
     if (isLoading) return <Spin />;
-    const classes = data?.classes || [];
+    const allClasses = data?.classes || [];
     const grades = data?.grades || [];
-    if (!classes.length) return <Empty msg="No marks recorded for this exam yet." />;
+    if (!allClasses.length) return <Empty msg="No marks recorded for this exam yet." />;
+    // Curriculum filter — the backend tags each class with its curriculum.
+    const curricula: string[] = Array.from(new Set(allClasses.map((c: any) => c.curriculum).filter(Boolean)));
+    const classes = curFilter ? allClasses.filter((c: any) => c.curriculum === curFilter) : allClasses;
+    const curBadge = (cur: string) => cur === "CBC" ? "bg-emerald-100 text-emerald-700" : cur === "Cambridge" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700";
 
     return (
+        <>
+            {curricula.length > 1 && (
+                <div className="flex items-center gap-2 mb-4">
+                    <span className="text-[11px] font-black uppercase text-slate-400">Curriculum</span>
+                    <button onClick={() => setCurFilter("")} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${!curFilter ? "bg-[#2E7D32] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>All</button>
+                    {curricula.map(cur => (
+                        <button key={cur} onClick={() => setCurFilter(cur)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${curFilter === cur ? "bg-[#2E7D32] text-white" : "bg-white border border-slate-200 text-slate-600"}`}>{cur}</button>
+                    ))}
+                </div>
+            )}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {classes.map((c: any) => (
                 <div key={c.name} className={`bg-white rounded-2xl border p-5 ${c.noMarks ? "border-dashed border-slate-200" : "border-slate-100"}`}>
                     <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-black text-slate-800">{c.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-black text-slate-800">{c.name}</h3>
+                            {c.curriculum && <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${curBadge(c.curriculum)}`}>{c.curriculum}</span>}
+                        </div>
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Users className="w-3.5 h-3.5" />{c.students}</span>
                     </div>
                     {c.noMarks ? (
@@ -155,6 +173,7 @@ function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: strin
                 </div>
             ))}
         </div>
+        </>
     );
 }
 

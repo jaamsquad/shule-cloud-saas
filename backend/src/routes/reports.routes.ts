@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { formatExamName } from '../lib/examName';
+import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum } from '../lib/curriculum';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -59,6 +60,18 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
 
         const myClass = student.studentClass || student.currentClass || '';
         const myStream = student.stream || student.streamName || '';
+
+        // ── Curriculum resolution (engine) ────────────────────────────────────────
+        // The class's assigned curriculum decides the report card mode/layout/
+        // terminology. Prefer the class record's curriculum; fall back to inferring
+        // from the class label (Grade/PP → CBC, Form → 8-4-4).
+        let curriculumConfig;
+        if (classId) {
+            const resolved = await resolveClassCurriculum(database, classId);
+            curriculumConfig = resolved.config;
+        } else {
+            curriculumConfig = await getCurriculumConfig(database, curriculumFromClassLabel(myClass));
+        }
         // Clean display label: avoid duplicating the stream when studentClass
         // already ends with it (e.g. "Form 1 East" + stream "East" → "Form 1 East").
         const classFull = (() => {
@@ -160,15 +173,16 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             });
         }
 
-        // Column visibility: a type-column is shown when EITHER it was explicitly
-        // pinned in the generation (End Term + the chosen CAT/Mid Term) OR any student
-        // in the class has marks for it. This guarantees the CAT/MIDTERM headers
-        // appear whenever those exams were included at generation time — a student
-        // with no CAT mark simply shows "-" in that column rather than the column
-        // vanishing. We only drop columns that were neither pinned nor ever marked.
-        const pinnedExamIds = new Set<string>([String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))].filter(Boolean));
+        // Column visibility rule:
+        //   • The MAIN (End-Term) column ALWAYS shows.
+        //   • A CAT / MIDTERM (or any extra) column shows ONLY when at least one of
+        //     its exams has marks for someone in the class. So: when no CAT/Mid Term
+        //     was added at generation, there are no such examIds → no column (hidden);
+        //     when they WERE added and marks exist, the column appears.
+        const mainColType = mainType;
         const anyMarkedExamIds = new Set(allMarks.map((m: any) => String(m.examId)));
-        const keep = examColumns.filter(c => c.examIds.some(id => pinnedExamIds.has(id) || anyMarkedExamIds.has(id)));
+        const keep = examColumns.filter(c =>
+            c.type === mainColType || c.examIds.some(id => anyMarkedExamIds.has(id)));
         if (keep.length) examColumns = keep;
         multiExam = examColumns.length > 1;
 
@@ -345,11 +359,10 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const myAll = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
-        // Detect the level system: "Form" (8-4-4) or "Grade" (CBC). Use the
-        // student's current class first, then any class seen in history.
-        const curriculum = String(profile.curriculum || profile.curriculumType || '').toLowerCase();
-        const looksGrade = /grade|cbc|junior|pp[12]/i.test(`${myClass} ${curriculum}`);
-        const levelSys = looksGrade ? { prefix: 'Grade', short: 'G' } : { prefix: 'Form', short: 'F' };
+        // Level system comes from the resolved curriculum (Form/Grade/Year), not a
+        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year.
+        const levelPrefix = curriculumConfig.levelPrefix || 'Form';
+        const levelSys = { prefix: levelPrefix, short: levelPrefix.charAt(0).toUpperCase() };
 
         const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
         for (const m of myAll) {
@@ -380,7 +393,14 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
 
         res.json({
             school: { name: profile.name || profile.schoolName || '', box: profile.poBox || profile.address || '', tel: profile.phone || profile.tel || '', motto: profile.motto || '', logo: profile.logo || '' },
-            curriculum: profile.curriculum || profile.curriculumType || '8-4-4',
+            curriculum: curriculumConfig.name,
+            // Curriculum-aware rendering: the frontend uses these to pick the CBC vs
+            // 8-4-4 layout and terminology — resolved server-side from the class.
+            curriculumCode: curriculumConfig.code,
+            curriculumMode: curriculumConfig.assessmentMode,          // 'traditional' | 'competency'
+            reportLayout: curriculumConfig.reportLayout,               // '844' | 'cbc' | 'cambridge'
+            terminology: curriculumConfig.terminology,
+            performanceLevels: curriculumConfig.performanceLevels || null,
             issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
             termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
             examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, classFull),

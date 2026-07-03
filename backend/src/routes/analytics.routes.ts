@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
+import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -213,7 +214,17 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
             classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown });
         }
         classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-        res.json({ classes, grades });
+
+        // Curriculum-aware: tag each class card with its curriculum so analytics can
+        // filter/group by curriculum (CBC vs 8-4-4). Resolved from the v2 class record
+        // by name, else inferred from the label.
+        const curByName: Record<string, string> = {};
+        v2Classes.forEach((c: any) => { curByName[levelOf(c.name).toLowerCase()] = canonicalCode(c.curriculumType ?? c.curriculum ?? ''); });
+        const withCurriculum = classes.map(c => ({
+            ...c,
+            curriculum: curByName[c.name.toLowerCase()] || canonicalCode(curriculumFromClassLabel(c.name)),
+        }));
+        res.json({ classes: withCurriculum, grades });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

@@ -21,6 +21,9 @@ export default function ClassesStreamsPage() {
     const { data: classes = [], isLoading: loadC } = useQuery({ queryKey: ["v2_classes"], queryFn: async () => { const r = await api.get("/v2/classes"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: streams = [] } = useQuery({ queryKey: ["v2_streams", selectedClass?._id], queryFn: async () => { if (!selectedClass) return []; const r = await api.get(`/v2/streams?classId=${selectedClass._id}`); return Array.isArray(r.data) ? r.data : []; }, enabled: !!selectedClass });
     const { data: staff = [] } = useQuery({ queryKey: ["staff"], queryFn: async () => { const r = await api.get("/staff"); return Array.isArray(r.data) ? r.data : []; } });
+    // Curriculum options come from the backend registry (active curricula only), so
+    // disabling a curriculum in settings removes it from the picker — no hardcoding.
+    const { data: curricula = [] } = useQuery({ queryKey: ["curricula_active"], queryFn: async () => { const r = await api.get("/curricula/active"); return Array.isArray(r.data) ? r.data : []; } });
 
     const classMut = useMutation({
         mutationFn: (p: any) => editClassId ? api.patch(`/v2/classes/${editClassId}`, p) : api.post("/v2/classes", p),
@@ -91,9 +94,11 @@ export default function ClassesStreamsPage() {
                                             <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center font-black text-[#5C67F2] text-sm">{c.level}</div>
                                             <div>
                                                 <p className="font-black text-slate-800">{c.name}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                     {c.code && <span className="text-[8px] font-black text-slate-400 uppercase">{c.code}</span>}
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase">{c.curriculumType}</span>
+                                                    {/* Curriculum badge — driven by the backend-resolved config */}
+                                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${c.curriculumCode === "CBC" ? "bg-emerald-100 text-emerald-700" : c.curriculumCode === "Cambridge" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{c.curriculum?.name || c.curriculumType}</span>
+                                                    {c.curriculum?.terminology && <span className="text-[8px] font-bold text-slate-400">{c.curriculum.terminology.subjectPlural}</span>}
                                                     <span className="text-[8px] font-black text-slate-400 uppercase">Cap: {c.capacity}</span>
                                                 </div>
                                             </div>
@@ -169,10 +174,9 @@ export default function ClassesStreamsPage() {
                                 <div className="relative col-span-2">
                                     <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Curriculum Type</div>
                                     <select value={classForm.curriculumType} onChange={e => setClassForm({ ...classForm, curriculumType: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        <option value="844">8-4-4</option>
-                                        <option value="CBC">CBC (Competency-Based)</option>
-                                        <option value="Cambridge">Cambridge</option>
-                                        <option value="IGCSE">IGCSE</option>
+                                        {curricula.length === 0
+                                            ? <><option value="844">8-4-4</option><option value="CBC">CBC (Competency-Based)</option><option value="Cambridge">Cambridge</option></>
+                                            : curricula.map((c: any) => <option key={c.code} value={c.code}>{c.name}</option>)}
                                     </select>
                                 </div>
                             </div>

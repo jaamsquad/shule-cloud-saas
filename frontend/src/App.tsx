@@ -374,6 +374,7 @@ import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
 import OrganizationSetup from "./pages/tenant/modules/settings/OrganizationSetup";
 import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
+import CurriculumSettings from "./pages/tenant/modules/academics-v2/CurriculumSettings";
 import BlankForms from "./pages/tenant/modules/forms/BlankForms";
 import CreateRequest from "./pages/tenant/modules/requests/CreateRequest";
 import RequestDetail from "./pages/tenant/modules/requests/RequestDetail";
@@ -639,6 +640,7 @@ const App = () => {
               <Route path="/academic-system/years" element={<Periods />} />
               <Route path="/settings/term-settings" element={<AcademicTermSettings />} />
               <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
+              <Route path="/settings/curriculum" element={<CurriculumSettings />} />
               <Route path="/departments" element={<DepartmentManagement />} />
               <Route path="/blank-forms" element={<BlankForms />} />
               {/* Request Management & Approval Workflow */}

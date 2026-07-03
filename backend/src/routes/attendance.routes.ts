@@ -815,25 +815,27 @@ router.get('/schools/:sid/attendance/dashboard', async (req: Request, res: Respo
         const sTotal = await db.collection('students').countDocuments();
         const eTotal = await db.collection('staff').countDocuments();
 
-        const sMarked = sRecs.length > 0;
-        const eMarked = eRecs.length > 0;
+        // Status stored inconsistently ("PRESENT"/"present"/"Present") — match case-insensitively.
+        const countStatus = (recs: any[], status: string) => recs.filter(r => String(r.status || '').toUpperCase() === status).length;
 
+        // Return REAL numbers only. No demo fallbacks — an empty school reads 0/0,
+        // not fabricated 142/150.
         res.json({
             data: {
                 date: today,
                 students: {
-                    total: sTotal > 0 ? sTotal : 150,
-                    present: sMarked ? sRecs.filter(r => r.status === 'PRESENT').length : (sTotal > 0 ? 0 : 142),
-                    absent: sMarked ? sRecs.filter(r => r.status === 'ABSENT').length : (sTotal > 0 ? 0 : 5),
-                    late: sMarked ? sRecs.filter(r => r.status === 'LATE').length : (sTotal > 0 ? 0 : 2),
-                    excused: sMarked ? sRecs.filter(r => r.status === 'EXCUSED').length : (sTotal > 0 ? 0 : 1),
+                    total: sTotal,
+                    present: countStatus(sRecs, 'PRESENT'),
+                    absent: countStatus(sRecs, 'ABSENT'),
+                    late: countStatus(sRecs, 'LATE'),
+                    excused: countStatus(sRecs, 'EXCUSED'),
                     not_marked_classes: 0
                 },
                 employees: {
-                    total: eTotal > 0 ? eTotal : 25,
-                    present: eMarked ? eRecs.filter(r => r.status === 'PRESENT').length : (eTotal > 0 ? 0 : 23),
-                    absent: eMarked ? eRecs.filter(r => r.status === 'ABSENT').length : (eTotal > 0 ? 0 : 1),
-                    on_leave: eMarked ? eRecs.filter(r => r.status === 'ON_LEAVE').length : (eTotal > 0 ? 0 : 1),
+                    total: eTotal,
+                    present: countStatus(eRecs, 'PRESENT'),
+                    absent: countStatus(eRecs, 'ABSENT'),
+                    on_leave: countStatus(eRecs, 'ON_LEAVE'),
                     not_marked: 0
                 }
             }, meta: {}, errors: []
@@ -851,20 +853,21 @@ router.get('/schools/:sid/attendance/stats', async (req: Request, res: Response)
         const sRecs = await db.collection('student_attendance').find({ schoolId, date: { $regex: `^${month}` } }).toArray();
         const eRecs = await db.collection('employee_attendance').find({ schoolId, date: { $regex: `^${month}` } }).toArray();
 
-        const sPresent = sRecs.filter(r => r.status === 'PRESENT').length;
-        const ePresent = eRecs.filter(r => r.status === 'PRESENT').length;
+        const isPresent = (r: any) => String(r.status || '').toUpperCase() === 'PRESENT';
+        const sPresent = sRecs.filter(isPresent).length;
+        const ePresent = eRecs.filter(isPresent).length;
+
+        // Build the real daily series from actual records (present count per day).
+        const byDay: Record<string, { s: number; e: number }> = {};
+        sRecs.forEach((r: any) => { const d = String(r.date); (byDay[d] ||= { s: 0, e: 0 }); if (isPresent(r)) byDay[d].s++; });
+        eRecs.forEach((r: any) => { const d = String(r.date); (byDay[d] ||= { s: 0, e: 0 }); if (isPresent(r)) byDay[d].e++; });
+        const daily = Object.keys(byDay).sort().map(date => ({ date, student_present_count: byDay[date].s, employee_present_count: byDay[date].e }));
 
         res.json({
             data: {
-                student_avg_percentage: sRecs.length > 0 ? Math.round((sPresent / sRecs.length) * 100 * 10) / 10 : 96.4,
-                employee_avg_percentage: eRecs.length > 0 ? Math.round((ePresent / eRecs.length) * 100 * 10) / 10 : 98.2,
-                daily: [
-                    { date: `${month}-01`, student_present_count: 140, employee_present_count: 24 },
-                    { date: `${month}-02`, student_present_count: 142, employee_present_count: 25 },
-                    { date: `${month}-03`, student_present_count: 141, employee_present_count: 25 },
-                    { date: `${month}-04`, student_present_count: 143, employee_present_count: 23 },
-                    { date: `${month}-05`, student_present_count: 145, employee_present_count: 25 }
-                ]
+                student_avg_percentage: sRecs.length > 0 ? Math.round((sPresent / sRecs.length) * 100 * 10) / 10 : 0,
+                employee_avg_percentage: eRecs.length > 0 ? Math.round((ePresent / eRecs.length) * 100 * 10) / 10 : 0,
+                daily
             }, meta: { month }, errors: []
         });
     } catch (error: any) { res.status(500).json({ errors: [{ message: error.message }] }); }

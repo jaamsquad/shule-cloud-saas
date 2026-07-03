@@ -18,6 +18,14 @@ export default function SchemeForm() {
 
     const { data: subjects = [] } = useQuery({ queryKey: ["subjects"], queryFn: async () => { const r = await api.get("/subjects"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } });
+    // Curriculum-aware terminology: resolve the selected class's curriculum from the
+    // backend and relabel "Subject" → "Learning Area" for CBC. No frontend guessing.
+    const { data: curriculum } = useQuery({
+        queryKey: ["class_curriculum", form.classId],
+        enabled: !!form.classId,
+        queryFn: async () => (await api.get(`/class/${form.classId}/curriculum`)).data,
+    });
+    const subjectTerm = curriculum?.config?.terminology?.subject || "Subject";
 
     const { data: existing, isLoading: loadingExisting } = useQuery({
         queryKey: ["scheme_single", id],
@@ -88,9 +96,9 @@ export default function SchemeForm() {
                                     <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Mathematics Scheme — Form 2 Term 1" className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                 </div>
                                 <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Subject</div>
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{subjectTerm}</div>
                                     <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        <option value="">— Select Subject —</option>
+                                        <option value="">— Select {subjectTerm} —</option>
                                         {subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}
                                     </select>
                                 </div>

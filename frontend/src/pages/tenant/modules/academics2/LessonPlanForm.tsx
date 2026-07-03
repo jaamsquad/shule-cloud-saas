@@ -30,6 +30,13 @@ export default function LessonPlanForm() {
         queryKey: ["classes"],
         queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; },
     });
+    // Curriculum-aware terminology (Subject vs Learning Area), resolved from backend.
+    const { data: curriculum } = useQuery({
+        queryKey: ["class_curriculum", form.classId],
+        enabled: !!form.classId,
+        queryFn: async () => (await api.get(`/class/${form.classId}/curriculum`)).data,
+    });
+    const subjectTerm = curriculum?.config?.terminology?.subject || "Subject";
 
     const { data: existing, isLoading: loadingExisting } = useQuery({
         queryKey: ["lesson_plan_single", id],
@@ -152,7 +159,7 @@ export default function LessonPlanForm() {
                             <div className="grid grid-cols-2 gap-6">
                                 {/* Subject */}
                                 <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Subject</div>
+                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{subjectTerm}</div>
                                     <select value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })}
                                         className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
                                         <option value="">— Select Subject —</option>

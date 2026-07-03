@@ -47,6 +47,19 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
     const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade"
     const hist = (lvl: number, t: number) => d.history?.[`l${lvl}t${t}`];
 
+    // ── Curriculum-aware rendering (driven by the backend-resolved config) ──────
+    const isCbc: boolean = d.curriculumMode === "competency";
+    const term = d.terminology || {};
+    const subjectHeader: string = term.subject || "Subject";          // "Subject" | "Learning Area"
+    const scoreHeader: string = term.score || "Marks";               // "Marks" | "Performance Level"
+    // Map a grade points value (1–12) to a CBC performance level (EE/ME/AE/BE).
+    const perfLevel = (points: number): string => {
+        if (points >= 10) return "EE";   // Exceeding
+        if (points >= 7) return "ME";     // Meeting
+        if (points >= 4) return "AE";     // Approaching
+        return "BE";                       // Below
+    };
+
     return (
         <div className="bg-white">
             {/* Toolbar (screen only; hidden when the parent page provides its own) */}
@@ -75,7 +88,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                         <h1>{d.school.name || "SCHOOL NAME"}</h1>
                         <div className="muted">{d.school.box}{d.school.tel ? ` Tel : ${d.school.tel}` : ""}</div>
                         <div className="muted" style={{ fontStyle: "italic" }}>{d.school.motto}</div>
-                        <div style={{ fontWeight: 700, marginTop: 2 }}>Report Form</div>
+                        <div style={{ fontWeight: 700, marginTop: 2 }}>{isCbc ? "Learner Progress Report" : "Report Form"}</div>
                     </td>
                     <td style={{ width: "55mm", verticalAlign: "top", textAlign: "right" }} className="muted">Issue Date : <b>{d.issueDate}</b></td>
                 </tr></tbody></table>
@@ -95,10 +108,10 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                 {/* Summary row */}
                 <table style={{ marginTop: 2 }}><tbody>
                     <tr style={{ fontWeight: 700, textAlign: "center" }}>
-                        <td>Total Marks</td><td>Mean Score</td><td>Total Points</td><td>Mean Point</td><td>Mean Grade</td><td>Class Pos</td><td>Level Pos(Overall)</td>
+                        <td>{isCbc ? "Total" : "Total Marks"}</td><td>Mean Score</td><td>Total Points</td><td>Mean Point</td><td>{isCbc ? "Overall Level" : "Mean Grade"}</td><td>Class Pos</td><td>Level Pos(Overall)</td>
                     </tr>
                     <tr style={{ textAlign: "center" }}>
-                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{d.summary.meanGrade}</td><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td>
+                        <td>{d.summary.totalMarks}</td><td>{d.summary.meanScore}</td><td>{d.summary.totalPoints}</td><td>{d.summary.meanPoint}</td><td>{isCbc ? perfLevel(Number(d.summary.meanPoint) || 0) : d.summary.meanGrade}</td><td>{d.summary.classPos}</td><td>{d.summary.levelPos}</td>
                     </tr>
                 </tbody></table>
 
@@ -113,24 +126,29 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                     plus an Aggregate column when more than one exam is combined. */}
                 <table style={{ marginTop: 3 }}><tbody>
                     <tr style={{ fontWeight: 700 }}>
-                        <td>Subject</td>
+                        <td>{subjectHeader}</td>
                         {cols.map((c, ci) => <td key={ci} style={{ textAlign: "center" }}>{c.title}</td>)}
-                        {multiExam && <td style={{ textAlign: "center" }}>AGGREGATE</td>}
-                        <td style={{ textAlign: "center" }}>Point</td><td style={{ textAlign: "center" }}>Grade</td><td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
+                        {multiExam && <td style={{ textAlign: "center" }}>{isCbc ? "OVERALL" : "AGGREGATE"}</td>}
+                        {!isCbc && <td style={{ textAlign: "center" }}>Point</td>}
+                        <td style={{ textAlign: "center" }}>{isCbc ? "Level" : "Grade"}</td>
+                        <td style={{ textAlign: "center" }}>Pos</td><td>Remarks</td><td style={{ textAlign: "center" }}>Initials</td>
                     </tr>
                     {(d.subjects || []).map((s: any, i: number) => {
                         // Per-exam cells (fall back to the single aggregate when no cells).
                         const cells = s.cells && s.cells.length ? s.cells : [{ mark: s.mark, outOf: s.outOf }];
+                        // CBC shows a performance level per assessment instead of a raw mark.
+                        const cellLabel = (cell: any) => {
+                            if (!cell || cell.mark === null || cell.mark === undefined) return "-";
+                            if (isCbc) { const pct = cell.outOf ? (cell.mark / cell.outOf) * 100 : cell.mark; return perfLevel(pct >= 80 ? 12 : pct >= 65 ? 9 : pct >= 45 ? 5 : 1); }
+                            return `${Math.round(cell.mark)}/${Math.round(cell.outOf)}`;
+                        };
                         return (
                             <tr key={i}>
                                 <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
-                                {cols.map((_c, ci) => {
-                                    const cell = cells[ci];
-                                    return <td key={ci} style={{ textAlign: "center" }}>{cell && cell.mark !== null && cell.mark !== undefined ? `${Math.round(cell.mark)}/${Math.round(cell.outOf)}` : "-"}</td>;
-                                })}
-                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{Math.round(s.mark)}/{Math.round(s.outOf)}</td>}
-                                <td style={{ textAlign: "center" }}>{s.point}</td>
-                                <td style={{ textAlign: "center" }}>{s.grade}</td>
+                                {cols.map((_c, ci) => <td key={ci} style={{ textAlign: "center" }}>{cellLabel(cells[ci])}</td>)}
+                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc ? perfLevel(s.point) : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
+                                {!isCbc && <td style={{ textAlign: "center" }}>{s.point}</td>}
+                                <td style={{ textAlign: "center" }}>{isCbc ? perfLevel(s.point) : s.grade}</td>
                                 <td style={{ textAlign: "center" }}>{s.position}</td>
                                 <td style={{ textTransform: "uppercase" }}>{s.remark}</td>
                                 <td style={{ textAlign: "center" }}>{s.initials || "-"}</td>
@@ -138,6 +156,11 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe = t
                         );
                     })}
                 </tbody></table>
+                {isCbc && d.performanceLevels?.length > 0 && (
+                    <div className="muted" style={{ marginTop: 2, fontSize: 8 }}>
+                        Key: {d.performanceLevels.map((l: any) => `${l.code} = ${l.label}`).join("  ·  ")}
+                    </div>
+                )}
 
                 {/* Performance line graph (B&W) — mean points per term */}
                 {chartBars.length > 1 && (() => {

@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { loadCurricula, canonicalCode } from '../lib/curriculum';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 const router = Router();
@@ -152,7 +153,17 @@ router.get('/v2/classes', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const classes = await db.collection('v2_classes').find({ deletedAt: { $exists: false } }).sort({ level: 1, name: 1 }).toArray();
-        res.json(classes);
+        // Curriculum-aware: attach each class's resolved curriculum config so the
+        // frontend gets behavior (terminology, assessment mode, report layout) from
+        // the backend — no frontend logic decides curriculum behavior.
+        const curricula = await loadCurricula(db);
+        const byCode: Record<string, any> = {}; curricula.forEach(c => { byCode[canonicalCode(c.code)] = c; });
+        const enriched = classes.map((c: any) => {
+            const code = canonicalCode(c.curriculumType ?? c.curriculum ?? '844');
+            const cfg = byCode[code] || null;
+            return { ...c, curriculumCode: code, curriculum: cfg };
+        });
+        res.json(enriched);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
