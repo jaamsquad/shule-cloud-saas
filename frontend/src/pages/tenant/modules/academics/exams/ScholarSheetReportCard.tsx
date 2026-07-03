@@ -165,16 +165,24 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                         // Per-exam cells (fall back to the single aggregate when no cells).
                         const cells = s.cells && s.cells.length ? s.cells : [{ mark: s.mark, outOf: s.outOf }];
                         // CBC shows a performance level per assessment instead of a raw mark.
+                        // CBC shows the mark AND its performance level, e.g. "90/100 (EE)".
+                        // Traditional shows the mark; the level maps from the % using the
+                        // CBC bands (curriculum), independent of the grading template's letters.
+                        const cbcLevelOfCell = (cell: any) => {
+                            const pct = cell.outOf ? (cell.mark / cell.outOf) * 100 : cell.mark;
+                            return perfLevel(pct >= 80 ? 12 : pct >= 65 ? 9 : pct >= 45 ? 5 : 1);
+                        };
                         const cellLabel = (cell: any) => {
                             if (!cell || cell.mark === null || cell.mark === undefined) return "-";
-                            if (isCbc) { const pct = cell.outOf ? (cell.mark / cell.outOf) * 100 : cell.mark; return perfLevel(pct >= 80 ? 12 : pct >= 65 ? 9 : pct >= 45 ? 5 : 1); }
-                            return `${Math.round(cell.mark)}/${Math.round(cell.outOf)}`;
+                            const marks = `${Math.round(cell.mark)}/${Math.round(cell.outOf)}`;
+                            if (isCbc) return `${marks} (${cbcLevelOfCell(cell)})`;
+                            return marks;
                         };
                         return (
                             <tr key={i}>
                                 <td style={{ textTransform: "uppercase" }}>{s.subject}</td>
                                 {cols.map((_c, ci) => <td key={ci} style={{ textAlign: "center" }}>{cellLabel(cells[ci])}</td>)}
-                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc ? perfLevel(s.point) : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
+                                {multiExam && <td style={{ textAlign: "center", fontWeight: 700 }}>{isCbc ? `${Math.round(s.mark)}/${Math.round(s.outOf)} (${perfLevel(s.point)})` : `${Math.round(s.mark)}/${Math.round(s.outOf)}`}</td>}
                                 {!isCbc && showCol("point") && <td style={{ textAlign: "center" }}>{s.point}</td>}
                                 {showCol("grade") && <td style={{ textAlign: "center" }}>{isCbc ? perfLevel(s.point) : s.grade}</td>}
                                 {showChange && <td style={{ textAlign: "center", color: changeColor(s.change), fontWeight: 700 }}>{changeCell(s.change)}</td>}
