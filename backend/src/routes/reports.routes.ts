@@ -379,13 +379,24 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
 
         let totalMarks = 0, totalPoints = 0;
         const subjects = Object.entries(bySubject).map(([sub, byType]) => {
-            // One cell per TYPE column = AVERAGE (%) of that subject's exams of that type.
+            // One cell per TYPE column. Show the mark over its REAL out-of (a CAT
+            // out of /20 shows "17/20", not "85/100"). When a subject has several
+            // exams of the SAME type: if they share the out-of, sum the raw marks;
+            // otherwise fall back to the averaged percentage out of 100. The `pct`
+            // is always the % (used for grading/aggregate).
             const cells = examColumns.map(col => {
                 const ms = byType[col.type] || [];
-                const pcts = ms.map((m: any) => { const max = N(m.totalMarks) || 100; return max > 0 ? (N(m.marksObtained) / max) * 100 : 0; });
-                if (!pcts.length) return { mark: null as number | null, outOf: 100, pct: null as number | null };
-                const avgPct = pcts.reduce((a: number, p: number) => a + p, 0) / pcts.length;
-                // Display the averaged mark out of 100 so mixed maxima combine cleanly.
+                if (!ms.length) return { mark: null as number | null, outOf: 100, pct: null as number | null };
+                const rows = ms.map((m: any) => ({ obtained: N(m.marksObtained), outOf: N(m.totalMarks) || 100 }));
+                const avgPct = rows.reduce((a, r) => a + (r.outOf > 0 ? (r.obtained / r.outOf) * 100 : 0), 0) / rows.length;
+                const sameOutOf = rows.every(r => r.outOf === rows[0].outOf);
+                if (sameOutOf) {
+                    // Real out-of preserved (e.g. 17/20, or the sum across two /20 CATs → /40).
+                    const totalObtained = rows.reduce((a, r) => a + r.obtained, 0);
+                    const totalOutOf = rows.reduce((a, r) => a + r.outOf, 0);
+                    return { mark: Math.round(totalObtained), outOf: Math.round(totalOutOf), pct: avgPct };
+                }
+                // Mixed maxima → normalise to a percentage.
                 return { mark: Math.round(avgPct), outOf: 100, pct: avgPct };
             });
             // Aggregate = average of available exam percentages → a 0-100 score.
