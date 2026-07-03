@@ -243,6 +243,19 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
 
+    // Attach an existing online exam to a parent (main) assessment so its marks roll
+    // up with the others. Parents = existing CAT / Mid Term / Mock exams.
+    const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
+    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
+    const attachParent = useMutation({
+        mutationFn: async (parentExamId: string) => {
+            const p = parentExams.find((x: any) => x._id === parentExamId);
+            return (await api.patch(`/online-exams/${examId}`, { parentExamId, parentExamName: p?.examName || p?.name || "" })).data;
+        },
+        onSuccess: () => { toast.success("Attached to main assessment"); refetch(); qc.invalidateQueries({ queryKey: ["online_exams"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
+
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen p-6">
             <button onClick={onBack} className="text-sm font-bold text-slate-500 flex items-center gap-1 mb-4"><ArrowLeft className="w-4 h-4" /> Back to exams</button>
@@ -262,6 +275,20 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                             </button>
                         )}
                     </div>
+                </div>
+
+                {/* Main assessment (parent) — attach/change so marks roll up together */}
+                <div className={`rounded-2xl border p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3 ${exam?.parentExamId ? "bg-indigo-50/50 border-indigo-100" : "bg-amber-50 border-amber-200"}`}>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Main Assessment</p>
+                        {exam?.parentExamId
+                            ? <p className="text-sm font-bold text-indigo-700">Rolls up into: {exam.parentExamName || "main assessment"}</p>
+                            : <p className="text-sm font-bold text-amber-700">Not attached — marks won't roll up with other subjects until you attach a CAT / Mid Term.</p>}
+                    </div>
+                    <select value={exam?.parentExamId || ""} onChange={e => e.target.value && attachParent.mutate(e.target.value)} disabled={attachParent.isPending} className="h-10 px-3 rounded-xl border border-slate-200 text-sm bg-white sm:w-64">
+                        <option value="">{exam?.parentExamId ? "Change main assessment…" : "Attach to main assessment…"}</option>
+                        {parentExams.map((e: any) => <option key={e._id} value={e._id}>{e.examName || e.name} · {e.type || e.examType}{e.term ? ` · ${e.term}` : ""}</option>)}
+                    </select>
                 </div>
 
                 {/* Schedule edit form */}

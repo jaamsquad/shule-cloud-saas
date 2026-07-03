@@ -379,7 +379,21 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
             };
         }).filter(Boolean) as any[];
 
+        // If this online exam previously published to a DIFFERENT exam id (e.g. it was
+        // re-attached to a parent), remove those stale marks so results don't double
+        // up under the old exam. We identify them by this exam's subject + students.
+        const priorExamId = exam.lastPublishedExamId && String(exam.lastPublishedExamId) !== String(mainExamId) ? String(exam.lastPublishedExamId) : '';
+        if (priorExamId) {
+            const studentIds = attempts.map((a: any) => String(a.studentId));
+            await database.collection('exam_marks').deleteMany({
+                examId: priorExamId, source: 'online_exam',
+                subjectId: exam.subjectId || subjectName, studentId: { $in: studentIds },
+            }).catch(() => {});
+        }
+
         if (ops.length) await database.collection('exam_marks').bulkWrite(ops);
+        // Remember where we published so a future re-attach can clean up.
+        await database.collection('online_exams').updateOne({ _id: exam._id }, { $set: { lastPublishedExamId: mainExamId } }).catch(() => {});
         // Mark published attempts.
         await database.collection('online_exam_attempts').updateMany({ examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked'] }, finalScore: { $ne: null } }, { $set: { status: 'published' } }).catch(() => {});
         await audit(database, req, 'RESULTS_PUBLISHED', req.params.id, { mainExamId, written, pending });
