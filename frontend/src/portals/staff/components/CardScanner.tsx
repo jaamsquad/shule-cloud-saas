@@ -89,7 +89,7 @@ export default function CardScanner({ onScan, onClose }: { onScan: (value: strin
                 </div>
 
                 <div className="px-4 py-3 text-center">
-                    <p className="text-xs text-slate-500">Point the camera at the QR/barcode on the student's card.</p>
+                    <p className="text-xs text-slate-500">Point the camera at the QR/barcode on the card.</p>
                     {lastHit && <p className="text-[11px] font-bold text-emerald-600 mt-1">Last scanned: {lastHit}</p>}
                 </div>
             </div>

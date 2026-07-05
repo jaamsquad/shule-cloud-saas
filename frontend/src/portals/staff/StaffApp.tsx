@@ -13,6 +13,7 @@ import StaffLive from "./pages/StaffLive";
 import StaffContent from "./pages/StaffContent";
 import StaffResources from "./pages/StaffResources";
 import StaffLeave from "./pages/StaffLeave";
+import StaffMessageParents from "./pages/StaffMessageParents";
 import AnnouncementsView from "../AnnouncementsView";
 import LiveRoom from "../../pages/tenant/modules/LiveRoom";
 import CalendarPage from "../../pages/tenant/modules/CalendarPage";
@@ -44,6 +45,7 @@ export default function StaffApp() {
                 <Route path="/assignments" element={<StaffContent type="assignments" />} />
                 <Route path="/homework" element={<StaffContent type="homework" />} />
                 <Route path="/announcements" element={<AnnouncementsView api={staffApi} endpoint="/staff-portal/announcements" queryKey="staff_ann" />} />
+                <Route path="/message-parents" element={<StaffMessageParents />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

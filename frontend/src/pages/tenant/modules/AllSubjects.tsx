@@ -30,8 +30,8 @@ export default function AllSubjects() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: (data: { id: string; name: string; code: string; category: string }) => 
-            api.patch(`/academics/subjects/${data.id}`, { name: data.name, code: data.code, category: data.category }),
+        mutationFn: (data: { id: string; name: string; code: string; shortCode: string; category: string }) =>
+            api.patch(`/academics/subjects/${data.id}`, { name: data.name, code: data.code, shortCode: data.shortCode, category: data.category }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects"] });
             toast.success("Subject node updated successfully!");
@@ -47,6 +47,7 @@ export default function AllSubjects() {
             id: editingSubject._id,
             name: editingSubject.name.trim(),
             code: editingSubject.code?.trim() || "",
+            shortCode: (editingSubject.shortCode || "").trim().toUpperCase(),
             category: editingSubject.category || "Core",
         });
     };
@@ -241,13 +242,28 @@ export default function AllSubjects() {
                                 <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md shadow-indigo-100 uppercase">
                                     Subject Code*
                                 </div>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     placeholder="e.g. MATH101"
                                     value={editingSubject.code || ""}
                                     onChange={e => setEditingSubject({...editingSubject, code: e.target.value})}
                                     required
                                     className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-slate-50/50 font-bold text-sm transition-all focus:bg-white focus:shadow-inner"
+                                />
+                            </div>
+
+                            {/* Short Code — shown on merit list & analysis */}
+                            <div className="relative group">
+                                <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md shadow-indigo-100 uppercase">
+                                    Short Code
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. MAT"
+                                    value={editingSubject.shortCode || ""}
+                                    onChange={e => setEditingSubject({...editingSubject, shortCode: e.target.value.toUpperCase()})}
+                                    maxLength={6}
+                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-slate-50/50 font-bold text-sm transition-all focus:bg-white focus:shadow-inner uppercase"
                                 />
                             </div>
 

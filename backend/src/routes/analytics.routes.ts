@@ -68,6 +68,19 @@ export async function buildExamResults(database: Db, examId: string) {
     const sClassById: Record<string, { id: string; name: string }> = {};
     studentDocsAll.forEach((s: any) => { sClassById[String(s._id)] = { id: String(s.classId || ''), name: s.studentClass || s.className || s.currentClass || '' }; });
 
+    // Subject short codes (compact labels for merit-list columns), keyed by
+    // normalized subject name. Falls back to the first letters of the name when a
+    // subject has no short code set.
+    const subjectDefs = await database.collection('subjects').find({}).toArray().catch(() => []);
+    const nrm = (v: any) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const shortByName: Record<string, string> = {};
+    subjectDefs.forEach((s: any) => {
+        const sc = String(s.shortCode || '').trim();
+        if (sc) shortByName[nrm(s.name || s.subjectName)] = sc.toUpperCase();
+    });
+    const shortCodeFor = (name: string): string =>
+        shortByName[nrm(name)] || String(name || '').replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
+
     const byStudent: Record<string, any> = {};
     for (const m of marks) {
         const sid = String(m.studentId);
@@ -75,8 +88,9 @@ export async function buildExamResults(database: Db, examId: string) {
         const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
         const scls = sClassById[sid] || { id: '', name: m.classAtTime || '' };
         const g = (await gradingFor(scls.id, scls.name || m.classAtTime)).gradeOf(pct);
+        const subName = m.subjectName || m.subject || 'Subject';
         (byStudent[sid] ||= { studentId: sid, subjects: [], classAtTime: m.classAtTime }).subjects.push({
-            name: m.subjectName || m.subject || 'Subject', marks: num(m.marksObtained), max, pct: round(pct, 1),
+            name: subName, shortCode: shortCodeFor(subName), marks: num(m.marksObtained), max, pct: round(pct, 1),
             grade: g.grade, points: g.points,
         });
     }

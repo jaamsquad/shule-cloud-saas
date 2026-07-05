@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, Loader2, LogIn, LogOut, CheckCircle2, XCircle, UserCheck, ClipboardCheck, User } from "lucide-react";
+import { ScanLine, Loader2, LogIn, LogOut, CheckCircle2, XCircle, UserCheck, ClipboardCheck, User, Camera } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import CardScanner from "@/portals/staff/components/CardScanner";
 
 const time = (t: any) => (t ? new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—");
 
@@ -10,11 +11,18 @@ export default function AttendanceScanner() {
     const qc = useQueryClient();
     const [code, setCode] = useState("");
     const [last, setLast] = useState<any>(null);
+    const [cameraOpen, setCameraOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Keep the scanner input focused so a USB card reader always types into it.
+    // Keep the scanner input focused so a USB card reader always types into it —
+    // but not while the camera modal is open (it would steal focus from the video).
     const focus = () => inputRef.current?.focus();
-    useEffect(() => { focus(); const i = setInterval(focus, 1500); return () => clearInterval(i); }, []);
+    useEffect(() => {
+        if (cameraOpen) return;
+        focus();
+        const i = setInterval(focus, 1500);
+        return () => clearInterval(i);
+    }, [cameraOpen]);
 
     const { data } = useQuery({
         queryKey: ["scan_today"],
@@ -40,14 +48,14 @@ export default function AttendanceScanner() {
         onError: () => toast.error("Failed to finalize"),
     });
 
-    // Fire a scan (used by both Enter and auto-detect).
+    // Fire a scan (used by the USB reader, manual Enter, AND the camera scanner).
     const doScan = (c: string) => {
         const v = c.trim();
         if (debounceRef.current) clearTimeout(debounceRef.current);
         if (!v || scan.isPending) return;
         scan.mutate(v);
         setCode("");
-        setTimeout(focus, 30);
+        if (!cameraOpen) setTimeout(focus, 30);   // don't yank focus from the camera modal
     };
 
     // Auto-submit shortly after a value is detected — no Enter needed.
@@ -84,7 +92,11 @@ export default function AttendanceScanner() {
                                 placeholder="Waiting for scan…"
                                 className="w-full h-14 px-6 rounded-2xl text-center text-lg font-black text-slate-800 focus:outline-none bg-white/95" />
                         </form>
-                        <p className="text-white/50 text-[11px] mt-3">{scan.isPending ? "Reading…" : "Keep this window focused"}</p>
+                        <button type="button" onClick={() => setCameraOpen(true)}
+                            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-sm font-bold transition-colors">
+                            <Camera className="w-4 h-4" /> Scan with Camera
+                        </button>
+                        <p className="text-white/50 text-[11px] mt-3">{scan.isPending ? "Reading…" : "Tap a card, type an ID, or use the camera"}</p>
                     </div>
 
                     {/* Last scan result */}
@@ -147,6 +159,8 @@ export default function AttendanceScanner() {
                     </div>
                 </div>
             </div>
+
+            {cameraOpen && <CardScanner onScan={doScan} onClose={() => setCameraOpen(false)} />}
         </div>
     );
 }

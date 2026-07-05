@@ -491,10 +491,14 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
     const students = (streamFilter ? allStudents.filter((s: any) => norm(s.stream) === norm(streamFilter)) : allStudents)
         .map((s: any, i: number) => ({ ...s, position: streamFilter ? i + 1 : s.position }));
     const subjects = Array.from(new Set(students.flatMap((s: any) => s.subjects.map((x: any) => x.name)))) as string[];
+    // Column labels use each subject's short code (falling back to the first letters).
+    const shortByName: Record<string, string> = {};
+    students.forEach((s: any) => s.subjects.forEach((x: any) => { if (x.shortCode && !shortByName[x.name]) shortByName[x.name] = x.shortCode; }));
+    const shortOf = (name: string) => shortByName[name] || name.replace(/[^a-zA-Z]/g, "").slice(0, 4).toUpperCase();
 
     const print = () => {
         const extra = `${show("avg") ? "<th>AVG</th>" : ""}${show("tm") ? "<th>TM</th>" : ""}${show("mg") ? "<th>MG</th>" : ""}${show("pg") ? "<th>PG</th>" : ""}`;
-        const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th>${show("stream") ? "<th>Stream</th>" : ""}${show("subjects") ? subjects.map(s => `<th>${s}</th>`).join("") : ""}<th>Pts</th>${extra}</tr>`;
+        const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th>${show("stream") ? "<th>Stream</th>" : ""}${show("subjects") ? subjects.map(s => `<th>${shortOf(s)}</th>`).join("") : ""}<th>Pts</th>${extra}</tr>`;
         const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td>${show("stream") ? `<td>${st.stream || ""}</td>` : ""}${show("subjects") ? subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("") : ""}<td><b>${st.totalPoints}</b></td>${show("avg") ? `<td>${st.avg ?? "-"}%</td>` : ""}${show("tm") ? `<td>${st.totalMarks ?? "-"}</td>` : ""}${show("mg") ? `<td>${st.meanGrade ?? "-"}</td>` : ""}${show("pg") ? `<td>${st.prevGrade ?? "-"}</td>` : ""}</tr>`).join("");
         const body = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
         printDoc(school, `MERIT LIST — ${form || "All"}${streamFilter ? ` (${streamFilter})` : ""}`, `${streamFilter || form || "All classes"} · ${students.length} students`, body, true);
@@ -508,7 +512,7 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
                     <thead><tr className="text-slate-400 uppercase">
                         <th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th>
                         {show("stream") && <th className="text-left">Stream</th>}
-                        {show("subjects") && subjects.map(s => <th key={s} className="text-center px-1">{s.slice(0, 4)}</th>)}
+                        {show("subjects") && subjects.map(s => <th key={s} className="text-center px-1" title={s}>{shortOf(s)}</th>)}
                         <th className="text-center">Pts</th>
                         {show("avg") && <th className="text-center">AVG</th>}
                         {show("tm") && <th className="text-center">TM</th>}

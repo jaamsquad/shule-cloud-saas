@@ -1844,6 +1844,90 @@ router.get('/staff-portal/assignments', authed(async (req, res, db, decoded) => 
     res.json(await staffAssignments(db, decoded));
 }));
 
+// ─── Staff portal: message parents (SMS to parents of the teacher's own class) ──
+// The classes a teacher may message = the classes they head OR teach a subject in.
+const messageableClasses = async (db: Db, decoded: any): Promise<string[]> => {
+    const { assignments, classTeacherOf } = await staffAssignments(db, decoded);
+    const names = new Set<string>();
+    classTeacherOf.forEach(c => c.className && names.add(c.className));
+    assignments.forEach(a => a.className && names.add(a.className));
+    return Array.from(names);
+};
+const parentPhoneOf = (s: any): string => String(s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || '').trim();
+
+// List the teacher's classes + the students in them (with parent-phone availability),
+// so the portal can let the teacher pick recipients.
+router.get('/staff-portal/message-parents/students', authed(async (req, res, db, decoded) => {
+    const classes = await messageableClasses(db, decoded);
+    const out: any[] = [];
+    for (const className of classes) {
+        const students = await studentsInClass(db, className);
+        out.push({
+            className,
+            students: students.map((s: any) => ({
+                studentId: String(s._id), name: s.studentName || s.name,
+                registrationNo: s.registrationNo || s.admNo || '',
+                parentPhone: parentPhoneOf(s), hasPhone: !!parentPhoneOf(s),
+            })),
+        });
+    }
+    res.json({ classes: out });
+}));
+
+// Send an SMS to the parents of selected students (or a whole class) the teacher
+// teaches. Branded with the school name and logged to sms_jobs (the same history
+// the admin Bulk SMS → History reads), tagged so the teacher can find their own.
+router.post('/staff-portal/message-parents', authed(async (req, res, db, decoded) => {
+    const { message, className, studentIds } = req.body || {};
+    if (!message || !String(message).trim()) return res.status(400).json({ message: 'Message is required' });
+
+    const allowed = await messageableClasses(db, decoded);
+    // Resolve the target students — either an explicit selection, or a whole class.
+    let students: any[] = [];
+    if (Array.isArray(studentIds) && studentIds.length) {
+        const oids = studentIds.map((id: any) => safeObjId(id)).filter(Boolean) as ObjectId[];
+        students = oids.length ? await db.collection('students').find({ _id: { $in: oids } }).toArray() : [];
+        // Only students in a class the teacher may message.
+        students = students.filter((s: any) => allowed.includes(s.studentClass) || allowed.includes(s.currentClass));
+    } else if (className) {
+        if (!allowed.includes(className)) return res.status(403).json({ message: 'You can only message parents of your own classes.' });
+        students = await studentsInClass(db, className);
+    } else {
+        return res.status(400).json({ message: 'Select a class or students to message.' });
+    }
+    if (students.length === 0) return res.status(400).json({ message: 'No students matched your selection.' });
+
+    const numbers = Array.from(new Set(students.map(parentPhoneOf).filter(Boolean)));
+    if (numbers.length === 0) return res.status(400).json({ message: 'None of the selected students have a parent phone number on file.' });
+
+    // Brand + queue via the shared SMS gateway (logs to sms_jobs & dispatches).
+    const { queueSms } = await import('../services/smsGateway.service');
+    const { brandMessage } = await import('../services/talksasa.service');
+    const tid = (req as any).tenantContext?.tenantId;
+    let schoolName = (req as any).tenantContext?.tenantName || '';
+    if (!schoolName) {
+        const p: any = await db.collection('school_profile').findOne({}).catch(() => null) || await db.collection('tenant_profile').findOne({}).catch(() => null);
+        schoolName = p?.name || '';
+    }
+    const branded = brandMessage(schoolName, String(message).trim());
+    const result = await queueSms(db, String(tid || ''), numbers, branded, {
+        audience: `staff:${decoded.name || 'Teacher'}`,   // tag so the teacher can find their own sends
+        createdBy: String(decoded.staffId || ''),
+    });
+    res.json({ message: `Message queued for ${numbers.length} parent(s)`, recipients: numbers.length, ...result });
+}));
+
+// The teacher's own sent messages (from sms_jobs, tagged with their staffId).
+router.get('/staff-portal/message-parents/history', authed(async (req, res, db, decoded) => {
+    const rows = await db.collection('sms_jobs')
+        .find({ createdBy: String(decoded.staffId || '') })
+        .sort({ createdAt: -1 }).limit(200).toArray().catch(() => []);
+    res.json(rows.map((r: any) => ({
+        _id: String(r._id), phone: r.phone, message: r.message,
+        status: r.status, audience: r.audience, createdAt: r.createdAt,
+    })));
+}));
+
 router.get('/staff-portal/summary', authed(async (req, res, db, decoded) => {
     const { assignments, classTeacherOf } = await staffAssignments(db, decoded);
     const classCount = new Set(assignments.map(a => a.className)).size;

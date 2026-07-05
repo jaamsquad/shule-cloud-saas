@@ -376,9 +376,31 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // the moment the setting is toggled on — no report re-fetch needed.
         let prevPctBySubject: Record<string, number> = {};
         {
-            const allStudentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+            // Pull the student's marks across BOTH regular and online exams so a prior
+            // online CAT/Mid Term also counts as "the previous exam done".
             const examsAll2 = await database.collection('exams').find({}).toArray().catch(() => []);
-            const eById2: Record<string, any> = {}; examsAll2.forEach((e: any) => eById2[String(e._id)] = e);
+            const onlineAll2 = await database.collection('online_exams').find({}).toArray().catch(() => []);
+            const eById2: Record<string, any> = {};
+            [...examsAll2, ...onlineAll2].forEach((e: any) => { if (!eById2[String(e._id)]) eById2[String(e._id)] = e; });
+            const [regMarks, onlineAttempts] = await Promise.all([
+                database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+                database.collection('online_exam_attempts')
+                    .find({ studentId: sid, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
+                    .toArray().catch(() => []),
+            ]);
+            // De-dupe: skip online attempts whose results are already in exam_marks.
+            const inRegMarks = new Set(regMarks.map((m: any) => `${String(m.examId)}|${String(sid)}`));
+            const allStudentMarks: any[] = [...regMarks, ...onlineAttempts
+                .filter((a: any) => !inRegMarks.has(`${String(a.examId)}|${String(sid)}`))
+                .map((a: any) => {
+                    const ex = eById2[String(a.examId)] || {};
+                    return {
+                        examId: a.examId,
+                        subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject',
+                        marksObtained: N(a.finalScore ?? a.score ?? a.totalScore ?? 0),
+                        totalMarks: N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100,
+                    };
+                })];
             const yOf = (e: any) => N(e?.academicYear ?? e?.year);
             const tOf = (e: any) => N(String(e?.term || '').match(/\d+/)?.[0] || 0);
             // A finer chronological key: year, term, then creation time — so the
@@ -388,21 +410,31 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const orderKey = (e: any) => yOf(e) * 1e15 + tOf(e) * 1e13 + timeOf(e);
             const mainE = examMeta[String(gen.mainExamId)] || exam;
             const mainOrder = orderKey(mainE);
-            const mainExamIds = new Set(examIds.map(String));   // exclude the exams already ON this card
-            // Prior marks = any of this student's marks whose exam sorts BEFORE the main
-            // exam and isn't one of the exams already shown as a column.
+            const mainExamId = String(gen.mainExamId || examId);   // never compare an exam to itself
+            const cardExamIds = new Set(examIds.map(String));      // exams shown ON this card
+            // Every one of the student's marks whose exam sorts BEFORE the main exam
+            // (and isn't the main exam itself) is a candidate "previous exam".
             const priorMarks = allStudentMarks
                 .map((m: any) => ({ m, e: eById2[String(m.examId)] }))
-                .filter((x: any) => x.e && !mainExamIds.has(String(x.m.examId)) && orderKey(x.e) < mainOrder);
-            // Keep the LATEST prior exam per subject (keyed by NORMALIZED subject name
-            // so it matches the current subject regardless of case/spacing).
-            const bestBySub: Record<string, { key: number; pct: number }> = {};
+                .filter((x: any) => x.e && String(x.m.examId) !== mainExamId && orderKey(x.e) < mainOrder);
+            // Two-tier per subject: PREFER the latest prior exam that is NOT on this card
+            // (a genuine earlier term/CAT), so we don't compare the term's aggregate to a
+            // component of itself. If none exists (e.g. a first-term report), FALL BACK to
+            // the latest earlier assessment on the card (Mid Term / CAT before the End
+            // Term) so the Change column is still meaningful.
+            const offCard: Record<string, { key: number; pct: number }> = {};
+            const onCard: Record<string, { key: number; pct: number }> = {};
             priorMarks.forEach(({ m, e }: any) => {
                 const sub = norm(m.subjectName || m.subject || 'Subject'); const key = orderKey(e);
                 const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
-                if (!bestBySub[sub] || key > bestBySub[sub].key) bestBySub[sub] = { key, pct };
+                const bucket = cardExamIds.has(String(m.examId)) ? onCard : offCard;
+                if (!bucket[sub] || key > bucket[sub].key) bucket[sub] = { key, pct };
             });
-            prevPctBySubject = Object.fromEntries(Object.entries(bestBySub).map(([s, v]) => [s, v.pct]));  // {normSubject: pct}
+            const subjectsSeen = new Set([...Object.keys(offCard), ...Object.keys(onCard)]);
+            subjectsSeen.forEach((sub) => {
+                const pick = offCard[sub] || onCard[sub];   // off-card wins; on-card is the fallback
+                if (pick) prevPctBySubject[sub] = pick.pct;
+            });
         }
 
         let totalMarks = 0, totalPoints = 0;
@@ -440,10 +472,14 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const pos = list.findIndex(x => x.sid === sid) + 1;
             const tName = teacherForSubject(sub);
             const initials = initialsOf(tName);
-            // Change vs previous exam (percentage points, rounded). null when no prior.
+            // Change vs the previous exam (percentage points, rounded). null when no
+            // prior exam exists for this subject. We measure the MAIN (End-Term) exam's
+            // % against the previous exam's % — a clean exam-over-exam comparison — and
+            // fall back to the term aggregate only if the main column has no mark.
             // Always computed; the frontend shows the column only when the setting is on.
             const prevPct = prevPctBySubject[norm(sub)];
-            const change = (prevPct !== undefined) ? Math.round(aggPct - prevPct) : null;
+            const mainCellPct = (cells[0]?.pct != null) ? cells[0].pct : aggPct;   // cells[0] is the main/End-Term column
+            const change = (prevPct !== undefined && prevPct !== null) ? Math.round(mainCellPct - prevPct) : null;
             return {
                 subject: sub,
                 cells,                                  // per-exam columns

@@ -4,9 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
-interface Row { name: string; code: string; category: string }
+interface Row { name: string; code: string; shortCode: string; category: string }
 const CATEGORIES = ["Core", "Elective", "Vocational", "Extracurricular"];
-const emptyRow = (): Row => ({ name: "", code: "", category: "Core" });
+const emptyRow = (): Row => ({ name: "", code: "", shortCode: "", category: "Core" });
 const blankRows = (n: number) => Array.from({ length: n }, emptyRow);
 
 // A spreadsheet-style grid for adding many subjects at once. Supports pasting
@@ -32,10 +32,10 @@ export default function SubjectBulkGrid({ onSaved }: { onSaved?: () => void }) {
         setRows(rs => {
             const next = [...rs];
             lines.forEach((line, k) => {
-                const [name = "", code = "", category = ""] = line.split("\t").map(c => c.trim());
+                const [name = "", code = "", shortCode = "", category = ""] = line.split("\t").map(c => c.trim());
                 const idx = rowIdx + k;
                 const cat = CATEGORIES.find(c => c.toLowerCase() === category.toLowerCase()) || "Core";
-                const row: Row = { name, code, category: cat };
+                const row: Row = { name, code, shortCode: shortCode.toUpperCase(), category: cat };
                 if (idx < next.length) next[idx] = row;
                 else next.push(row);
             });
@@ -49,7 +49,7 @@ export default function SubjectBulkGrid({ onSaved }: { onSaved?: () => void }) {
         if (validRows.length === 0) { toast.error("Enter at least one subject name"); return; }
         setSaving(true);
         const results = await Promise.allSettled(
-            validRows.map(r => api.post("/academics/subjects", { name: r.name.trim(), code: r.code.trim(), category: r.category }))
+            validRows.map(r => api.post("/academics/subjects", { name: r.name.trim(), code: r.code.trim(), shortCode: r.shortCode.trim(), category: r.category }))
         );
         const ok = results.filter(r => r.status === "fulfilled").length;
         const failed = results.length - ok;
@@ -65,7 +65,7 @@ export default function SubjectBulkGrid({ onSaved }: { onSaved?: () => void }) {
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/60">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                     <ClipboardPaste className="w-4 h-4 text-[#5C67F2]" />
-                    <span>Type rows, or <b>paste straight from Excel</b> (Name · Code · Classification). {validRows.length} ready.</span>
+                    <span>Type rows, or <b>paste straight from Excel</b> (Name · Code · Short Code · Classification). {validRows.length} ready.</span>
                 </div>
                 <button onClick={clearAll} className="text-[11px] font-bold text-slate-400 hover:text-rose-500 inline-flex items-center gap-1"><X className="w-3.5 h-3.5" /> Clear</button>
             </div>
@@ -77,6 +77,7 @@ export default function SubjectBulkGrid({ onSaved }: { onSaved?: () => void }) {
                             <th className="w-10 py-2.5 font-black">#</th>
                             <th className="text-left px-3 py-2.5 font-black">Subject Name *</th>
                             <th className="text-left px-3 py-2.5 font-black">Subject Code</th>
+                            <th className="text-left px-3 py-2.5 font-black">Short Code</th>
                             <th className="text-left px-3 py-2.5 font-black">Classification</th>
                             <th className="w-10"></th>
                         </tr>
@@ -92,6 +93,10 @@ export default function SubjectBulkGrid({ onSaved }: { onSaved?: () => void }) {
                                 <td className="px-2 py-1">
                                     <input value={r.code} onChange={e => setCell(i, "code", e.target.value)} onPaste={e => handlePaste(i, e)}
                                         placeholder="e.g. MATH101" className="w-full h-9 px-2 rounded border border-transparent hover:border-slate-200 focus:border-[#5C67F2] focus:outline-none text-sm" />
+                                </td>
+                                <td className="px-2 py-1">
+                                    <input value={r.shortCode} onChange={e => setCell(i, "shortCode", e.target.value.toUpperCase())} onPaste={e => handlePaste(i, e)}
+                                        placeholder="e.g. MAT" maxLength={6} className="w-full h-9 px-2 rounded border border-transparent hover:border-slate-200 focus:border-[#5C67F2] focus:outline-none text-sm uppercase" />
                                 </td>
                                 <td className="px-2 py-1">
                                     <select value={r.category} onChange={e => setCell(i, "category", e.target.value)}

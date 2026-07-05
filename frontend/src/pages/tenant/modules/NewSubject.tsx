@@ -11,6 +11,7 @@ export default function NewSubject() {
     const [mode, setMode] = useState<"single" | "bulk">("bulk");
     const [name, setName] = useState("");
     const [code, setCode] = useState("");
+    const [shortCode, setShortCode] = useState("");
     const [category, setCategory] = useState("Core");
 
     const queryClient = useQueryClient();
@@ -28,9 +29,10 @@ export default function NewSubject() {
     const handleCreate = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) return;
-        createMutation.mutate({ 
-            name: name.trim(), 
+        createMutation.mutate({
+            name: name.trim(),
             code: code.trim(),
+            shortCode: shortCode.trim(),
             category
         });
     };
@@ -109,6 +111,23 @@ export default function NewSubject() {
                                 />
                                 <Sparkles className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-200 group-focus-within:text-[#5C67F2] transition-colors" />
                             </div>
+
+                            {/* Short Code — the compact abbreviation shown on the merit list & analysis */}
+                            <div className="relative group">
+                                <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md shadow-indigo-100 uppercase">
+                                    Short Code
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. MAT"
+                                    value={shortCode}
+                                    onChange={e => setShortCode(e.target.value.toUpperCase())}
+                                    maxLength={6}
+                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 placeholder-slate-200 bg-slate-50/50 font-bold text-sm transition-all focus:bg-white focus:shadow-inner uppercase"
+                                />
+                                <Type className="absolute right-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-200 group-focus-within:text-[#5C67F2] transition-colors" />
+                            </div>
+                            <p className="-mt-6 text-[10px] text-slate-400 px-6">Shown on the merit list &amp; analysis columns. Leave blank to auto-use the first letters of the name.</p>
 
                             {/* Subject Category */}
                             <div className="relative group">
