@@ -21,12 +21,16 @@ interface StudentAttendanceRecord {
     } | null;
 }
 
+// "" = unmarked (the teacher/admin has not chosen a status yet). Unmarked students
+// are NOT saved and are not counted in the present/absent stats.
+type AttStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "";
+
 export default function StudentsAttendance() {
     const queryClient = useQueryClient();
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [classId, setClassId] = useState("");
     const [periodId, setPeriodId] = useState("");
-    const [records, setRecords] = useState<Record<string, { status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED"; remarks: string }>>({});
+    const [records, setRecords] = useState<Record<string, { status: AttStatus; remarks: string }>>({});
     const [isDirty, setIsDirty] = useState(false);
 
     // Fetch classes
@@ -82,12 +86,12 @@ export default function StudentsAttendance() {
 
     // Sync state with fetched data
     useEffect(() => {
-        const initialMap: Record<string, { status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED"; remarks: string }> = {};
+        const initialMap: Record<string, { status: AttStatus; remarks: string }> = {};
         studentsData.forEach(s => {
             if (s.attendance) {
                 initialMap[s.student_id] = { status: s.attendance.status, remarks: s.attendance.remarks || "" };
             } else {
-                initialMap[s.student_id] = { status: "PRESENT", remarks: "" }; // default
+                initialMap[s.student_id] = { status: "", remarks: "" }; // unmarked by default — must be set explicitly
             }
         });
         setRecords(prev => {
@@ -102,11 +106,13 @@ export default function StudentsAttendance() {
     // Bulk save mutation
     const saveMutation = useMutation({
         mutationFn: async () => {
+            const marked = Object.entries(records).filter(([, val]) => val.status !== "");
+            if (marked.length === 0) throw new Error("Mark at least one student before saving.");
             const payload = {
                 date,
                 class_id: classId,
                 period_id: periodId || null,
-                records: Object.entries(records).map(([student_id, val]) => ({
+                records: marked.map(([student_id, val]) => ({
                     student_id,
                     status: val.status,
                     remarks: val.remarks
@@ -127,8 +133,9 @@ export default function StudentsAttendance() {
     });
 
     // Status updater
-    const updateStatus = (studentId: string, status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED") => {
-        setRecords(prev => ({ ...prev, [studentId]: { ...prev[studentId], status } }));
+    const updateStatus = (studentId: string, status: AttStatus) => {
+        // Tapping the active status again clears it back to unmarked.
+        setRecords(prev => ({ ...prev, [studentId]: { ...prev[studentId], status: prev[studentId]?.status === status ? "" : status } }));
         setIsDirty(true);
     };
 
@@ -139,8 +146,8 @@ export default function StudentsAttendance() {
     };
 
     // Bulk actions
-    const markAll = (status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED") => {
-        const updated: Record<string, { status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED"; remarks: string }> = {};
+    const markAll = (status: AttStatus) => {
+        const updated: Record<string, { status: AttStatus; remarks: string }> = {};
         studentsData.forEach(s => {
             updated[s.student_id] = { status, remarks: records[s.student_id]?.remarks || "" };
         });
@@ -149,16 +156,17 @@ export default function StudentsAttendance() {
         toast.success(`Marked all students as ${status}`);
     };
 
-    // Summary stats
+    // Summary stats — "unmarked" is tracked so the header shows how many are left.
     const stats = useMemo(() => {
-        let present = 0, absent = 0, late = 0, excused = 0;
+        let present = 0, absent = 0, late = 0, excused = 0, unmarked = 0;
         Object.values(records).forEach(r => {
             if (r.status === "PRESENT") present++;
-            if (r.status === "ABSENT") absent++;
-            if (r.status === "LATE") late++;
-            if (r.status === "EXCUSED") excused++;
+            else if (r.status === "ABSENT") absent++;
+            else if (r.status === "LATE") late++;
+            else if (r.status === "EXCUSED") excused++;
+            else unmarked++;
         });
-        return { present, absent, late, excused, total: Object.keys(records).length };
+        return { present, absent, late, excused, unmarked, total: Object.keys(records).length };
     }, [records]);
 
     return (
@@ -264,6 +272,10 @@ export default function StudentsAttendance() {
                             <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
                             Excused: {stats.excused}
                         </div>
+                        <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            Unmarked: {stats.unmarked}
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
@@ -305,12 +317,13 @@ export default function StudentsAttendance() {
                             </thead>
                             <tbody>
                                 {studentsData.map((student, idx) => {
-                                    const rec = records[student.student_id] || { status: "PRESENT", remarks: "" };
-                                    const statusColors = {
+                                    const rec = records[student.student_id] || { status: "" as AttStatus, remarks: "" };
+                                    const statusColors: Record<string, string> = {
                                         PRESENT: "bg-emerald-50/70 border-emerald-100 text-emerald-900",
                                         ABSENT: "bg-rose-50/70 border-rose-100 text-rose-900",
                                         LATE: "bg-amber-50/70 border-amber-100 text-amber-900",
-                                        EXCUSED: "bg-blue-50/70 border-blue-100 text-blue-900"
+                                        EXCUSED: "bg-blue-50/70 border-blue-100 text-blue-900",
+                                        "": "",   // unmarked → neutral row
                                     };
 
                                     return (

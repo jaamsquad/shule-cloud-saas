@@ -1942,10 +1942,23 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         if (batch) return res.status(423).json({ message: `These marks are ${String(batch.status).toLowerCase()} by the HOD and can no longer be edited. Ask the HOD to unlock first.` });
     } catch { /* non-fatal */ }
     const total = Number(outOf || 100);
+    // Read the CURRENT marks first so we can record exactly what changed — this
+    // powers the "changes made after approval" trail the HOD sees on re-submission.
+    const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
+    const prevMarks = await db.collection('exam_marks')
+        .find({ examId, subjectName: subject }).toArray().catch(() => []);
+    const prevByStudent: Record<string, number | null> = {};
+    prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; });
+
     let saved = 0;
+    const changes: Array<{ studentId: string; from: number | null; to: number }> = [];
     for (const m of marks) {
         if (m.marks === '' || m.marks == null) continue;
         const obtained = Number(m.marks);
+        const before = prevByStudent[String(m.studentId)];
+        if (before === undefined || Number(before) !== obtained) {
+            changes.push({ studentId: String(m.studentId), from: before === undefined ? null : (before as number), to: obtained });
+        }
         await db.collection('exam_marks').updateOne(
             { examId, subjectName: subject, studentId: String(m.studentId) },
             { $set: {
@@ -1957,7 +1970,42 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         );
         saved++;
     }
-    res.json({ message: `Saved ${saved} marks`, saved });
+
+    // If this batch was already in the approval workflow (Submitted / Seen / Returned
+    // / Rejected — i.e. anything except Approved/Locked, which are blocked above), a
+    // save means the teacher edited marks that were pending. Reset the batch to
+    // "Submitted" so it must be approved AGAIN, and attach a human-readable list of
+    // the edits so the approver can see precisely what changed.
+    if (changes.length > 0) {
+        const batch = await db.collection('mark_approvals').findOne({ examId, subjectNorm: nrmS }).catch(() => null);
+        if (batch && !['Approved', 'Locked'].includes(String(batch.status))) {
+            // Resolve student names for a readable change log.
+            const ids = changes.map(c => safeObjId(c.studentId)).filter(Boolean) as ObjectId[];
+            const studs = ids.length ? await db.collection('students').find({ _id: { $in: ids } }).toArray().catch(() => []) : [];
+            const nameById: Record<string, string> = {};
+            studs.forEach((s: any) => { nameById[String(s._id)] = s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(); });
+            const detail = changes.map(c => ({
+                studentId: c.studentId,
+                name: nameById[c.studentId] || 'Student',
+                from: c.from, to: c.to,
+            }));
+            const wasStatus = String(batch.status);
+            const note = `Edited ${changes.length} mark${changes.length === 1 ? '' : 's'} after ${wasStatus.toLowerCase()} — resubmitted for approval`;
+            await db.collection('mark_approvals').updateOne(
+                { _id: batch._id },
+                {
+                    $set: { status: 'Submitted', updatedAt: new Date(), lastEditedBy: decoded.name, lastEditedAt: new Date() },
+                    $push: { history: { action: 'Resubmitted', by: decoded.name, byId: String(decoded.staffId || ''), at: new Date(), note, changes: detail } },
+                } as any,
+            );
+            await db.collection('exam_marks').updateMany(
+                { examId, subjectName: subject },
+                { $set: { approvalStatus: 'Submitted', approved: false } },
+            ).catch(() => {});
+        }
+    }
+
+    res.json({ message: `Saved ${saved} marks`, saved, resubmitted: changes.length > 0 });
 }));
 
 // Approval status of a teacher's (exam × subject) marks batch — so the staff
@@ -1969,6 +2017,64 @@ router.get('/staff-portal/marks-status', authed(async (req, res, db) => {
     const nrmS = subject.toLowerCase().replace(/\s+/g, ' ').trim();
     const batch = await db.collection('mark_approvals').findOne({ examId, subjectNorm: nrmS });
     res.json({ status: batch?.status || 'Draft', locked: batch ? ['Approved', 'Locked'].includes(batch.status) : false });
+}));
+
+// Teacher submits an (exam × subject) marks batch for HOD/admin approval. Creates
+// or updates the shared `mark_approvals` document so it appears in the admin/HOD
+// "Marks Approval" queue exactly like an admin-side submission, and flags the marks
+// as Submitted (hidden from students until approved).
+router.post('/staff-portal/marks/submit', authed(async (req, res, db, decoded) => {
+    const { examId, examName, className, subject, note } = req.body || {};
+    if (!examId || !className || !subject) {
+        return res.status(400).json({ message: 'examId, className and subject are required' });
+    }
+    if (!(await assertAssigned(db, decoded, className, subject))) {
+        return res.status(403).json({ message: 'You are not assigned to this class/subject' });
+    }
+    const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
+    const key = { examId: String(examId), subjectNorm: nrmS };
+
+    const existing: any = await db.collection('mark_approvals').findOne(key).catch(() => null);
+    if (existing && ['Approved', 'Locked'].includes(existing.status)) {
+        return res.status(409).json({ message: `Marks already ${String(existing.status).toLowerCase()} — ask the HOD to unlock first.` });
+    }
+
+    // Count the marks in this batch, and resolve the owning department(s) so the
+    // batch surfaces to the right HOD (departments whose `subjects` include this one).
+    const entries = await db.collection('exam_marks').countDocuments({
+        examId: String(examId), $or: [{ subjectName: subject }, { subject }],
+    }).catch(() => 0);
+    if (entries === 0) {
+        return res.status(400).json({ message: 'Save marks before submitting for approval.' });
+    }
+    const deps = await db.collection('departments').find({}).toArray().catch(() => []);
+    const owners = deps.filter((d: any) => Array.isArray(d.subjects) && d.subjects.some((s: string) => String(s).toLowerCase().replace(/\s+/g, ' ').trim() === nrmS));
+
+    const staffId = String(decoded.staffId || '');
+    const staffName = decoded.name || 'Teacher';
+    const nowD = new Date();
+    const event = { action: 'Submitted', by: staffName, byId: staffId, at: nowD, note: note || '' };
+    await db.collection('mark_approvals').updateOne(
+        key,
+        {
+            $set: {
+                examId: String(examId), examName: examName || '', subject, subjectNorm: nrmS, className: className || '',
+                entries, status: 'Submitted',
+                departmentIds: owners.map((o: any) => String(o._id)), departmentNames: owners.map((o: any) => o.name),
+                submittedBy: staffName, submittedById: staffId, submittedAt: nowD, updatedAt: nowD,
+            },
+            $setOnInsert: { createdAt: nowD },
+            $push: { history: event },
+        } as any,
+        { upsert: true },
+    );
+    // Hide these marks from students until the HOD/admin approves.
+    await db.collection('exam_marks').updateMany(
+        { examId: String(examId), $or: [{ subjectName: subject }, { subject }] },
+        { $set: { approvalStatus: 'Submitted', approved: false } },
+    ).catch(() => {});
+
+    res.json({ message: 'Marks submitted for approval', entries });
 }));
 
 // Results the teacher can view — per student, per class, for subjects they teach.
@@ -2011,7 +2117,9 @@ router.get('/staff-portal/attendance', authed(async (req, res, db, decoded) => {
         className, subject: subject || 'General', date,
         students: students.map((s: any) => ({
             studentId: String(s._id), name: s.studentName,
-            registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)] || 'Present',
+            // Empty status = unmarked. The teacher must explicitly set each student's
+            // status; unmarked students are not saved (see POST below).
+            registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)] || '',
         })),
     });
 }));
@@ -2027,9 +2135,11 @@ router.post('/staff-portal/attendance', authed(async (req, res, db, decoded) => 
     }
     let saved = 0;
     for (const r of records) {
+        // Skip unmarked students — only persist a row when a status was chosen.
+        if (!r.status) continue;
         await db.collection('student_attendance').updateOne(
             { studentId: String(r.studentId), className, date, subject: subj },
-            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status || 'Present', markedBy: decoded.name, updatedAt: new Date() } },
+            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, markedBy: decoded.name, updatedAt: new Date() } },
             { upsert: true },
         );
         saved++;

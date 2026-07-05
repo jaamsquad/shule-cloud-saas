@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Save, PencilLine, Lock } from "lucide-react";
+import { Loader2, Save, PencilLine, Lock, Send } from "lucide-react";
 import { toast } from "sonner";
 import { PageTitle, PanelCard } from "../../PortalShell";
 import type { StaffCtx } from "../StaffLayout";
@@ -37,21 +37,36 @@ export default function StaffMarksEntry() {
     const outOf = Number(exam?.totalMarks) || 100;   // from the exam's Total Marks setting
 
     // Approval status of this (exam × subject) — locked marks can't be edited.
-    const { data: markStatus } = useQuery({
+    const { data: markStatus, refetch: refetchStatus } = useQuery({
         queryKey: ["staff_marks_status", examId, subject],
         enabled: !!examId && !!subject,
         queryFn: async () => (await api.get(`/staff-portal/marks-status`, { params: { examId, subject } })).data,
     });
     const isLocked = !!markStatus?.locked;
     const statusLabel = markStatus?.status || "";
+    // Submitted marks are pending approval; editing them re-submits for re-approval.
+    const isSubmitted = statusLabel === "Submitted";
+    const isApproved = statusLabel === "Approved";
 
     const save = useMutation({
         mutationFn: async () => (await api.post("/staff-portal/marks", {
             examId, examName: exam?.name, term: exam?.term, className, subject, outOf,
             marks: rows.map(r => ({ studentId: r.studentId, marks: r.marks })),
         })).data,
-        onSuccess: (d: any) => { toast.success(d.message || "Saved"); refetch(); },
+        onSuccess: (d: any) => {
+            toast.success(d.resubmitted ? "Saved — changes resent for approval" : (d.message || "Saved"));
+            refetch(); refetchStatus();
+        },
         onError: (e: any) => toast.error(e.response?.data?.message || "Save failed"),
+    });
+
+    // Submit the saved marks to the HOD/admin approval queue.
+    const submit = useMutation({
+        mutationFn: async () => (await api.post("/staff-portal/marks/submit", {
+            examId, examName: exam?.name, className, subject,
+        })).data,
+        onSuccess: (d: any) => { toast.success(d.message || "Submitted for approval"); refetchStatus(); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Submit failed"),
     });
 
     return (
@@ -94,15 +109,38 @@ export default function StaffMarksEntry() {
                     action={
                         <div className="flex items-center gap-2">
                             {statusLabel && statusLabel !== "Draft" && (
-                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isLocked ? "bg-slate-800 text-white" : statusLabel === "Returned" || statusLabel === "Rejected" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>{statusLabel}</span>
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isLocked ? "bg-slate-800 text-white" : statusLabel === "Returned" || statusLabel === "Rejected" ? "bg-amber-100 text-amber-700" : statusLabel === "Approved" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>{statusLabel}</span>
                             )}
                             <button disabled={save.isPending || rows.length === 0 || isLocked} onClick={() => save.mutate()}
                                 title={isLocked ? "Locked by HOD — ask them to unlock to edit" : ""}
                                 className="inline-flex items-center gap-1.5 bg-white text-[#0f5132] text-xs font-bold px-3 py-1.5 rounded disabled:opacity-50">
                                 {save.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isLocked ? <Lock className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} {isLocked ? "Locked" : "Save Marks"}
                             </button>
+                            {!isLocked && !isSubmitted && (
+                                <button disabled={submit.isPending || save.isPending || rows.length === 0} onClick={() => submit.mutate()}
+                                    title="Send these marks to the HOD/admin for approval"
+                                    className="inline-flex items-center gap-1.5 bg-[#159a52] text-white text-xs font-bold px-3 py-1.5 rounded disabled:opacity-50">
+                                    {submit.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Submit for Approval
+                                </button>
+                            )}
                         </div>
                     }>
+                    {/* Workflow hints so the teacher understands the approval state. */}
+                    {isSubmitted && (
+                        <div className="mb-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-[11px] text-blue-700">
+                            These marks are <b>submitted and awaiting approval</b>. You can still edit them — any change will be re-sent to the HOD for approval, and they'll see exactly what you changed.
+                        </div>
+                    )}
+                    {(statusLabel === "Returned" || statusLabel === "Rejected") && (
+                        <div className="mb-3 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-700">
+                            The HOD <b>{statusLabel === "Rejected" ? "rejected" : "returned"}</b> these marks. Fix them, then click <b>Submit for Approval</b> again.
+                        </div>
+                    )}
+                    {isApproved && (
+                        <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-[11px] text-emerald-700">
+                            These marks are <b>approved</b>. Editing is locked — ask the HOD to unlock if a change is needed.
+                        </div>
+                    )}
                     {isFetching ? (
                         <div className="flex items-center gap-2 text-slate-400 text-sm py-8 justify-center">
                             <Loader2 className="w-5 h-5 animate-spin" /> Loading roster…
@@ -129,9 +167,9 @@ export default function StaffMarksEntry() {
                                             <td className="py-2">
                                                 <div className="flex items-center gap-1">
                                                     <PencilLine className="w-3.5 h-3.5 text-slate-300" />
-                                                    <input type="number" min={0} max={outOf} value={r.marks}
+                                                    <input type="number" min={0} max={outOf} value={r.marks} disabled={isLocked}
                                                         onChange={e => setRows(rs => rs.map((x, j) => j === i ? { ...x, marks: e.target.value } : x))}
-                                                        className="w-20 h-9 px-2 border border-black/10 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#159a52]/40" />
+                                                        className="w-20 h-9 px-2 border border-black/10 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#159a52]/40 disabled:bg-slate-50 disabled:text-slate-400" />
                                                 </div>
                                             </td>
                                         </tr>

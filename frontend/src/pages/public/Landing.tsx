@@ -4,6 +4,7 @@ import { resolvePortal } from "@/lib/portal";
 import SchoolLanding from "./SchoolLanding";
 import { MarketingNav, MarketingFooter, IconChip, NAVY, NAVY_DEEP, TEAL, MINT, MINT_SOFT, PAGE_BG } from "./MarketingChrome";
 import { DemoModal } from "./DemoModal";
+import AppDownloadSection from "./AppDownload";
 import {
   ArrowRight, PlayCircle, TrendingUp, Sparkles, ShieldCheck, Puzzle, Headset,
   Users, CheckCircle2, CalendarCheck, GraduationCap, MessageSquare,
@@ -136,6 +137,9 @@ export default function Landing() {
           </div>
         ))}
       </section>
+
+      {/* ── Download the apps (QR on hover / desktop, button on mobile) ──── */}
+      <AppDownloadSection />
 
       {/* ── CTA band (dark navy) ────────────────────────────────────────── */}
       <section className="max-w-7xl mx-auto px-6 pb-20">

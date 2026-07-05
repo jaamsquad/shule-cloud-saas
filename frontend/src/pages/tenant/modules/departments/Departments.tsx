@@ -661,6 +661,7 @@ const ClassList = ({ rows }: { rows: any[] }) => (
 const STATUS_BADGE: Record<string, string> = {
     Approved: "bg-emerald-100 text-emerald-700", Submitted: "bg-blue-100 text-blue-700",
     Returned: "bg-amber-100 text-amber-700", Rejected: "bg-rose-100 text-rose-700",
+    Resubmitted: "bg-violet-100 text-violet-700",
     Locked: "bg-slate-800 text-white", Draft: "bg-slate-100 text-slate-500", Missing: "bg-rose-50 text-rose-600",
 };
 
@@ -774,7 +775,25 @@ function HistoryModal({ batch, onClose }: { batch: any; onClose: () => void }) {
                             {(data?.history || []).map((h: any, i: number) => (
                                 <div key={i} className="flex items-start gap-2 border-l-2 border-slate-100 pl-3 py-1">
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[h.action] || "bg-slate-100 text-slate-500"}`}>{h.action}</span>
-                                    <div className="min-w-0"><p className="text-xs font-bold text-slate-700">{h.by}</p><p className="text-[11px] text-slate-400">{new Date(h.at).toLocaleString()}{h.note ? ` · ${h.note}` : ""}</p></div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-bold text-slate-700">{h.by}</p>
+                                        <p className="text-[11px] text-slate-400">{new Date(h.at).toLocaleString()}{h.note ? ` · ${h.note}` : ""}</p>
+                                        {Array.isArray(h.changes) && h.changes.length > 0 && (
+                                            <div className="mt-1.5 rounded-lg bg-violet-50/70 border border-violet-100 p-2 space-y-0.5">
+                                                <p className="text-[9px] font-black uppercase tracking-wider text-violet-500 mb-1">Marks changed</p>
+                                                {h.changes.map((c: any, j: number) => (
+                                                    <div key={j} className="flex items-center justify-between gap-2 text-[11px]">
+                                                        <span className="font-semibold text-slate-600 truncate">{c.name}</span>
+                                                        <span className="font-mono font-bold flex-shrink-0">
+                                                            <span className="text-slate-400">{c.from == null ? "—" : c.from}</span>
+                                                            <span className="text-slate-300 mx-1">→</span>
+                                                            <span className="text-violet-700">{c.to}</span>
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
