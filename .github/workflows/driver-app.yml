@@ -1,0 +1,66 @@
+name: Build Driver App APK
+
+# Builds the ShuleCloud Driver Flutter app in the cloud and uploads an installable
+# APK as an artifact — so no Flutter SDK is needed on any local machine.
+#
+# Runs on: pushes that touch driver-app/, and on-demand via the "Run workflow"
+# button (workflow_dispatch) in the GitHub Actions tab.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "driver-app/**"
+      - ".github/workflows/driver-app.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: driver-app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java (needed by the Android build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Generate native scaffolding (android/) without touching lib/
+        run: flutter create --platforms=android --org com.shulecloud .
+
+      - name: Restore custom AndroidManifest (permissions + Maps + bg service)
+        run: |
+          if [ -f android/app/src/main/AndroidManifest.xml.custom ]; then
+            cp android/app/src/main/AndroidManifest.xml.custom android/app/src/main/AndroidManifest.xml
+          fi
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Run code generators (Hive adapters, etc.)
+        run: flutter pub run build_runner build --delete-conflicting-outputs || true
+
+      - name: Build debug APK (installable without a signing key)
+        run: flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shulecloud-driver-apk
+          path: driver-app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
