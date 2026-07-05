@@ -1,0 +1,63 @@
+name: shulecloud_driver
+description: ShuleCloud Driver — Smart School Transport app for bus drivers.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Navigation
+  go_router: ^14.2.0
+
+  # Networking
+  dio: ^5.4.3+1
+  connectivity_plus: ^6.0.3
+  socket_io_client: ^2.0.3+1
+
+  # Storage
+  flutter_secure_storage: ^9.2.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Location & maps
+  geolocator: ^12.0.0
+  google_maps_flutter: ^2.6.1
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+
+  # Device / permissions
+  permission_handler: ^11.3.1
+  battery_plus: ^6.0.1
+
+  # Notifications
+  firebase_core: ^3.1.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.1.2
+
+  # QR / camera
+  mobile_scanner: ^5.1.1
+  image_picker: ^1.1.2
+
+  # UI helpers
+  cupertino_icons: ^1.0.8
+  intl: ^0.19.0
+  cached_network_image: ^3.3.1
+  flutter_slidable: ^3.1.0
+  shimmer: ^3.0.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.11
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
