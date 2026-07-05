@@ -29,7 +29,14 @@ class StorageService {
     await _secure.delete(key: StorageKeys.accessToken);
     await _secure.delete(key: StorageKeys.refreshToken);
     await _secure.delete(key: StorageKeys.driverProfile);
+    await _secure.delete(key: StorageKeys.schoolCode);
   }
+
+  // ── School code (tenant subdomain) ──────────────────────────────────────────
+  // Sent as the `x-tenant-subdomain` header on every request so the backend can
+  // resolve the correct school database. This is the "School Code" from login.
+  Future<void> saveSchoolCode(String code) => _secure.write(key: StorageKeys.schoolCode, value: code.trim().toLowerCase());
+  Future<String?> get schoolCode => _secure.read(key: StorageKeys.schoolCode);
 
   // ── Driver profile (cached for auto-login/offline) ──────────────────────────
   Future<void> saveDriver(Driver d) => _secure.write(key: StorageKeys.driverProfile, value: jsonEncode(d.toJson()));

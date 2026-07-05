@@ -67,7 +67,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
                 child: Column(
                   children: [
-                    TextField(controller: _school, decoration: const InputDecoration(hintText: 'School Code')),
+                    TextField(
+                      controller: _school,
+                      textCapitalization: TextCapitalization.none,
+                      decoration: const InputDecoration(hintText: 'School Code (e.g. kilimo)'),
+                    ),
                     const SizedBox(height: 16),
                     TextField(controller: _id, decoration: const InputDecoration(hintText: 'Driver ID or Email')),
                     const SizedBox(height: 16),

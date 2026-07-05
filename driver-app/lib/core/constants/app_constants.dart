@@ -6,36 +6,42 @@
 class ApiConfig {
   ApiConfig._();
 
-  /// Base URL of the ShuleCloud backend (HTTPS only in production).
-  static const String baseUrl = 'https://api.shulecloud.com';
+  /// Base URL of the ShuleCloud backend. Routes are mounted at /api/v1 and the
+  /// tenant (school) is resolved from the subdomain OR the `x-tenant-subdomain`
+  /// header (see ApiClient) — that header is the "School Code" from login.
+  ///
+  /// PROD example: 'https://api.shulecloud.com/api/v1' (with subdomain header),
+  /// or 'https://<school>.shulecloud.com/api/v1'.
+  /// LOCAL dev on an Android emulator: 'http://10.0.2.2:5000/api/v1'.
+  static const String baseUrl = 'https://api.shulecloud.com/api/v1';
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  static const String login = '/api/driver/login';
-  static const String refresh = '/api/driver/refresh';
-  static const String me = '/api/driver/me';
+  static const String login = '/driver/login';
+  static const String refresh = '/driver/refresh';
+  static const String me = '/driver/me';
 
   // ── Trip lifecycle ─────────────────────────────────────────────────────────
-  static const String assignedRoute = '/api/driver/route/today';
-  static const String startTrip = '/api/driver/trip/start';
-  static const String pauseTrip = '/api/driver/trip/pause';
-  static const String resumeTrip = '/api/driver/trip/resume';
-  static const String endTrip = '/api/driver/trip/end';
+  static const String assignedRoute = '/driver/route/today';
+  static const String startTrip = '/driver/trip/start';
+  static const String pauseTrip = '/driver/trip/pause';
+  static const String resumeTrip = '/driver/trip/resume';
+  static const String endTrip = '/driver/trip/end';
 
   // ── Live tracking ───────────────────────────────────────────────────────────
-  static const String trackerLocation = '/api/tracker/location';
-  static const String trackerBatch = '/api/tracker/location/batch';
+  static const String trackerLocation = '/tracker/location';
+  static const String trackerBatch = '/tracker/location/batch';
 
   // ── Students & boarding ─────────────────────────────────────────────────────
-  static const String routeStudents = '/api/driver/students';
-  static const String boardStudent = '/api/driver/students/board';
-  static const String dropStudent = '/api/driver/students/drop';
-  static const String studentByQr = '/api/driver/students/scan';
+  static const String routeStudents = '/driver/students';
+  static const String boardStudent = '/driver/students/board';
+  static const String dropStudent = '/driver/students/drop';
+  static const String studentByQr = '/driver/students/scan';
 
   // ── Safety & ops ────────────────────────────────────────────────────────────
-  static const String sos = '/api/driver/sos';
-  static const String incident = '/api/driver/incident';
-  static const String inspection = '/api/driver/inspection';
-  static const String notifications = '/api/driver/notifications';
+  static const String sos = '/driver/sos';
+  static const String incident = '/driver/incident';
+  static const String inspection = '/driver/inspection';
+  static const String notifications = '/driver/notifications';
 
   /// Socket.IO namespace for live driver events.
   static const String socketUrl = baseUrl;

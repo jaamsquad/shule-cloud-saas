@@ -21,8 +21,14 @@ flutter run
 ### Before running you must configure:
 
 1. **Backend URL** — `lib/core/constants/app_constants.dart` → `ApiConfig.baseUrl`.
+   - Production: `https://api.shulecloud.com/api/v1` (tenant resolved by the `x-tenant-subdomain` header the app sends automatically — it's the **School Code** entered at login, e.g. `kilimo`).
+   - Local dev on an Android emulator pointing at your dev server: `http://10.0.2.2:5000/api/v1` (10.0.2.2 = your PC's localhost from the emulator). On a real phone, use your PC's LAN IP, e.g. `http://192.168.1.20:5000/api/v1`.
 2. **Google Maps key** — `android/app/src/main/AndroidManifest.xml` (`com.google.android.geo.API_KEY`) and, for iOS, `ios/Runner/AppDelegate.swift`.
 3. **Firebase** (push) — add `google-services.json` (Android) / `GoogleService-Info.plist` (iOS) and run `flutterfire configure` to generate `lib/firebase_options.dart`. The app runs without it (FCM is guarded).
+
+### The backend endpoints already exist
+
+The matching Node endpoints live in `backend/src/routes/driver.routes.ts` (mounted at `/api/v1`). A **driver is a staff member** with a transport role, linked to a `transport_zones` record. Log in with the driver's **portal username + portal password** (the same credentials as the staff portal). Set those on the staff record and assign the staff as `driver` (or `driverId`) on a transport zone.
 
 ---
 
@@ -61,24 +67,25 @@ lib/
 
 ---
 
-## Backend contract (endpoints the app calls)
+## Backend contract (implemented in `backend/src/routes/driver.routes.ts`)
 
-All under `ApiConfig.baseUrl`, JWT in `Authorization: Bearer`. Adjust paths in `app_constants.dart` to match your Node backend.
+All under `ApiConfig.baseUrl` (`/api/v1`), JWT in `Authorization: Bearer`, tenant in `x-tenant-subdomain`.
 
 ```
-POST /api/driver/login            { schoolCode, identifier, password } → { accessToken, refreshToken, driver }
-POST /api/driver/refresh          { refreshToken } → { accessToken, refreshToken }
-GET  /api/driver/route/today      → BusRoute (stops[])
-POST /api/driver/trip/start|pause|resume|end   → Trip
-POST /api/tracker/location        GpsPoint            ← live tracking (spec)
-POST /api/tracker/location/batch  { points: GpsPoint[] }   ← offline flush
-GET  /api/driver/students         → Student[]
-POST /api/driver/students/board|drop   { studentId }
-POST /api/driver/students/scan    { code } → Student
-POST /api/driver/sos              { lat, lng, tripId, timestamp }
-POST /api/driver/incident         { type, description, lat, lng, photo, timestamp }
-POST /api/driver/inspection       { checks, at }
-GET  /api/driver/notifications    → AppNotification[]
+POST /driver/login            { schoolCode, identifier, password } → { accessToken, refreshToken, driver }
+POST /driver/refresh          { refreshToken } → { accessToken, refreshToken }
+GET  /driver/me               → Driver
+GET  /driver/route/today      → BusRoute (stops[])
+POST /driver/trip/start|pause|resume|end   → Trip
+POST /tracker/location        GpsPoint            ← live tracking → bus_locations + bus_positions
+POST /tracker/location/batch  { points: GpsPoint[] }   ← offline flush
+GET  /driver/students         → Student[]   (by transportZone)
+POST /driver/students/board|drop   { studentId }   → transport_pickups
+POST /driver/students/scan    { code } → Student
+POST /driver/sos              { lat, lng, tripId, timestamp }   → driver_sos
+POST /driver/incident         { type, description, lat, lng, photo, timestamp }   → driver_incidents
+POST /driver/inspection       { checks, at }   → driver_inspections
+GET  /driver/notifications    → AppNotification[]   (from announcements)
 ```
 
 See each `models/*.dart` `fromJson` for the exact field shapes (they tolerate common aliases like `_id`/`id`).

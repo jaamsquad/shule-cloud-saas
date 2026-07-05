@@ -64,6 +64,9 @@ Future<void> _onStart(ServiceInstance service) async {
   final dio = Dio(BaseOptions(baseUrl: ApiConfig.baseUrl));
   final token = await storage.accessToken;
   if (token != null) dio.options.headers['Authorization'] = 'Bearer $token';
+  // The background isolate needs the tenant header too, else uploads 401.
+  final school = await storage.schoolCode;
+  if (school != null && school.isNotEmpty) dio.options.headers['x-tenant-subdomain'] = school;
   final uploader = TrackingUploader(dio, GpsQueue());
 
   String driverId = '', busId = '', tripId = '';

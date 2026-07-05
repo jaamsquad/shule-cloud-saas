@@ -20,6 +20,9 @@ class ApiClient {
       onRequest: (options, handler) async {
         final token = await _storage.accessToken;
         if (token != null) options.headers['Authorization'] = 'Bearer $token';
+        // Tenant resolution: the backend reads this header to pick the school DB.
+        final school = await _storage.schoolCode;
+        if (school != null && school.isNotEmpty) options.headers['x-tenant-subdomain'] = school;
         handler.next(options);
       },
       onError: (e, handler) async {

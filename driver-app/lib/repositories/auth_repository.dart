@@ -18,6 +18,8 @@ class AuthRepository {
     required String password,
   }) async {
     try {
+      // Persist the school code FIRST so the tenant header is on the login call.
+      await _storage.saveSchoolCode(schoolCode);
       final res = await _dio.post(ApiConfig.login, data: {
         'schoolCode': schoolCode,
         'identifier': identifier,
