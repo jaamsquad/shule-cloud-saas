@@ -499,6 +499,40 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const terms = Array.from(termsSet).sort((a, b) => a - b);
         chart.sort((a, b) => a.label.localeCompare(b.label));
 
+        // ── "Next Term Begins On" ────────────────────────────────────────────────
+        // Show the start date of the term AFTER this exam's term, taken from the
+        // academic calendar (terms collection). The next term is: same year with
+        // termNumber+1, or — when this is the last term of the year — term 1 of the
+        // next academic year. If no such term is defined (or it has no start date),
+        // show "Not set". A manual override on the school profile still wins.
+        let nextTermBegins = String(profile.nextTermBegins || '').trim();
+        if (!nextTermBegins) {
+            const curTermNo = N(String(exam?.term || '').match(/\d+/)?.[0] || 0);
+            const curYear = N(exam?.academicYear ?? exam?.year ?? 0);
+            if (curTermNo > 0) {
+                const allTerms = await database.collection('terms').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+                const termsByYear = allTerms.map((t: any) => ({
+                    year: N(t.academicYear ?? t.year ?? 0),
+                    num: N(t.termNumber ?? String(t.name || '').match(/\d+/)?.[0] ?? 0),
+                    startDate: t.startDate,
+                }));
+                // Prefer next term in the same year; else the earliest term of the next year.
+                let next = termsByYear.find(t => t.year === curYear && t.num === curTermNo + 1);
+                if (!next) {
+                    next = termsByYear
+                        .filter(t => t.year === curYear + 1 && t.num > 0)
+                        .sort((a, b) => a.num - b.num)[0];
+                }
+                if (next?.startDate) {
+                    const d = new Date(next.startDate);
+                    if (!isNaN(d.getTime())) {
+                        nextTermBegins = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                    }
+                }
+            }
+        }
+        if (!nextTermBegins) nextTermBegins = 'Not set';
+
         res.json({
             school: { name: profile.name || profile.schoolName || '', box: profile.poBox || profile.address || '', tel: profile.phone || profile.tel || '', motto: profile.motto || '', logo: profile.logo || '' },
             curriculum: curriculumConfig.name,
@@ -525,7 +559,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             levels,                          // e.g. [3, 4] — only those with data
             terms,                           // e.g. [2, 3] — only those with data
             comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
-            nextTermBegins: profile.nextTermBegins || '',
+            nextTermBegins,
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
