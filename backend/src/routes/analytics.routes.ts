@@ -307,11 +307,32 @@ router.get('/analytics/form', async (req: Request, res: Response) => {
 // Merit list — ranked by total points, with subject marks + grades.
 router.get('/analytics/merit-list', async (req: Request, res: Response) => {
     try {
+        const database = db(req);
         const examId = String(req.query.examId || '');
         const form = String(req.query.form || '');
-        const { rows } = await buildExamResults(db(req), examId);
+        const { rows } = await buildExamResults(database, examId);
         const inForm = form ? rows.filter(r => String(r.className).toLowerCase().includes(form.toLowerCase()) || String(r.stream).toLowerCase().includes(form.toLowerCase())) : rows;
-        res.json({ students: inForm.map(r => ({ position: (r as any).position, adm: r.adm, name: r.name, stream: r.stream, totalPoints: r.totalPoints, meanGrade: r.meanGrade, subjects: r.subjects })) });
+
+        // Previous exam's overall grade per student (for the PG column). Template-graded.
+        const exams = await examsChrono(database);
+        const idx = exams.findIndex((e: any) => String(e._id) === examId);
+        const prev = idx > 0 ? exams[idx - 1] : null;
+        const prevGradeByStudent: Record<string, string> = {};
+        if (prev) {
+            const { rows: prevRows } = await buildExamResults(database, String(prev._id));
+            prevRows.forEach((r: any) => { prevGradeByStudent[String(r.studentId)] = r.meanGrade; });
+        }
+
+        res.json({
+            students: inForm.map(r => ({
+                position: (r as any).position, adm: r.adm, name: r.name, stream: r.stream,
+                totalPoints: r.totalPoints, totalMarks: r.totalMarks,
+                avg: r.meanPct,                    // AVG (mean %)
+                meanGrade: r.meanGrade,            // MG (current, template-graded)
+                prevGrade: prevGradeByStudent[String(r.studentId)] || null,   // PG
+                subjects: r.subjects,
+            })),
+        });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

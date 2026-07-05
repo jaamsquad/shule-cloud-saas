@@ -1718,12 +1718,19 @@ const DEFAULT_RC_SETTINGS = {
     showPositions: true,
     showChange: false,       // "Change" column: improvement/drop vs previous exam
     columns: { point: true, grade: true, pos: true, remarks: true, initials: true },
+    // Analysis (Merit List) column toggles.
+    analysis: { avg: true, tm: true, mg: true, pg: true, stream: true, subjects: true },
 };
+const mergeRcSettings = (doc: any) => ({
+    ...DEFAULT_RC_SETTINGS, ...(doc || {}),
+    columns: { ...DEFAULT_RC_SETTINGS.columns, ...(doc?.columns || {}) },
+    analysis: { ...DEFAULT_RC_SETTINGS.analysis, ...(doc?.analysis || {}) },
+});
 router.get('/report-card-settings', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
         const doc = await db.collection('report_card_settings').findOne({}).catch(() => null);
-        res.json({ ...DEFAULT_RC_SETTINGS, ...(doc || {}), columns: { ...DEFAULT_RC_SETTINGS.columns, ...(doc?.columns || {}) } });
+        res.json(mergeRcSettings(doc));
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 router.patch('/report-card-settings', async (req: Request, res: Response) => {
@@ -1732,7 +1739,7 @@ router.patch('/report-card-settings', async (req: Request, res: Response) => {
         const { _id, ...body } = req.body || {};
         await db.collection('report_card_settings').updateOne({}, { $set: { ...body, updatedAt: new Date() } }, { upsert: true });
         const doc = await db.collection('report_card_settings').findOne({});
-        res.json({ ...DEFAULT_RC_SETTINGS, ...(doc || {}), columns: { ...DEFAULT_RC_SETTINGS.columns, ...(doc?.columns || {}) } });
+        res.json(mergeRcSettings(doc));
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 

@@ -11,6 +11,11 @@ import api from "@/lib/api";
 const COLUMN_LABELS: Record<string, string> = {
     point: "Point", grade: "Grade", pos: "Position (per subject)", remarks: "Remarks", initials: "Teacher Initials",
 };
+// Merit-list columns on the Analytics page.
+const ANALYSIS_LABELS: Record<string, string> = {
+    stream: "Stream", subjects: "Per-subject marks & grades",
+    avg: "Average (AVG)", tm: "Total Marks (TM)", mg: "Mean Grade (MG)", pg: "Previous Grade (PG)",
+};
 
 export default function ReportCardSettings() {
     const qc = useQueryClient();
@@ -35,6 +40,7 @@ export default function ReportCardSettings() {
 
     const setTop = (k: string, v: boolean) => setS({ ...s, [k]: v });
     const setCol = (k: string, v: boolean) => setS({ ...s, columns: { ...s.columns, [k]: v } });
+    const setAnalysis = (k: string, v: boolean) => setS({ ...s, analysis: { ...(s.analysis || {}), [k]: v } });
 
     const Toggle = ({ on, onToggle, label, hint }: { on: boolean; onToggle: () => void; label: string; hint?: string }) => (
         <div className="flex items-center justify-between py-3 border-b border-slate-50">
@@ -70,6 +76,14 @@ export default function ReportCardSettings() {
                     <p className="text-[11px] font-black text-slate-400 uppercase mb-2">Subject Table Columns</p>
                     {Object.entries(COLUMN_LABELS).map(([k, label]) => (
                         <Toggle key={k} on={s.columns?.[k] !== false} onToggle={() => setCol(k, s.columns?.[k] === false)} label={label} />
+                    ))}
+                </div>
+
+                {/* Analysis (Merit List) columns */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <p className="text-[11px] font-black text-slate-400 uppercase mb-2">Analysis Page — Merit List Columns</p>
+                    {Object.entries(ANALYSIS_LABELS).map(([k, label]) => (
+                        <Toggle key={k} on={s.analysis?.[k] !== false} onToggle={() => setAnalysis(k, s.analysis?.[k] === false)} label={label} />
                     ))}
                 </div>
 

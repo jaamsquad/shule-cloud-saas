@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area,
@@ -52,8 +53,15 @@ function printDoc(school: { name: string; logo: string; box?: string; tel?: stri
 }
 
 export default function Analytics() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [examId, setExamId] = useState("");
-    const [form, setForm] = useState<string | null>(null);   // null = My Classes view
+    // The selected class/form is URL-driven: /exams/analytics?class=Form%204&tab=merit
+    const form = searchParams.get("class");   // null = My Classes view
+    const setForm = (f: string | null) => setSearchParams(prev => {
+        const p = new URLSearchParams(prev);
+        if (f) p.set("class", f); else { p.delete("class"); p.delete("tab"); }
+        return p;
+    });
     const [examOpen, setExamOpen] = useState(false);
 
     const { data: examData } = useQuery({ queryKey: ["an_exams"], queryFn: async () => (await api.get("/analytics/exams")).data });
@@ -177,8 +185,15 @@ function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: strin
     );
 }
 
+const FORM_TABS = ["overview", "merit", "comparison", "subjects", "classes", "improved"] as const;
+type FormTab = typeof FORM_TABS[number];
+const FORM_TAB_LABELS: Record<FormTab, string> = { overview: "Overview", merit: "Merit List", comparison: "Comparison", subjects: "Subjects", classes: "Class & Stream", improved: "Most Improved" };
+
 function FormAnalytics({ examId, form }: { examId: string; form: string }) {
-    const [tab, setTab] = useState<"overview" | "merit" | "improved" | "subjects" | "classes">("overview");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const urlTab = (searchParams.get("tab") || "overview") as FormTab;
+    const tab: FormTab = FORM_TABS.includes(urlTab) ? urlTab : "overview";
+    const setTab = (t: FormTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set("tab", t); return p; });
     const { data, isLoading } = useQuery({ queryKey: ["an_form", examId, form], queryFn: async () => (await api.get("/analytics/form", { params: { examId, form } })).data });
     const { data: ot } = useQuery({ queryKey: ["an_ot", form], queryFn: async () => (await api.get("/analytics/over-time", { params: { form } })).data });
     const { data: cmp } = useQuery({ queryKey: ["an_compare", examId, form], queryFn: async () => (await api.get("/analytics/compare", { params: { examId, form } })).data });
@@ -198,8 +213,8 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-                {[["overview", "Overview"], ["merit", "Merit List"], ["subjects", "Subjects"], ["classes", "Class & Stream"], ["improved", "Most Improved"]].map(([k, l]) => (
-                    <button key={k} onClick={() => setTab(k as any)} className={`h-9 px-4 rounded-lg font-bold text-sm ${tab === k ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tab === k ? { background: GREEN } : {}}>{l}</button>
+                {FORM_TABS.map(k => (
+                    <button key={k} onClick={() => setTab(k)} className={`h-9 px-4 rounded-lg font-bold text-sm ${tab === k ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tab === k ? { background: GREEN } : {}}>{FORM_TAB_LABELS[k]}</button>
                 ))}
             </div>
 
@@ -309,6 +324,46 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
                                 </tbody>
                             </table>
                         </div>
+                    </Card>
+                </>
+            )}
+
+            {/* Comparison tab — Subject Comparison (This vs Previous) + Subject Performance */}
+            {tab === "comparison" && (
+                <>
+                    <Card title="Subject Comparison (Mean % — This vs Previous)">
+                        {!(cmp?.subjects?.length > 0) ? <Empty msg="No previous exam to compare." /> : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-2">Subject</th><th className="text-center">This</th><th className="text-center">Previous</th><th className="text-center">Change</th></tr></thead>
+                                    <tbody>
+                                        {cmp.subjects.map((s: any) => (
+                                            <tr key={s.name} className="border-t border-slate-50">
+                                                <td className="py-2 font-bold text-slate-700 uppercase">{s.name}</td>
+                                                <td className="text-center font-bold">{s.current != null ? `${s.current}%` : "—"}</td>
+                                                <td className="text-center text-slate-400">{s.previous != null ? `${s.previous}%` : "—"}</td>
+                                                <td className="text-center">{s.change != null ? <Delta v={s.change} /> : <span className="text-slate-300">—</span>}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </Card>
+                    <Card title="Subject Performance">
+                        <table className="w-full text-sm">
+                            <thead><tr className="text-slate-400 text-[11px] uppercase"><th className="text-left py-2">Subject</th><th className="text-right">Points</th><th className="text-center">Change</th><th className="text-center">Grade</th></tr></thead>
+                            <tbody>
+                                {(data.subjects || []).map((s: any) => (
+                                    <tr key={s.name} className="border-t border-slate-50">
+                                        <td className="py-2 font-bold text-slate-700 uppercase">{s.name}</td>
+                                        <td className="text-right font-bold">{s.points}</td>
+                                        <td className="text-center"><Delta v={s.change} /></td>
+                                        <td className="text-center font-bold">{s.grade}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </Card>
                 </>
             )}
@@ -425,17 +480,22 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
     const school = useSchool();
     const [streamFilter, setStreamFilter] = useState("");
     const { data, isLoading } = useQuery({ queryKey: ["an_merit", examId, form], queryFn: async () => (await api.get("/analytics/merit-list", { params: { examId, form } })).data });
+    // Column toggles from Report Card Settings → Analysis Page.
+    const { data: settings } = useQuery({ queryKey: ["rc_settings"], queryFn: async () => (await api.get("/report-card-settings")).data, staleTime: 30_000 });
+    const a = settings?.analysis || {};
+    const show = (k: string) => a[k] !== false;   // default on
+
     if (isLoading) return <Spin />;
     const allStudents = data?.students || [];
     const streamOpts = streamOptions(allStudents);
-    // Filter by stream, then re-rank within the filtered set so positions read 1..n.
     const students = (streamFilter ? allStudents.filter((s: any) => norm(s.stream) === norm(streamFilter)) : allStudents)
         .map((s: any, i: number) => ({ ...s, position: streamFilter ? i + 1 : s.position }));
     const subjects = Array.from(new Set(students.flatMap((s: any) => s.subjects.map((x: any) => x.name)))) as string[];
 
     const print = () => {
-        const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th><th>Stream</th>${subjects.map(s => `<th>${s}</th>`).join("")}<th>Pts</th></tr>`;
-        const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td><td>${st.stream || ""}</td>${subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("")}<td><b>${st.totalPoints}</b></td></tr>`).join("");
+        const extra = `${show("avg") ? "<th>AVG</th>" : ""}${show("tm") ? "<th>TM</th>" : ""}${show("mg") ? "<th>MG</th>" : ""}${show("pg") ? "<th>PG</th>" : ""}`;
+        const head = `<tr><th>#</th><th>Adm</th><th style="text-align:left">Name</th>${show("stream") ? "<th>Stream</th>" : ""}${show("subjects") ? subjects.map(s => `<th>${s}</th>`).join("") : ""}<th>Pts</th>${extra}</tr>`;
+        const rows = students.map((st: any) => `<tr><td>${st.position}</td><td>${st.adm}</td><td style="text-align:left">${st.name}</td>${show("stream") ? `<td>${st.stream || ""}</td>` : ""}${show("subjects") ? subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return `<td>${sub ? `${sub.marks}<br/><small>${sub.grade}</small>` : "-"}</td>`; }).join("") : ""}<td><b>${st.totalPoints}</b></td>${show("avg") ? `<td>${st.avg ?? "-"}%</td>` : ""}${show("tm") ? `<td>${st.totalMarks ?? "-"}</td>` : ""}${show("mg") ? `<td>${st.meanGrade ?? "-"}</td>` : ""}${show("pg") ? `<td>${st.prevGrade ?? "-"}</td>` : ""}</tr>`).join("");
         const body = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
         printDoc(school, `MERIT LIST — ${form || "All"}${streamFilter ? ` (${streamFilter})` : ""}`, `${streamFilter || form || "All classes"} · ${students.length} students`, body, true);
     };
@@ -445,13 +505,27 @@ function MeritList({ examId, form }: { examId: string; form: string }) {
             <StreamFilter value={streamFilter} onChange={setStreamFilter} streams={streamOpts} count={students.length} />
             <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                    <thead><tr className="text-slate-400 uppercase"><th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th><th className="text-left">Stream</th>{subjects.map(s => <th key={s} className="text-center px-1">{s.slice(0, 4)}</th>)}<th className="text-center">Pts</th></tr></thead>
+                    <thead><tr className="text-slate-400 uppercase">
+                        <th className="text-left py-1">#</th><th className="text-left">Adm</th><th className="text-left">Name</th>
+                        {show("stream") && <th className="text-left">Stream</th>}
+                        {show("subjects") && subjects.map(s => <th key={s} className="text-center px-1">{s.slice(0, 4)}</th>)}
+                        <th className="text-center">Pts</th>
+                        {show("avg") && <th className="text-center">AVG</th>}
+                        {show("tm") && <th className="text-center">TM</th>}
+                        {show("mg") && <th className="text-center">MG</th>}
+                        {show("pg") && <th className="text-center">PG</th>}
+                    </tr></thead>
                     <tbody>
                         {students.map((st: any) => (
                             <tr key={st.adm} className="border-t border-slate-50">
-                                <td className="py-1.5 font-black">{st.position}</td><td>{st.adm}</td><td className="font-bold text-slate-700">{st.name}</td><td>{st.stream}</td>
-                                {subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return <td key={s} className="text-center">{sub ? <div>{sub.marks}<div className="text-[9px] text-slate-400">{sub.grade}</div></div> : "-"}</td>; })}
+                                <td className="py-1.5 font-black">{st.position}</td><td>{st.adm}</td><td className="font-bold text-slate-700">{st.name}</td>
+                                {show("stream") && <td>{st.stream}</td>}
+                                {show("subjects") && subjects.map(s => { const sub = st.subjects.find((x: any) => x.name === s); return <td key={s} className="text-center">{sub ? <div>{sub.marks}<div className="text-[9px] text-slate-400">{sub.grade}</div></div> : "-"}</td>; })}
                                 <td className="text-center font-black">{st.totalPoints}</td>
+                                {show("avg") && <td className="text-center">{st.avg != null ? `${st.avg}%` : "-"}</td>}
+                                {show("tm") && <td className="text-center">{st.totalMarks ?? "-"}</td>}
+                                {show("mg") && <td className="text-center font-bold">{st.meanGrade ?? "-"}</td>}
+                                {show("pg") && <td className="text-center text-slate-500">{st.prevGrade ?? "-"}</td>}
                             </tr>
                         ))}
                     </tbody>
