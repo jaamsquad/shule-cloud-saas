@@ -329,7 +329,7 @@ export default function Dashboard() {
             const monExpenses = expenses
                 .filter((e: any) => e.date?.startsWith(mon.key))
                 .reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
-            return { monthName: mon.name, income: monIncome + monPaidInv, expenses: monExpenses };
+            return { key: mon.key, monthName: mon.name, income: monIncome + monPaidInv, expenses: monExpenses };
         });
 
         return { revenue, expenseTotal, profit, chart1Data };
@@ -428,6 +428,20 @@ export default function Dashboard() {
     const getBarHeight = (v: number) => (v / maxBarValue) * 100;
 
     const fmt = (n: number) => `KSh ${(Number(n) || 0).toLocaleString()}`;
+
+    // ── Chart interactivity ─────────────────────────────────────────────────────
+    // Hovered point/bar index + on-screen tooltip position. The SVGs use a fixed
+    // 500×160 viewBox with non-uniform scaling, so we translate the datum's viewBox
+    // x into a percentage of the container width for a pixel-accurate tooltip.
+    const [finHover, setFinHover] = useState<number | null>(null);
+    const [barHover, setBarHover] = useState<number | null>(null);
+    const finChangePct = (cur: number, prev: number) =>
+        prev > 0 ? Math.round(((cur - prev) / prev) * 100) : (cur > 0 ? 100 : 0);
+
+    // Clicking the financial chart drills into that month's account statement;
+    // clicking a class bar opens that class's student roster.
+    const goToMonth = (key: string) => navigate(`/accounts/statement?month=${key}`);
+    const goToClass = (className: string) => navigate(`/students?class=${encodeURIComponent(className)}`);
 
     return (
         <>
@@ -637,7 +651,8 @@ export default function Dashboard() {
                                 </div>
                             ) : (
                                 <div className="w-full h-44 relative bg-slate-50/50 rounded-2xl border border-slate-100 p-2 overflow-hidden">
-                                    <svg className="w-full h-full" viewBox="0 0 500 160" preserveAspectRatio="none">
+                                    <svg className="w-full h-full" viewBox="0 0 500 160" preserveAspectRatio="none"
+                                        onMouseLeave={() => setFinHover(null)}>
                                         <defs>
                                             <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="0%" stopColor="#6b8cff" stopOpacity="0.4" />
@@ -655,14 +670,62 @@ export default function Dashboard() {
                                         <path d={expensesAreaPath} fill="url(#expenseGrad)" />
                                         <path d={incomeLinePath} fill="none" stroke="#6b8cff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                                         <path d={expensesLinePath} fill="none" stroke="#ff808b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                                        {finances.chart1Data.map((d, idx) => (
-                                            <g key={idx}>
-                                                <circle cx={getScaledX(idx)} cy={getScaledY(d.income)} r="4.5" fill="#6b8cff" stroke="#fff" strokeWidth="1.5" />
-                                                <circle cx={getScaledX(idx)} cy={getScaledY(d.expenses)} r="4.5" fill="#ff808b" stroke="#fff" strokeWidth="1.5" />
-                                                <text x={getScaledX(idx)} y="148" textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="bold">{d.monthName}</text>
-                                            </g>
-                                        ))}
+                                        {/* Hover guide line on the active month */}
+                                        {finHover !== null && finances.chart1Data[finHover] && (
+                                            <line x1={getScaledX(finHover)} y1="20" x2={getScaledX(finHover)} y2="130" stroke="#94a3b8" strokeDasharray="4" strokeWidth="1" />
+                                        )}
+                                        {finances.chart1Data.map((d, idx) => {
+                                            const active = finHover === idx;
+                                            return (
+                                                <g key={idx}>
+                                                    <circle cx={getScaledX(idx)} cy={getScaledY(d.income)} r={active ? 6.5 : 4.5} fill="#6b8cff" stroke="#fff" strokeWidth="1.5" />
+                                                    <circle cx={getScaledX(idx)} cy={getScaledY(d.expenses)} r={active ? 6.5 : 4.5} fill="#ff808b" stroke="#fff" strokeWidth="1.5" />
+                                                    <text x={getScaledX(idx)} y="148" textAnchor="middle" fontSize="9" fill={active ? "#334155" : "#94a3b8"} fontWeight="bold">{d.monthName}</text>
+                                                    {/* Invisible full-height hit column for easy hover/click */}
+                                                    <rect x={getScaledX(idx) - 40} y="0" width="80" height="160" fill="transparent" style={{ cursor: "pointer" }}
+                                                        onMouseEnter={() => setFinHover(idx)}
+                                                        onClick={() => goToMonth(d.key)} />
+                                                </g>
+                                            );
+                                        })}
                                     </svg>
+
+                                    {/* Rich HTML tooltip anchored to the hovered month */}
+                                    {finHover !== null && finances.chart1Data[finHover] && (() => {
+                                        const d = finances.chart1Data[finHover];
+                                        const prev = finHover > 0 ? finances.chart1Data[finHover - 1] : null;
+                                        const net = d.income - d.expenses;
+                                        const leftPct = (getScaledX(finHover) / 500) * 100;
+                                        return (
+                                            <div className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-xl bg-slate-900/95 px-3 py-2 shadow-xl"
+                                                style={{ left: `${leftPct}%`, top: 6, minWidth: 148 }}>
+                                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-300">{d.monthName}</p>
+                                                <div className="mt-1 space-y-0.5">
+                                                    <div className="flex items-center justify-between gap-4 text-[11px]">
+                                                        <span className="flex items-center gap-1 text-slate-300"><span className="inline-block w-2 h-2 rounded-full bg-[#6b8cff]" />Income</span>
+                                                        <span className="font-black text-white">{fmt(Math.round(d.income))}</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-4 text-[11px]">
+                                                        <span className="flex items-center gap-1 text-slate-300"><span className="inline-block w-2 h-2 rounded-full bg-[#ff808b]" />Expenses</span>
+                                                        <span className="font-black text-white">{fmt(Math.round(d.expenses))}</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-0.5 text-[11px]">
+                                                        <span className="text-slate-300">Net</span>
+                                                        <span className={`font-black ${net < 0 ? "text-rose-300" : "text-emerald-300"}`}>{net < 0 ? "-" : ""}{fmt(Math.abs(Math.round(net)))}</span>
+                                                    </div>
+                                                    {prev && (
+                                                        <div className="flex items-center justify-between gap-4 text-[10px] text-slate-400">
+                                                            <span>vs {prev.monthName}</span>
+                                                            <span className={finChangePct(d.income, prev.income) < 0 ? "text-rose-300" : "text-emerald-300"}>
+                                                                {finChangePct(d.income, prev.income) >= 0 ? "▲" : "▼"} {Math.abs(finChangePct(d.income, prev.income))}%
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-[#8b91db]">Click to open statement →</p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </div>
@@ -684,11 +747,16 @@ export default function Dashboard() {
                                 </div>
                             ) : (
                                 <div className="w-full h-44 relative bg-slate-50/50 rounded-2xl border border-slate-100 p-2 overflow-hidden">
-                                    <svg className="w-full h-full" viewBox="0 0 500 160" preserveAspectRatio="none">
+                                    <svg className="w-full h-full" viewBox="0 0 500 160" preserveAspectRatio="none"
+                                        onMouseLeave={() => setBarHover(null)}>
                                         <defs>
                                             <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="0%" stopColor="#8b91db" stopOpacity="0.95" />
                                                 <stop offset="100%" stopColor="#6b8cff" stopOpacity="0.8" />
+                                            </linearGradient>
+                                            <linearGradient id="barGradActive" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="#5C67F2" stopOpacity="1" />
+                                                <stop offset="100%" stopColor="#4e4bb2" stopOpacity="0.95" />
                                             </linearGradient>
                                         </defs>
                                         <line x1="40" y1="30" x2="480" y2="30" stroke="#e2e8f0" strokeDasharray="3" />
@@ -697,15 +765,44 @@ export default function Dashboard() {
                                         {classChartData.map((d: any, idx: number) => {
                                             const w = 32;
                                             const x = 50 + idx * 80 - w / 2;
+                                            const active = barHover === idx;
                                             return (
-                                                <g key={idx}>
-                                                    <rect x={x} y={getBarY(d.count)} width={w} height={getBarHeight(d.count)} rx="6" fill="url(#barGrad)" />
-                                                    <text x={x + w / 2} y={getBarY(d.count) - 6} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="bold">{d.count}</text>
-                                                    <text x={x + w / 2} y="148" textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold">{d.className.slice(0, 8)}</text>
+                                                <g key={idx} style={{ cursor: "pointer" }}
+                                                    onMouseEnter={() => setBarHover(idx)}
+                                                    onClick={() => goToClass(d.className)}>
+                                                    {/* Invisible full-height hit area */}
+                                                    <rect x={50 + idx * 80 - 40} y="0" width="80" height="160" fill="transparent" />
+                                                    <rect x={x} y={getBarY(d.count)} width={w} height={getBarHeight(d.count)} rx="6"
+                                                        fill={active ? "url(#barGradActive)" : "url(#barGrad)"} />
+                                                    <text x={x + w / 2} y={getBarY(d.count) - 6} textAnchor="middle" fontSize={active ? "12" : "10"} fill={active ? "#5C67F2" : "#475569"} fontWeight="bold">{d.count}</text>
+                                                    <text x={x + w / 2} y="148" textAnchor="middle" fontSize="8" fill={active ? "#334155" : "#94a3b8"} fontWeight="bold">{d.className.slice(0, 8)}</text>
                                                 </g>
                                             );
                                         })}
                                     </svg>
+
+                                    {/* Tooltip with full class name + share of enrolment */}
+                                    {barHover !== null && classChartData[barHover] && (() => {
+                                        const d: any = classChartData[barHover];
+                                        const total = classChartData.reduce((a: number, c: any) => a + c.count, 0);
+                                        const share = total > 0 ? Math.round((d.count / total) * 100) : 0;
+                                        const leftPct = ((50 + barHover * 80) / 500) * 100;
+                                        return (
+                                            <div className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-xl bg-slate-900/95 px-3 py-2 shadow-xl"
+                                                style={{ left: `${leftPct}%`, top: 6, minWidth: 130 }}>
+                                                <p className="text-[11px] font-black text-white">{d.className}</p>
+                                                <div className="mt-1 flex items-center justify-between gap-4 text-[11px]">
+                                                    <span className="text-slate-300">Students</span>
+                                                    <span className="font-black text-white">{d.count}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-4 text-[11px]">
+                                                    <span className="text-slate-300">Share</span>
+                                                    <span className="font-black text-[#8b91db]">{share}%</span>
+                                                </div>
+                                                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-[#8b91db]">Click to view roster →</p>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </div>
@@ -844,15 +941,19 @@ export default function Dashboard() {
 
                     {/* Fee Collection Ring */}
                     {canFinance && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
-                        <h3 className="text-slate-800 font-black text-sm uppercase tracking-wider mb-4">Fee Collection This Month</h3>
+                    <div onClick={() => navigate("/reports/fee-collection")}
+                        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center cursor-pointer hover:shadow-md hover:border-[#ff5e6c]/30 transition-all group">
+                        <div className="flex items-center justify-center gap-2 mb-4">
+                            <h3 className="text-slate-800 font-black text-sm uppercase tracking-wider">Fee Collection This Month</h3>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:text-[#ff5e6c] transition-all" />
+                        </div>
                         <div className="relative w-36 h-36 mx-auto mb-6 flex items-center justify-center">
                             <svg className="w-full h-full transform -rotate-90">
                                 <circle cx="72" cy="72" r="54" stroke="#f1f5f9" strokeWidth="12" fill="transparent" />
                                 <circle cx="72" cy="72" r="54" stroke="#ff5e6c" strokeWidth="12" fill="transparent"
                                     strokeDasharray={2 * Math.PI * 54}
                                     strokeDashoffset={2 * Math.PI * 54 * (1 - feeEstimation.percent / 100)}
-                                    strokeLinecap="round" />
+                                    strokeLinecap="round" className="transition-all duration-700 ease-out" />
                             </svg>
                             <div className="absolute flex flex-col items-center justify-center">
                                 <span className="text-2xl font-black text-slate-800 tracking-tighter">{feeEstimation.percent}%</span>
@@ -877,38 +978,44 @@ export default function Dashboard() {
                     </div>
                     )}
 
-                    {/* Quick Stats — each row gated by its module */}
+                    {/* Quick Stats — each row gated by its module, clickable to its module */}
                     {(canAttendance || canFinance || canClasses) && (
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100">
                         {canAttendance && (
-                        <div className="p-4 flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-500">Today Present Students</span>
-                            <span className="text-sm font-bold text-[#6b8cff]">
+                        <button onClick={() => navigate("/attendance/students")} className="w-full p-4 flex justify-between items-center text-left hover:bg-slate-50 transition-colors group">
+                            <span className="text-sm font-medium text-gray-500 group-hover:text-slate-700">Today Present Students</span>
+                            <span className="text-sm font-bold text-[#6b8cff] flex items-center gap-1">
                                 {attendanceDashboard ? `${attendancePercentages.studentPercent}%` : "—"}
+                                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </span>
-                        </div>
+                        </button>
                         )}
                         {canAttendance && canStaff && (
-                        <div className="p-4 flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-500">Today Present Employees</span>
-                            <span className="text-sm font-bold text-[#ff5e6c]">
+                        <button onClick={() => navigate("/attendance/employees")} className="w-full p-4 flex justify-between items-center text-left hover:bg-slate-50 transition-colors group">
+                            <span className="text-sm font-medium text-gray-500 group-hover:text-slate-700">Today Present Employees</span>
+                            <span className="text-sm font-bold text-[#ff5e6c] flex items-center gap-1">
                                 {attendanceDashboard ? `${attendancePercentages.employeePercent}%` : "—"}
+                                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </span>
-                        </div>
+                        </button>
                         )}
                         {canFinance && (
-                        <div className="p-4 flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-500">Fee Collection Rate</span>
-                            <span className="text-sm font-bold text-[#5C67F2]">
+                        <button onClick={() => navigate("/reports/fee-collection")} className="w-full p-4 flex justify-between items-center text-left hover:bg-slate-50 transition-colors group">
+                            <span className="text-sm font-medium text-gray-500 group-hover:text-slate-700">Fee Collection Rate</span>
+                            <span className="text-sm font-bold text-[#5C67F2] flex items-center gap-1">
                                 {feeEstimation.totalEstimated > 0 ? `${feeEstimation.percent}%` : "—"}
+                                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </span>
-                        </div>
+                        </button>
                         )}
                         {canClasses && (
-                        <div className="p-4 flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-500">Total Classes</span>
-                            <span className="text-sm font-bold text-slate-700">{classes.length}</span>
-                        </div>
+                        <button onClick={() => navigate("/classes")} className="w-full p-4 flex justify-between items-center text-left hover:bg-slate-50 transition-colors group">
+                            <span className="text-sm font-medium text-gray-500 group-hover:text-slate-700">Total Classes</span>
+                            <span className="text-sm font-bold text-slate-700 flex items-center gap-1">
+                                {classes.length}
+                                <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </span>
+                        </button>
                         )}
                     </div>
                     )}

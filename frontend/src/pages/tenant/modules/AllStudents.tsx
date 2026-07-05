@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useItems } from "@/hooks/useItems";
@@ -24,6 +24,21 @@ export default function AllStudents() {
     const { data: filterStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", filterClassId], enabled: !!filterClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: filterClassId } })).data || [] });
     const filterCls = classes.find((c: any) => String(c._id) === filterClassId);
     const filterStream = filterStreams.find((s: any) => String(s._id) === filterStreamId);
+
+    // Drill-down from the dashboard: /students?class=<name>. Match the name against a
+    // v2 class (by level/name) and pre-select that filter once classes have loaded.
+    const [searchParams] = useSearchParams();
+    const classParam = searchParams.get("class");
+    useEffect(() => {
+        if (!classParam || filterClassId || classes.length === 0) return;
+        const target = norm(classParam);
+        const match = classes.find((c: any) => {
+            const n = norm(c.name || c.levelName);
+            return n === target || target.startsWith(n) || n.startsWith(target);
+        });
+        if (match) setFilterClassId(String(match._id));
+        else setSearchTerm(classParam);   // fall back to a text search so the drill-down still narrows
+    }, [classParam, classes, filterClassId]);
 
     const handleViewModeChange = (mode: 'grid'|'list') => {
         setViewMode(mode);
