@@ -5,10 +5,11 @@ import api from "@/lib/api";
 import {
     User, Briefcase, DollarSign, ChevronLeft, ChevronRight,
     Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight,
-    BookOpen, TrendingUp
+    BookOpen, TrendingUp, Inbox, ClipboardCheck, CalendarDays, ClipboardList
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { reqApi, statusStyle } from "@/lib/requestsApi";
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -250,6 +251,12 @@ export default function Dashboard() {
         },
     });
 
+    // ── Approvals & Requests (admins + department heads) ────────────────────────
+    // A department head is anyone granted the exams/employees modules; all the
+    // underlying endpoints are already server-scoped to what the user may act on,
+    // so non-approvers simply get empty lists and the section stays hidden.
+    const isApprover = perms.isAdmin || can("exams") || can("employees");
+
     // Marks awaiting HOD/admin approval — teacher-submitted batches (exam × subject).
     // Scoped by the backend to the user's departments (admins see all).
     const canApproveMarks = can("exams") || perms.isAdmin;
@@ -258,6 +265,25 @@ export default function Dashboard() {
         enabled: canApproveMarks,
         queryFn: async () => { try { const r = await api.get("/mark-approvals", { params: { status: "Submitted" } }); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
     });
+
+    // Requisitions / purchase / clearance requests sitting in my inbox awaiting action.
+    const { data: inboxRequests = [] } = useQuery<any[]>({
+        queryKey: ["dashboard_req_inbox"],
+        enabled: isApprover,
+        queryFn: async () => { try { return await reqApi.inbox(); } catch { return []; } },
+    });
+
+    // Staff leave requests still awaiting a decision — reuses the TSC Leave
+    // Management endpoint (staff_leave_requests) that admins approve/reject from /tsc/leave.
+    const { data: pendingLeave = [] } = useQuery<any[]>({
+        queryKey: ["dashboard_leave_requests"],
+        enabled: isApprover,
+        queryFn: async () => {
+            try { const r = await api.get("/tsc/leave-requests", { params: { status: "pending" } }); return Array.isArray(r.data) ? r.data : []; } catch { return []; }
+        },
+    });
+
+    const approvalsTotal = pendingMarks.length + inboxRequests.length + pendingLeave.length;
 
     const { data: absentStudents = [] } = useQuery<any[]>({
         queryKey: ["dashboard_absent_students", today],
@@ -548,6 +574,126 @@ export default function Dashboard() {
                 )}
             </div>
 
+            {/* ── Approvals & Requests (admins + department heads) ───────────── */}
+            {isApprover && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <ClipboardCheck className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-black text-slate-800 text-base leading-tight">Approvals &amp; Requests</h3>
+                            <p className="text-xs text-slate-500">
+                                {approvalsTotal > 0
+                                    ? <>You have <b className="text-amber-600">{approvalsTotal}</b> item{approvalsTotal === 1 ? "" : "s"} needing your action</>
+                                    : "Everything is up to date — nothing awaiting your approval"}
+                            </p>
+                        </div>
+                    </div>
+                    {approvalsTotal > 0 && (
+                        <span className="text-lg font-black text-white bg-amber-500 rounded-full min-w-9 h-9 px-2 flex items-center justify-center">{approvalsTotal}</span>
+                    )}
+                </div>
+
+                {approvalsTotal === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-emerald-600 bg-emerald-50/40 border border-emerald-100 rounded-2xl">
+                        <CheckCircle2 className="w-8 h-8 mb-2" />
+                        <p className="font-black text-sm uppercase tracking-wide">All caught up</p>
+                        <p className="text-xs text-emerald-600/80 mt-0.5">No pending marks, requests or leave to review.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                        {/* Marks awaiting approval */}
+                        {canApproveMarks && (
+                        <div className={`rounded-2xl border p-4 flex flex-col ${pendingMarks.length ? "border-blue-100 bg-blue-50/30" : "border-slate-100 bg-slate-50/40"}`}>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-blue-700">
+                                    <ClipboardList className="w-4 h-4" /> Marks Submitted
+                                </span>
+                                <span className="text-sm font-black text-blue-700 bg-blue-100 rounded-full min-w-7 h-7 px-2 flex items-center justify-center">{pendingMarks.length}</span>
+                            </div>
+                            <div className="space-y-1.5 flex-1 max-h-40 overflow-y-auto pr-1">
+                                {pendingMarks.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-2">No marks awaiting approval.</p>
+                                ) : pendingMarks.slice(0, 5).map((b: any) => (
+                                    <div key={b._id} className="flex items-center justify-between border-b border-slate-100/70 py-1.5">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-700 truncate">{b.subject}</p>
+                                            <p className="text-[11px] text-slate-400 truncate">{b.examName || ""}{b.submittedBy ? ` · ${b.submittedBy}` : ""} · {b.entries} entries</p>
+                                        </div>
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0 ml-2">New</span>
+                                    </div>
+                                ))}
+                                {pendingMarks.length > 5 && <p className="text-[11px] font-bold text-slate-400 pt-1">+{pendingMarks.length - 5} more</p>}
+                            </div>
+                            <button onClick={() => navigate("/departments?tab=marks")} className="mt-3 text-xs font-black text-blue-700 hover:underline self-start flex items-center gap-1">
+                                Review &amp; approve <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                        )}
+
+                        {/* Requisitions / purchase / clearance inbox */}
+                        <div className={`rounded-2xl border p-4 flex flex-col ${inboxRequests.length ? "border-indigo-100 bg-indigo-50/30" : "border-slate-100 bg-slate-50/40"}`}>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-indigo-700">
+                                    <Inbox className="w-4 h-4" /> New Requests
+                                </span>
+                                <span className="text-sm font-black text-indigo-700 bg-indigo-100 rounded-full min-w-7 h-7 px-2 flex items-center justify-center">{inboxRequests.length}</span>
+                            </div>
+                            <div className="space-y-1.5 flex-1 max-h-40 overflow-y-auto pr-1">
+                                {inboxRequests.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-2">No requests in your inbox.</p>
+                                ) : inboxRequests.slice(0, 5).map((r: any) => (
+                                    <button key={r._id} onClick={() => navigate(`/requests/${r._id}`)}
+                                        className="w-full flex items-center justify-between border-b border-slate-100/70 py-1.5 text-left hover:bg-white/60 rounded-lg px-1 -mx-1">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-700 truncate">{r.title}</p>
+                                            <p className="text-[11px] text-slate-400 truncate">{r.number} · {r.requesterName || r.department || "—"}</p>
+                                        </div>
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ml-2"
+                                            style={{ background: statusStyle(r.status).bg, color: statusStyle(r.status).fg }}>{r.status}</span>
+                                    </button>
+                                ))}
+                                {inboxRequests.length > 5 && <p className="text-[11px] font-bold text-slate-400 pt-1">+{inboxRequests.length - 5} more</p>}
+                            </div>
+                            <button onClick={() => navigate("/requests/inbox")} className="mt-3 text-xs font-black text-indigo-700 hover:underline self-start flex items-center gap-1">
+                                Open request inbox <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+
+                        {/* Staff leave requests pending decision */}
+                        <div className={`rounded-2xl border p-4 flex flex-col ${pendingLeave.length ? "border-rose-100 bg-rose-50/30" : "border-slate-100 bg-slate-50/40"}`}>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-rose-600">
+                                    <CalendarDays className="w-4 h-4" /> Leave Requests
+                                </span>
+                                <span className="text-sm font-black text-rose-600 bg-rose-100 rounded-full min-w-7 h-7 px-2 flex items-center justify-center">{pendingLeave.length}</span>
+                            </div>
+                            <div className="space-y-1.5 flex-1 max-h-40 overflow-y-auto pr-1">
+                                {pendingLeave.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-2">No leave requests pending.</p>
+                                ) : pendingLeave.slice(0, 5).map((l: any) => (
+                                    <div key={l._id} className="flex items-center justify-between border-b border-slate-100/70 py-1.5">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-700 truncate">{l.staffName || l.employeeName || l.name || "Staff member"}</p>
+                                            <p className="text-[11px] text-slate-400 truncate">{l.type || l.leaveType || "Leave"}{l.days ? ` · ${l.days} day${l.days === 1 ? "" : "s"}` : ""}</p>
+                                        </div>
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 flex-shrink-0 ml-2">{l.status === "HOD Approved" ? "HR" : "Pending"}</span>
+                                    </div>
+                                ))}
+                                {pendingLeave.length > 5 && <p className="text-[11px] font-bold text-slate-400 pt-1">+{pendingLeave.length - 5} more</p>}
+                            </div>
+                            <button onClick={() => navigate("/tsc/leave")} className="mt-3 text-xs font-black text-rose-600 hover:underline self-start flex items-center gap-1">
+                                Review leave <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+            )}
+
             {/* ── Welcome Banner ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
                 <div className={`${canAttendance ? "lg:col-span-2" : "lg:col-span-3"} bg-[#ffe7e9] rounded-2xl p-6 flex justify-between items-center shadow-sm relative overflow-hidden`}>
@@ -565,28 +711,6 @@ export default function Dashboard() {
                         <CheckCircle2 className="w-16 h-16 text-[#ff5e6c] opacity-50" />
                     </div>
                 </div>
-
-                {/* Marks awaiting approval (HOD / admin) */}
-                {canApproveMarks && pendingMarks.length > 0 && (
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100 flex flex-col">
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-amber-700 font-bold text-sm uppercase tracking-wider">Marks Awaiting Approval</h3>
-                        <span className="text-lg font-black text-amber-600 bg-amber-50 rounded-full w-8 h-8 flex items-center justify-center">{pendingMarks.length}</span>
-                    </div>
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                        {pendingMarks.slice(0, 6).map((b: any) => (
-                            <div key={b._id} className="flex items-center justify-between border-b border-slate-50 py-1.5">
-                                <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-700 truncate">{b.subject}</p>
-                                    <p className="text-[11px] text-slate-400 truncate">{b.examName || ""}{b.submittedBy ? ` · by ${b.submittedBy}` : ""} · {b.entries} entries</p>
-                                </div>
-                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">Submitted</span>
-                            </div>
-                        ))}
-                    </div>
-                    <button onClick={() => navigate("/departments?tab=marks")} className="mt-3 text-xs font-black text-amber-700 hover:underline self-start">Review &amp; approve →</button>
-                </div>
-                )}
 
                 {/* Quick attendance summary */}
                 {canAttendance && (
