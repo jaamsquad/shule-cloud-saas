@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ── Permissions ──────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -43,10 +44,12 @@
 
         <meta-data android:name="flutterEmbedding" android:value="2" />
 
-        <!-- flutter_background_service foreground service (location type) -->
+        <!-- The flutter_background_service plugin already declares this service; we
+             only OVERRIDE its foreground type to "location" (for GPS tracking) and
+             keep the plugin's exported value to avoid a manifest-merge conflict. -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
-            android:exported="false" />
+            tools:node="merge" />
     </application>
 </manifest>
