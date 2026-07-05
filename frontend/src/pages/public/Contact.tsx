@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Mail, Phone, MapPin, Send, CheckCircle2, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { MarketingNav, MarketingFooter, HeroBackdrop, BLUE, NAVY, TEAL, CONTACT_PHONE, CONTACT_EMAIL } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, IconChip, NAVY, TEAL, MINT_SOFT, PAGE_BG, CONTACT_PHONE, CONTACT_EMAIL } from "./MarketingChrome";
 
 export default function Contact() {
   const { toast } = useToast();
@@ -24,47 +24,31 @@ export default function Contact() {
     } finally { setSending(false); }
   };
 
-  const channels = [
-    { icon: Phone, label: "Call us", value: CONTACT_PHONE, href: `tel:${CONTACT_PHONE.replace(/\s/g, "")}`, color: BLUE },
-    { icon: Mail, label: "Email us", value: CONTACT_EMAIL, href: `mailto:${CONTACT_EMAIL}`, color: TEAL },
-    { icon: MessageSquare, label: "WhatsApp", value: CONTACT_PHONE, href: `https://wa.me/254726151104`, color: "#25D366" },
-    { icon: MapPin, label: "Visit us", value: "Nairobi, Kenya", href: "#", color: "#F59E0B" },
+  const info = [
+    { icon: Mail, label: "Email", value: CONTACT_EMAIL, sub: "24/7 Response Time" },
+    { icon: Phone, label: "Phone", value: CONTACT_PHONE, sub: "Mon–Fri, 8am – 6pm EAT" },
+    { icon: MapPin, label: "Office", value: "Nairobi, Kenya", sub: "By appointment" },
   ];
 
+  const field = "w-full h-11 px-4 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#158066]";
+
   return (
-    <div className="min-h-screen bg-white text-slate-800 font-sans">
+    <div className="min-h-screen font-sans" style={{ background: PAGE_BG, color: NAVY }}>
       <MarketingNav />
 
       {/* Hero */}
-      <section className="relative overflow-hidden text-white">
-        <HeroBackdrop />
-        <div className="max-w-3xl mx-auto px-6 py-20 text-center relative">
-          <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">Let's talk about your school</h1>
-          <p className="text-lg text-white/80">Questions, a demo, or help getting set up — our Kenyan-based team is here for you.</p>
-        </div>
+      <section className="max-w-7xl mx-auto px-6 pt-16 pb-10">
+        <h1 className="text-4xl md:text-5xl font-black leading-[1.1] mb-4" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          Let's build the future of education together
+        </h1>
+        <p className="text-lg text-slate-600 max-w-2xl">
+          Have questions about our platform? Our team is ready to help your institution streamline student progress and school operations.
+        </p>
       </section>
 
-      <section className="max-w-6xl mx-auto px-6 pb-20 grid lg:grid-cols-2 gap-10">
-        {/* Channels */}
-        <div>
-          <div className="grid sm:grid-cols-2 gap-4 mb-8">
-            {channels.map(c => (
-              <a key={c.label} href={c.href} target={c.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer"
-                className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-5">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3 text-white" style={{ background: c.color }}><c.icon className="w-5 h-5" /></div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.label}</p>
-                <p className="font-bold text-sm mt-0.5" style={{ color: NAVY }}>{c.value}</p>
-              </a>
-            ))}
-          </div>
-          <div className="rounded-2xl p-6 text-white" style={{ background: `linear-gradient(135deg, ${BLUE}, ${NAVY})` }}>
-            <p className="font-black text-lg mb-1">Prefer a quick demo?</p>
-            <p className="text-blue-100 text-sm">Call or WhatsApp us on <b>{CONTACT_PHONE}</b> and we'll walk you through ShuleCloud live.</p>
-          </div>
-        </div>
-
+      <section className="max-w-7xl mx-auto px-6 pb-16 grid lg:grid-cols-[1.3fr_1fr] gap-6">
         {/* Form */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-lg p-7">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-7">
           {submitted ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-white" style={{ background: TEAL }}><CheckCircle2 className="w-8 h-8" /></div>
@@ -73,36 +57,45 @@ export default function Contact() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <h2 className="text-lg font-black mb-1" style={{ color: NAVY }}>Send us a message</h2>
+              <h2 className="text-xl font-black mb-2" style={{ color: NAVY, fontFamily: "'Poppins', sans-serif" }}>Send us a message</h2>
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Your name</label>
-                  <input required value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Jane Doe" className="w-full h-11 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#1B5FE3]" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">School name</label>
-                  <input value={form.school} onChange={(e) => set("school", e.target.value)} placeholder="Your school" className="w-full h-11 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#1B5FE3]" />
-                </div>
+                <div><label className="block text-xs font-bold text-slate-500 mb-1.5">Full Name</label><input required value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Jane Doe" className={field} /></div>
+                <div><label className="block text-xs font-bold text-slate-500 mb-1.5">School Name</label><input value={form.school} onChange={(e) => set("school", e.target.value)} placeholder="International Academy" className={field} /></div>
               </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Email</label>
-                  <input type="email" required value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="you@school.ac.ke" className="w-full h-11 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#1B5FE3]" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Phone</label>
-                  <input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="07XX XXX XXX" className="w-full h-11 px-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#1B5FE3]" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Message</label>
-                <textarea required value={form.message} onChange={(e) => set("message", e.target.value)} rows={4} placeholder="Tell us about your school and what you need…" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#1B5FE3]" />
-              </div>
-              <button type="submit" disabled={sending} className="w-full h-12 inline-flex items-center justify-center gap-2 font-bold text-white rounded-xl shadow-lg disabled:opacity-60" style={{ background: BLUE }}>
+              <div><label className="block text-xs font-bold text-slate-500 mb-1.5">Work Email</label><input type="email" required value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="jane@school.ac.ke" className={field} /></div>
+              <div><label className="block text-xs font-bold text-slate-500 mb-1.5">Phone</label><input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="07XX XXX XXX" className={field} /></div>
+              <div><label className="block text-xs font-bold text-slate-500 mb-1.5">How can we help?</label><textarea required value={form.message} onChange={(e) => set("message", e.target.value)} rows={4} placeholder="Tell us about your institution's needs…" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-[#158066]" /></div>
+              <button type="submit" disabled={sending} className="inline-flex items-center gap-2 px-6 py-3 font-bold text-white rounded-lg disabled:opacity-60" style={{ background: TEAL }}>
                 <Send className="w-4 h-4" /> {sending ? "Sending…" : "Send Message"}
               </button>
             </form>
           )}
+        </div>
+
+        {/* Info cards */}
+        <div className="space-y-4">
+          {info.map(c => (
+            <div key={c.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4">
+              <IconChip icon={c.icon} />
+              <div>
+                <p className="text-sm font-black" style={{ color: NAVY }}>{c.label}</p>
+                <p className="text-sm text-slate-700">{c.value}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{c.sub}</p>
+              </div>
+            </div>
+          ))}
+          <a href="https://wa.me/254726151104" target="_blank" rel="noreferrer" className="block rounded-2xl p-5 text-white" style={{ background: TEAL }}>
+            <p className="font-black flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Prefer WhatsApp?</p>
+            <p className="text-sm text-white/85 mt-1">Message us on {CONTACT_PHONE} for a live walkthrough.</p>
+          </a>
+        </div>
+      </section>
+
+      {/* Trusted-by */}
+      <section className="bg-white border-y border-slate-100 py-14 text-center">
+        <h2 className="text-2xl font-black mb-8" style={{ fontFamily: "'Poppins', sans-serif" }}>Trusted by 500+ Educational Institutions</h2>
+        <div className="max-w-4xl mx-auto px-6 flex flex-wrap items-center justify-center gap-4">
+          {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-10 w-28 rounded-lg" style={{ background: MINT_SOFT }} />)}
         </div>
       </section>
 

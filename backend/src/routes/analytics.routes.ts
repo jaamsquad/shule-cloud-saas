@@ -3,7 +3,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
-import { makeGradingCache } from '../lib/grading';
+import { makeGradingCache, resolveGrading } from '../lib/grading';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -196,24 +196,21 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         rows.forEach(r => { (byClass[levelOf(r.className || r.stream)] ||= []).push(r); });
         const grades = scale.map((s: any) => s.grade);
 
-        // Curriculum per class level (resolved from v2 classes / label) so each card
-        // uses ITS OWN grading style: CBC → EE/ME/AE/BE performance levels; 8-4-4 →
-        // KCSE letter grades.
+        // Curriculum + grading TEMPLATE per class level, so each card uses ITS OWN
+        // grading scale (the assigned template — letters, EE/ME/AE/BE, or EE1/AE1…).
         const v2ClassesEarly = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
         const curByLevel: Record<string, string> = {};
         v2ClassesEarly.forEach((c: any) => { curByLevel[levelOf(c.name).toLowerCase()] = canonicalCode(c.curriculumType ?? c.curriculum ?? ''); });
-        const CBC_GRADES = ['EE', 'ME', 'AE', 'BE'];
-        // Mean points (0–12) → CBC performance level.
-        const cbcLevelFromPoints = (pts: number): string => pts >= 10 ? 'EE' : pts >= 7 ? 'ME' : pts >= 4 ? 'AE' : 'BE';
 
-        const classes = Object.entries(byClass).map(([name, list]) => {
+        const classes = await Promise.all(Object.entries(byClass).map(async ([name, list]) => {
             const cur = curByLevel[name.toLowerCase()] || canonicalCode(curriculumFromClassLabel(name));
-            const isCbc = cur === 'CBC';
-            const classGrades = isCbc ? CBC_GRADES : grades;
+            // Resolve the class's grading template; its grade set drives the breakdown.
+            const g = await resolveGrading(database, undefined, name);
+            const classGrades = g.scale.map((b: any) => b.grade);
             const breakdown: Record<string, number> = {};
-            classGrades.forEach((g: string) => breakdown[g] = 0);
+            classGrades.forEach((gr: string) => breakdown[gr] = 0);
             list.forEach(r => {
-                const key = isCbc ? cbcLevelFromPoints(r.meanPoints) : r.meanGrade;
+                const key = g.meanGrade(r.meanPoints);
                 breakdown[key] = (breakdown[key] || 0) + 1;
             });
             const meanPoints = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
@@ -221,10 +218,10 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
             return {
                 name, students: list.length, noMarks: false,
                 meanPoints: round(meanPoints, 2), meanPct: round(meanPct, 2),
-                meanGrade: isCbc ? cbcLevelFromPoints(meanPoints) : meanGradeFromPoints(scale, meanPoints),
+                meanGrade: g.meanGrade(meanPoints),
                 breakdown, grades: classGrades, curriculum: cur,
             };
-        });
+        }));
 
         // Also surface every class the exam APPLIES TO — even if no marks are entered
         // yet — so My Classes shows the full picture (and which classes still need
@@ -240,9 +237,10 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
             if (have.has(lvl.toLowerCase())) continue;
             have.add(lvl.toLowerCase());
             const cur = curByLevel[lvl.toLowerCase()] || canonicalCode(curriculumFromClassLabel(lvl));
-            const g = cur === 'CBC' ? CBC_GRADES : grades;
-            const emptyBreakdown: Record<string, number> = {}; g.forEach((x: string) => emptyBreakdown[x] = 0);
-            classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown, grades: g, curriculum: cur });
+            const gr = await resolveGrading(database, undefined, lvl);
+            const gset = gr.scale.map((b: any) => b.grade);
+            const emptyBreakdown: Record<string, number> = {}; gset.forEach((x: string) => emptyBreakdown[x] = 0);
+            classes.push({ name: lvl, students: 0, noMarks: true, meanPoints: 0, meanPct: 0, meanGrade: '-', breakdown: emptyBreakdown, grades: gset, curriculum: cur });
         }
         classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
@@ -260,8 +258,13 @@ router.get('/analytics/form', async (req: Request, res: Response) => {
         if (!examId) return res.status(400).json({ message: 'examId required' });
         const database = db(req);
         const exam = await database.collection('exams').findOne({}).catch(() => null);
-        const { rows, scale } = await buildExamResults(database, examId);
+        const { rows } = await buildExamResults(database, examId);
         const inForm = form ? rows.filter(r => String(r.className).toLowerCase().includes(form.toLowerCase()) || String(r.stream).toLowerCase().includes(form.toLowerCase())) : rows;
+        // Grade this FORM using its assigned template (letters / EE-ME / EE1…), so the
+        // mean grade, subject grades and breakdown axis all match the report card.
+        const formGrading = await resolveGrading(database, undefined, form || (inForm[0]?.className || ''));
+        const scale = formGrading.scale;
+        const meanGradeForm = (mp: number) => formGrading.meanGrade(mp);
         const grades = scale.map((s: any) => s.grade);
 
         // Class averages.
@@ -281,20 +284,21 @@ router.get('/analytics/form', async (req: Request, res: Response) => {
         const subjAgg: Record<string, { pts: number; n: number }> = {};
         inForm.forEach(r => r.subjects.forEach((s: any) => { (subjAgg[s.name] ||= { pts: 0, n: 0 }); subjAgg[s.name].pts += s.points; subjAgg[s.name].n += 1; }));
         const subjects = Object.entries(subjAgg).map(([name, v]) => ({
-            name, points: round(v.pts / v.n, 2), grade: meanGradeFromPoints(scale, v.pts / v.n), change: 0,
+            name, points: round(v.pts / v.n, 2), grade: meanGradeForm(v.pts / v.n), change: 0,
         })).sort((a, b) => b.points - a.points);
 
-        // Grade breakdown (streams as rows, grades as columns).
+        // Grade breakdown (streams as rows, grades as columns) — re-graded with the
+        // form's template so the axis and counts match its scale.
         const breakdown = Object.entries(byStream).map(([stream, list]) => {
             const counts: Record<string, number> = {}; grades.forEach((g: string) => counts[g] = 0);
-            list.forEach(r => { counts[r.meanGrade] = (counts[r.meanGrade] || 0) + 1; });
+            list.forEach(r => { const g = meanGradeForm(r.meanPoints); counts[g] = (counts[g] || 0) + 1; });
             return { stream, counts };
         });
 
         res.json({
             examTitle: formatExamName(exam, form || undefined),
             form, satCount: inForm.length, grades,
-            averages: { meanPoints: round(meanPoints, 2), meanPct: round(meanPct, 2), meanGrade: meanGradeFromPoints(scale, meanPoints) },
+            averages: { meanPoints: round(meanPoints, 2), meanPct: round(meanPct, 2), meanGrade: meanGradeForm(meanPoints) },
             streams, subjects, breakdown,
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

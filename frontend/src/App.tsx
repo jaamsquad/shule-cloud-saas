@@ -25,6 +25,7 @@ import StaffPortalLogin from "./pages/staff-portal/StaffPortalLogin";
 // Public pages
 import Landing from "./pages/public/Landing";
 import Features from "./pages/public/Features";
+import About from "./pages/public/About";
 import FAQ from "./pages/public/FAQ";
 import BlogList from "./pages/public/BlogList";
 import BlogPost from "./pages/public/BlogPost";
@@ -457,6 +458,7 @@ const App = () => {
             <Route path="/" element={<Landing />} />
             <Route path="/application" element={<PublicApplication />} />
             <Route path="/features" element={<Features />} />
+            <Route path="/about" element={<About />} />
             <Route path="/faq" element={<FAQ />} />
             <Route path="/blogs" element={<BlogList />} />
             <Route path="/blogs/:slug" element={<BlogPost />} />

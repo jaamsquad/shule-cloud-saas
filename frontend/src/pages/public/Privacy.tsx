@@ -2,7 +2,7 @@ import { LegalShell, NAVY } from "./MarketingChrome";
 
 export default function Privacy() {
   return (
-    <LegalShell title="Privacy Policy" subtitle="How we collect, use and protect your data.">
+    <LegalShell title="Privacy Policy" badge="Legal Policy" subtitle="Your trust is our foundation. Learn how ShuleCloud collects, protects and manages your data." lastUpdated="February 28, 2026">
       <div className="space-y-8 leading-relaxed text-slate-600">
         <p className="text-lg">
           ShuleCloud is committed to protecting the privacy of students, parents, staff, and school administrators.

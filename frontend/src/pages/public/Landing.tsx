@@ -2,23 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { resolvePortal } from "@/lib/portal";
 import SchoolLanding from "./SchoolLanding";
-import { MarketingNav, MarketingFooter, HeroBackdrop, PURPLE, NAVY } from "./MarketingChrome";
+import { MarketingNav, MarketingFooter, IconChip, NAVY, NAVY_DEEP, TEAL, MINT, MINT_SOFT, PAGE_BG } from "./MarketingChrome";
 import { DemoModal } from "./DemoModal";
-
-const cbe = [
-  { title: "7 Core Competencies", desc: "Map and monitor all 7 CBE core competencies across every learning area with live progress analytics." },
-  { title: "Learner Portfolios", desc: "Rich portfolios with evidence collection, quality assessment and competency demonstrations." },
-  { title: "Learning Outcomes", desc: "Real-time tracking of learning outcomes with predictive analytics to flag learners who need support." },
-];
-
-const modules = [
-  { title: "CBE & 8-4-4 Academics", desc: "Full Competency-Based Education and 8-4-4 support — assessments, strands, rubrics and report cards." },
-  { title: "Fees & Finance", desc: "Invoicing, M-PESA payments, statements, defaulters and complete school accounting." },
-  { title: "Parent & Student Portals", desc: "Dedicated portals keep parents, students and teachers connected in real time." },
-  { title: "Reports & Analytics", desc: "Insightful reports for performance, attendance and finance — exported in a click." },
-  { title: "Communication", desc: "Reach parents instantly via SMS, Email and WhatsApp — results, fees and announcements." },
-  { title: "Attendance & Timetable", desc: "Smart timetabling, daily attendance and card-scan check-in for students and staff." },
-];
+import {
+  ArrowRight, PlayCircle, TrendingUp, Sparkles, ShieldCheck, Puzzle, Headset,
+  Users, CheckCircle2, CalendarCheck, GraduationCap, MessageSquare,
+} from "lucide-react";
 
 const stats = [
   { value: "500+", label: "Schools" },
@@ -27,17 +16,19 @@ const stats = [
   { value: "99.9%", label: "Uptime" },
 ];
 
-const why = [
-  { t: "Secure & private", d: "Bank-grade security with per-school data isolation and privacy compliance." },
-  { t: "Works on any device", d: "Optimized for phones and tablets — manage your school from anywhere." },
-  { t: "Real-time insights", d: "Live dashboards for academics, finance and attendance." },
-  { t: "M-PESA built in", d: "Collect fees and reconcile payments automatically with Daraja." },
+// "Why Choose ShuleCloud" feature grid — one dark card for contrast.
+const features = [
+  { icon: TrendingUp, title: "Real-time Insights", desc: "Instant visibility into student performance and institutional health with live analytics.", points: ["Predictive grading trends", "Automated attendance reports"], dark: false, wide: true },
+  { icon: ShieldCheck, title: "Enterprise Security", desc: "Your data is protected with military-grade encryption and per-school data isolation.", dark: true },
+  { icon: Puzzle, title: "Easy Integration", desc: "Connect seamlessly with SMS, WhatsApp and M-PESA Daraja.", dark: false },
+  { icon: Headset, title: "24/7 Support", desc: "Our team is always available to assist with onboarding and technical needs.", dark: false },
+  { icon: Users, title: "Parent Portal", desc: "Keep parents engaged with real-time updates on attendance, behaviour and grades.", dark: false },
 ];
 
-const testimonials = [
-  { name: "Mrs. Wanjiku", role: "Head Teacher, Nairobi Girls Academy", quote: "CBE assessment and reporting that used to take days now takes minutes. Our teachers love it." },
-  { name: "Mr. Ochieng", role: "Principal, Kisumu Boys High", quote: "Fee collection and M-PESA reconciliation are effortless, and parents get instant receipts." },
-  { name: "Mrs. Chebet", role: "Bursar, Eldoret Heights", quote: "One platform for academics, finance and communication. It paid for itself in a single term." },
+const showcase = [
+  { icon: CalendarCheck, title: "Attendance", desc: "Daily marking for teachers and automatic SMS notifications to parents when students are absent." },
+  { icon: GraduationCap, title: "Grading", desc: "Dynamic gradebooks with weighted averages, rubric-based CBC assessment and instant report cards." },
+  { icon: MessageSquare, title: "Communication", desc: "Centralized hub for school-wide announcements, secure messaging and event scheduling." },
 ];
 
 export default function Landing() {
@@ -45,156 +36,117 @@ export default function Landing() {
   if (resolvePortal().portal === "tenant") return <SchoolLanding />;
 
   return (
-    <div className="min-h-screen bg-white text-slate-800 font-sans">
+    <div className="min-h-screen font-sans" style={{ background: PAGE_BG, color: NAVY }}>
       <DemoModal open={demo} onClose={() => setDemo(false)} />
       <MarketingNav />
 
-      {/* ── Hero (real photo + copy, two columns) ──────────────────────── */}
-      <section className="relative overflow-hidden" style={{ background: "linear-gradient(115deg,#5a36d6 0%, #4326b5 60%, #34199a 100%)" }}>
-        {/* soft radial highlight, hand-placed off-centre */}
-        <div className="absolute -top-32 -right-24 w-[480px] h-[480px] rounded-full opacity-30 blur-3xl pointer-events-none" style={{ background: "radial-gradient(circle, #b69bff, transparent 70%)" }} />
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-8 items-center pt-16 pb-20 lg:pt-20 relative">
-          <div className="text-white">
-            <p className="inline-block text-[13px] font-semibold tracking-wide text-white/80 mb-6 border border-white/25 rounded-full px-3.5 py-1.5">
-              Kenya's school platform · CBC &amp; 8-4-4 ready
-            </p>
-            <h1 className="text-4xl md:text-5xl lg:text-[3.4rem] font-light leading-[1.07] mb-6">
-              Run your whole school from <span className="font-bold">one place</span>.
-            </h1>
-            <p className="text-lg text-white/75 max-w-xl mb-9 leading-relaxed">
-              From admissions and CBC assessment to M-PESA fee collection, timetables and parent messaging — ShuleCloud keeps teachers, parents and administrators on the same page.
-            </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <Link to="/register" className="px-9 py-4 font-bold rounded-full shadow-lg shadow-purple-900/30 transition-transform hover:-translate-y-0.5" style={{ background: "#fff", color: PURPLE }}>
-                Start free — no card needed
-              </Link>
-              <button onClick={() => setDemo(true)} className="px-9 py-4 font-semibold text-white rounded-full border border-white/40 hover:bg-white/10 transition-colors">
-                Book a demo
-              </button>
-            </div>
-            <p className="text-sm text-white/65 mt-8">Trusted by schools in all <b className="text-white">47 counties</b> · Rated 4.6 / 5 by head teachers</p>
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 pt-14 pb-16 grid lg:grid-cols-[1fr_1.05fr] gap-12 items-center">
+        <div>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide px-3 py-1.5 rounded-full mb-6" style={{ background: MINT_SOFT, color: TEAL }}>
+            <Sparkles className="w-3.5 h-3.5" /> Next-Gen Education Management
+          </span>
+          <h1 className="text-4xl md:text-5xl font-black leading-[1.08] mb-5" style={{ fontFamily: "'Poppins', sans-serif" }}>
+            Streamline Your<br /><span style={{ color: TEAL }}>School's Future</span>
+          </h1>
+          <p className="text-lg text-slate-600 max-w-xl mb-8 leading-relaxed">
+            Empower educators and administrators with an all-in-one platform designed to manage CBC &amp; 8-4-4 academics, fees, attendance and communication with unprecedented efficiency.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link to="/register" className="inline-flex items-center gap-2 px-6 py-3.5 font-bold text-white rounded-lg transition-transform hover:-translate-y-0.5" style={{ background: TEAL }}>
+              Get Started Free <ArrowRight className="w-4 h-4" />
+            </Link>
+            <button onClick={() => setDemo(true)} className="inline-flex items-center gap-2 px-6 py-3.5 font-bold rounded-lg border bg-white transition-colors hover:bg-slate-50" style={{ color: NAVY, borderColor: "#d4dee6" }}>
+              <PlayCircle className="w-4 h-4" /> Watch Demo
+            </button>
           </div>
+          <p className="text-sm text-slate-500 mt-8 flex items-center gap-2">
+            <span className="flex -space-x-2">{[MINT, "#cbd5e1", "#fcd9a6"].map((c, i) => <span key={i} className="w-6 h-6 rounded-full border-2 border-white" style={{ background: c }} />)}</span>
+            Trusted by <b style={{ color: NAVY }}>500+ institutions</b> worldwide
+          </p>
+        </div>
 
-          {/* Real photograph, framed naturally with a stat overlay */}
-          <div className="relative lg:justify-self-end w-full max-w-md mx-auto lg:mx-0">
-            <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-purple-950/40 ring-1 ring-white/20">
-              <img src="/auth-hero.png" alt="A graduate using ShuleCloud on a laptop" className="w-full h-full object-cover" loading="eager" />
-              <div className="absolute inset-x-0 bottom-0 h-1/3" style={{ background: "linear-gradient(to top, rgba(40,20,110,.55), transparent)" }} />
+        {/* Hero image + floating stat card */}
+        <div className="relative">
+          <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-slate-200/60">
+            <img src="/auth-hero.png" alt="ShuleCloud in a classroom" className="w-full h-full object-cover" loading="eager" />
+          </div>
+          <div className="absolute -bottom-5 left-6 right-6 bg-white rounded-xl shadow-xl border border-slate-100 p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <IconChip icon={TrendingUp} />
+              <div><p className="text-[10px] font-bold text-slate-400 uppercase">School Efficiency</p><p className="text-lg font-black" style={{ color: TEAL }}>+42%</p></div>
             </div>
-            {/* small honest stat tag, not a fake dashboard */}
-            <div className="absolute -bottom-5 -left-4 sm:left-6 bg-white rounded-2xl shadow-xl px-5 py-3.5">
-              <p className="text-xs text-slate-400 font-semibold">Fees collected this term</p>
-              <p className="text-2xl font-black" style={{ color: NAVY }}>KSh 8.2M</p>
-            </div>
+            <div className="text-right"><p className="text-[10px] font-bold text-slate-400 uppercase">Active Students</p><p className="text-lg font-black" style={{ color: NAVY }}>12,480</p></div>
           </div>
         </div>
       </section>
 
-      {/* ── Stats ─────────────────────────────────────────────────────── */}
-      <section className="py-14" style={{ background: NAVY }}>
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          {stats.map(s => (
-            <div key={s.label}>
-              <p className="text-3xl md:text-5xl font-black text-white">{s.value}</p>
-              <p className="text-xs font-bold uppercase tracking-widest mt-2 text-white/50">{s.label}</p>
+      {/* ── Trusted-by band ──────────────────────────────────────────────── */}
+      <section className="bg-white border-y border-slate-100 py-8">
+        <p className="text-center text-[11px] font-black uppercase tracking-widest text-slate-400 mb-5">Trusted by institutions across Kenya</p>
+        <div className="max-w-5xl mx-auto px-6 flex flex-wrap items-center justify-center gap-x-12 gap-y-4 text-lg font-black text-slate-300">
+          {["ACADEMIA", "SCHOLARLY", "EDUPATH", "INSIGHTS", "LYCEUM"].map(n => <span key={n}>{n}</span>)}
+        </div>
+      </section>
+
+      {/* ── Why Choose ShuleCloud ───────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <h2 className="text-3xl md:text-4xl font-black mb-3" style={{ fontFamily: "'Poppins', sans-serif" }}>Why Choose ShuleCloud?</h2>
+          <p className="text-slate-500">Designed by educators for educators, we prioritize administrative speed and intuitive user experiences.</p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-5">
+          {features.map((f, i) => (
+            <div key={i} className={`rounded-2xl border p-6 ${f.wide ? "md:col-span-2" : ""}`}
+              style={f.dark ? { background: NAVY, borderColor: NAVY } : { background: "#fff", borderColor: "#eef2f6" }}>
+              <IconChip icon={f.icon} />
+              <h3 className="text-lg font-black mt-4 mb-2" style={{ color: f.dark ? "#fff" : NAVY }}>{f.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: f.dark ? "rgba(255,255,255,.7)" : "#64748b" }}>{f.desc}</p>
+              {f.points && (
+                <div className="mt-4 space-y-2">
+                  {f.points.map(p => <p key={p} className="flex items-center gap-2 text-sm text-slate-600"><CheckCircle2 className="w-4 h-4" style={{ color: TEAL }} /> {p}</p>)}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── CBE highlight (image + list) ──────────────────────────────── */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-14 items-center">
-          <div className="relative order-2 lg:order-1">
-            <div className="rounded-[2rem] overflow-hidden shadow-xl ring-1 ring-slate-100">
-              <img src="/auth-hero.png" alt="Student tracking competency progress" className="w-full object-cover" loading="lazy" />
-            </div>
-            <div className="absolute -top-4 -right-3 sm:right-6 bg-white rounded-2xl shadow-lg px-5 py-3 ring-1 ring-slate-100">
-              <p className="text-xs text-slate-400 font-semibold">Average competency</p>
-              <p className="text-2xl font-black" style={{ color: PURPLE }}>82%</p>
-            </div>
-          </div>
-          <div className="order-1 lg:order-2">
-            <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: PURPLE }}>Competency-Based Education</p>
-            <h2 className="text-3xl md:text-4xl font-black mb-3" style={{ color: NAVY }}>CBE, done the way teachers actually work</h2>
-            <p className="text-slate-500 text-lg mb-8">Purpose-built for Kenya's CBC — competencies, portfolios and learning-outcome analytics in one place, without the spreadsheet gymnastics.</p>
-            <div className="divide-y divide-slate-100">
-              {cbe.map(c => (
-                <div key={c.title} className="py-5">
-                  <h3 className="text-lg font-black" style={{ color: NAVY }}>{c.title}</h3>
-                  <p className="text-slate-500 leading-relaxed mt-1">{c.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Modules ───────────────────────────────────────────────────── */}
-      <section id="products" className="py-24" style={{ background: "#faf9ff" }}>
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: PURPLE }}>The platform</p>
-            <h2 className="text-3xl md:text-4xl font-black" style={{ color: NAVY }}>Everything your school needs</h2>
-            <p className="text-slate-500 mt-3 text-lg">One subscription. Every module. No more juggling spreadsheets and disconnected systems.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-x-12 gap-y-10">
-            {modules.map(p => (
-              <div key={p.title} className="border-l-2 pl-5" style={{ borderColor: PURPLE }}>
-                <h3 className="text-lg font-black mb-1.5" style={{ color: NAVY }}>{p.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed">{p.desc}</p>
+      {/* ── Product showcase strip ──────────────────────────────────────── */}
+      <section className="bg-white border-y border-slate-100 py-16">
+        <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-3 gap-8">
+          {showcase.map(s => (
+            <div key={s.title}>
+              <div className="rounded-xl overflow-hidden border border-slate-100 shadow-sm mb-4 aspect-[16/10] bg-slate-50 flex items-center justify-center">
+                <s.icon className="w-12 h-12 text-slate-200" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-base font-black mb-1 flex items-center gap-2" style={{ color: NAVY }}><s.icon className="w-4 h-4" style={{ color: TEAL }} /> {s.title}</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">{s.desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ── Why ShuleCloud ────────────────────────────────────────────── */}
-      <section className="py-24">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: PURPLE }}>Why ShuleCloud</p>
-            <h2 className="text-3xl md:text-4xl font-black" style={{ color: NAVY }}>Trusted by schools across Kenya</h2>
+      {/* ── Stats ───────────────────────────────────────────────────────── */}
+      <section className="max-w-6xl mx-auto px-6 py-16 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+        {stats.map(s => (
+          <div key={s.label}>
+            <p className="text-4xl font-black" style={{ color: TEAL }}>{s.value}</p>
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-wide mt-1">{s.label}</p>
           </div>
-          <div className="grid sm:grid-cols-2 gap-x-12 gap-y-8">
-            {why.map(b => (
-              <div key={b.t}>
-                <p className="font-black text-base mb-1" style={{ color: NAVY }}>{b.t}</p>
-                <p className="text-slate-500 leading-relaxed">{b.d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
       </section>
 
-      {/* ── Testimonials ──────────────────────────────────────────────── */}
-      <section className="py-24" style={{ background: "#faf9ff" }}>
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: PURPLE }}>Loved by educators</p>
-            <h2 className="text-3xl md:text-4xl font-black" style={{ color: NAVY }}>What schools say about ShuleCloud</h2>
+      {/* ── CTA band (dark navy) ────────────────────────────────────────── */}
+      <section className="max-w-7xl mx-auto px-6 pb-20">
+        <div className="rounded-3xl px-8 py-14 text-center text-white" style={{ background: `linear-gradient(135deg, ${NAVY} 0%, ${NAVY_DEEP} 100%)` }}>
+          <h2 className="text-3xl md:text-4xl font-black mb-3" style={{ fontFamily: "'Poppins', sans-serif" }}>Ready to Transform Your School?</h2>
+          <p className="text-white/70 max-w-xl mx-auto mb-7">Join 500+ schools that have already modernized their operations with ShuleCloud.</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link to="/register" className="px-6 py-3.5 font-bold text-white rounded-lg" style={{ background: TEAL }}>Start Your Free Trial</Link>
+            <button onClick={() => setDemo(true)} className="px-6 py-3.5 font-bold text-white rounded-lg border border-white/25 hover:bg-white/10 transition-colors">Talk to an Expert</button>
           </div>
-          <div className="space-y-12 max-w-3xl mx-auto">
-            {testimonials.map(t => (
-              <figure key={t.name} className="text-center">
-                <blockquote className="text-xl md:text-2xl font-light leading-relaxed" style={{ color: NAVY }}>“{t.quote}”</blockquote>
-                <figcaption className="mt-4 text-sm text-slate-500"><b style={{ color: NAVY }}>{t.name}</b> — {t.role}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA band ──────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden py-24 text-center text-white">
-        <HeroBackdrop />
-        <div className="max-w-3xl mx-auto px-6 relative">
-          <h2 className="text-3xl md:text-5xl font-black mb-4">Ready to transform your school?</h2>
-          <p className="text-white/80 text-lg max-w-xl mx-auto mb-10">Join hundreds of schools already running smarter with ShuleCloud. Get set up in minutes — it's free to start.</p>
-          <div className="flex flex-wrap items-center justify-center gap-5">
-            <Link to="/register" className="px-10 py-4 font-black rounded-full bg-white" style={{ color: PURPLE }}>Get Started, It's Free</Link>
-            <button onClick={() => setDemo(true)} className="px-10 py-4 font-semibold rounded-full border border-white/40 text-white hover:bg-white/10">Book a demo</button>
-          </div>
+          <p className="text-xs text-white/50 mt-6">No credit card required · 14-day free trial · Cancel anytime</p>
         </div>
       </section>
 

@@ -2,7 +2,7 @@ import { LegalShell, NAVY } from "./MarketingChrome";
 
 export default function Terms() {
   return (
-    <LegalShell title="Terms of Service" subtitle="The terms that govern your use of ShuleCloud.">
+    <LegalShell title="Terms of Service" badge="Legal Policy" subtitle="The terms that govern your use of ShuleCloud." lastUpdated="February 28, 2026">
       <div className="space-y-8 leading-relaxed text-slate-600">
         <p className="text-lg">
           By using ShuleCloud, you agree to these terms. ShuleCloud provides a multi-tenant school management platform designed for Kenyan schools following the CBC and 8-4-4 curricula.
