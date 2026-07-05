@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/trip.dart';
 import '../../providers/providers.dart';
 import '../../providers/trip_provider.dart';
 import '../../widgets/status_chip.dart';
