@@ -88,21 +88,23 @@ export async function getAccessToken(c: MpesaConfig): Promise<string> {
 
     // Safaricom's sandbox OAuth endpoint occasionally 400s a token request that
     // immediately follows another one for the same Consumer Key (e.g. clicking
-    // "Test Connection" then "Register C2B URLs" seconds apart) — retry once
-    // after a short delay before surfacing an error.
-    let { ok, status, data } = await requestNewToken(c);
-    if (!ok) {
-        console.error('[M-PESA] OAuth token request failed (attempt 1):', JSON.stringify({
+    // "Test Connection" then "Register C2B URLs" seconds apart) — retry with
+    // increasing backoff before surfacing an error.
+    const delays = [1200, 2500, 4000];
+    let ok = false, status = 0, data: any = {};
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+        ({ ok, status, data } = await requestNewToken(c));
+        if (ok) break;
+        console.error(`[M-PESA] OAuth token request failed (attempt ${attempt + 1}/${delays.length + 1}):`, JSON.stringify({
             status, base: c.base, env: c.env, keyTail: c.key.slice(-4), response: data,
         }));
-        await new Promise(r => setTimeout(r, 1200));
-        ({ ok, status, data } = await requestNewToken(c));
+        if (attempt < delays.length) await new Promise(r => setTimeout(r, delays[attempt]));
     }
     if (!ok) {
-        console.error('[M-PESA] OAuth token request failed (attempt 2):', JSON.stringify({
-            status, base: c.base, env: c.env, keyTail: c.key.slice(-4), response: data,
-        }));
-        throw new Error(data?.errorMessage || `Failed to obtain M-PESA token (HTTP ${status})`);
+        // Surface Safaricom's actual reason (bad key/secret, IP not whitelisted for
+        // production, etc.) instead of a generic "HTTP 400" that hides the cause.
+        const reason = data?.errorMessage || data?.error_description || data?.error || `HTTP ${status}`;
+        throw new Error(`Failed to obtain M-PESA token: ${reason}`);
     }
     tokenCache.set(c.key, { token: data.access_token, expires: Date.now() + Number(data.expires_in || 3599) * 1000 });
     return data.access_token;

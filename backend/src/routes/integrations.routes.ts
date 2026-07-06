@@ -86,7 +86,11 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
             return res.json({ ok: true, alreadyRegistered: true, message: 'C2B URLs are already registered for this shortcode — direct payments will be captured.' });
         }
         if (/failed to obtain m-pesa token/i.test(e.message || '')) {
-            return res.status(400).json({ ok: false, message: 'Could not reach Safaricom to register the URLs (their sandbox briefly rate-limits requests made right after "Test Connection"). Wait a few seconds and click "Register C2B URLs" again.' });
+            // getAccessToken already retried 4x with backoff — a persistent failure
+            // here is Safaricom's real reason (bad/expired Consumer Key-Secret,
+            // wrong environment, IP not whitelisted for production, etc.), not a
+            // transient rate limit. Show it directly instead of a generic retry hint.
+            return res.status(400).json({ ok: false, message: `Could not authenticate with Safaricom: ${e.message.replace(/^failed to obtain m-pesa token:\s*/i, '')}. Double-check your Consumer Key/Secret and Environment (sandbox vs production) in the M-PESA settings above.` });
         }
         res.status(400).json({ ok: false, message: e.message });
     }
