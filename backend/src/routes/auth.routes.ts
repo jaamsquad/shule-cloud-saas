@@ -4,7 +4,7 @@ import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
-import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete } from '../services/mpesa.service';
+import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete, platformCallbackBaseV1 } from '../services/mpesa.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 
@@ -1645,7 +1645,7 @@ const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 
         phone, amount: Number(amount),
         accountRef: regNo,            // M-PESA account number = student reg number
         description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
-        callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+        callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
     });
     await getMetaDb().collection('mpesa_transactions').insertOne({
         checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
@@ -2796,7 +2796,7 @@ router.post('/tenant/subscribe', async (req, res) => {
         const r = await stkPush(cfg, {
             phone, amount: price, accountRef: `PLAN-${plan.name}`.slice(0, 12),
             description: `ShuleCloud ${plan.name} subscription`,
-            callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+            callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
         });
         await meta.collection('subscription_payments').insertOne({
             tenantId, planId: plan._id, planName: plan.name, amount: price, phone,

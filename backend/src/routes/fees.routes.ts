@@ -4,7 +4,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
+import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
@@ -240,7 +240,7 @@ router.post('/fees/till-transactions/apply', async (req: Request, res: Response)
         try {
             const cfg = await resolveMpesaConfig(db);
             if (cfg.initiator && cfg.securityCredential && platformCallbackBase()) {
-                const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+                const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
                 await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till payment verification' });
                 verification = 'queued';
             }
@@ -271,7 +271,7 @@ router.post('/fees/till-transactions/verify', async (req: Request, res: Response
         }
         if (!platformCallbackBase()) return res.json({ status: 'unavailable', message: 'Platform callback URL is not configured by the operator.' });
 
-        const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+        const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
         // Clear any stale verdict for this code, then query.
         await getMetaDb().collection('mpesa_code_verifications').deleteOne({ code: mpesaCode }).catch(() => { });
         await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till code verification' });
@@ -317,7 +317,7 @@ router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Requ
 
         const r = await stkPush(cfg, {
             phone, amount: amt, accountRef: regNo, description: 'School fees',
-            callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+            callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
         });
         await getMetaDb().collection('mpesa_transactions').insertOne({
             checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose: 'fees',
@@ -447,7 +447,7 @@ router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (re
         if (!platformCallbackBase()) return res.status(400).json({ message: 'Platform callback URL is not configured by the operator.' });
         const nominated = String(req.body?.nominatedNumber || '').replace(/\D/g, '');
         if (!/^2547\d{8}$/.test(nominated) && !/^07\d{8}$/.test(nominated)) return res.status(400).json({ message: 'Provide the nominated phone number registered on the M-PESA org portal (e.g. 0712345678).' });
-        const base = platformCallbackBase().replace(/mpesa/gi, 'pesa');
+        const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
         const result = await registerPullUrl(cfg, `${base}/pesa/pull/result`, nominated.startsWith('07') ? '254' + nominated.slice(1) : nominated);
         await db.collection('mpesa_settings').updateOne({}, { $set: { pullRegistered: true, pullRegisteredAt: new Date(), pullNominatedNumber: nominated } }, { upsert: true });
         res.json({ ok: true, result, message: 'Pull API registered — you can now Sync transactions from Safaricom.' });

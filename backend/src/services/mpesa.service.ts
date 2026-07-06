@@ -27,6 +27,16 @@ const baseFor = (env: string) => env === 'production' ? 'https://api.safaricom.c
 
 export const platformCallbackBase = () => (process.env.MPESA_CALLBACK_URL || '').replace(/\/$/, '');
 
+// ALL Safaricom callbacks (STK, C2B, transaction-status, pull) are registered
+// under the /v1/ mount — the canonical path. Idempotent: strips any /v1 the
+// operator already put in MPESA_CALLBACK_URL so we never produce /v1/v1/.
+// Callbacks Safaricom already stored against the old bare-/api paths keep
+// working because mpesaRoutes stays mounted at both /api and /api/v1.
+export const platformCallbackBaseV1 = () => {
+    const b = platformCallbackBase().replace(/\/v1$/, '');
+    return b ? `${b}/v1` : '';
+};
+
 /**
  * Resolve a tenant's M-PESA config. Sources (in priority order):
  *   1. mpesa_settings (the dedicated M-PESA Integration page)
@@ -251,7 +261,7 @@ export async function initiateStkTopup(db: Db, opts: { tenantDbName: string; stu
         phone: opts.phone, amount: Number(opts.amount),
         accountRef: opts.accountRef || opts.registrationNo || 'Wallet',
         description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
-        callbackUrl: `${cfg.callbackBase}/mpesa/callback`,
+        callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
     });
     await getMetaDb().collection('mpesa_transactions').insertOne({
         checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,

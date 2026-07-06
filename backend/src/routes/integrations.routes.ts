@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
-import { resolveMpesaConfig, getAccessToken, registerC2BUrls, isMpesaConfigured, platformCallbackBase } from '../services/mpesa.service';
+import { resolveMpesaConfig, getAccessToken, registerC2BUrls, isMpesaConfigured, platformCallbackBase, platformCallbackBaseV1 } from '../services/mpesa.service';
 
 const router = Router();
 const tdb = (req: any) => req.tenantDb || getMetaDb();
@@ -24,7 +24,9 @@ router.get('/integrations/mpesa/settings', async (req, res) => {
             passkeySet: !!cfg.passkey,
             securityCredentialSet: !!cfg.securityCredential,
             configured: isMpesaConfigured(cfg),
-            callbackBase: cfg.callbackBase,
+            // The v1 base — the UI appends /pesa/c2b/... to display the exact URLs
+            // that Register sends to Safaricom, so the two must stay in lockstep.
+            callbackBase: platformCallbackBaseV1(),
             registered: !!s.urlsRegistered,
             registeredShortCode: s.registeredShortCode || '',
             pullRegistered: !!s.pullRegistered,
@@ -69,16 +71,14 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'Configure your M-PESA credentials first.' });
         // Safaricom rejects any C2B URL containing the word "mpesa". Our endpoints are
         // also served under /pesa/... for exactly this reason — use that, and strip any
-        // stray "mpesa" from the operator's callback base just in case.
-        const safeBase = cfg.callbackBase.replace(/mpesa/gi, 'pesa');
+        // stray "mpesa" from the operator's callback base just in case. All callbacks
+        // are registered on the canonical /v1/ mount (platformCallbackBaseV1).
+        const safeBase = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
         // Register against the STORE/TILL number, not the Head Office shortcode.
         // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
         // override via the request body (storeNumber) for edge cases.
         const storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
-        // Registered under /v1/ — mpesaRoutes is mounted at both /api/v1 and /api
-        // (app.ts), and the tenancy middleware's public-prefix allowlist already
-        // exempts /api/v1/pesa, so this path works with no other code changes.
-        const result = await registerC2BUrls(cfg, `${safeBase}/v1/pesa/c2b/validation`, `${safeBase}/v1/pesa/c2b/confirmation`, 'Completed', storeNumber);
+        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`, 'Completed', storeNumber);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
         res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
