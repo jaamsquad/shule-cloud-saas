@@ -362,13 +362,19 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
         let imported = 0, matched = 0;
         // For a Till, the money lands on the till number (PartyB), not the store
         // number — query the till first, then fall back to the store/shortcode.
+        // Also try registeredShortCode: the number C2B URLs were actually registered
+        // against can differ from the currently-saved shortcode/tillNumber if an
+        // operator used the storeNumber override at registration time or edited
+        // settings afterwards — without it, Pull queries the wrong number and
+        // always reports "no transactions" even though payments are flowing fine.
         const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
         const candidates = Array.from(new Set([
             ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
             String(cfg.shortcode).trim(),
             ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+            ...(setRow.registeredShortCode ? [String(setRow.registeredShortCode).trim()] : []),
         ].filter(Boolean)));
-        const codeSet = [cfg.shortcode, cfg.tillNumber].map(v => String(v || '').trim()).filter(Boolean);
+        const codeSet = [cfg.shortcode, cfg.tillNumber, setRow.registeredShortCode].map(v => String(v || '').trim()).filter(Boolean);
 
         // Try each candidate number; use the first that returns transactions.
         let queriedCode = candidates[0];
