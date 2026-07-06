@@ -53,14 +53,20 @@ class AppTheme {
       // No custom fontFamily is set — Inter/Plus Jakarta Sans aren't bundled, and a
       // declared-but-missing family can render blank glyphs on some devices. We use
       // the platform default (Roboto), which always renders.
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontWeight: FontWeight.w800, fontSize: 28, height: 1.28),
-        titleLarge: TextStyle(fontWeight: FontWeight.w700, fontSize: 22, height: 1.27),
-        titleMedium: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        bodyLarge: TextStyle(fontSize: 18, height: 1.55),
-        bodyMedium: TextStyle(fontSize: 16, height: 1.5),
-        labelMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        labelSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+      //
+      // IMPORTANT: every style below has an EXPLICIT color. In Material 3, a custom
+      // TextTheme that omits `color` does NOT automatically inherit onSurface for the
+      // overridden styles — it resolves to a near-invisible/transparent color, which
+      // is exactly why cards were rendering with no visible text/icons. Do not remove
+      // these colors.
+      textTheme: TextTheme(
+        headlineLarge: TextStyle(fontWeight: FontWeight.w800, fontSize: 28, height: 1.28, color: isDark ? Colors.white : AppColors.onSurface),
+        titleLarge: TextStyle(fontWeight: FontWeight.w700, fontSize: 22, height: 1.27, color: isDark ? Colors.white : AppColors.onSurface),
+        titleMedium: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: isDark ? Colors.white : AppColors.onSurface),
+        bodyLarge: TextStyle(fontSize: 18, height: 1.55, color: isDark ? Colors.white : AppColors.onSurface),
+        bodyMedium: TextStyle(fontSize: 16, height: 1.5, color: isDark ? Colors.white : AppColors.onSurface),
+        labelMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: isDark ? Colors.white70 : AppColors.onSurfaceVariant),
+        labelSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isDark ? Colors.white70 : AppColors.onSurfaceVariant),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,

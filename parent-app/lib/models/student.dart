@@ -28,7 +28,7 @@ class Student {
         id: (j['id'] ?? j['_id'] ?? '').toString(),
         name: (j['studentName'] ?? j['name'] ?? 'Student').toString(),
         admissionNo: (j['registrationNo'] ?? j['admNo'] ?? j['admissionNo'] ?? '').toString(),
-        className: (j['studentClass'] ?? j['currentClass'] ?? j['className'] ?? '').toString(),
+        className: (j['studentClass'] ?? j['currentClass'] ?? j['className'] ?? j['class'] ?? '').toString(),
         stream: (j['stream'] ?? j['streamName'] ?? '').toString(),
         photoUrl: (j['photo'] ?? j['image'] ?? j['photoUrl'])?.toString(),
         house: j['house']?.toString(),

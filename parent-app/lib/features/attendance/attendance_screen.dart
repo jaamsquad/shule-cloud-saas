@@ -86,7 +86,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               for (int i = 0; i < leading; i++) const SizedBox(),
               for (int day = 1; day <= daysInMonth; day++)
                 Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text('$day'),
+                  Text('$day', style: const TextStyle(color: AppColors.onSurface)),
                   const SizedBox(height: 2),
                   Container(width: 6, height: 6, decoration: BoxDecoration(
                     color: dot(byDay[DateTime(_month.year, _month.month, day)]) ?? Colors.transparent, shape: BoxShape.circle)),

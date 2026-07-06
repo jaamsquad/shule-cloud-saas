@@ -198,31 +198,50 @@ class FeesScreen extends ConsumerWidget {
     );
   }
 
-  // Ask for the M-PESA phone, then run the STK flow.
+  // Ask for the M-PESA phone + amount (editable, defaults to the full balance), then run the STK flow.
   Future<void> _startMpesa(BuildContext context, WidgetRef ref, double balance) async {
     final phoneCtrl = TextEditingController();
+    final amountCtrl = TextEditingController(text: balance > 0 ? balance.toStringAsFixed(0) : '');
+    final formKey = GlobalKey<FormState>();
     final go = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
           title: const Text('Pay via M-PESA'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Outstanding: ${ksh(balance)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            TextField(controller: phoneCtrl, keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'M-PESA phone', hintText: '07XX XXX XXX', prefixIcon: Icon(Icons.phone))),
-            const SizedBox(height: 8),
-            const Text('An STK prompt will be sent to this number to authorise the payment.',
-                style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-          ]),
+          content: Form(
+            key: formKey,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Outstanding: ${ksh(balance)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              TextField(controller: phoneCtrl, keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'M-PESA phone', hintText: '07XX XXX XXX', prefixIcon: Icon(Icons.phone))),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Amount to pay (KES)', prefixIcon: Icon(Icons.payments_outlined)),
+                validator: (v) {
+                  final amt = double.tryParse((v ?? '').trim());
+                  if (amt == null || amt <= 0) return 'Enter a valid amount';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              const Text('An STK prompt will be sent to this number to authorise the payment.',
+                  style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
+            ]),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send prompt')),
+            FilledButton(onPressed: () {
+              if (formKey.currentState?.validate() ?? false) Navigator.pop(context, true);
+            }, child: const Text('Send prompt')),
           ],
         ));
     if (go != true || !context.mounted) return;
+    final amount = double.parse(amountCtrl.text.trim());
 
     // Kick off the STK push.
     showDialog(context: context, barrierDismissible: false, builder: (_) => const _PayProgress());
     try {
-      await ref.read(dataRepoProvider).payMpesa(phone: phoneCtrl.text.trim(), amount: balance);
+      await ref.read(dataRepoProvider).payMpesa(phone: phoneCtrl.text.trim(), amount: amount);
       // Poll status up to ~30s.
       String status = 'pending';
       for (int i = 0; i < 15 && status == 'pending'; i++) {
@@ -533,7 +552,8 @@ class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(selectedStudentProvider);
+    final auth = ref.watch(authControllerProvider);
+    final s = auth.selected;
     return Scaffold(
       appBar: AppBar(title: const Text('Student Profile'), actions: [
         IconButton(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings)),
@@ -560,6 +580,30 @@ class ProfileScreen extends ConsumerWidget {
               _row(Icons.event_available, 'Attendance', '${s.attendanceRate.toStringAsFixed(1)}%'),
               if (s.house != null) _row(Icons.home_work, 'House', s.house!),
               _row(Icons.verified_user, 'Status', s.status),
+              if (auth.students.length > 1) ...[
+                const SizedBox(height: 20),
+                const SectionHeader('My Children'),
+                for (final child in auth.students)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AppCard(
+                      accent: child.id == s.id ? AppColors.primary : null,
+                      onTap: () => ref.read(authControllerProvider.notifier).selectStudent(child.id),
+                      child: Row(children: [
+                        CircleAvatar(radius: 18, backgroundColor: AppColors.surfaceContainer,
+                            backgroundImage: child.photoUrl != null ? CachedNetworkImageProvider(child.photoUrl!) : null,
+                            child: child.photoUrl == null ? const Icon(Icons.person, size: 18, color: AppColors.primary) : null),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(child.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Text('${child.className}${child.stream.isNotEmpty ? ' ${child.stream}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
+                        ])),
+                        if (child.id == s.id) const Icon(Icons.check_circle, color: AppColors.primary)
+                        else const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
+                      ]),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 12),
               OutlinedButton.icon(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings), label: const Text('Settings')),
             ]),

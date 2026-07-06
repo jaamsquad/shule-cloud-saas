@@ -40,12 +40,15 @@ class AuthRepository {
       await _storage.saveTokens(access: token, refresh: data['refreshToken']?.toString());
     }
 
-    // The backend returns either { parent: {...} } or a flat parent object,
-    // and either a students[] array or a single student.
+    // The backend returns { parent: { children: [...], student: {...} } } —
+    // `children` is the authoritative array of ALL linked students; `student`
+    // is only a back-compat single-object copy of the first child. Some older
+    // deployments may instead send `students`, so fall back through both names.
     final parentJson = Map<String, dynamic>.from((data['parent'] ?? data) as Map);
     final parent = Parent.fromJson(parentJson);
 
-    final rawStudents = data['students'] ?? parentJson['students'] ??
+    final rawStudents = parentJson['children'] ?? data['children'] ??
+        data['students'] ?? parentJson['students'] ??
         (parentJson['student'] != null ? [parentJson['student']] : []);
     final students = (rawStudents as List)
         .map((e) => Student.fromJson(Map<String, dynamic>.from(e as Map)))

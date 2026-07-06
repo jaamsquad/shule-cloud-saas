@@ -65,11 +65,11 @@ flutter:
   assets:
     - assets/icon/
 
-# ShuleCloud brand-mark launcher icon (graduation cap + cloud on dark navy).
+# ShuleCloud brand-mark launcher icon (driver photo mark, blue gradient).
 # CI runs flutter_launcher_icons after `flutter create` to generate all densities.
 flutter_launcher_icons:
   android: "ic_launcher"          # overwrite the default ic_launcher from `flutter create`
-  ios: true
+  ios: false                      # CI builds Android only (no ios/ folder → generation crashes)
   min_sdk_android: 21
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#10245C"
