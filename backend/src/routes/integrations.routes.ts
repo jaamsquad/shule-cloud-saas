@@ -85,6 +85,9 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
             await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true } }, { upsert: true }).catch(() => { });
             return res.json({ ok: true, alreadyRegistered: true, message: 'C2B URLs are already registered for this shortcode — direct payments will be captured.' });
         }
+        if (/failed to obtain m-pesa token/i.test(e.message || '')) {
+            return res.status(400).json({ ok: false, message: 'Could not reach Safaricom to register the URLs (their sandbox briefly rate-limits requests made right after "Test Connection"). Wait a few seconds and click "Register C2B URLs" again.' });
+        }
         res.status(400).json({ ok: false, message: e.message });
     }
 });

@@ -73,16 +73,37 @@ const b64 = (s: string) => Buffer.from(s).toString('base64');
 // ─── OAuth token (cached per consumer key) ──────────────────────────────────────
 const tokenCache = new Map<string, { token: string; expires: number }>();
 
+async function requestNewToken(c: MpesaConfig): Promise<{ ok: boolean; status: number; data: any }> {
+    const resp = await fetch(`${c.base}/oauth/v1/generate?grant_type=client_credentials`, {
+        headers: { Authorization: `Basic ${b64(`${c.key}:${c.secret}`)}` },
+    });
+    const data: any = await resp.json().catch(() => ({}));
+    return { ok: resp.ok && !!data.access_token, status: resp.status, data };
+}
+
 export async function getAccessToken(c: MpesaConfig): Promise<string> {
     if (!c.key || !c.secret) throw new Error('M-PESA is not configured for this school.');
     const cached = tokenCache.get(c.key);
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;
 
-    const resp = await fetch(`${c.base}/oauth/v1/generate?grant_type=client_credentials`, {
-        headers: { Authorization: `Basic ${b64(`${c.key}:${c.secret}`)}` },
-    });
-    const data: any = await resp.json().catch(() => ({}));
-    if (!resp.ok || !data.access_token) throw new Error(data?.errorMessage || `Failed to obtain M-PESA token (HTTP ${resp.status})`);
+    // Safaricom's sandbox OAuth endpoint occasionally 400s a token request that
+    // immediately follows another one for the same Consumer Key (e.g. clicking
+    // "Test Connection" then "Register C2B URLs" seconds apart) — retry once
+    // after a short delay before surfacing an error.
+    let { ok, status, data } = await requestNewToken(c);
+    if (!ok) {
+        console.error('[M-PESA] OAuth token request failed (attempt 1):', JSON.stringify({
+            status, base: c.base, env: c.env, keyTail: c.key.slice(-4), response: data,
+        }));
+        await new Promise(r => setTimeout(r, 1200));
+        ({ ok, status, data } = await requestNewToken(c));
+    }
+    if (!ok) {
+        console.error('[M-PESA] OAuth token request failed (attempt 2):', JSON.stringify({
+            status, base: c.base, env: c.env, keyTail: c.key.slice(-4), response: data,
+        }));
+        throw new Error(data?.errorMessage || `Failed to obtain M-PESA token (HTTP ${status})`);
+    }
     tokenCache.set(c.key, { token: data.access_token, expires: Date.now() + Number(data.expires_in || 3599) * 1000 });
     return data.access_token;
 }
