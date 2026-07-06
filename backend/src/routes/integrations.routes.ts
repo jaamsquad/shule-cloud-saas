@@ -75,7 +75,10 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
         // override via the request body (storeNumber) for edge cases.
         const storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
-        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`, 'Completed', storeNumber);
+        // Registered under /v1/ — mpesaRoutes is mounted at both /api/v1 and /api
+        // (app.ts), and the tenancy middleware's public-prefix allowlist already
+        // exempts /api/v1/pesa, so this path works with no other code changes.
+        const result = await registerC2BUrls(cfg, `${safeBase}/v1/pesa/c2b/validation`, `${safeBase}/v1/pesa/c2b/confirmation`, 'Completed', storeNumber);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
         res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
