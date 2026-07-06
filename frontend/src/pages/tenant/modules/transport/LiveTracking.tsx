@@ -140,7 +140,7 @@ export default function LiveTracking() {
                                         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                                             <h3 className="font-black text-slate-800 flex items-center gap-2"><Navigation className="w-4 h-4 text-[#5C67F2]" /> {active.routeName}</h3>
                                             {active.lat != null && (
-                                                <a href={`https://www.openstreetmap.org/?mlat=${active.lat}&mlon=${active.lng}#map=16/${active.lat}/${active.lng}`} target="_blank" rel="noreferrer"
+                                                <a href={`https://www.google.com/maps?q=${active.lat},${active.lng}`} target="_blank" rel="noreferrer"
                                                     className="text-[11px] font-bold text-[#5C67F2] flex items-center gap-1">Open in Maps <ExternalLink className="w-3 h-3" /></a>
                                             )}
                                         </div>
@@ -226,7 +226,7 @@ export default function LiveTracking() {
                                             <p className="text-sm font-bold text-slate-700">{a.driverName || "Driver"}{a.routeName ? ` · ${a.routeName}` : ""}</p>
                                             <p className="text-[12px] text-slate-500">{a.description}</p>
                                             <p className="text-[10px] text-slate-400 mt-0.5">{fmtTime(a.at)} · {ago(a.at)}{a.lat ? " · " : ""}
-                                                {a.lat != null && <a href={`https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=16/${a.lat}/${a.lng}`} target="_blank" rel="noreferrer" className="text-[#5C67F2] font-bold">view location</a>}
+                                                {a.lat != null && <a href={`https://www.google.com/maps?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer" className="text-[#5C67F2] font-bold">view location</a>}
                                             </p>
                                         </div>
                                     </div>

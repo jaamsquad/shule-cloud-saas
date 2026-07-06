@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
+import { MapPickerButton } from "@/components/MapPicker";
 
 export default function TransportManagement({ tab }: { tab: "zones" | "new" | "edit" | "assign" | "report" | "buses" | "new-bus" | "edit-bus" }) {
     const navigate = useNavigate();
@@ -472,11 +473,11 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                 ) : (
                                     <div className="space-y-2">
                                         {/* Header row */}
-                                        <div className="hidden sm:grid grid-cols-[1fr_90px_100px_100px_32px] gap-2 text-[9px] font-black uppercase text-slate-400 px-1">
-                                            <span>Stop Name</span><span>Fee (KSh)</span><span>Latitude</span><span>Longitude</span><span></span>
+                                        <div className="hidden sm:grid grid-cols-[1fr_90px_88px_88px_56px_32px] gap-2 text-[9px] font-black uppercase text-slate-400 px-1">
+                                            <span>Stop Name</span><span>Fee (KSh)</span><span>Latitude</span><span>Longitude</span><span>Map</span><span></span>
                                         </div>
                                         {zoneForm.stops.map((s, i) => (
-                                            <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_100px_100px_32px] gap-2 items-center">
+                                            <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_88px_88px_56px_32px] gap-2 items-center">
                                                 <input value={s.name} onChange={(e) => setStop(i, "name", e.target.value)} placeholder="e.g. Stage A"
                                                     className="h-10 px-3 border border-slate-200 rounded-lg text-xs col-span-2 sm:col-span-1" />
                                                 <input value={s.fee} onChange={(e) => setStop(i, "fee", e.target.value)} placeholder="Fee" type="number" min={0}
@@ -485,6 +486,12 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                                     className="h-10 px-3 border border-slate-200 rounded-lg text-xs" />
                                                 <input value={s.lng} onChange={(e) => setStop(i, "lng", e.target.value)} placeholder="Lng" type="number"
                                                     className="h-10 px-3 border border-slate-200 rounded-lg text-xs" />
+                                                <MapPickerButton
+                                                    lat={s.lat === "" ? null : Number(s.lat)}
+                                                    lng={s.lng === "" ? null : Number(s.lng)}
+                                                    title={`Pick location for ${s.name || "stop"}`}
+                                                    onChange={(la, ln) => { setStop(i, "lat", la.toFixed(6)); setStop(i, "lng", ln.toFixed(6)); }}
+                                                />
                                                 <button type="button" onClick={() => removeStop(i)}
                                                     className="h-10 w-8 flex items-center justify-center text-slate-300 hover:text-rose-500">✕</button>
                                             </div>

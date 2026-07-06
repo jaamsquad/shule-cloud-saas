@@ -67,13 +67,39 @@ export const normalizePhone = (raw: string): string => {
 };
 
 /** Queue SMS jobs for a set of numbers and notify connected devices. */
+// Resolve the school's display name for SMS branding: prefer the Tenant record
+// in the meta DB (by schoolId), then the tenant-DB profile. Cached per call.
+const resolveSchoolName = async (db: Db, schoolId: string): Promise<string> => {
+    try {
+        if (schoolId) {
+            const { getMetaDb } = await import('../lib/mongodb');
+            const { ObjectId } = await import('mongodb');
+            let oid: any = null; try { oid = new ObjectId(String(schoolId)); } catch { /* not an oid */ }
+            if (oid) {
+                const t: any = await getMetaDb().collection('Tenant').findOne({ _id: oid });
+                if (t?.instituteName || t?.name) return t.instituteName || t.name;
+            }
+        }
+    } catch { /* ignore */ }
+    try {
+        const p: any = await db.collection('school_profile').findOne({}) || await db.collection('tenant_profile').findOne({});
+        return p?.name || p?.schoolName || '';
+    } catch { return ''; }
+};
+
 export const queueSms = async (
     db: Db, schoolId: string,
-    numbers: string[], message: string,
+    numbers: string[], rawMessage: string,
     opts: { scheduledAt?: Date | null; createdBy?: string; audience?: string } = {},
 ) => {
     const clean = Array.from(new Set(numbers.map(normalizePhone).filter(n => n.length >= 9)));
     if (clean.length === 0) return { queued: 0, jobIds: [] as string[] };
+
+    // Brand EVERY SMS with the school name ("Kilimo High: <message>"). Idempotent —
+    // paths that already branded aren't double-prefixed (brandMessage guards that).
+    const schoolName = await resolveSchoolName(db, schoolId);
+    const { brandMessage } = await import('./talksasa.service');
+    const message = brandMessage(schoolName, rawMessage);
 
     const now = new Date();
     const docs = clean.map(phone => ({

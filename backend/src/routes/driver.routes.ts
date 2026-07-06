@@ -448,7 +448,7 @@ router.post('/driver/sos', authed(async (req, res, me) => {
         at: new Date(), createdAt: new Date(),
     });
     // Alert the driver's supervisor immediately with a map link to the location.
-    const mapLink = (lat || lng) ? ` Location: https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}` : '';
+    const mapLink = (lat || lng) ? ` Location: https://www.google.com/maps?q=${lat},${lng}` : '';
     await notifySupervisor(req, me, `EMERGENCY SOS from driver ${me.name}${zone.name ? ` on route ${zone.name}` : ''}. Please respond immediately.${mapLink}`);
     res.json({ ok: true, message: 'SOS alert received' });
 }));
