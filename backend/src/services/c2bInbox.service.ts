@@ -27,14 +27,19 @@ async function resolveTenantForShortcode(shortcode: string) {
     const meta = getMetaDb();
     const sc = String(shortcode || '').trim();
     if (!sc) return null;
-    // Branch/Tenant mapping: a tenant's mpesa_settings holds shortcode + tillNumber.
+    // Branch/Tenant mapping: a tenant's mpesa_settings holds shortcode + tillNumber,
+    // AND (separately) registeredShortCode — the number C2B URLs were actually
+    // registered against, which the operator can override at registration time and
+    // which can drift from shortcode/tillNumber if settings are edited afterwards.
+    // Match against all three, or a real Safaricom callback for an edited school
+    // silently resolves to no tenant and the payment vanishes from the Inbox.
     const tenants = await meta.collection('Tenant').find({ status: 'active' }).toArray();
     for (const t of tenants) {
         if (!t.databaseName) continue;
         try {
             const db = getTenantDb(t.databaseName);
             const s: any = (await db.collection('mpesa_settings').findOne({})) || {};
-            const codes = [s.shortcode, s.tillNumber].map((v: any) => String(v || '').trim());
+            const codes = [s.shortcode, s.tillNumber, s.registeredShortCode].map((v: any) => String(v || '').trim());
             if (codes.includes(sc)) return { tenant: t, db };
         } catch { /* next */ }
     }

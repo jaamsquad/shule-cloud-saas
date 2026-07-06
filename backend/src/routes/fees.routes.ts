@@ -145,7 +145,17 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
         const cfg = await resolveMpesaConfig(tenantDb).catch(() => null as any);
-        const codes = [cfg?.shortcode, cfg?.tillNumber].map((v: any) => String(v || '').trim()).filter(Boolean);
+        const settings = await tenantDb.collection('mpesa_settings').findOne({}).catch(() => null as any);
+        // Match on every shortcode this school has ever been known by: the currently
+        // configured Paybill/Till, AND whatever number C2B URLs were actually
+        // registered against (registerC2BUrls lets the operator override the store
+        // number at registration time, so it can differ from cfg.shortcode/tillNumber
+        // if settings were edited afterwards — without this, real incoming C2B
+        // payments land in mpesa_c2b_payments tagged with the registered shortcode
+        // but never show up here because the filter only looked at the current config).
+        const codes = [cfg?.shortcode, cfg?.tillNumber, settings?.registeredShortCode]
+            .map((v: any) => String(v || '').trim()).filter(Boolean);
+        const uniqueCodes = [...new Set(codes)];
         const { code, phone, name, from, to } = req.query as any;
         const fromD = from ? new Date(from) : null;
         const toD = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59); return d; })() : null;
@@ -154,8 +164,8 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
         const all: Row[] = [];
 
         // 1) Raw C2B confirmations (meta DB) for this school's shortcode/till.
-        if (codes.length) {
-            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: codes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
+        if (uniqueCodes.length) {
+            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: uniqueCodes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
             c2b.forEach((r: any) => all.push({
                 code: r.TransID || '', phone: r.MSISDN || '',
                 name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
@@ -174,7 +184,7 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
                 code: p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '',
                 phone: p.phone || '', name: p.studentName || p.payerName || '—',
                 account: p.registrationNo || p.account || '', amount: Number(p.amount) || 0,
-                shortcode: codes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA',
+                shortcode: uniqueCodes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA',
             });
         });
 
@@ -191,7 +201,7 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
 
         data.sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
         const total = data.reduce((s, d) => s + d.amount, 0);
-        res.json({ data, summary: { count: data.length, total }, configured: codes.length > 0, shortcodes: codes });
+        res.json({ data, summary: { count: data.length, total }, configured: uniqueCodes.length > 0, shortcodes: uniqueCodes });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -665,6 +675,42 @@ router.post('/payments/:id/reverse', requireRole('ADMIN'), async (req: Request, 
         const { reverse } = await import('../services/c2bInbox.service');
         await reverse(req.params.id, db, (req as any).user?.name || 'admin', String(req.body?.reason || ''));
         res.json({ ok: true, message: 'Payment reversed (soft).' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// Re-link C2B inbox rows that arrived BEFORE this school's mpesa_settings had the
+// right shortcode on file (e.g. registered against a store number that differed
+// from the configured Paybill/Till at the time) — they were stored with no
+// tenantDbName and so never showed up in this Inbox. Re-resolves against the
+// school's current shortcode/tillNumber/registeredShortCode and claims any match.
+router.post('/payments/inbox/reclaim-orphans', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const tenantDb = getRequestDb(req);
+        const tenant = (req as any).tenantContext;
+        if (!tenant?.databaseName) return res.status(400).json({ message: 'No tenant context.' });
+        const s: any = (await tenantDb.collection('mpesa_settings').findOne({})) || {};
+        const codes = [s.shortcode, s.tillNumber, s.registeredShortCode].map((v: any) => String(v || '').trim()).filter(Boolean);
+        if (!codes.length) return res.status(400).json({ message: 'No M-PESA shortcode configured for this school.' });
+
+        const meta = getMetaDb();
+        const orphans = await meta.collection('c2b_inbox').find({ tenantDbName: null, BusinessShortCode: { $in: codes } }).toArray();
+        if (!orphans.length) return res.json({ ok: true, reclaimed: 0 });
+
+        await meta.collection('c2b_inbox').updateMany(
+            { _id: { $in: orphans.map((o: any) => o._id) } },
+            { $set: { tenantDbName: tenant.databaseName, tenantSubdomain: tenant.tenantSubdomain || null } },
+        );
+
+        // Best-effort auto-match each reclaimed row now that it belongs to a tenant.
+        const { findStudentMatches, allocate } = await import('../services/c2bInbox.service');
+        let autoMatched = 0;
+        for (const o of orphans) {
+            try {
+                const matches = await findStudentMatches(tenantDb, o);
+                if (matches.length === 1) { await allocate(String(o._id), tenantDb, matches[0], { auto: true }); autoMatched++; }
+            } catch { /* leave pending, still visible now */ }
+        }
+        res.json({ ok: true, reclaimed: orphans.length, autoMatched });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
