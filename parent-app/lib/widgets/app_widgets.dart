@@ -16,7 +16,12 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: accent ?? Colors.transparent, width: accent == null ? 0 : 4)),
+        // No border AT ALL when there's no accent. A width-0 solid BorderSide is
+        // a "hairline" border, and a non-uniform hairline + borderRadius fails
+        // Flutter's paint assertion in debug builds — the decoration throws AFTER
+        // painting the background but BEFORE painting the child, so every
+        // accent-less card rendered as an empty white box with invisible content.
+        border: accent == null ? null : Border(left: BorderSide(color: accent!, width: 4)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       padding: padding,
