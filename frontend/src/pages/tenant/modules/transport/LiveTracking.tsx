@@ -41,9 +41,14 @@ export default function LiveTracking() {
 
     const onlineCount = useMemo(() => buses.filter((b) => b.online).length, [buses]);
 
-    // Keyless Google Maps embed centered on the bus (no API key needed for this).
+    // Keyless OpenStreetMap embed centered on the bus (no API key, no billing).
+    // A small bbox around the point gives a street-level view with a marker.
     const mapSrc = active?.lat != null && active?.lng != null
-        ? `https://www.google.com/maps?q=${active.lat},${active.lng}&z=15&output=embed`
+        ? (() => {
+            const d = 0.006; // ~600m half-box
+            const bbox = `${active.lng - d},${active.lat - d},${active.lng + d},${active.lat + d}`;
+            return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${active.lat},${active.lng}`;
+        })()
         : null;
 
     return (
@@ -118,7 +123,7 @@ export default function LiveTracking() {
                                         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                                             <h3 className="font-black text-slate-800 flex items-center gap-2"><Navigation className="w-4 h-4 text-[#5C67F2]" /> {active.routeName}</h3>
                                             {active.lat != null && (
-                                                <a href={`https://www.google.com/maps?q=${active.lat},${active.lng}`} target="_blank" rel="noreferrer"
+                                                <a href={`https://www.openstreetmap.org/?mlat=${active.lat}&mlon=${active.lng}#map=16/${active.lat}/${active.lng}`} target="_blank" rel="noreferrer"
                                                     className="text-[11px] font-bold text-[#5C67F2] flex items-center gap-1">Open in Maps <ExternalLink className="w-3 h-3" /></a>
                                             )}
                                         </div>
