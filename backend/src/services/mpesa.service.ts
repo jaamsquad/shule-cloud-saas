@@ -40,17 +40,23 @@ export const resolveMpesaConfig = async (db: Db): Promise<MpesaConfig> => {
     try { ig = (await db.collection('integration_settings').findOne({ integration: 'daraja' })) || {}; } catch { /* ignore */ }
 
     const env = String(s.env || ig.environment || ig.env || process.env.MPESA_ENV || 'sandbox').toLowerCase() as 'sandbox' | 'production';
+    // Trim every credential — a pasted Consumer Key/Secret with a trailing
+    // space or newline (very easy to pick up from a browser page, PDF, or
+    // email) silently breaks the Base64 Basic-Auth header and Safaricom
+    // rejects it with an opaque, CONSISTENT (not intermittent) HTTP 400 with
+    // an empty body — indistinguishable from a rate limit unless you trim.
+    const trim = (v: any) => String(v || '').trim();
     return {
         env,
         base: baseFor(env),
-        key: s.consumerKey || ig.consumerKey || process.env.MPESA_CONSUMER_KEY || '',
-        secret: s.consumerSecret || ig.consumerSecret || process.env.MPESA_CONSUMER_SECRET || '',
-        shortcode: s.shortcode || ig.shortCode || ig.shortcode || process.env.MPESA_SHORTCODE || '',
-        tillNumber: s.tillNumber || ig.tillNumber || process.env.MPESA_TILL_NUMBER || '',
-        passkey: s.passkey || ig.passkey || process.env.MPESA_PASSKEY || '',
-        txType: s.txType || ig.txType || process.env.MPESA_TX_TYPE || 'CustomerPayBillOnline',
-        initiator: s.initiator || ig.initiator || process.env.MPESA_INITIATOR || '',
-        securityCredential: s.securityCredential || ig.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL || '',
+        key: trim(s.consumerKey || ig.consumerKey || process.env.MPESA_CONSUMER_KEY),
+        secret: trim(s.consumerSecret || ig.consumerSecret || process.env.MPESA_CONSUMER_SECRET),
+        shortcode: trim(s.shortcode || ig.shortCode || ig.shortcode || process.env.MPESA_SHORTCODE),
+        tillNumber: trim(s.tillNumber || ig.tillNumber || process.env.MPESA_TILL_NUMBER),
+        passkey: trim(s.passkey || ig.passkey || process.env.MPESA_PASSKEY),
+        txType: trim(s.txType || ig.txType || process.env.MPESA_TX_TYPE || 'CustomerPayBillOnline'),
+        initiator: trim(s.initiator || ig.initiator || process.env.MPESA_INITIATOR),
+        securityCredential: trim(s.securityCredential || ig.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL),
         callbackBase: platformCallbackBase(),
         enabled: s.enabled !== false && ig.enabled !== false,
     };
@@ -81,15 +87,28 @@ async function requestNewToken(c: MpesaConfig): Promise<{ ok: boolean; status: n
     return { ok: resp.ok && !!data.access_token, status: resp.status, data };
 }
 
+// Consumer Key/Secret should be plain alphanumeric tokens. A stray space,
+// newline, or invisible character (easy to pick up copy-pasting from a
+// browser/PDF/email) produces a HARD, CONSISTENT failure — not a rate limit —
+// and Safaricom's error for it is an opaque empty-body HTTP 400 either way.
+// Catch it here so the real cause is obvious instead of looking identical to
+// sandbox throttling.
+const looksMalformed = (v: string) => /\s/.test(v) || /[^\x20-\x7E]/.test(v);
+
 export async function getAccessToken(c: MpesaConfig): Promise<string> {
     if (!c.key || !c.secret) throw new Error('M-PESA is not configured for this school.');
+    if (looksMalformed(c.key) || looksMalformed(c.secret)) {
+        throw new Error('Your Consumer Key or Consumer Secret contains whitespace or an invalid character (often from copy-pasting) — re-copy them from your Daraja app and re-save.');
+    }
     const cached = tokenCache.get(c.key);
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;
 
-    // Safaricom's sandbox OAuth endpoint occasionally 400s a token request that
+    // Safaricom's OAuth endpoint occasionally 400s a token request that
     // immediately follows another one for the same Consumer Key (e.g. clicking
     // "Test Connection" then "Register C2B URLs" seconds apart) — retry with
-    // increasing backoff before surfacing an error.
+    // increasing backoff before surfacing an error. A CONSISTENT failure across
+    // all attempts (same status, same empty body) usually means the credentials
+    // themselves are wrong for this environment, not a transient rate limit.
     const delays = [1200, 2500, 4000];
     let ok = false, status = 0, data: any = {};
     for (let attempt = 0; attempt <= delays.length; attempt++) {
@@ -103,7 +122,10 @@ export async function getAccessToken(c: MpesaConfig): Promise<string> {
     if (!ok) {
         // Surface Safaricom's actual reason (bad key/secret, IP not whitelisted for
         // production, etc.) instead of a generic "HTTP 400" that hides the cause.
-        const reason = data?.errorMessage || data?.error_description || data?.error || `HTTP ${status}`;
+        const reason = data?.errorMessage || data?.error_description || data?.error
+            || (Object.keys(data || {}).length === 0
+                ? `HTTP ${status} with an empty response — this consistently means Safaricom rejected the Consumer Key/Secret for the "${c.env}" environment (wrong environment, expired/revoked app, or a typo), not a temporary issue`
+                : `HTTP ${status}`);
         throw new Error(`Failed to obtain M-PESA token: ${reason}`);
     }
     tokenCache.set(c.key, { token: data.access_token, expires: Date.now() + Number(data.expires_in || 3599) * 1000 });
