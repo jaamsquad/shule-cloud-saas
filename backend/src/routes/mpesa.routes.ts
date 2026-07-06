@@ -88,55 +88,37 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
     }
 });
 
-// ─── C2B validation (accept all by default) ────────────────────────────────────
+// ─── C2B validation ─────────────────────────────────────────────────────────────
 // Served at both /mpesa/c2b/validation and /pesa/c2b/validation (Safaricom URL).
-router.post(['/mpesa/c2b/validation', '/pesa/c2b/validation'], (req, res) => {
+// Only invoked by Safaricom if "External Validation" is enabled for the
+// shortcode; most schools leave it disabled and Confirmation fires directly.
+router.post(['/mpesa/c2b/validation', '/pesa/c2b/validation'], async (req, res) => {
     console.log('[M-PESA][C2B validation] Headers:', req.headers);
     console.log('[M-PESA][C2B validation] Body:', req.body);
-    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    try {
+        const { validateC2B } = await import('../services/c2bInbox.service');
+        res.json(await validateC2B(req.body || {}));
+    } catch (e) {
+        console.error('[M-PESA] c2b validation error:', e);
+        // Fail open — an internal error here must not cost the customer their payment.
+        res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }
 });
 
 // ─── C2B confirmation ──────────────────────────────────────────────────────────
-// Served at both /mpesa/c2b/confirmation and /pesa/c2b/confirmation.
+// Served at both /mpesa/c2b/confirmation and /pesa/c2b/confirmation. This is the
+// single source of truth for incoming C2B money — all storage, dedupe, student
+// matching, fee allocation, and notifications happen in c2bInbox.service.ts.
 router.post(['/mpesa/c2b/confirmation', '/pesa/c2b/confirmation'], async (req, res) => {
     console.log('[M-PESA][C2B confirmation] Headers:', req.headers);
     console.log('[M-PESA][C2B confirmation] Body:', req.body);
     res.json({ ResultCode: 0, ResultDesc: 'Accepted' });   // ACK Safaricom immediately
     try {
-        const p = req.body || {};
-        const meta = getMetaDb();
-        await meta.collection('mpesa_c2b_payments').insertOne({ ...p, receivedAt: new Date() });
-
-        // Feed the C2B Payment Inbox (full raw store + dedupe + auto-match + allocate).
-        // Heavy work runs here, AFTER we've already responded to Safaricom.
         const { ingestC2B } = await import('../services/c2bInbox.service');
-        ingestC2B(p, { ip: (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '', headers: req.headers }).catch(e => console.error('[C2B inbox] ingest error:', e));
-
-        // Auto-match to a student and apply the payment. Paybills carry the account
-        // number in BillRefNumber (= student reg/adm no). Tills (Buy Goods) usually
-        // have NO account, so fall back to matching the payer phone (MSISDN) against
-        // a student's or guardian's phone on file. Either way the payment still
-        // appears on the Till Transactions page even if no match is found.
-        const ref = String(p.BillRefNumber || '').trim();
-        const payerPhone = String(p.MSISDN || '').replace(/\D/g, '');
-        const phoneTail = payerPhone.slice(-9);   // last 9 digits, format-agnostic
-        const tenants = await meta.collection('Tenant').find({ status: 'active' }).toArray();
-        for (const t of tenants) {
-            const dbName = t.databaseName; if (!dbName) continue;
-            try {
-                const db = getTenantDb(dbName);
-                let student = ref ? await db.collection('students').findOne({ $or: [{ registrationNo: ref }, { admNo: ref }] }) : null;
-                // Fallback for Till payments without an account number → match by phone.
-                if (!student && phoneTail) {
-                    const rx = new RegExp(phoneTail + '$');
-                    student = await db.collection('students').findOne({ $or: [{ phone: rx }, { parentPhone: rx }, { guardianPhone: rx }, { 'guardian.phone': rx }] });
-                }
-                if (student) {
-                    await applyMpesaPayment(db, { studentId: String(student._id), studentName: student.studentName, registrationNo: ref || student.registrationNo || student.admNo, amount: Number(p.TransAmount), receipt: p.TransID, phone: p.MSISDN });
-                    break;
-                }
-            } catch { /* try next tenant */ }
-        }
+        await ingestC2B(req.body || {}, {
+            ip: (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '',
+            headers: req.headers,
+        });
     } catch (e) {
         console.error('[M-PESA] c2b confirmation error:', e);
     }

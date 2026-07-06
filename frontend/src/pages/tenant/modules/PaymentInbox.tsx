@@ -87,12 +87,13 @@ export default function PaymentInbox() {
             </div>
 
             {/* Reconciliation stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
                 <Stat label="Today's Collections" value={ksh(recon?.todayCollections)} accent="#10B981" />
                 <Stat label="Pending Allocation" value={recon?.pending ?? 0} accent="#F59E0B" />
                 <Stat label="Allocated Today" value={recon?.allocatedToday ?? 0} accent="#0EA5E9" />
                 <Stat label="Duplicates" value={recon?.duplicates ?? 0} accent="#94A3B8" />
                 <Stat label="Total Collected" value={ksh(recon?.totalCollections)} accent="#5C67F2" />
+                <Stat label="Fees Outstanding" value={ksh(recon?.totalOutstanding)} accent="#EF4444" />
             </div>
 
             {/* Filters */}

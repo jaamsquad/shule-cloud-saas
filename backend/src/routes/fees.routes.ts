@@ -646,11 +646,38 @@ router.get('/payments/reconciliation', async (req: Request, res: Response) => {
         const sum = (rows: any[]) => rows.reduce((s, r) => s + (Number(r.TransAmount) || 0), 0);
         const byType: any = { till: 0, paybill: 0 };
         all.forEach((r: any) => { byType[r.businessType] = (byType[r.businessType] || 0) + (Number(r.TransAmount) || 0); });
+
+        // "Failed" = validation/registration rejected it, or the eventual fee
+        // application errored — we don't have a distinct status for the latter
+        // today, so this currently mirrors `rejected` (soft-reversed payments).
+        const failed = rejected;
+
+        // Total fees outstanding across the whole school (all unpaid/partial invoices).
+        const tenantDb = getRequestDb(req);
+        const outstandingAgg = await tenantDb.collection('invoices').aggregate([
+            { $match: { status: { $in: ['UNPAID', 'PARTIAL', 'unpaid', 'partial'] } } },
+            { $group: { _id: null, total: { $sum: { $subtract: [{ $ifNull: ['$total_due', { $ifNull: ['$amount', 0] }] }, { $ifNull: ['$paid_amount', { $ifNull: ['$amount_paid', 0] }] }] } } } },
+        ]).toArray().catch(() => []);
+        const totalOutstanding = Math.max(0, Number(outstandingAgg[0]?.total) || 0);
+
         res.json({
             todayCollections: sum(today), todayCount: today.length,
             totalCollections: sum(all), totalCount: all.length,
-            pending, allocatedToday, duplicates, rejected, byType,
+            pending, allocatedToday, duplicates, rejected, failed, byType,
+            totalOutstanding,
         });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Unmatched Payments — C2B money received but not (yet) linked to a student,
+// for staff to manually reconcile. Must be registered BEFORE /payments/:id.
+router.get('/payments/unmatched', async (req: Request, res: Response) => {
+    try {
+        const base = tenantInboxFilter(req);
+        const rows = await getMetaDb().collection('c2b_inbox')
+            .find({ ...base, reconStatus: 'pending', matchedStudentId: null })
+            .sort({ paidAt: -1 }).limit(1000).toArray();
+        res.json({ data: rows, count: rows.length, total: rows.reduce((s, r: any) => s + (Number(r.TransAmount) || 0), 0) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

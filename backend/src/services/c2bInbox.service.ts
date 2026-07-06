@@ -2,6 +2,7 @@ import { Db } from 'mongodb';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { applyMpesaPayment } from './mpesa.service';
 import { publish } from './sse.service';
+import { sendEmail } from './communications.service';
 
 // ─── C2B Payment Inbox ──────────────────────────────────────────────────────────
 // Stores every C2B callback in full, identifies the receiving school by shortcode,
@@ -44,6 +45,39 @@ async function resolveTenantForShortcode(shortcode: string) {
         } catch { /* next */ }
     }
     return null;
+}
+
+/**
+ * C2B Validation (POST /pesa/c2b/validation) — Safaricom calls this BEFORE the
+ * money moves, and only if "External Validation" is enabled for the shortcode
+ * (most schools leave it off, since M-PESA then completes the transaction and
+ * sends Confirmation directly — see mpesa.routes.ts). When it IS enabled, we
+ * get one chance to reject a payment before Safaricom finalises it.
+ *
+ * Daraja gives ~8 seconds to respond and expects ResultCode 0 to accept or a
+ * non-zero code (C2B00011-C2B00016) to reject. We deliberately only reject on
+ * hard, unambiguous problems (school not found, amount <= 0) — an unmatched
+ * BillRefNumber is NOT a rejection reason, because the money is still real and
+ * should land as an Unmatched Payment for staff to reconcile manually rather
+ * than bouncing the customer's payment back at the M-PESA counter.
+ */
+export async function validateC2B(payload: any): Promise<{ ResultCode: number; ResultDesc: string }> {
+    const shortcode = String(payload?.BusinessShortCode || '').trim();
+    const amount = Number(payload?.TransAmount) || 0;
+
+    // Daraja's validation response is a numeric ResultCode: 0 = accept, any
+    // non-zero = reject (Safaricom cancels the transaction and refunds the payer).
+    if (!shortcode) return { ResultCode: 1, ResultDesc: 'Invalid ShortCode' };
+    if (amount <= 0) return { ResultCode: 1, ResultDesc: 'Invalid Amount' };
+
+    const resolved = await resolveTenantForShortcode(shortcode);
+    if (!resolved) {
+        // No school owns this shortcode at all — genuinely nothing to accept into.
+        return { ResultCode: 1, ResultDesc: 'Invalid ShortCode — not registered to any school' };
+    }
+    // Do NOT reject for an unmatched BillRefNumber/admission number — accept it
+    // and let ingestC2B() file it as an Unmatched Payment for manual reconciliation.
+    return { ResultCode: 0, ResultDesc: 'Accepted' };
 }
 
 /**
@@ -116,8 +150,10 @@ export async function ingestC2B(payload: any, meta2: { ip?: string; headers?: an
                 await allocate(inboxId, resolved.db, matches[0], { auto: true });
             } else if (matches.length > 1) {
                 await meta.collection('c2b_inbox').updateOne({ _id: ins.insertedId }, { $set: { reconStatus: 'pending', needsReview: true, candidateCount: matches.length } });
+            } else {
+                // 0 matches → genuinely unmatched; alert the school admin to reconcile.
+                notifyUnmatched(resolved.tenant, doc).catch(() => { });
             }
-            // 0 matches → stays 'pending' (Unallocated).
         } catch { /* leave pending */ }
     }
     return { id: inboxId, duplicate: false };
@@ -192,7 +228,7 @@ export async function allocate(inboxId: string, db: Db, student: any, opts: { au
     return { ok: true };
 }
 
-/** Best-effort SMS + in-app notice that a fee payment was received and applied. */
+/** Best-effort SMS + in-app + admin-email notice that a fee payment was applied. */
 async function notifyAllocation(db: Db, inbox: any, student: any) {
     const amount = num(inbox.TransAmount);
     const name = student.parentName || student.guardianName || student.studentName || 'Parent';
@@ -204,13 +240,45 @@ async function notifyAllocation(db: Db, inbox: any, student: any) {
         const schoolId = String((await db.collection('school_profile').findOne({}))?._id || 'default');
         await queueSms(db, schoolId, numbers, msg, { audience: 'fees' });
     } catch { /* SMS optional */ }
-    // In-app notification.
+    // In-app notification (parent portal + student portal both read this collection).
     try {
         await db.collection('notifications').insertOne({
             title: 'Fee payment received', message: msg, type: 'fees',
             studentId: String(student._id), read: false, createdAt: new Date(),
         });
     } catch { /* optional */ }
+    // Admin email — best-effort, only if the tenant has a contact address on file.
+    try {
+        const meta = getMetaDb();
+        const tenant: any = await meta.collection('Tenant').findOne({ databaseName: db.databaseName });
+        const adminEmail = tenant?.contactEmail || tenant?.email;
+        if (adminEmail) {
+            await sendEmail(db, {
+                to: [adminEmail], subject: `Fee payment received — ${student.studentName}`,
+                message: `KES ${amount.toLocaleString()} received via M-PESA (Receipt ${inbox.TransID}, Phone ${inbox.MSISDN}) and auto-allocated to ${student.studentName} (${inbox.BillRefNumber || student.registrationNo || student.admNo}).`,
+            });
+        }
+    } catch { /* email optional */ }
+}
+
+/** Best-effort admin alert for a C2B payment that could NOT be auto-matched to a student. */
+async function notifyUnmatched(tenant: any, inbox: any) {
+    if (!tenant?.databaseName) return;
+    try {
+        const db = getTenantDb(tenant.databaseName);
+        await db.collection('notifications').insertOne({
+            title: 'Unmatched M-PESA payment', type: 'fees_unmatched',
+            message: `KES ${num(inbox.TransAmount).toLocaleString()} received from ${inbox.customerName || inbox.MSISDN || 'unknown payer'} (Receipt ${inbox.TransID}, Account "${inbox.BillRefNumber || '—'}") could not be matched to a student — reconcile it in Fees → Payment Inbox.`,
+            read: false, createdAt: new Date(),
+        });
+        const adminEmail = tenant?.contactEmail || tenant?.email;
+        if (adminEmail) {
+            await sendEmail(db, {
+                to: [adminEmail], subject: 'Unmatched M-PESA payment needs reconciliation',
+                message: `A payment of KES ${num(inbox.TransAmount).toLocaleString()} (Receipt ${inbox.TransID}) from ${inbox.customerName || inbox.MSISDN || 'unknown payer'} using account/reference "${inbox.BillRefNumber || '—'}" could not be automatically matched to a student. Please review and allocate it in Fees → Payment Inbox.`,
+            });
+        }
+    } catch { /* best-effort */ }
 }
 
 /** Soft-reverse an allocation: void the payment, mark inbox rejected. Never hard-delete. */
