@@ -380,4 +380,88 @@ router.get('/driver/notifications', authed(async (req, res) => {
     })));
 }));
 
+// ════════════════════════════════════════════════════════════════════════════
+//  ADMIN LIVE TRACKING  (school-admin authenticated via normal tenancy)
+// ════════════════════════════════════════════════════════════════════════════
+// These are consumed by the admin portal's Transport → Live Tracking page.
+// "Online" = the bus reported a position within the last ONLINE_WINDOW ms.
+const ONLINE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+// GET /transport/live/buses → every bus's latest position + online status + the
+// driver/route it belongs to. Joins bus_positions (live) with transport_zones.
+router.get('/transport/live/buses', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const [positions, zones, staff] = await Promise.all([
+            database.collection('bus_positions').find({}).toArray().catch(() => []),
+            database.collection('transport_zones').find({}).toArray().catch(() => []),
+            database.collection('staff').find({}).toArray().catch(() => []),
+        ]);
+        const now = Date.now();
+        const staffById: Record<string, any> = {};
+        staff.forEach((s: any) => { staffById[String(s._id)] = s; });
+        const posByBus: Record<string, any> = {};
+        positions.forEach((p: any) => { posByBus[String(p.busId)] = p; });
+
+        // One row per transport zone (= a bus/route). Attach live position if any.
+        const rows = zones.map((z: any) => {
+            // The driver app reports busId = the zone _id (see driver route/tracker).
+            const pos = posByBus[String(z._id)] || posByBus[String(z.busId || '')] || null;
+            const updatedAt = pos?.updatedAt ? new Date(pos.updatedAt).getTime() : (pos?.at ? new Date(pos.at).getTime() : 0);
+            const online = updatedAt > 0 && (now - updatedAt) < ONLINE_WINDOW_MS;
+            const driver = z.driverId ? staffById[String(z.driverId)] : null;
+            return {
+                busId: String(z._id),
+                routeName: z.name || z.routeName || 'Route',
+                busPlate: z.busReg || z.busNumber || z.busName || '',
+                driverName: z.driver || (driver ? (driver.employeeName || driver.name) : '') || '',
+                driverPhone: z.driverPhone || (driver ? driver.phone : '') || '',
+                online,
+                lastSeen: updatedAt ? new Date(updatedAt).toISOString() : null,
+                lat: pos?.lat ?? null,
+                lng: pos?.lng ?? null,
+                speed: pos?.speed ?? null,      // m/s
+                heading: pos?.heading ?? null,
+                battery: pos?.battery ?? null,
+                tripId: pos?.tripId || null,
+            };
+        });
+        // Buses that have reported but aren't tied to a zone (defensive).
+        const zoneIds = new Set(zones.map((z: any) => String(z._id)));
+        positions.forEach((p: any) => {
+            if (!zoneIds.has(String(p.busId))) {
+                const updatedAt = p.updatedAt ? new Date(p.updatedAt).getTime() : (p.at ? new Date(p.at).getTime() : 0);
+                rows.push({
+                    busId: String(p.busId), routeName: 'Unassigned', busPlate: '', driverName: '', driverPhone: '',
+                    online: updatedAt > 0 && (now - updatedAt) < ONLINE_WINDOW_MS,
+                    lastSeen: updatedAt ? new Date(updatedAt).toISOString() : null,
+                    lat: p.lat ?? null, lng: p.lng ?? null, speed: p.speed ?? null, heading: p.heading ?? null,
+                    battery: p.battery ?? null, tripId: p.tripId || null,
+                });
+            }
+        });
+        res.json({ buses: rows, onlineWindowMs: ONLINE_WINDOW_MS, serverTime: new Date().toISOString() });
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+// GET /transport/live/trail/:busId?limit=200 → the recent GPS trail for one bus,
+// oldest→newest, for drawing the path and a location log.
+router.get('/transport/live/trail/:busId', async (req: Request, res: Response) => {
+    try {
+        const busId = String(req.params.busId);
+        const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
+        const rows = await db(req).collection('bus_locations')
+            .find({ busId }).sort({ at: -1 }).limit(limit).toArray().catch(() => []);
+        const trail = rows.reverse().map((r: any) => ({
+            lat: r.lat, lng: r.lng, speed: r.speed ?? 0, heading: r.heading ?? 0,
+            battery: r.battery ?? null, at: r.at,
+        }));
+        res.json({ busId, points: trail.length, trail });
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
 export default router;

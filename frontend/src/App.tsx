@@ -330,6 +330,7 @@ import TransportManagement from "./pages/tenant/modules/TransportManagement";
 import CalendarPage from "./pages/tenant/modules/CalendarPage";
 import BusPickup from "./pages/tenant/modules/transport/BusPickup";
 import TransportSettings from "./pages/tenant/modules/transport/TransportSettings";
+import LiveTracking from "./pages/tenant/modules/transport/LiveTracking";
 
 import InstituteProfile from "./pages/tenant/modules/InstituteProfile";
 import AccountsForFees from "./pages/tenant/modules/AccountsForFees";
@@ -844,6 +845,7 @@ const App = () => {
               <Route path="/transport/buses/edit/:id" element={<TransportManagement tab="edit-bus" />} />
               <Route path="/transport/assign" element={<TransportManagement tab="assign" />} />
               <Route path="/transport/pickup" element={<BusPickup />} />
+              <Route path="/transport/live" element={<LiveTracking />} />
               <Route path="/transport/settings" element={<TransportSettings />} />
               <Route path="/transport/report" element={<TransportManagement tab="report" />} />
               

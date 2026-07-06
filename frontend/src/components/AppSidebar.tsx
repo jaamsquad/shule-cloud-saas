@@ -216,6 +216,7 @@ export const navItems: NavItem[] = [
       { label: "Salary Components", path: "/salary/components" },
   ] },
   { label: "Transport", icon: Truck, moduleKey: "transport", children: [
+      { label: "Live Tracking", path: "/transport/live" },
       { label: "Zones", path: "/transport/zones" },
       { label: "New Zone", path: "/transport/zones/new" },
       { label: "Buses", path: "/transport/buses" },
