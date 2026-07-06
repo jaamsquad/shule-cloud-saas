@@ -61,19 +61,20 @@ async function resolveTenantForShortcode(shortcode: string) {
  * should land as an Unmatched Payment for staff to reconcile manually rather
  * than bouncing the customer's payment back at the M-PESA counter.
  */
-export async function validateC2B(payload: any): Promise<{ ResultCode: number; ResultDesc: string }> {
+export async function validateC2B(payload: any): Promise<{ ResultCode: number | string; ResultDesc: string }> {
     const shortcode = String(payload?.BusinessShortCode || '').trim();
     const amount = Number(payload?.TransAmount) || 0;
 
-    // Daraja's validation response is a numeric ResultCode: 0 = accept, any
-    // non-zero = reject (Safaricom cancels the transaction and refunds the payer).
-    if (!shortcode) return { ResultCode: 1, ResultDesc: 'Invalid ShortCode' };
-    if (amount <= 0) return { ResultCode: 1, ResultDesc: 'Invalid Amount' };
+    // Daraja's validation contract: ResultCode 0 accepts; rejections use the
+    // documented C2B000xx codes (Safaricom then cancels the transaction):
+    //   C2B00013 = Invalid Amount, C2B00015 = Invalid Shortcode.
+    if (!shortcode) return { ResultCode: 'C2B00015', ResultDesc: 'Rejected' };
+    if (amount <= 0) return { ResultCode: 'C2B00013', ResultDesc: 'Rejected' };
 
     const resolved = await resolveTenantForShortcode(shortcode);
     if (!resolved) {
         // No school owns this shortcode at all — genuinely nothing to accept into.
-        return { ResultCode: 1, ResultDesc: 'Invalid ShortCode — not registered to any school' };
+        return { ResultCode: 'C2B00015', ResultDesc: 'Rejected' };
     }
     // Do NOT reject for an unmatched BillRefNumber/admission number — accept it
     // and let ingestC2B() file it as an Unmatched Payment for manual reconciliation.
@@ -138,6 +139,18 @@ export async function ingestC2B(payload: any, meta2: { ip?: string; headers?: an
 
     const ins = await meta.collection('c2b_inbox').insertOne(doc);
     const inboxId = String(ins.insertedId);
+
+    // Mirror the raw callback into mpesa_c2b_payments — the legacy collection the
+    // Till/Paybill Transactions page, Pull-sync dedupe, auto-sync, and assistant
+    // queries all read from. Upsert by TransID ($setOnInsert) so a row imported
+    // earlier by Pull-sync is never overwritten by a late-arriving callback.
+    try {
+        await meta.collection('mpesa_c2b_payments').updateOne(
+            { TransID: transId || `NOID-${inboxId}` },
+            { $setOnInsert: { ...payload, TransID: transId || `NOID-${inboxId}`, receivedAt: now, source: 'c2b' } },
+            { upsert: true },
+        );
+    } catch (e) { console.error('[C2B inbox] mpesa_c2b_payments mirror error:', e); }
 
     // Push the new payment to the school's open inboxes in real time.
     if (resolved?.tenant?.databaseName) publish(resolved.tenant.databaseName, 'payment', { ...doc, _id: inboxId });
