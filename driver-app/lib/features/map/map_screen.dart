@@ -142,7 +142,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (await canLaunchUrl(web)) await launchUrl(web, mode: LaunchMode.externalApplication);
   }
 
-  // Open Google Maps directions through ALL stops (current location → waypoints).
+  // Open Google Maps directions through ALL stops (current location → waypoints),
+  // preferring the Google Maps APP over the browser.
   Future<void> _openDirectionsAll(List<LatLng> stops) async {
     if (stops.isEmpty) return;
     final origin = _current != null ? '${_current!.latitude},${_current!.longitude}' : '';
@@ -150,14 +151,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final waypoints = stops.length > 1
         ? stops.sublist(0, stops.length - 1).map((s) => '${s.latitude},${s.longitude}').join('|')
         : '';
-    final url = Uri.parse(
+
+    // 1) Google Maps app URL scheme (registered by the app on both Android & iOS).
+    final appUri = Uri.parse(
+      'comgooglemaps://?daddr=${dest.latitude},${dest.longitude}'
+      '${origin.isNotEmpty ? '&saddr=$origin' : ''}'
+      '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
+      '&directionsmode=driving',
+    );
+    if (await canLaunchUrl(appUri)) {
+      await launchUrl(appUri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    // 2) Universal https link — Android routes this to the Maps app when installed,
+    // else opens in the browser (final fallback).
+    final web = Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
       '${origin.isNotEmpty ? '&origin=$origin' : ''}'
       '&destination=${dest.latitude},${dest.longitude}'
       '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
       '&travelmode=driving',
     );
-    if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (await canLaunchUrl(web)) await launchUrl(web, mode: LaunchMode.externalApplication);
   }
 
   @override
