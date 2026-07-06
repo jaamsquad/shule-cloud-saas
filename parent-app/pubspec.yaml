@@ -59,10 +59,11 @@ flutter:
   assets:
     - assets/icon/
 
-# Dark-green graduation-cap launcher icon (matches DESIGN.md primary).
+# ShuleCloud brand-mark launcher icon (graduation cap + cloud on Growth Green).
 flutter_launcher_icons:
-  android: true
+  android: "ic_launcher"          # overwrite the default ic_launcher from `flutter create`
   ios: true
+  min_sdk_android: 21
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#006b2c"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"

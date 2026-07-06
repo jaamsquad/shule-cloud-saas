@@ -72,8 +72,17 @@ jobs:
       - name: Get packages
         run: flutter pub get
 
-      - name: Generate launcher icons
-        run: dart run flutter_launcher_icons || true
+      - name: Generate launcher icons (ShuleCloud brand mark)
+        run: |
+          set -e
+          echo "Icon source files:"
+          ls -l assets/icon/
+          # Run the generator (fail loudly if it errors — do NOT mask with '|| true').
+          dart run flutter_launcher_icons
+          echo "Generated mipmap icons:"
+          find android/app/src/main/res -name "ic_launcher*.png" -o -name "ic_launcher*.xml" | sort
+          # Guard: a real launcher PNG must exist, else we'd ship the default Flutter icon.
+          test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
 
       - name: Build debug APK (installable without a signing key)
         run: flutter build apk --debug

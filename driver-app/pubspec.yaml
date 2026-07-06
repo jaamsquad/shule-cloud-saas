@@ -65,11 +65,12 @@ flutter:
   assets:
     - assets/icon/
 
-# App launcher icon — dark-blue school bus. CI runs `flutter_launcher_icons`
-# after `flutter create` to generate all Android mipmap densities.
+# ShuleCloud brand-mark launcher icon (graduation cap + cloud on dark navy).
+# CI runs flutter_launcher_icons after `flutter create` to generate all densities.
 flutter_launcher_icons:
-  android: true
+  android: "ic_launcher"          # overwrite the default ic_launcher from `flutter create`
   ios: true
+  min_sdk_android: 21
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#10245C"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"

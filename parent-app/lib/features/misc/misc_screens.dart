@@ -9,6 +9,7 @@ import '../../models/homework.dart';
 import '../../models/misc_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/data_providers.dart';
+import '../../providers/providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/app_widgets.dart';
 
