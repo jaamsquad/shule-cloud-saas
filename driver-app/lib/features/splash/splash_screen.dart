@@ -19,8 +19,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _boot() async {
-    await ref.read(authControllerProvider.notifier).bootstrap();
-    await Future.delayed(const Duration(milliseconds: 600));
+    // Bootstrap (auto-login) must never hang the splash: guard it AND cap it with
+    // a timeout so a slow/unreachable backend still lets the user reach login.
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .bootstrap()
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('bootstrap failed/timed out: $e');
+    }
+    await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
     final authed = ref.read(authControllerProvider).isAuthenticated;
     context.go(authed ? '/' : '/login');
@@ -29,28 +38,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.primary, // dark blue
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24)),
-              child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 48),
+              width: 108,
+              height: 108,
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
+              child: const Icon(Icons.directions_bus_rounded, color: AppColors.primary, size: 56),
             ),
-            const SizedBox(height: 20),
-            const Text('ShuleCloud', style: TextStyle(color: AppColors.primary, fontSize: 30, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 22),
+            const Text('ShuleDriver', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('Smart School Transport', style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
+            const Text('Smart School Transport', style: TextStyle(color: Colors.white70, fontSize: 16)),
             const SizedBox(height: 40),
             const SizedBox(
               width: 160,
-              child: LinearProgressIndicator(color: AppColors.primary, backgroundColor: Color(0xFFE3E9E6)),
+              child: LinearProgressIndicator(color: Colors.white, backgroundColor: Colors.white24),
             ),
             const SizedBox(height: 16),
-            const Text('Connecting to Secure Server', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+            const Text('Connecting to Secure Server', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
           ],
         ),
       ),

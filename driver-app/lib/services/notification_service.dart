@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -22,11 +23,24 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_channel);
 
-    await FirebaseMessaging.instance.requestPermission();
-    FirebaseMessaging.onMessage.listen(_showForeground);
+    // Firebase Cloud Messaging is OPTIONAL: without google-services.json the
+    // Firebase app never initialized, so touching FirebaseMessaging throws.
+    // Guard it so the app runs perfectly fine without push configured.
+    try {
+      await FirebaseMessaging.instance.requestPermission();
+      FirebaseMessaging.onMessage.listen(_showForeground);
+    } catch (e) {
+      debugPrint('FCM not configured — skipping push setup: $e');
+    }
   }
 
-  Future<String?> get fcmToken => FirebaseMessaging.instance.getToken();
+  Future<String?> get fcmToken async {
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (_) {
+      return null;
+    }
+  }
 
   void _showForeground(RemoteMessage m) {
     final n = m.notification;

@@ -15,20 +15,40 @@ import 'services/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Every init below is guarded independently so a single failure can NEVER
+  // freeze the app on the native splash — runApp() always runs. Startup only
+  // needs Hive (prefs); everything else degrades gracefully.
+
   // Firebase is optional in dev — guard so the app still runs without config.
   try {
     await Firebase.initializeApp();
   } catch (_) {/* configure firebase_options for release */}
 
-  // Local storage.
-  await Hive.initFlutter();
-  Hive.registerAdapter(GpsPointAdapter());
-  await Hive.openBox<GpsPoint>(StorageKeys.gpsQueueBox);
-  await Hive.openBox(StorageKeys.prefsBox);
+  // Local storage (required). registerAdapter is idempotent-guarded.
+  try {
+    await Hive.initFlutter();
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(GpsPointAdapter());
+    }
+    await Hive.openBox<GpsPoint>(StorageKeys.gpsQueueBox);
+    await Hive.openBox(StorageKeys.prefsBox);
+  } catch (e, s) {
+    debugPrint('Hive init failed: $e\n$s');
+  }
 
-  // Background GPS + notifications.
-  await BackgroundTrackingService.init();
-  await NotificationService().init();
+  // Background GPS — never block startup on it.
+  try {
+    await BackgroundTrackingService.init();
+  } catch (e) {
+    debugPrint('BackgroundTrackingService.init failed: $e');
+  }
+
+  // Local notifications — never block startup on it.
+  try {
+    await NotificationService().init();
+  } catch (e) {
+    debugPrint('NotificationService.init failed: $e');
+  }
 
   runApp(const ProviderScope(child: ShuleCloudDriverApp()));
 }
