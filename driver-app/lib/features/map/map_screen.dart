@@ -70,24 +70,94 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
   // Open external turn-by-turn directions through all stops. Prefers the OSM
-  // directions page (multi-waypoint, no API key); falls back to a geo: intent.
-  Future<void> _navigateStops(List<LatLng> stops) async {
-    if (stops.isEmpty) return;
+  // Show all stops as a list, ordered NEAREST-FIRST from the driver's current
+  // position, so the driver starts with the closest stage. Each row opens that
+  // stop directly in Google Maps; a top button opens full directions through all.
+  Future<void> _showStopsSheet(List<({String name, LatLng point})> stops) async {
     final from = _current;
-    // OSRM/OSM directions: route=lat,lng;lat,lng;... (driving profile).
-    final coords = [
-      if (from != null) '${from.latitude},${from.longitude}',
-      ...stops.map((s) => '${s.latitude},${s.longitude}'),
-    ].join(';');
-    final osm = Uri.parse('https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=$coords');
-    if (await canLaunchUrl(osm)) {
-      await launchUrl(osm, mode: LaunchMode.externalApplication);
-      return;
+    final ordered = [...stops];
+    if (from != null) {
+      ordered.sort((a, b) => _distance(from, a.point).compareTo(_distance(from, b.point)));
     }
-    // Fallback: open the first stop in whatever map app is installed.
-    final first = stops.first;
-    final geo = Uri.parse('geo:${first.latitude},${first.longitude}?q=${first.latitude},${first.longitude}(Stop)');
-    if (await canLaunchUrl(geo)) await launchUrl(geo);
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Stops — nearest first', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                  ),
+                  TextButton.icon(
+                    onPressed: () { Navigator.pop(ctx); _openDirectionsAll(ordered.map((e) => e.point).toList()); },
+                    icon: const Icon(Icons.directions),
+                    label: const Text('Route all'),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: ordered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final s = ordered[i];
+                  final km = from != null ? (_distance(from, s.point) / 1000) : null;
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: i == 0 ? AppColors.primary : AppColors.accentBlue.withValues(alpha: 0.15),
+                      child: Text('${i + 1}', style: TextStyle(color: i == 0 ? Colors.white : AppColors.accentBlue, fontWeight: FontWeight.w800)),
+                    ),
+                    title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text([
+                      if (i == 0) 'Nearest — start here',
+                      if (km != null) '${km.toStringAsFixed(1)} km away',
+                    ].join(' · ')),
+                    trailing: const Icon(Icons.navigation, color: AppColors.primary),
+                    onTap: () { Navigator.pop(ctx); _openInGoogleMaps(s.point, s.name); },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Open a single stop's location in Google Maps (navigation).
+  Future<void> _openInGoogleMaps(LatLng p, String label) async {
+    // google.navigation gives turn-by-turn in the Google Maps app; the https URL
+    // is the universal fallback (browser or app).
+    final nav = Uri.parse('google.navigation:q=${p.latitude},${p.longitude}');
+    if (await canLaunchUrl(nav)) { await launchUrl(nav, mode: LaunchMode.externalApplication); return; }
+    final web = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}');
+    if (await canLaunchUrl(web)) await launchUrl(web, mode: LaunchMode.externalApplication);
+  }
+
+  // Open Google Maps directions through ALL stops (current location → waypoints).
+  Future<void> _openDirectionsAll(List<LatLng> stops) async {
+    if (stops.isEmpty) return;
+    final origin = _current != null ? '${_current!.latitude},${_current!.longitude}' : '';
+    final dest = stops.last;
+    final waypoints = stops.length > 1
+        ? stops.sublist(0, stops.length - 1).map((s) => '${s.latitude},${s.longitude}').join('|')
+        : '';
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '${origin.isNotEmpty ? '&origin=$origin' : ''}'
+      '&destination=${dest.latitude},${dest.longitude}'
+      '${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}'
+      '&travelmode=driving',
+    );
+    if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -132,20 +202,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final initialCenter = _current ??
         (schoolLat != null ? LatLng(schoolLat, schoolLng!) : const LatLng(-1.2921, 36.8219));
 
-    // Waypoints (all stops with coords, from every zone) for turn-by-turn nav.
-    final waypoints = <LatLng>[
+    // Named stops with coords (from every zone) for turn-by-turn nav.
+    final stopPoints = <({String name, LatLng point})>[
       for (final route in routes)
         for (final s in route.stops)
-          if (s.lat != null && s.lng != null) LatLng(s.lat!, s.lng!),
+          if (s.lat != null && s.lng != null) (name: s.name, point: LatLng(s.lat!, s.lng!)),
     ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Live Tracking')),
-      floatingActionButton: waypoints.isEmpty
+      floatingActionButton: stopPoints.isEmpty
           ? null
           : FloatingActionButton.extended(
               backgroundColor: AppColors.primary,
-              onPressed: () => _navigateStops(waypoints),
+              onPressed: () => _showStopsSheet(stopPoints),
               icon: const Icon(Icons.alt_route, color: Colors.white),
               label: const Text('Navigate stops', style: TextStyle(color: Colors.white)),
             ),
