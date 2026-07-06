@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     Bus, MapPin, Loader2, RefreshCw, Gauge, BatteryMedium, Clock, Navigation,
-    Phone, User, Circle, ExternalLink, Route as RouteIcon,
+    Phone, User, Circle, ExternalLink, Route as RouteIcon, AlertTriangle,
 } from "lucide-react";
 import api from "@/lib/api";
 
@@ -38,6 +38,20 @@ export default function LiveTracking() {
         queryFn: async () => (await api.get(`/transport/live/trail/${selected}`, { params: { limit: 300 } })).data,
     });
     const trail: any[] = trailData?.trail || [];
+
+    // Safety alerts (SOS + incidents) and the trip activity log.
+    const { data: alertsData } = useQuery({
+        queryKey: ["transport_alerts"],
+        queryFn: async () => (await api.get("/transport/alerts")).data,
+        refetchInterval: 15_000,
+    });
+    const alerts: any[] = alertsData?.alerts || [];
+    const { data: tripsData } = useQuery({
+        queryKey: ["transport_trips"],
+        queryFn: async () => (await api.get("/transport/live/trips")).data,
+        refetchInterval: 15_000,
+    });
+    const trips: any[] = Array.isArray(tripsData) ? tripsData : [];
 
     const onlineCount = useMemo(() => buses.filter((b) => b.online).length, [buses]);
 
@@ -98,8 +112,11 @@ export default function LiveTracking() {
                                     </div>
                                     <div className="text-[11px] text-slate-500 space-y-0.5">
                                         {b.busPlate && <p className="flex items-center gap-1.5"><RouteIcon className="w-3 h-3" /> {b.busPlate}</p>}
-                                        {b.driverName && <p className="flex items-center gap-1.5"><User className="w-3 h-3" /> {b.driverName}</p>}
+                                        {b.driverName && <p className="flex items-center gap-1.5"><User className="w-3 h-3" /> {b.driverName}{b.coDriver ? ` · ${b.coDriver}` : ""}</p>}
                                         <p className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Last seen {ago(b.lastSeen)}</p>
+                                        {(b.studentCount > 0 || (b.stops?.length ?? 0) > 0) && (
+                                            <p className="text-slate-400">{b.studentCount || 0} students · {(b.stops?.length ?? 0)} stops</p>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-3 mt-2 text-[11px] font-bold">
                                         <span className="flex items-center gap-1 text-slate-600"><Gauge className="w-3 h-3" /> {kmh(b.speed)}</span>
@@ -190,6 +207,55 @@ export default function LiveTracking() {
                         </div>
                     </div>
                 )}
+
+                {/* Safety alerts (SOS + incidents) + trip activity log */}
+                <div className="grid lg:grid-cols-2 gap-6 mt-6">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-rose-500" /> Safety Alerts</h3>
+                            {alerts.length > 0 && <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">{alerts.length}</span>}
+                        </div>
+                        {alerts.length === 0 ? (
+                            <p className="py-8 text-center text-slate-400 text-sm">No SOS or incidents reported.</p>
+                        ) : (
+                            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                                {alerts.map((a) => (
+                                    <div key={a.id} className="px-5 py-3 flex items-start gap-3">
+                                        <span className={`mt-0.5 text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${a.kind === "sos" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{a.kind === "sos" ? "SOS" : "Incident"}</span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-bold text-slate-700">{a.driverName || "Driver"}{a.routeName ? ` · ${a.routeName}` : ""}</p>
+                                            <p className="text-[12px] text-slate-500">{a.description}</p>
+                                            <p className="text-[10px] text-slate-400 mt-0.5">{fmtTime(a.at)} · {ago(a.at)}{a.lat ? " · " : ""}
+                                                {a.lat != null && <a href={`https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=16/${a.lat}/${a.lng}`} target="_blank" rel="noreferrer" className="text-[#5C67F2] font-bold">view location</a>}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="px-5 py-3 border-b border-slate-100">
+                            <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Navigation className="w-4 h-4 text-[#5C67F2]" /> Trip Activity</h3>
+                        </div>
+                        {trips.length === 0 ? (
+                            <p className="py-8 text-center text-slate-400 text-sm">No trips recorded yet.</p>
+                        ) : (
+                            <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+                                {trips.map((t) => (
+                                    <div key={t.id} className="px-5 py-3 flex items-center justify-between">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-700 truncate">{t.driverName || "Driver"}{t.routeName ? ` · ${t.routeName}` : ""}</p>
+                                            <p className="text-[10px] text-slate-400">Started {fmtTime(t.startedAt)}{t.endedAt ? ` · Ended ${fmtTime(t.endedAt)}` : ""}</p>
+                                        </div>
+                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex-shrink-0 ${t.state === "started" ? "bg-emerald-100 text-emerald-700" : t.state === "paused" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{t.state}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

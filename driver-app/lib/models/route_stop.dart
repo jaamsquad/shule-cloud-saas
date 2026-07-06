@@ -6,6 +6,7 @@ class RouteStop {
   final String name;
   final double? lat;
   final double? lng;
+  final double? fee;
   final String scheduledTime;
   final int studentCount;
   final StopStatus status;
@@ -15,6 +16,7 @@ class RouteStop {
     required this.name,
     this.lat,
     this.lng,
+    this.fee,
     required this.scheduledTime,
     required this.studentCount,
     this.status = StopStatus.pending,
@@ -25,6 +27,7 @@ class RouteStop {
         name: (j['name'] ?? 'Stop').toString(),
         lat: (j['lat'] as num?)?.toDouble(),
         lng: (j['lng'] as num?)?.toDouble(),
+        fee: (j['fee'] as num?)?.toDouble(),
         scheduledTime: (j['scheduledTime'] ?? j['time'] ?? '').toString(),
         studentCount: (j['studentCount'] as num?)?.toInt() ?? 0,
         status: switch ((j['status'] ?? '').toString().toLowerCase()) {

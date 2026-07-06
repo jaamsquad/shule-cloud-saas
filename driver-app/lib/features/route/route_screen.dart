@@ -5,32 +5,49 @@ import '../../models/route_stop.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/app_widgets.dart';
 
-/// Today's route: ordered stops with status, times, and a Navigate button.
+/// Today's route(s): every zone the driver serves, each with its ordered stops,
+/// times, per-stop fee, and a Navigate button.
 class RouteScreen extends ConsumerWidget {
   const RouteScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(todayRouteProvider);
+    final async = ref.watch(driverRoutesProvider);
     return Scaffold(
       appBar: AppBar(title: const Text("Today's Route")),
       body: async.when(
         loading: () => const SkeletonList(),
-        error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(todayRouteProvider)),
-        data: (route) => ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
-              children: [
-                Chip(label: Text(route.name), backgroundColor: AppColors.accentBlue.withValues(alpha: 0.12)),
-                const SizedBox(width: 8),
-                Text('• ${route.busPlate}', style: const TextStyle(color: AppColors.textMuted)),
+        error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(driverRoutesProvider)),
+        data: (routes) {
+          if (routes.isEmpty) {
+            return const Center(child: Text('No route assigned yet.', style: TextStyle(color: AppColors.textMuted)));
+          }
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (routes.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('You serve ${routes.length} routes', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+                ),
+              for (final route in routes) ...[
+                Row(
+                  children: [
+                    Chip(label: Text(route.name), backgroundColor: AppColors.accentBlue.withValues(alpha: 0.12)),
+                    const SizedBox(width: 8),
+                    Text('• ${route.busPlate}', style: const TextStyle(color: AppColors.textMuted)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (route.stops.isEmpty)
+                  const Padding(padding: EdgeInsets.only(bottom: 20), child: Text('No stops set for this route.', style: TextStyle(color: AppColors.textMuted))),
+                for (int i = 0; i < route.stops.length; i++)
+                  _StopTile(stop: route.stops[i], isLast: i == route.stops.length - 1),
+                const SizedBox(height: 8),
               ],
-            ),
-            const SizedBox(height: 16),
-            for (int i = 0; i < route.stops.length; i++) _StopTile(stop: route.stops[i], isLast: i == route.stops.length - 1),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -73,7 +90,14 @@ class _StopTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('${stop.scheduledTime} • ${stop.studentCount} students', style: const TextStyle(color: AppColors.textMuted)),
+                    Text(
+                      [
+                        if (stop.scheduledTime.isNotEmpty) stop.scheduledTime,
+                        '${stop.studentCount} students',
+                        if (stop.fee != null && stop.fee! > 0) 'KSh ${stop.fee!.toStringAsFixed(0)}',
+                      ].join(' • '),
+                      style: const TextStyle(color: AppColors.textMuted),
+                    ),
                     if (stop.status == StopStatus.current) ...[
                       const SizedBox(height: 10),
                       FilledButton.icon(

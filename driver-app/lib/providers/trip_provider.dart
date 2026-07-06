@@ -37,16 +37,20 @@ class TripController extends StateNotifier<Trip> {
 
   Future<void> pause() async {
     if (!canPause) return;
-    final t = await _ref.read(tripRepoProvider).pause(state.id);
-    state = t.copyWith(state: TripState.paused);
+    // Update the UI immediately (optimistic) — the local trip state drives the
+    // buttons. The backend + tracking are best-effort so a slow/failed network
+    // never leaves the button feeling "stuck".
+    state = state.copyWith(state: TripState.paused);
     await BackgroundTrackingService.stopTracking();
+    try {
+      await _ref.read(tripRepoProvider).pause(state.id);
+    } catch (_) {/* keep paused locally; will reconcile on next action */}
   }
 
   Future<void> resume() async {
     if (!canResume) return;
+    state = state.copyWith(state: TripState.started);
     final driver = _ref.read(authControllerProvider).driver;
-    final t = await _ref.read(tripRepoProvider).resume(state.id);
-    state = t.copyWith(state: TripState.started);
     if (driver != null) {
       await BackgroundTrackingService.startTracking(
         driverId: driver.id,
@@ -54,13 +58,18 @@ class TripController extends StateNotifier<Trip> {
         tripId: state.id,
       );
     }
+    try {
+      await _ref.read(tripRepoProvider).resume(state.id);
+    } catch (_) {/* keep started locally */}
   }
 
   Future<void> end() async {
     if (!canEnd) return;
+    state = state.copyWith(state: TripState.completed, endedAt: DateTime.now());
     await BackgroundTrackingService.stopTracking();
-    final t = await _ref.read(tripRepoProvider).end(state.id);
-    state = t.copyWith(state: TripState.completed, endedAt: DateTime.now());
+    try {
+      await _ref.read(tripRepoProvider).end(state.id);
+    } catch (_) {/* trip is ended locally regardless */}
   }
 }
 

@@ -23,4 +23,8 @@ class StudentRepository {
     final res = await _dio.post(ApiConfig.studentByQr, data: {'code': code});
     return Student.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
+
+  /// Send an SMS to a student's parent (branded + logged for the admin).
+  Future<void> messageParent(String studentId, String message) =>
+      _dio.post('/driver/students/message', data: {'studentId': studentId, 'message': message});
 }

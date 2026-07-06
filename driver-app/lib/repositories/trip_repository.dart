@@ -13,6 +13,13 @@ class TripRepository {
     return BusRoute.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
+  /// ALL routes/zones the driver serves (a driver may cover more than one).
+  Future<List<BusRoute>> allRoutes() async {
+    final res = await _dio.get('/driver/routes');
+    final list = (res.data['routes'] as List?) ?? [];
+    return list.map((e) => BusRoute.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  }
+
   Future<Trip> start(String routeId) async {
     final res = await _dio.post(ApiConfig.startTrip, data: {'routeId': routeId});
     return Trip.fromJson(Map<String, dynamic>.from(res.data as Map));

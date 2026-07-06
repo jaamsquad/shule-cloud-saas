@@ -4,8 +4,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
-import '../../models/route_stop.dart';
 import '../../models/trip.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/providers.dart';
@@ -69,21 +69,47 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   String _fmt(Duration d) =>
       '${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
+  // Open external turn-by-turn directions through all stops. Prefers the OSM
+  // directions page (multi-waypoint, no API key); falls back to a geo: intent.
+  Future<void> _navigateStops(List<LatLng> stops) async {
+    if (stops.isEmpty) return;
+    final from = _current;
+    // OSRM/OSM directions: route=lat,lng;lat,lng;... (driving profile).
+    final coords = [
+      if (from != null) '${from.latitude},${from.longitude}',
+      ...stops.map((s) => '${s.latitude},${s.longitude}'),
+    ].join(';');
+    final osm = Uri.parse('https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=$coords');
+    if (await canLaunchUrl(osm)) {
+      await launchUrl(osm, mode: LaunchMode.externalApplication);
+      return;
+    }
+    // Fallback: open the first stop in whatever map app is installed.
+    final first = stops.first;
+    final geo = Uri.parse('geo:${first.latitude},${first.longitude}?q=${first.latitude},${first.longitude}(Stop)');
+    if (await canLaunchUrl(geo)) await launchUrl(geo);
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = ref.watch(tripControllerProvider);
     if (trip.state.isRunning && !_timer.isRunning) _timer.start();
-    final routeAsync = ref.watch(todayRouteProvider);
-    final route = routeAsync.valueOrNull;
+    final routesAsync = ref.watch(driverRoutesProvider);
+    final routes = routesAsync.valueOrNull ?? const [];
+    // School coords come from any route (they share the school).
+    final schoolLat = routes.isNotEmpty ? routes.first.schoolLat : null;
+    final schoolLng = routes.isNotEmpty ? routes.first.schoolLng : null;
 
-    // Assemble markers: school, stops, and the live bus.
+    // Assemble markers: school, stops from EVERY zone the driver serves, live bus.
     final markers = <Marker>[];
-    if (route?.schoolLat != null && route?.schoolLng != null) {
-      markers.add(_pin(LatLng(route!.schoolLat!, route.schoolLng!), Icons.school, AppColors.primary));
+    if (schoolLat != null && schoolLng != null) {
+      markers.add(_pin(LatLng(schoolLat, schoolLng), Icons.school, AppColors.primary));
     }
-    for (final s in route?.stops ?? const <RouteStop>[]) {
-      if (s.lat != null && s.lng != null) {
-        markers.add(_pin(LatLng(s.lat!, s.lng!), Icons.location_on, AppColors.accentBlue, label: s.name));
+    for (final route in routes) {
+      for (final s in route.stops) {
+        if (s.lat != null && s.lng != null) {
+          markers.add(_pin(LatLng(s.lat!, s.lng!), Icons.location_on, AppColors.accentBlue, label: s.name));
+        }
       }
     }
     if (_current != null) {
@@ -104,10 +130,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     final initialCenter = _current ??
-        (route?.schoolLat != null ? LatLng(route!.schoolLat!, route.schoolLng!) : const LatLng(-1.2921, 36.8219));
+        (schoolLat != null ? LatLng(schoolLat, schoolLng!) : const LatLng(-1.2921, 36.8219));
+
+    // Waypoints (all stops with coords, from every zone) for turn-by-turn nav.
+    final waypoints = <LatLng>[
+      for (final route in routes)
+        for (final s in route.stops)
+          if (s.lat != null && s.lng != null) LatLng(s.lat!, s.lng!),
+    ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Live Tracking')),
+      floatingActionButton: waypoints.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: AppColors.primary,
+              onPressed: () => _navigateStops(waypoints),
+              icon: const Icon(Icons.alt_route, color: Colors.white),
+              label: const Text('Navigate stops', style: TextStyle(color: Colors.white)),
+            ),
       body: Column(
         children: [
           Padding(

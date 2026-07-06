@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:battery_plus/battery_plus.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/student.dart';
 import '../../models/trip.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/data_providers.dart';
 import '../../providers/trip_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/providers.dart';
@@ -36,9 +38,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final driver = ref.read(authControllerProvider).driver;
     try {
       await ref.read(tripControllerProvider.notifier).start(driver?.routeId ?? '');
+      // Open the live map with turn-by-turn to the route's stops.
+      if (mounted) context.push('/map');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
+  }
+
+  // End Trip is blocked while any boarded student hasn't been dropped, so no
+  // child is "left on the bus" in the records.
+  Future<void> _endTrip() async {
+    final students = ref.read(studentsControllerProvider).valueOrNull ?? [];
+    final stillOnboard = students.where((s) => s.status == BoardingStatus.boarded).toList();
+    if (stillOnboard.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${stillOnboard.length} student(s) still boarded. Drop everyone before ending the trip.'),
+        backgroundColor: AppColors.danger,
+      ));
+      return;
+    }
+    await ref.read(tripControllerProvider.notifier).end();
   }
 
   @override
@@ -113,7 +132,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 16),
 
             // Primary trip control
-            _PrimaryTripButton(trip: trip, onStart: _startTrip, onEnd: tc.end),
+            _PrimaryTripButton(trip: trip, onStart: _startTrip, onEnd: _endTrip),
             const SizedBox(height: 12),
             Row(
               children: [

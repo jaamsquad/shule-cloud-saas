@@ -55,13 +55,18 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
     const drivers = staff.filter((s: any) => hasRole(s, /(^|\s)driver$/i) || hasRole(s, /^driver/i) && !hasRole(s, /co.?driver/i));
     const coDrivers = staff.filter((s: any) => hasRole(s, /co.?driver|bus attendant/i));
 
-    // Local form state for zone
-    const [zoneForm, setZoneForm] = useState({
+    // Local form state for zone. `stops` = the points along the route where
+    // students get off, each with its own optional fee and coordinates.
+    const [zoneForm, setZoneForm] = useState<{
+        name: string; fee: string; driver: string; coDriver: string; busNo: string;
+        stops: { name: string; fee: string; lat: string; lng: string }[];
+    }>({
         name: "",
         fee: "",
         driver: "",
         coDriver: "",
-        busNo: ""
+        busNo: "",
+        stops: [],
     });
 
     // Local form state for bus
@@ -92,11 +97,19 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                     fee: z.fee?.toString() || "",
                     driver: z.driver || "",
                     coDriver: z.coDriver || "",
-                    busNo: z.busNo || ""
+                    busNo: z.busNo || "",
+                    stops: Array.isArray(z.stops)
+                        ? z.stops.map((s: any) => ({
+                            name: s.name || "",
+                            fee: (s.fee ?? "").toString(),
+                            lat: (s.lat ?? "").toString(),
+                            lng: (s.lng ?? "").toString(),
+                        }))
+                        : [],
                 });
             }
         } else {
-            setZoneForm({ name: "", fee: "", driver: "", coDriver: "", busNo: "" });
+            setZoneForm({ name: "", fee: "", driver: "", coDriver: "", busNo: "", stops: [] });
         }
     }, [tab, id, zones]);
 
@@ -205,8 +218,23 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
             toast.error("Zone name and fee are required");
             return;
         }
-        saveZoneMutation.mutate(zoneForm);
+        // Normalise stops: keep only named rows, coerce fee/coords to numbers.
+        const stops = zoneForm.stops
+            .filter((s) => s.name.trim())
+            .map((s) => ({
+                name: s.name.trim(),
+                fee: s.fee === "" ? 0 : Number(s.fee) || 0,
+                lat: s.lat === "" ? null : Number(s.lat),
+                lng: s.lng === "" ? null : Number(s.lng),
+            }));
+        saveZoneMutation.mutate({ ...zoneForm, stops });
     };
+
+    // Stop editor helpers.
+    const addStop = () => setZoneForm((f) => ({ ...f, stops: [...f.stops, { name: "", fee: "", lat: "", lng: "" }] }));
+    const removeStop = (i: number) => setZoneForm((f) => ({ ...f, stops: f.stops.filter((_, j) => j !== i) }));
+    const setStop = (i: number, key: "name" | "fee" | "lat" | "lng", v: string) =>
+        setZoneForm((f) => ({ ...f, stops: f.stops.map((s, j) => (j === i ? { ...s, [key]: v } : s)) }));
 
     const handleSaveBus = (e: React.FormEvent) => {
         e.preventDefault();
@@ -427,9 +455,47 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                 </select>
                             </div>
 
+                            {/* STOPS — where students get off, each with its own fee */}
+                            <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/40">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div>
+                                        <p className="text-xs font-black text-slate-700 uppercase tracking-wide">Bus Stops</p>
+                                        <p className="text-[10px] text-slate-400">Points where students board/alight. Each can have its own fee. Lat/Lng are optional (shown on the map).</p>
+                                    </div>
+                                    <button type="button" onClick={addStop}
+                                        className="text-[10px] font-black text-[#5C67F2] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-[#5C67F2]/30 hover:bg-[#5C67F2]/5">
+                                        + Add Stop
+                                    </button>
+                                </div>
+                                {zoneForm.stops.length === 0 ? (
+                                    <p className="text-[11px] text-slate-400 py-2 text-center">No stops added yet.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {/* Header row */}
+                                        <div className="hidden sm:grid grid-cols-[1fr_90px_100px_100px_32px] gap-2 text-[9px] font-black uppercase text-slate-400 px-1">
+                                            <span>Stop Name</span><span>Fee (KSh)</span><span>Latitude</span><span>Longitude</span><span></span>
+                                        </div>
+                                        {zoneForm.stops.map((s, i) => (
+                                            <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_100px_100px_32px] gap-2 items-center">
+                                                <input value={s.name} onChange={(e) => setStop(i, "name", e.target.value)} placeholder="e.g. Stage A"
+                                                    className="h-10 px-3 border border-slate-200 rounded-lg text-xs col-span-2 sm:col-span-1" />
+                                                <input value={s.fee} onChange={(e) => setStop(i, "fee", e.target.value)} placeholder="Fee" type="number" min={0}
+                                                    className="h-10 px-3 border border-slate-200 rounded-lg text-xs" />
+                                                <input value={s.lat} onChange={(e) => setStop(i, "lat", e.target.value)} placeholder="Lat" type="number"
+                                                    className="h-10 px-3 border border-slate-200 rounded-lg text-xs" />
+                                                <input value={s.lng} onChange={(e) => setStop(i, "lng", e.target.value)} placeholder="Lng" type="number"
+                                                    className="h-10 px-3 border border-slate-200 rounded-lg text-xs" />
+                                                <button type="button" onClick={() => removeStop(i)}
+                                                    className="h-10 w-8 flex items-center justify-center text-slate-300 hover:text-rose-500">✕</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex justify-end gap-3 pt-4">
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={() => navigate("/transport/zones")}
                                     className="px-8 h-12 border border-slate-100 text-slate-400 hover:bg-slate-50 font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all"
                                 >

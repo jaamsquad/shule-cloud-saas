@@ -9,6 +9,11 @@ final todayRouteProvider = FutureProvider<BusRoute>(
   (ref) => ref.read(tripRepoProvider).todayRoute(),
 );
 
+/// ALL zones/routes the driver serves — used when a driver covers more than one.
+final driverRoutesProvider = FutureProvider<List<BusRoute>>(
+  (ref) => ref.read(tripRepoProvider).allRoutes(),
+);
+
 /// Students on today's route, with local board/drop mutations reflected optimistically.
 class StudentsController extends StateNotifier<AsyncValue<List<Student>>> {
   final Ref _ref;
