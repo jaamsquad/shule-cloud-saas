@@ -13,11 +13,34 @@ const normalize = (raw: string) => {
     return p;
 };
 
+// Fold characters outside plain GSM-7/ASCII to their nearest ASCII equivalent.
+// Any non-GSM-7 character (em-dash, curly quotes, ellipsis, emoji, etc.) makes
+// Talksasa silently reclassify the message as Unicode (70 chars/segment instead
+// of 160), splitting it into multiple parts — which has been observed to trigger
+// a server-side "Array to string conversion" error on their end for certain
+// multi-part sends, and doubles/triples the SMS cost even when it doesn't fail.
+// Sanitising here, at the single call-through point every sender uses, means no
+// caller anywhere in the codebase can reintroduce this by typing a smart quote.
+const GSM7_REPLACEMENTS: Record<string, string> = {
+    '—': '-', '–': '-',            // em dash, en dash
+    '‘': "'", '’': "'",            // curly single quotes
+    '“': '"', '”': '"',            // curly double quotes
+    '…': '...',                          // ellipsis
+    ' ': ' ',                             // non-breaking space
+};
+const toGsm7Safe = (text: string): string =>
+    String(text || '')
+        .replace(/[—–‘’“”… ]/g, (c) => GSM7_REPLACEMENTS[c] || '')
+        // Strip anything else outside printable ASCII (emoji, other unicode
+        // punctuation, etc.) rather than let it silently balloon the SMS cost.
+        .replace(/[^\x00-\x7F]/g, '');
+
 /** Send an SMS (or WhatsApp) via Talksasa to one or more recipients. */
 export async function talksasaSend(cfg: TalksasaConfig, numbers: string[], message: string, opts: { type?: 'plain' | 'whatsapp'; scheduleTime?: string } = {}) {
     if (!cfg?.apiToken) return { ok: false, sent: 0, failed: numbers.length, error: 'Talksasa API token not configured.' };
     const recipient = numbers.map(normalize).filter(n => n.length >= 9).join(',');
     if (!recipient) return { ok: false, sent: 0, failed: numbers.length, error: 'No valid recipients.' };
+    const safeMessage = opts.type === 'whatsapp' ? message : toGsm7Safe(message);
     try {
         const resp = await fetch(`${BASE}/sms/send`, {
             method: 'POST',
@@ -26,7 +49,7 @@ export async function talksasaSend(cfg: TalksasaConfig, numbers: string[], messa
                 recipient,
                 sender_id: cfg.senderId || 'TALKSASA',
                 type: opts.type === 'whatsapp' ? 'whatsapp' : 'plain',
-                message,
+                message: safeMessage,
                 ...(opts.scheduleTime ? { schedule_time: opts.scheduleTime } : {}),
             }),
         });
