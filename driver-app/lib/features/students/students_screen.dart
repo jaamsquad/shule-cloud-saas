@@ -87,6 +87,13 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   Future<void> _act(Future<void> Function() fn) async {
     try {
       await fn();
+    } on BoardingRuleError catch (e) {
+      // A rule violation (e.g. already boarded/dropped) — show the reason.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
+        );
+      }
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not update — will retry when online')));
     }
@@ -134,13 +141,20 @@ class _StudentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Board only when waiting; Drop only when boarded. (Dropped is terminal.)
+    final canBoard = student.status == BoardingStatus.waiting;
+    final canDrop = student.status == BoardingStatus.boarded;
     return Slidable(
-      startActionPane: ActionPane(motion: const DrawerMotion(), children: [
-        SlidableAction(onPressed: (_) => onBoard(), backgroundColor: AppColors.primary, foregroundColor: Colors.white, icon: Icons.check, label: 'Board'),
-      ]),
-      endActionPane: ActionPane(motion: const DrawerMotion(), children: [
-        SlidableAction(onPressed: (_) => onDrop(), backgroundColor: AppColors.accentBlue, foregroundColor: Colors.white, icon: Icons.logout, label: 'Drop'),
-      ]),
+      startActionPane: canBoard
+          ? ActionPane(motion: const DrawerMotion(), children: [
+              SlidableAction(onPressed: (_) => onBoard(), backgroundColor: AppColors.primary, foregroundColor: Colors.white, icon: Icons.check, label: 'Board'),
+            ])
+          : null,
+      endActionPane: canDrop
+          ? ActionPane(motion: const DrawerMotion(), children: [
+              SlidableAction(onPressed: (_) => onDrop(), backgroundColor: AppColors.accentBlue, foregroundColor: Colors.white, icon: Icons.logout, label: 'Drop'),
+            ])
+          : null,
       child: AppCard(
         onTap: () => context.push('/student/${student.id}'),
         child: Row(

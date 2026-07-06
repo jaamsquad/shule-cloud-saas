@@ -45,6 +45,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  // Board/Drop entry point: scan a card, or open the student list — depending on
+  // the "Boarding method" setting.
+  void _boardDrop(String mode) {
+    final scan = ref.read(settingsControllerProvider).scanBoarding;
+    if (scan) {
+      context.push('/scan?mode=$mode');
+    } else {
+      context.go('/students');
+    }
+  }
+
   // End Trip is blocked while any boarded student hasn't been dropped, so no
   // child is "left on the bus" in the records.
   Future<void> _endTrip() async {
@@ -153,15 +164,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            // Board / Drop — either scans a card or opens the list, per the
+            // "Boarding method" setting.
             Row(
               children: [
-                Expanded(child: ActionTile(icon: Icons.qr_code_scanner, label: 'Scan Card', color: AppColors.primary, filled: false, onTap: () => context.push('/scan'))),
+                Expanded(child: ActionTile(icon: Icons.login, label: 'Board Student', color: AppColors.primary, filled: false, onTap: () => _boardDrop('board'))),
                 const SizedBox(width: 12),
-                Expanded(child: ActionTile(icon: Icons.report_problem_outlined, label: 'Incident', color: AppColors.warning, filled: false, onTap: () => context.push('/incident'))),
+                Expanded(child: ActionTile(icon: Icons.logout, label: 'Drop Student', color: AppColors.accentBlue, filled: false, onTap: () => _boardDrop('drop'))),
               ],
             ),
             const SizedBox(height: 12),
-            ActionTile(icon: Icons.route, label: 'Today\'s Route', color: AppColors.primary, filled: false, onTap: () => context.push('/route')),
+            Row(
+              children: [
+                Expanded(child: ActionTile(icon: Icons.report_problem_outlined, label: 'Incident', color: AppColors.warning, filled: false, onTap: () => context.push('/incident'))),
+                const SizedBox(width: 12),
+                Expanded(child: ActionTile(icon: Icons.route, label: 'Today\'s Route', color: AppColors.primary, filled: false, onTap: () => context.push('/route'))),
+              ],
+            ),
           ],
         ),
       ),

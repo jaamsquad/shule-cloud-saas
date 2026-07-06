@@ -60,6 +60,7 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
     // students get off, each with its own optional fee and coordinates.
     const [zoneForm, setZoneForm] = useState<{
         name: string; fee: string; driver: string; coDriver: string; busNo: string;
+        pickFromSchool: string; pickFromHome: string;
         stops: { name: string; fee: string; lat: string; lng: string }[];
     }>({
         name: "",
@@ -67,6 +68,8 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
         driver: "",
         coDriver: "",
         busNo: "",
+        pickFromSchool: "",   // time the bus leaves school (afternoon run)
+        pickFromHome: "",     // time the bus starts the morning pickup from home
         stops: [],
     });
 
@@ -79,10 +82,11 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
         coDriver: ""
     });
 
-    // Local state for assignment
+    // Local state for assignment (zone + the specific stop/stage the student uses).
     const [assignState, setAssignState] = useState({
         studentId: "",
-        zoneName: ""
+        zoneName: "",
+        stopName: "",
     });
 
     const [searchStudentTerm, setSearchStudentTerm] = useState("");
@@ -99,6 +103,8 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                     driver: z.driver || "",
                     coDriver: z.coDriver || "",
                     busNo: z.busNo || "",
+                    pickFromSchool: z.pickFromSchool || "",
+                    pickFromHome: z.pickFromHome || "",
                     stops: Array.isArray(z.stops)
                         ? z.stops.map((s: any) => ({
                             name: s.name || "",
@@ -110,7 +116,7 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                 });
             }
         } else {
-            setZoneForm({ name: "", fee: "", driver: "", coDriver: "", busNo: "", stops: [] });
+            setZoneForm({ name: "", fee: "", driver: "", coDriver: "", busNo: "", pickFromSchool: "", pickFromHome: "", stops: [] });
         }
     }, [tab, id, zones]);
 
@@ -184,17 +190,21 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
         }
     });
 
-    // Assign student zone
+    // Assign student to a zone + a specific stop/stage.
     const assignStudentMutation = useMutation({
-        mutationFn: async ({ studentId, zoneName }: { studentId: string, zoneName: string }) => {
+        mutationFn: async ({ studentId, zoneName, stopName }: { studentId: string, zoneName: string, stopName: string }) => {
             const student = students.find((s: any) => s._id === studentId);
             if (!student) throw new Error("Student not found");
-            return api.patch(`/students/${studentId}`, { ...student, transportZone: zoneName });
+            return api.patch(`/students/${studentId}`, {
+                ...student, transportZone: zoneName,
+                // The stop the student boards/alights at — used by the driver app.
+                pickupStop: stopName || zoneName, dropStop: stopName || zoneName,
+            });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["all_students"] });
-            toast.success("Student transport zone updated successfully");
-            setAssignState({ studentId: "", zoneName: "" });
+            toast.success("Student transport zone & stop updated");
+            setAssignState({ studentId: "", zoneName: "", stopName: "" });
             setSearchStudentTerm("");
         },
         onError: (err: any) => toast.error(err?.message || "Failed to assign student")
@@ -254,9 +264,16 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
         }
         assignStudentMutation.mutate({
             studentId: assignState.studentId,
-            zoneName: assignState.zoneName
+            zoneName: assignState.zoneName,
+            stopName: assignState.stopName,
         });
     };
+
+    // Stops of the currently-selected zone, for the stop dropdown.
+    const selectedZoneStops: any[] = (() => {
+        const z = zones.find((zz: any) => zz.name === assignState.zoneName);
+        return Array.isArray(z?.stops) ? z.stops : [];
+    })();
 
     const activeStudents = students.filter((s: any) => s.transportZone);
     const unassignedStudents = students.filter((s: any) => !s.transportZone);
@@ -454,6 +471,22 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                         <option key={cd._id} value={cd.name || cd.employeeName}>{cd.name || cd.employeeName}</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            {/* PICKUP TIMES — the schedule the bus follows */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="relative group">
+                                    <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Pick From Home</div>
+                                    <input type="time" value={zoneForm.pickFromHome}
+                                        onChange={(e) => setZoneForm({ ...zoneForm, pickFromHome: e.target.value })}
+                                        className="w-full h-12 px-6 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold text-xs bg-white shadow-sm" />
+                                </div>
+                                <div className="relative group">
+                                    <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Pick From School</div>
+                                    <input type="time" value={zoneForm.pickFromSchool}
+                                        onChange={(e) => setZoneForm({ ...zoneForm, pickFromSchool: e.target.value })}
+                                        className="w-full h-12 px-6 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold text-xs bg-white shadow-sm" />
+                                </div>
                             </div>
 
                             {/* STOPS — where students get off, each with its own fee */}
@@ -680,6 +713,22 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                         <option value="">-- Select Transport Zone --</option>
                                         {zones.map((z: any) => (
                                             <option key={z._id} value={z.name}>{z.name} (KES {z.fee})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Stop / stage within the zone (optional but recommended) */}
+                                <div className="relative group">
+                                    <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Select Stop / Stage</div>
+                                    <select
+                                        value={assignState.stopName}
+                                        onChange={(e) => setAssignState({ ...assignState, stopName: e.target.value })}
+                                        disabled={!assignState.zoneName || selectedZoneStops.length === 0}
+                                        className="w-full h-12 px-6 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold text-xs bg-white shadow-sm appearance-none disabled:bg-slate-50 disabled:text-slate-400"
+                                    >
+                                        <option value="">{selectedZoneStops.length === 0 ? "-- Zone has no stops --" : "-- Whole zone (no specific stop) --"}</option>
+                                        {selectedZoneStops.map((s: any, i: number) => (
+                                            <option key={i} value={s.name}>{s.name}{s.fee ? ` (KES ${s.fee})` : ""}</option>
                                         ))}
                                     </select>
                                 </div>

@@ -115,7 +115,10 @@ class StudentDetailScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: () => ctrl.board(student.id),
+                        // Only enabled while waiting.
+                        onPressed: student.status == BoardingStatus.waiting
+                            ? () => _act(context, () => ctrl.board(student.id))
+                            : null,
                         icon: const Icon(Icons.check),
                         label: const Text('Mark Boarded'),
                       ),
@@ -124,7 +127,10 @@ class StudentDetailScreen extends ConsumerWidget {
                     Expanded(
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(backgroundColor: AppColors.accentBlue),
-                        onPressed: () => ctrl.drop(student.id),
+                        // Only enabled while boarded.
+                        onPressed: student.status == BoardingStatus.boarded
+                            ? () => _act(context, () => ctrl.drop(student.id))
+                            : null,
                         icon: const Icon(Icons.logout),
                         label: const Text('Mark Dropped'),
                       ),
@@ -137,6 +143,17 @@ class StudentDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  // Run a board/drop action and surface any boarding-rule message.
+  Future<void> _act(BuildContext context, Future<void> Function() fn) async {
+    try {
+      await fn();
+    } on BoardingRuleError catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: AppColors.danger));
+      }
+    } catch (_) {/* offline queued */}
   }
 
   // Open the phone dialer with the parent's number.

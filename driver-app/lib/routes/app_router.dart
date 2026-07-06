@@ -49,7 +49,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full-screen flows
       GoRoute(path: '/student/:id', builder: (_, s) => StudentDetailScreen(studentId: s.pathParameters['id']!)),
-      GoRoute(path: '/scan', builder: (_, __) => const QrScannerScreen()),
+      // mode = 'board' | 'drop' | 'lookup' (default). Board/drop apply immediately.
+      GoRoute(path: '/scan', builder: (_, s) => QrScannerScreen(mode: s.uri.queryParameters['mode'] ?? 'lookup')),
       GoRoute(path: '/route', builder: (_, __) => const RouteScreen()),
       GoRoute(path: '/incident', builder: (_, __) => const IncidentScreen()),
       GoRoute(path: '/inspection', builder: (_, __) => const InspectionScreen()),

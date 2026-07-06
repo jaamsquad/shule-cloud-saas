@@ -60,6 +60,8 @@ class StorageKeys {
   static const String prefDarkMode = 'dark_mode';
   static const String prefLanguage = 'language';
   static const String prefInspectionRequired = 'inspection_required';
+  // 'scan' = board/drop by scanning a card; 'list' = pick from the student list.
+  static const String prefBoardingMode = 'boarding_mode';
 }
 
 /// Tracking tunables (spec: every 5–10s or 20–50m).

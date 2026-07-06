@@ -7,17 +7,22 @@ class SettingsState {
   final ThemeMode themeMode;
   final String language;
   final bool inspectionRequired;
+  final String boardingMode; // 'scan' | 'list'
   const SettingsState({
     this.themeMode = ThemeMode.light,
     this.language = 'en',
     this.inspectionRequired = true,
+    this.boardingMode = 'scan',
   });
 
-  SettingsState copyWith({ThemeMode? themeMode, String? language, bool? inspectionRequired}) =>
+  bool get scanBoarding => boardingMode == 'scan';
+
+  SettingsState copyWith({ThemeMode? themeMode, String? language, bool? inspectionRequired, String? boardingMode}) =>
       SettingsState(
         themeMode: themeMode ?? this.themeMode,
         language: language ?? this.language,
         inspectionRequired: inspectionRequired ?? this.inspectionRequired,
+        boardingMode: boardingMode ?? this.boardingMode,
       );
 }
 
@@ -29,6 +34,7 @@ class SettingsController extends StateNotifier<SettingsState> {
       themeMode: s.darkMode ? ThemeMode.dark : ThemeMode.light,
       language: s.language,
       inspectionRequired: s.inspectionRequired,
+      boardingMode: s.boardingMode,
     );
   }
 
@@ -45,6 +51,11 @@ class SettingsController extends StateNotifier<SettingsState> {
   void setInspectionRequired(bool v) {
     _ref.read(storageProvider).inspectionRequired = v;
     state = state.copyWith(inspectionRequired: v);
+  }
+
+  void setBoardingMode(String mode) {
+    _ref.read(storageProvider).boardingMode = mode;
+    state = state.copyWith(boardingMode: mode);
   }
 }
 

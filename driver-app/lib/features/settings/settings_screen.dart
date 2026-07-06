@@ -71,6 +71,14 @@ class SettingsScreen extends ConsumerWidget {
                   value: settings.inspectionRequired,
                   onChanged: sc.setInspectionRequired,
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.how_to_reg_outlined),
+                  title: const Text('Boarding method'),
+                  subtitle: Text(settings.scanBoarding ? 'Scan student card' : 'Pick from list'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pickBoardingMode(context, sc, settings.boardingMode),
+                ),
               ],
             ),
           ),
@@ -133,6 +141,29 @@ class SettingsScreen extends ConsumerWidget {
                 Navigator.pop(context);
               },
             ),
+        ],
+      ),
+    );
+  }
+
+  void _pickBoardingMode(BuildContext context, SettingsController sc, String current) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RadioListTile<String>(
+            value: 'scan', groupValue: current,
+            title: const Text('Scan student card'),
+            subtitle: const Text('Board/Drop by scanning the QR/barcode'),
+            onChanged: (v) { if (v != null) sc.setBoardingMode(v); Navigator.pop(context); },
+          ),
+          RadioListTile<String>(
+            value: 'list', groupValue: current,
+            title: const Text('Pick from list'),
+            subtitle: const Text('Board/Drop from the student list'),
+            onChanged: (v) { if (v != null) sc.setBoardingMode(v); Navigator.pop(context); },
+          ),
         ],
       ),
     );

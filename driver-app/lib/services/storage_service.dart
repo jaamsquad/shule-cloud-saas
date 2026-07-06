@@ -60,4 +60,8 @@ class StorageService {
 
   bool get inspectionRequired => _prefs.get(StorageKeys.prefInspectionRequired, defaultValue: true) as bool;
   set inspectionRequired(bool v) => _prefs.put(StorageKeys.prefInspectionRequired, v);
+
+  // 'scan' (default) or 'list' — how the driver boards/drops students.
+  String get boardingMode => _prefs.get(StorageKeys.prefBoardingMode, defaultValue: 'scan') as String;
+  set boardingMode(String v) => _prefs.put(StorageKeys.prefBoardingMode, v);
 }
