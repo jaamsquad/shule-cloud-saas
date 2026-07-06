@@ -37,6 +37,11 @@ final feesProvider = FutureProvider<FeesSummary>((ref) {
   return ref.read(dataRepoProvider).fees(id);
 });
 
+final receiptsProvider = FutureProvider<List<Receipt>>((ref) {
+  ref.watch(_sid); // re-fetch when the child switches
+  return ref.read(dataRepoProvider).receipts();
+});
+
 final libraryProvider = FutureProvider<LibrarySummary>((ref) {
   final id = ref.watch(_sid);
   return ref.read(dataRepoProvider).library(id);

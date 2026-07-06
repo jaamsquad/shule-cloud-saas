@@ -50,10 +50,10 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
-      fontFamily: 'Inter',
+      // No custom fontFamily is set — Inter/Plus Jakarta Sans aren't bundled, and a
+      // declared-but-missing family can render blank glyphs on some devices. We use
+      // the platform default (Roboto), which always renders.
       textTheme: const TextTheme(
-        // Plus Jakarta Sans is used for headings; falls back to Inter if the font
-        // isn't bundled. (Add the font files to pubspec `fonts:` to enable it.)
         headlineLarge: TextStyle(fontWeight: FontWeight.w800, fontSize: 28, height: 1.28),
         titleLarge: TextStyle(fontWeight: FontWeight.w700, fontSize: 22, height: 1.27),
         titleMedium: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),

@@ -77,6 +77,32 @@ class DataRepository {
     return j == null ? const FeesSummary() : FeesSummary.fromJson(j);
   }
 
+  /// Start an M-PESA STK push for the outstanding balance (or [amount]).
+  /// Returns { ok, message, checkoutRequestId? }.
+  Future<Map<String, dynamic>> payMpesa({String? phone, double? amount}) async {
+    final res = await _dio.post(ApiConfig.payMpesa, data: {
+      if (phone != null) 'phone': phone,
+      if (amount != null) 'amount': amount,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// Poll STK status → { status: 'pending'|'success'|'failed', message }.
+  Future<Map<String, dynamic>> mpesaStatus() async {
+    try {
+      final res = await _dio.get(ApiConfig.mpesaStatus);
+      return Map<String, dynamic>.from(res.data as Map);
+    } catch (_) {
+      return {'status': 'pending'};
+    }
+  }
+
+  /// Payment receipts (statement).
+  Future<List<Receipt>> receipts() async {
+    final l = await _getList(ApiConfig.receipts, cacheKey: 'receipts');
+    return l.map((e) => Receipt.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  }
+
   // ── Library ─────────────────────────────────────────────────────────────────
   Future<LibrarySummary> library(String studentId) async {
     final j = await _get(ApiConfig.library, params: {'studentId': studentId}, cacheKey: 'lib_$studentId');

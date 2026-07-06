@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/fees.dart';
 import '../../models/homework.dart';
 import '../../models/misc_models.dart';
 import '../../providers/auth_provider.dart';
@@ -158,9 +159,13 @@ class FeesScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: FilledButton.icon(onPressed: () => _payDialog(context), icon: const Icon(Icons.phone_android), label: const Text('Pay via M-PESA'))),
+              Expanded(child: FilledButton.icon(
+                onPressed: f.balance <= 0 ? null : () => _startMpesa(context, ref, f.balance),
+                icon: const Icon(Icons.phone_android), label: const Text('Pay via M-PESA'))),
               const SizedBox(width: 12),
-              Expanded(child: OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.description), label: const Text('Statement'))),
+              Expanded(child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StatementScreen())),
+                icon: const Icon(Icons.description), label: const Text('Statement'))),
             ]),
             const SizedBox(height: 16),
             const SectionHeader('Payment History'),
@@ -192,11 +197,116 @@ class FeesScreen extends ConsumerWidget {
     );
   }
 
-  void _payDialog(BuildContext context) => showDialog(context: context, builder: (_) => AlertDialog(
-        title: const Text('Pay via M-PESA'),
-        content: const Text('An STK push will be sent to your phone to authorise the payment.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Send prompt'))],
+  // Ask for the M-PESA phone, then run the STK flow.
+  Future<void> _startMpesa(BuildContext context, WidgetRef ref, double balance) async {
+    final phoneCtrl = TextEditingController();
+    final go = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+          title: const Text('Pay via M-PESA'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Outstanding: ${ksh(balance)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            TextField(controller: phoneCtrl, keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'M-PESA phone', hintText: '07XX XXX XXX', prefixIcon: Icon(Icons.phone))),
+            const SizedBox(height: 8),
+            const Text('An STK prompt will be sent to this number to authorise the payment.',
+                style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send prompt')),
+          ],
+        ));
+    if (go != true || !context.mounted) return;
+
+    // Kick off the STK push.
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const _PayProgress());
+    try {
+      await ref.read(dataRepoProvider).payMpesa(phone: phoneCtrl.text.trim(), amount: balance);
+      // Poll status up to ~30s.
+      String status = 'pending';
+      for (int i = 0; i < 15 && status == 'pending'; i++) {
+        await Future.delayed(const Duration(seconds: 2));
+        final s = await ref.read(dataRepoProvider).mpesaStatus();
+        status = (s['status'] ?? 'pending').toString().toLowerCase();
+      }
+      if (context.mounted) Navigator.pop(context); // close progress
+      if (!context.mounted) return;
+      final ok = status == 'success' || status == 'completed' || status == 'paid';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? 'Payment received ✓' : 'Awaiting confirmation — check your fee balance shortly.'),
+        backgroundColor: ok ? AppColors.primary : AppColors.tertiary,
       ));
+      ref.invalidate(feesProvider);
+      ref.invalidate(receiptsProvider);
+    } catch (e) {
+      if (context.mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not start the M-PESA prompt. Try again.'), backgroundColor: AppColors.error)); }
+    }
+  }
+}
+
+class _PayProgress extends StatelessWidget {
+  const _PayProgress();
+  @override
+  Widget build(BuildContext context) => const AlertDialog(
+        content: Row(children: [
+          SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 16), Expanded(child: Text('Sending STK prompt… enter your M-PESA PIN on your phone.')),
+        ]),
+      );
+}
+
+// ── Statement / Receipts ─────────────────────────────────────────────────────
+class StatementScreen extends ConsumerWidget {
+  const StatementScreen({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(receiptsProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Statement & Receipts')),
+      body: async.when(
+        loading: () => const SkeletonList(),
+        error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(receiptsProvider)),
+        data: (list) => list.isEmpty
+            ? const ErrorView(message: 'No receipts yet.', icon: Icons.receipt_long_outlined)
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (_, i) => _receipt(list[i]),
+              ),
+      ),
+    );
+  }
+
+  Widget _receipt(Receipt r) => AppCard(
+        accent: AppColors.primary,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.primaryContainer.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.receipt_long, color: AppColors.primary)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Receipt ${r.receiptNo}', style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(r.date, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
+            ])),
+            Text(ksh(r.amount), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 16)),
+          ]),
+          const Divider(height: 20),
+          _kv('Payment mode', r.paymentMode),
+          if (r.reference.isNotEmpty) _kv('Reference', r.reference),
+          _kv('Purpose', r.purpose),
+          _kv('Status', r.status),
+          if (r.servedBy.isNotEmpty) _kv('Served by', r.servedBy),
+        ]),
+      );
+
+  Widget _kv(String k, String v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(k, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
+          Flexible(child: Text(v, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+        ]),
+      );
 }
 
 // ── Library ──────────────────────────────────────────────────────────────────
@@ -490,12 +600,16 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: 16),
         const SectionHeader('Support'),
         AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          ListTile(leading: const Icon(Icons.help_outline), title: const Text('Help Center'), trailing: const Icon(Icons.open_in_new),
+          ListTile(leading: const Icon(Icons.help_outline), title: const Text('Help Center'), subtitle: const Text('FAQs and support articles'), trailing: const Icon(Icons.open_in_new),
               onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication)),
           const Divider(height: 1),
-          const ListTile(leading: Icon(Icons.privacy_tip_outlined), title: Text('Privacy')),
+          ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy'), subtitle: const Text('Manage data sharing and visibility'), trailing: const Icon(Icons.open_in_new),
+              onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication)),
           const Divider(height: 1),
-          const ListTile(leading: Icon(Icons.info_outline), title: Text('About'), subtitle: Text('ShuleCloud Parent v1.0.0')),
+          ListTile(leading: const Icon(Icons.info_outline), title: const Text('About'), subtitle: const Text('ShuleCloud Parent v1.0.0'), trailing: const Icon(Icons.chevron_right),
+              onTap: () => showAboutDialog(context: context, applicationName: 'ShuleCloud Parent', applicationVersion: '1.0.0',
+                  applicationLegalese: '© 2024 ShuleCloud · Empowering education through technology.',
+                  children: const [SizedBox(height: 8), Text('Monitor your child\'s academics, attendance, fees, transport and school communication.')])),
         ])),
         const SizedBox(height: 16),
         OutlinedButton.icon(

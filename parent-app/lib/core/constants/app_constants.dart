@@ -27,6 +27,8 @@ class ApiConfig {
   static const String feeInvoices = '/auth/student-portal/fee-invoices';
   static const String fees = '/auth/student-portal/fees';
   static const String payMpesa = '/auth/student-portal/pay-mpesa';
+  static const String mpesaStatus = '/auth/student-portal/mpesa-status';
+  static const String receipts = '/auth/student-portal/receipts';
   static const String announcements = '/auth/student-portal/announcements';
   static const String calendar = '/auth/student-portal/academic-calendar';
   static const String library = '/auth/student-portal/library';

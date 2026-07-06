@@ -16,6 +16,32 @@ class FeePayment {
   static double _d(dynamic v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
 }
 
+/// A payment receipt (mirrors the parent-portal receipts list).
+class Receipt {
+  final String receiptNo;
+  final String date;
+  final String paymentMode;
+  final double amount;
+  final String status;
+  final String reference;
+  final String purpose;
+  final String servedBy;
+  const Receipt({
+    required this.receiptNo, this.date = '', this.paymentMode = '', this.amount = 0,
+    this.status = 'Confirmed', this.reference = '', this.purpose = '', this.servedBy = '',
+  });
+  factory Receipt.fromJson(Map<String, dynamic> j) => Receipt(
+        receiptNo: (j['receiptNo'] ?? j['receipt_no'] ?? '').toString(),
+        date: (j['date'] ?? '').toString(),
+        paymentMode: (j['paymentMode'] ?? j['method'] ?? '').toString(),
+        amount: (j['amount'] is num) ? (j['amount'] as num).toDouble() : double.tryParse('${j['amount'] ?? ''}') ?? 0,
+        status: (j['status'] ?? 'Confirmed').toString(),
+        reference: (j['reference'] ?? '').toString(),
+        purpose: (j['purpose'] ?? '').toString(),
+        servedBy: (j['servedBy'] ?? '').toString(),
+      );
+}
+
 class FeeLine {
   final String label;
   final double amount;

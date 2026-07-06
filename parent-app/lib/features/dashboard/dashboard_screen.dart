@@ -151,14 +151,34 @@ class DashboardScreen extends ConsumerWidget {
         ),
       );
 
-  Widget _action(BuildContext context, IconData icon, String label, Color color, String route) => AppCard(
-        onTap: () => context.push(route),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(children: [
-          Container(width: 36, height: 36, decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: color, size: 20)),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-        ]),
+  Widget _action(BuildContext context, IconData icon, String label, Color color, String route) => Material(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.push(route),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
 }
