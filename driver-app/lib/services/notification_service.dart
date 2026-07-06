@@ -14,14 +14,26 @@ class NotificationService {
     importance: Importance.high,
   );
 
+  // MUST match BackgroundTrackingService's notificationChannelId. The foreground
+  // tracking service crashes natively on Android 8+ if this channel is missing.
+  static const _trackingChannel = AndroidNotificationChannel(
+    'shulecloud_tracking',
+    'Live Trip Tracking',
+    description: 'Ongoing notification while a trip is being tracked',
+    importance: Importance.low, // low = quiet ongoing notification
+  );
+
   Future<void> init() async {
     await _local.initialize(const InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     ));
-    await _local
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+    final android = _local
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await android?.createNotificationChannel(_channel);
+    await android?.createNotificationChannel(_trackingChannel);
+    // Android 13+ needs runtime notification permission for the foreground service.
+    await android?.requestNotificationsPermission();
 
     // Firebase Cloud Messaging is OPTIONAL: without google-services.json the
     // Firebase app never initialized, so touching FirebaseMessaging throws.

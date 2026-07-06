@@ -38,13 +38,21 @@ class BackgroundTrackingService {
   }
 
   /// Begin tracking for a trip. The ids are handed to the isolate via invoke().
+  /// Guarded so a platform failure to start the foreground service never crashes
+  /// the whole app — the trip still starts; tracking simply retries next time.
   static Future<void> startTracking({
     required String driverId,
     required String busId,
     required String tripId,
   }) async {
-    await _service.startService();
-    _service.invoke('config', {'driverId': driverId, 'busId': busId, 'tripId': tripId});
+    try {
+      if (!await _service.isRunning()) {
+        await _service.startService();
+      }
+      _service.invoke('config', {'driverId': driverId, 'busId': busId, 'tripId': tripId});
+    } catch (e) {
+      debugPrint('startTracking failed (foreground service): $e');
+    }
   }
 
   static Future<void> stopTracking() async => _service.invoke('stop');
