@@ -44,7 +44,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               AppCard(child: Row(children: [
                 const Icon(Icons.check_circle, color: AppColors.primary), const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(t.label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text(t.detail, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 Text(t.time, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
@@ -75,7 +75,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             IconButton(onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)), icon: const Icon(Icons.chevron_left)),
-            Text('${_monthName(_month.month)} ${_month.year}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Text('${_monthName(_month.month)} ${_month.year}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.onSurface)),
             IconButton(onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)), icon: const Icon(Icons.chevron_right)),
           ]),
           GridView.count(
@@ -105,7 +105,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
   Widget _legend(String t, Color c) => Row(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-        const SizedBox(width: 4), Text(t, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: 4), Text(t, style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
       ]);
 
   String _monthName(int m) => const ['','January','February','March','April','May','June','July','August','September','October','November','December'][m];

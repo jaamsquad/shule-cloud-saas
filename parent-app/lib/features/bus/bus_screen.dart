@@ -17,7 +17,7 @@ class BusScreen extends ConsumerWidget {
     final busAsync = ref.watch(busProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bus Tracking', style: TextStyle(fontSize: 22)),
+        title: const Text('Bus Tracking', style: TextStyle(fontSize: 22, color: AppColors.primary)),
         actions: [IconButton(onPressed: () => ref.invalidate(busProvider), icon: const Icon(Icons.refresh))],
       ),
       body: busAsync.when(
@@ -95,7 +95,7 @@ class _BusView extends StatelessWidget {
                     accent: AppColors.tertiary,
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('Driver', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-                      Text(bus.driverName.isEmpty ? '—' : bus.driverName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(bus.driverName.isEmpty ? '—' : bus.driverName, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                       if (bus.driverPhone != null)
                         InkWell(onTap: () => launchUrl(Uri.parse('tel:${bus.driverPhone}')),
                           child: const Row(children: [Icon(Icons.call, size: 14, color: AppColors.secondary), SizedBox(width: 4), Text('Call', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))])),
@@ -110,7 +110,7 @@ class _BusView extends StatelessWidget {
                       child: const Icon(Icons.directions_bus, color: AppColors.primary)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(bus.routeName.isEmpty ? 'Route' : bus.routeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    Text(bus.routeName.isEmpty ? 'Route' : bus.routeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                     Text(bus.busPlate.isEmpty ? '' : bus.busPlate, style: const TextStyle(color: AppColors.onSurfaceVariant)),
                   ])),
                 ]),

@@ -19,7 +19,7 @@ class StudentSelectScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Welcome back, Parent', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
+          const Text('Welcome back, Parent', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
           const SizedBox(height: 4),
           const Text('Select a student profile to view their detailed academic and financial dashboard.',
               style: TextStyle(color: AppColors.onSurfaceVariant)),
@@ -46,7 +46,7 @@ class StudentSelectScreen extends ConsumerWidget {
             Container(width: 48, height: 48, decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
                 child: const Icon(Icons.person_add_alt, color: AppColors.secondary)),
             const SizedBox(height: 8),
-            const Text('Enroll New Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Text('Enroll New Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
             const SizedBox(height: 4),
             const Text('Link another child to your ShuleCloud Parent account.',
                 textAlign: TextAlign.center, style: TextStyle(color: AppColors.onSurfaceVariant)),
@@ -65,7 +65,7 @@ class StudentSelectScreen extends ConsumerWidget {
               Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColors.primaryContainer.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
                   child: const Icon(Icons.help_outline, color: AppColors.primary)),
               const SizedBox(width: 12),
-              const Expanded(child: Text('Need Assistance?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+              const Expanded(child: Text('Need Assistance?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface))),
             ]),
             const SizedBox(height: 8),
             const Text('Contact our school administration for help with enrollment or login.',
@@ -105,7 +105,7 @@ class _StudentCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(student.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      Text(student.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                       Text('Adm: ${student.admissionNo}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                     ],
                   ),

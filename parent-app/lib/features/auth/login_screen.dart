@@ -63,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: const Icon(Icons.school_rounded, color: Colors.white, size: 40),
               ),
               const SizedBox(height: 16),
-              const Text('ShuleCloud Parent', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              const Text('ShuleCloud Parent', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
               const SizedBox(height: 6),
               const Text("Secure access to your child's academic progress and school communication.",
                   textAlign: TextAlign.center, style: TextStyle(color: AppColors.onSurfaceVariant)),

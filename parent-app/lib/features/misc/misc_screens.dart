@@ -51,12 +51,12 @@ class HomeworkScreen extends ConsumerWidget {
           Row(children: [
             Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(color: AppColors.surfaceContainer, borderRadius: BorderRadius.circular(6)),
-              child: Text(h.subject.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700))),
+              child: Text(h.subject.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.onSurface))),
             const Spacer(),
             Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
           ]),
           const SizedBox(height: 6),
-          Text(h.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(h.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
           if (h.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4),
             child: Text(h.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.onSurfaceVariant))),
           const SizedBox(height: 8),
@@ -109,7 +109,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                   final c = _colors[i % _colors.length];
                   return AppCard(accent: c, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
-                      Expanded(child: Text(l.subject, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                      Expanded(child: Text(l.subject, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface))),
                       Text('${l.start} - ${l.end}', style: const TextStyle(color: AppColors.onSurfaceVariant)),
                     ]),
                     const SizedBox(height: 6),
@@ -173,7 +173,7 @@ class FeesScreen extends ConsumerWidget {
             for (final p in f.history)
               AppCard(accent: p.status.toUpperCase() == 'CLEARED' ? AppColors.primary : AppColors.secondary, child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(p.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(p.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text('${p.date}${p.method.isNotEmpty ? ' · ${p.method}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -187,9 +187,9 @@ class FeesScreen extends ConsumerWidget {
               AppCard(child: Column(children: [
                 for (final b in f.breakdown)
                   Padding(padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(b.label), Text(ksh(b.amount), style: const TextStyle(fontWeight: FontWeight.w700))])),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(b.label, style: const TextStyle(color: AppColors.onSurface)), Text(ksh(b.amount), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface))])),
                 const Divider(),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total Invoiced', style: TextStyle(fontWeight: FontWeight.w700)), Text(ksh(f.totalInvoiced), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800))]),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total Invoiced', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)), Text(ksh(f.totalInvoiced), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800))]),
               ])),
             ],
           ],
@@ -208,7 +208,7 @@ class FeesScreen extends ConsumerWidget {
           content: Form(
             key: formKey,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('Outstanding: ${ksh(balance)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text('Outstanding: ${ksh(balance)}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
               const SizedBox(height: 12),
               TextField(controller: phoneCtrl, keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(labelText: 'M-PESA phone', hintText: '07XX XXX XXX', prefixIcon: Icon(Icons.phone))),
@@ -306,7 +306,7 @@ class StatementScreen extends ConsumerWidget {
                 child: const Icon(Icons.receipt_long, color: AppColors.primary)),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Receipt ${r.receiptNo}', style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text('Receipt ${r.receiptNo}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.onSurface)),
               Text(r.date, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
             ])),
             Text(ksh(r.amount), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 16)),
@@ -324,7 +324,7 @@ class StatementScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text(k, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
-          Flexible(child: Text(v, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+          Flexible(child: Text(v, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.onSurface))),
         ]),
       );
 }
@@ -350,7 +350,7 @@ class LibraryScreen extends ConsumerWidget {
             ]),
             if (l.fines > 0) Padding(padding: const EdgeInsets.only(top: 12),
               child: AppCard(accent: AppColors.error, child: Row(children: [
-                const Expanded(child: Text('Pending Fines', style: TextStyle(fontWeight: FontWeight.w700))),
+                const Expanded(child: Text('Pending Fines', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface))),
                 Text(ksh(l.fines), style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w800)),
               ]))),
             const SizedBox(height: 16),
@@ -358,7 +358,7 @@ class LibraryScreen extends ConsumerWidget {
             for (final b in l.loans)
               AppCard(accent: b.overdue ? AppColors.error : AppColors.primary, child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(b.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(b.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text('Due: ${b.dueDate}${b.overdue ? ' (overdue)' : ''}', style: TextStyle(color: b.overdue ? AppColors.error : AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 if (b.renewable && !b.overdue) FilledButton(onPressed: () {}, style: FilledButton.styleFrom(minimumSize: const Size(90, 36)), child: const Text('Renew')),
@@ -462,7 +462,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
                     Text(a.time, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11)),
                   ]),
                   const SizedBox(height: 4),
-                  Text(a.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  Text(a.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   if (a.body.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(a.body, style: const TextStyle(color: AppColors.onSurfaceVariant))),
                 ]));
               },
@@ -504,7 +504,7 @@ class CalendarScreen extends ConsumerWidget {
                 ]),
                 const SizedBox(width: 16),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(e.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(e.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   if (e.detail.isNotEmpty) Text(e.detail, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
               ]));
@@ -537,7 +537,7 @@ class NotificationsScreen extends ConsumerWidget {
                 itemBuilder: (_, i) => AppCard(child: Row(children: [
                   const Icon(Icons.notifications, color: AppColors.primary), const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(list[i].title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(list[i].title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                     Text(list[i].body, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
                   ])),
                 ])),
@@ -595,7 +595,7 @@ class ProfileScreen extends ConsumerWidget {
                             child: child.photoUrl == null ? const Icon(Icons.person, size: 18, color: AppColors.primary) : null),
                         const SizedBox(width: 12),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(child.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Text(child.name, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                           Text('${child.className}${child.stream.isNotEmpty ? ' ${child.stream}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                         ])),
                         if (child.id == s.id) const Icon(Icons.check_circle, color: AppColors.primary)
@@ -614,7 +614,7 @@ class ProfileScreen extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 8),
         child: AppCard(child: Row(children: [
           Icon(i, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
           Text(value, style: const TextStyle(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w700)),
         ])),
       );
@@ -632,26 +632,46 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const SectionHeader('Preferences'),
         AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          SwitchListTile(secondary: const Icon(Icons.dark_mode_outlined), title: const Text('Dark Mode'),
-              value: s.themeMode == ThemeMode.dark, onChanged: sc.toggleDark),
-          const Divider(height: 1),
-          ListTile(leading: const Icon(Icons.language), title: const Text('Language'),
-              subtitle: Text(s.language == 'sw' ? 'Kiswahili' : 'English (US)'), trailing: const Icon(Icons.chevron_right),
+          SwitchListTile(
+              secondary: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
+              title: const Text('Dark Mode', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              value: s.themeMode == ThemeMode.dark, onChanged: sc.toggleDark, activeColor: AppColors.primary),
+          const Divider(height: 1, color: AppColors.outlineVariant),
+          ListTile(
+              leading: const Icon(Icons.language, color: AppColors.primary),
+              title: const Text('Language', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              subtitle: Text(s.language == 'sw' ? 'Kiswahili' : 'English (US)', style: const TextStyle(color: AppColors.onSurfaceVariant)),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
               onTap: () => _lang(context, sc, s.language)),
-          const Divider(height: 1),
-          SwitchListTile(secondary: const Icon(Icons.fingerprint), title: const Text('Biometric Login'),
-              subtitle: const Text('Use FaceID or Fingerprint'), value: s.biometric, onChanged: sc.setBiometric),
+          const Divider(height: 1, color: AppColors.outlineVariant),
+          SwitchListTile(
+              secondary: const Icon(Icons.fingerprint, color: AppColors.primary),
+              title: const Text('Biometric Login', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Use FaceID or Fingerprint', style: TextStyle(color: AppColors.onSurfaceVariant)),
+              value: s.biometric, onChanged: sc.setBiometric, activeColor: AppColors.primary),
         ])),
         const SizedBox(height: 16),
         const SectionHeader('Support'),
         AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          ListTile(leading: const Icon(Icons.help_outline), title: const Text('Help Center'), subtitle: const Text('FAQs and support articles'), trailing: const Icon(Icons.open_in_new),
+          ListTile(
+              leading: const Icon(Icons.help_outline, color: AppColors.primary),
+              title: const Text('Help Center', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              subtitle: const Text('FAQs and support articles', style: TextStyle(color: AppColors.onSurfaceVariant)),
+              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
               onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1),
-          ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy'), subtitle: const Text('Manage data sharing and visibility'), trailing: const Icon(Icons.open_in_new),
+          const Divider(height: 1, color: AppColors.outlineVariant),
+          ListTile(
+              leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.primary),
+              title: const Text('Privacy', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Manage data sharing and visibility', style: TextStyle(color: AppColors.onSurfaceVariant)),
+              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
               onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1),
-          ListTile(leading: const Icon(Icons.info_outline), title: const Text('About'), subtitle: const Text('ShuleCloud Parent v1.0.0'), trailing: const Icon(Icons.chevron_right),
+          const Divider(height: 1, color: AppColors.outlineVariant),
+          ListTile(
+              leading: const Icon(Icons.info_outline, color: AppColors.primary),
+              title: const Text('About', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+              subtitle: const Text('ShuleCloud Parent v1.0.0', style: TextStyle(color: AppColors.onSurfaceVariant)),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
               onTap: () => showAboutDialog(context: context, applicationName: 'ShuleCloud Parent', applicationVersion: '1.0.0',
                   applicationLegalese: '© 2024 ShuleCloud · Empowering education through technology.',
                   children: const [SizedBox(height: 8), Text('Monitor your child\'s academics, attendance, fees, transport and school communication.')])),

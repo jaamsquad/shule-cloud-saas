@@ -20,7 +20,7 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ShuleCloud Parent', style: TextStyle(fontSize: 20)),
+        title: const Text('ShuleCloud Parent', style: TextStyle(fontSize: 20, color: AppColors.primary)),
         actions: [
           IconButton(onPressed: () => context.push('/notifications'), icon: const Icon(Icons.notifications_none)),
         ],
@@ -33,7 +33,7 @@ class DashboardScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Hello, ${auth.parent?.name ?? 'Parent'}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            Text('Hello, ${auth.parent?.name ?? 'Parent'}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
             const Text('Your children are safe at school today.', style: TextStyle(color: AppColors.onSurfaceVariant)),
             const SizedBox(height: 12),
 
@@ -105,7 +105,7 @@ class DashboardScreen extends ConsumerWidget {
                           children: [
                             Text(a.category.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: a.urgent ? AppColors.error : AppColors.secondary)),
                             const SizedBox(height: 2),
-                            Text(a.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text(a.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                             if (a.body.isNotEmpty) Text(a.body, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
                           ],
                         ),
@@ -174,7 +174,7 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.onSurface)),
                 ),
               ],
             ),

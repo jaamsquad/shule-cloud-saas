@@ -78,7 +78,7 @@ class AcademicsScreen extends ConsumerWidget {
                         child: const Icon(Icons.assignment_outlined, color: AppColors.primary)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(a.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(a.name, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                       if (a.date.isNotEmpty) Text(a.date, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                     ])),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -123,7 +123,7 @@ class AcademicsScreen extends ConsumerWidget {
               final i = v.toInt();
               if (i < 0 || i >= subjects.length) return const SizedBox.shrink();
               final name = subjects[i].subject as String;
-              return Padding(padding: const EdgeInsets.only(top: 4), child: Text(name.length > 4 ? name.substring(0, 4) : name, style: const TextStyle(fontSize: 10)));
+              return Padding(padding: const EdgeInsets.only(top: 4), child: Text(name.length > 4 ? name.substring(0, 4) : name, style: const TextStyle(fontSize: 10, color: AppColors.onSurfaceVariant)));
             },
           )),
         ),
@@ -137,7 +137,7 @@ class AcademicsScreen extends ConsumerWidget {
         padding: const EdgeInsets.only(bottom: 8),
         child: AppCard(onTap: () => context.push(route), child: Row(children: [
           Icon(icon, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
           const Icon(Icons.chevron_right, color: AppColors.outline),
         ])),
       );

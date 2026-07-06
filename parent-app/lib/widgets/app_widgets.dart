@@ -92,7 +92,7 @@ class SectionHeader extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
             if (action != null) action!,
           ],
         ),
