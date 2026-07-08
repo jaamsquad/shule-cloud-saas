@@ -107,7 +107,7 @@ class _ContentEditorScreenState extends ConsumerState<ContentEditorScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title', hintText: '${widget.title} Title')),
+          TextField(controller: _titleCtrl, decoration: InputDecoration(labelText: 'Title', hintText: '${widget.title} Title')),
           const SizedBox(height: 12),
           TextField(controller: _descCtrl, maxLines: 5, decoration: const InputDecoration(labelText: 'Description & Instructions', alignLabelWithHint: true)),
           const SizedBox(height: 12),

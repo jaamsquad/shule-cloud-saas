@@ -25,7 +25,7 @@ class RosterMark {
   final String studentId;
   final String name;
   final String admissionNo;
-  double? marks;
+  final double? marks;
   const RosterMark({required this.studentId, required this.name, this.admissionNo = '', this.marks});
 
   factory RosterMark.fromJson(Map<String, dynamic> j) => RosterMark(
