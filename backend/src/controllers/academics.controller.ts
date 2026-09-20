@@ -242,6 +242,7 @@ export const deleteItem = (collectionName: string) => async (req: Request, res: 
             ...item,
             originalCollection: collectionName,
             deletedAt: new Date(),
+            deletedBy: (req as any).tenantContext?.user?.name || null,
             archivedId: item._id
         });
 

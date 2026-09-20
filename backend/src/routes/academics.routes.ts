@@ -7,6 +7,7 @@ import { sendEmail } from '../services/communications.service';
 import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } from '../services/report-card-pdf.service';
 import { syncStudentToParents } from '../services/parent-student-sync.service';
 import { enforceCrud } from '../lib/permissions';
+import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 
 const router = Router();
 
@@ -487,6 +488,113 @@ router.post('/students',             enforceCrud('students', 'create'), enforceP
 router.patch('/students/:id',        enforceCrud('students', 'update'), c.updateItem('students'));
 router.delete('/students/:id',       enforceCrud('students', 'delete'), c.deleteItem('students'));
 router.post('/students/bulk',        enforceCrud('students', 'create'), enforcePlanLimit, c.bulkCreate('students'));
+
+// ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
+// Class membership lives directly on the student (classId / studentClass / stream…),
+// so a Transferred or Graduated student is taken OUT of their class by clearing those
+// fields — every class roster, attendance sheet and marks list then drops them with
+// no per-query filtering. The class they left is kept in classHistory and in
+// statusPrevClass, so setting them back to Active puts them in it again.
+const STUDENT_STATUSES = ['Active', 'Transferred', 'Graduated'];
+const STUDENT_CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName'];
+
+router.post('/students/:id/status', enforceCrud('students', 'update'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const status = STUDENT_STATUSES.find(s => s.toLowerCase() === String(req.body?.status || '').toLowerCase());
+        if (!status) return res.status(400).json({ message: `Status must be one of: ${STUDENT_STATUSES.join(', ')}` });
+        let oid: ObjectId;
+        try { oid = new ObjectId(req.params.id); } catch { return res.status(400).json({ message: 'Invalid student id' }); }
+
+        const scope = await resolveScope(req, db);
+        const student: any = await db.collection('students').findOne(mergeFilter({ _id: oid }, scopeForCollection('students', scope)));
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        const from = String(student.status || 'Active');
+        if (from.toLowerCase() === status.toLowerCase()) return res.json({ message: `Student is already ${status}`, status });
+
+        const now = new Date();
+        const reason = String(req.body?.reason || '').trim();
+        const actor = (req as any).tenantContext?.user || {};
+        const set: any = { status, statusChangedAt: now, statusReason: reason, updatedAt: now };
+        const update: any = {
+            $set: set,
+            $push: { statusHistory: { from, to: status, reason, at: now, by: actor.name || actor.staffId || 'admin' } },
+        };
+
+        if (status === 'Active') {
+            // Back into the class they left — unless they've been placed in a new one since.
+            const prev = student.statusPrevClass;
+            const hasClass = STUDENT_CLASS_FIELDS.some(f => student[f]);
+            if (prev && !hasClass) Object.assign(set, prev);
+            update.$unset = { statusPrevClass: '' };
+        } else if (STUDENT_CLASS_FIELDS.some(f => student[f])) {
+            // Leaving the class (Active → Transferred/Graduated). A Transferred → Graduated
+            // move has no class left to clear, so the saved statusPrevClass is kept as is.
+            const prev: any = {};
+            for (const f of STUDENT_CLASS_FIELDS) if (student[f] !== undefined) prev[f] = student[f];
+            set.statusPrevClass = prev;
+            for (const f of STUDENT_CLASS_FIELDS) set[f] = f === 'streamId' ? null : '';
+            update.$push.classHistory = {
+                className: student.studentClass || student.currentClass || '', classId: student.classId || '',
+                streamId: student.streamId || '', streamName: student.stream || student.streamName || '',
+                academicYear: student.academicYear || '', leftAt: now, reason: status,
+            };
+        }
+
+        await db.collection('students').updateOne({ _id: oid }, update);
+        res.json({ message: `Student marked ${status}`, status });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Student trash (soft delete) ─────────────────────────────────────────────
+// DELETE /students/:id moves the record into `archives` (see deleteItem), which hides
+// it everywhere. These endpoints list that trash, restore from it, or erase for good.
+// Credentials are never sent to the browser. Scoped users only see their own students.
+const trashQuery = async (req: Request, db: Db, extra: any = {}) => {
+    const scope = await resolveScope(req, db);
+    return mergeFilter({ originalCollection: 'students', ...extra }, scopeForCollection('students', scope));
+};
+const toObjectId = (id: string): ObjectId | null => { try { return new ObjectId(id); } catch { return null; } };
+
+router.get('/students/trash', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const items = await db.collection('archives')
+            .find(await trashQuery(req, db), { projection: { portalPassword: 0, parentPortalPassword: 0 } })
+            .sort({ deletedAt: -1 }).toArray();
+        res.json(items);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/students/trash/:id/restore', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const oid = toObjectId(req.params.id);
+        if (!oid) return res.status(400).json({ message: 'Invalid id' });
+        const archived: any = await db.collection('archives').findOne(await trashQuery(req, db, { _id: oid }));
+        if (!archived) return res.status(404).json({ message: 'Deleted student not found in trash' });
+
+        const { _id, originalCollection, archivedId, deletedAt, deletedBy, ...data } = archived;
+        if (data.registrationNo && await db.collection('students').findOne({ registrationNo: data.registrationNo })) {
+            return res.status(409).json({ message: `Another student already has registration number ${data.registrationNo}. Change or remove it first.` });
+        }
+        await db.collection('students').insertOne({ ...data, _id: archivedId || _id, restoredAt: new Date() });
+        await db.collection('archives').deleteOne({ _id });
+        res.json({ message: 'Student restored' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.delete('/students/trash/:id', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const oid = toObjectId(req.params.id);
+        if (!oid) return res.status(400).json({ message: 'Invalid id' });
+        const r = await db.collection('archives').deleteOne(await trashQuery(req, db, { _id: oid }));
+        if (!r.deletedCount) return res.status(404).json({ message: 'Deleted student not found in trash' });
+        res.json({ message: 'Student permanently deleted' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // ─── Staff ───────────────────────────────────────────────────────────────────
 router.get('/staff',                 c.getItems('staff'));

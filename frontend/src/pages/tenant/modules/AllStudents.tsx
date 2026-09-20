@@ -5,8 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useItems } from "@/hooks/useItems";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
+import StudentTrashDialog, { STUDENT_TRASH_KEY } from "./students/StudentTrashDialog";
 
 const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Students with no status yet (older records) count as Active.
+const statusOf = (s: any) => String(s.status || "Active");
+const STATUS_BADGE: Record<string, string> = {
+    transferred: "bg-amber-50 text-amber-700 border-amber-200",
+    graduated: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
 
 export default function AllStudents() {
     const navigate = useNavigate();
@@ -16,12 +24,16 @@ export default function AllStudents() {
     const [filterClassId, setFilterClassId] = useState("");   // v2 class filter
     const [filterStreamId, setFilterStreamId] = useState(""); // v2 stream filter
     const [sortBy, setSortBy] = useState("name_asc");
+    const [filterStatus, setFilterStatus] = useState("Active");   // Transferred/Graduated students are hidden by default
+    const [showTrash, setShowTrash] = useState(false);
     const [viewMode, setViewMode] = useState<'grid'|'list'>(localStorage.getItem('studentViewMode') as any || 'grid');
     const [editingId, setEditingId] = useState<string | null>(null);   // inline class edit
 
     // v2 classes (Form 4) + streams for the chosen filter class.
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const { data: filterStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", filterClassId], enabled: !!filterClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: filterClassId } })).data || [] });
+    // Soft-deleted students (for the Trash button's count). Only people who may delete can open the trash.
+    const { data: trash = [] } = useQuery<any[]>({ queryKey: STUDENT_TRASH_KEY, enabled: canDelete, queryFn: async () => (await api.get("/students/trash")).data || [] });
     const filterCls = classes.find((c: any) => String(c._id) === filterClassId);
     const filterStream = filterStreams.find((s: any) => String(s._id) === filterStreamId);
 
@@ -59,7 +71,8 @@ export default function AllStudents() {
             const name = (s.studentName || s.name || "").toLowerCase();
             const reg = (s.registrationNo || "").toLowerCase();
             const matchesSearch = name.includes(searchTerm.toLowerCase()) || reg.includes(searchTerm.toLowerCase());
-            return matchesSearch && matchesClassFilter(s);
+            const matchesStatus = filterStatus === "all" || norm(statusOf(s)) === norm(filterStatus);
+            return matchesSearch && matchesStatus && matchesClassFilter(s);
         })
         .sort((a: any, b: any) => {
             if (sortBy === "name_asc") {
@@ -73,6 +86,11 @@ export default function AllStudents() {
             }
             if (sortBy === "oldest") {
                 return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            }
+            if (sortBy === "gender_male" || sortBy === "gender_female") {
+                const order = sortBy === "gender_male" ? ["male", "female"] : ["female", "male"];
+                const rank = (s: any) => { const i = order.indexOf(norm(s.gender)); return i === -1 ? order.length : i; };   // unset/other last
+                return rank(a) - rank(b) || (a.studentName || a.name || "").localeCompare(b.studentName || b.name || "");
             }
             return 0;
         });
@@ -115,6 +133,16 @@ export default function AllStudents() {
                             ))}
                         </select>
                         <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 flex-1 md:flex-none cursor-pointer"
+                        >
+                            <option value="Active">Active</option>
+                            <option value="Transferred">Transferred</option>
+                            <option value="Graduated">Graduated</option>
+                            <option value="all">All statuses</option>
+                        </select>
+                        <select
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value)}
                             className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 flex-1 md:flex-none cursor-pointer"
@@ -123,10 +151,21 @@ export default function AllStudents() {
                             <option value="name_desc">Name (Z-A)</option>
                             <option value="newest">Newest First</option>
                             <option value="oldest">Oldest First</option>
+                            <option value="gender_male">Gender (Male first)</option>
+                            <option value="gender_female">Gender (Female first)</option>
                         </select>
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {canDelete && (
+                            <button
+                                onClick={() => setShowTrash(true)}
+                                className="h-10 px-3 border border-gray-200 hover:border-rose-300 rounded-lg text-sm bg-white font-medium text-gray-700 hover:text-rose-600 flex items-center gap-2 transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" /> Trash
+                                {trash.length > 0 && <span className="min-w-5 h-5 px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">{trash.length}</span>}
+                            </button>
+                        )}
                         <div className="flex bg-gray-100 rounded-lg p-1 mr-2 hidden md:flex">
                             <button 
                                 onClick={() => handleViewModeChange('grid')}
@@ -174,7 +213,9 @@ export default function AllStudents() {
                                     
                                     <p className="text-[9px] font-bold text-gray-400 mb-0.5">{student.registrationNo || '—'}</p>
                                     <h3 className="font-bold text-gray-800 text-xs tracking-tight mb-1 text-center">{student.studentName || student.name}</h3>
-                                    <p className="text-[8px] font-black text-[#5C67F2] uppercase tracking-widest mb-3">{student.studentClass || '—'}</p>
+                                    <p className="text-[8px] font-black text-[#5C67F2] uppercase tracking-widest mb-3">
+                                        {STATUS_BADGE[norm(statusOf(student))] ? statusOf(student) : (student.studentClass || '—')}
+                                    </p>
 
                                     <div className="flex gap-2">
                                         <Link to={`/students/report/${student._id}`} className="w-7 h-7 rounded-full bg-[#868DF4] hover:bg-[#5C67F2] text-white flex items-center justify-center transition-colors shadow-sm">
@@ -190,7 +231,7 @@ export default function AllStudents() {
                                         )}
                                         {canDelete && (
                                         <button
-                                            onClick={() => { if(confirm("Delete this student?")) deleteItem(student._id); }}
+                                            onClick={() => { if(confirm("Move this student to Trash? You can restore them from there.")) deleteItem(student._id); }}
                                             className="w-7 h-7 rounded-full bg-[#ff5e6c] hover:bg-[#e04553] text-white flex items-center justify-center transition-colors shadow-sm"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
@@ -218,6 +259,7 @@ export default function AllStudents() {
                                 <tr className="border-b border-gray-100 bg-gray-50/50">
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Student</th>
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
+                                    <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Gender</th>
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Class</th>
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                                 </tr>
@@ -225,7 +267,7 @@ export default function AllStudents() {
                             <tbody>
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={4} className="p-8 text-center">
+                                        <td colSpan={5} className="p-8 text-center">
                                             <Loader2 className="w-8 h-8 animate-spin text-[#5C67F2] mx-auto" />
                                         </td>
                                     </tr>
@@ -242,9 +284,13 @@ export default function AllStudents() {
                                                         )}
                                                     </div>
                                                     <span className="font-bold text-gray-800 text-sm">{student.studentName || student.name}</span>
+                                                    {STATUS_BADGE[norm(statusOf(student))] && (
+                                                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${STATUS_BADGE[norm(statusOf(student))]}`}>{statusOf(student)}</span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="p-4 text-xs font-medium text-gray-600">{student.registrationNo || '—'}</td>
+                                            <td className="p-4 text-xs font-medium text-gray-600">{student.gender || '—'}</td>
                                             <td className="p-4 text-xs">
                                                 {editingId === student._id ? (
                                                     <ClassStreamEditor
@@ -277,7 +323,7 @@ export default function AllStudents() {
                                                         <Edit className="w-4 h-4" />
                                                     </button>
                                                     <button 
-                                                        onClick={() => { if(confirm("Delete this student?")) deleteItem(student._id); }}
+                                                        onClick={() => { if(confirm("Move this student to Trash? You can restore them from there.")) deleteItem(student._id); }}
                                                         className="w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -289,7 +335,7 @@ export default function AllStudents() {
                                 )}
                                 {!isLoading && (
                                     <tr>
-                                        <td colSpan={4} className="p-4 text-center">
+                                        <td colSpan={5} className="p-4 text-center">
                                             <Link to="/students/new" className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-[#5C67F2] font-bold rounded-lg transition-colors text-sm border border-indigo-100">
                                                 <Plus className="w-4 h-4" /> Add New Student
                                             </Link>
@@ -301,6 +347,8 @@ export default function AllStudents() {
                     </div>
                 )}
             </div>
+
+            {showTrash && <StudentTrashDialog onClose={() => setShowTrash(false)} />}
         </div>
     );
 }

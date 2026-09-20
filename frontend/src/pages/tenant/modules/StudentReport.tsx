@@ -1,7 +1,8 @@
 import { useParams, Link } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp } from "lucide-react";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2 } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useModuleCrud } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
@@ -21,6 +22,35 @@ export default function StudentReport() {
     const [isAssignOpen, setIsAssignOpen] = useState(false);
     const [selectedSubjects, setSelectedSubjects] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Manage Student — lifecycle status (Active / Transferred / Graduated)
+    const queryClient = useQueryClient();
+    const { canUpdate } = useModuleCrud("students");
+    const [isManageOpen, setIsManageOpen] = useState(false);
+    const [manageStatus, setManageStatus] = useState("Active");
+    const [manageReason, setManageReason] = useState("");
+    const [isSavingStatus, setIsSavingStatus] = useState(false);
+    const currentStatus = String(student?.status || "Active");
+
+    const handleOpenManage = () => {
+        setManageStatus(currentStatus);
+        setManageReason("");
+        setIsManageOpen(true);
+    };
+
+    const handleSaveStatus = async () => {
+        try {
+            setIsSavingStatus(true);
+            await api.post(`/students/${student?._id || id}/status`, { status: manageStatus, reason: manageReason });
+            await queryClient.invalidateQueries({ queryKey: ["students"] });
+            toast.success(`Student marked ${manageStatus}`);
+            setIsManageOpen(false);
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Failed to update student status");
+        } finally {
+            setIsSavingStatus(false);
+        }
+    };
 
     // Initialize selected subjects when student loads
     useState(() => {
@@ -221,6 +251,12 @@ export default function StudentReport() {
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
+                    {canUpdate && (
+                        <button onClick={handleOpenManage}
+                            className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                            <Settings2 className="w-3.5 h-3.5" /> Manage Student
+                        </button>
+                    )}
                     <Link to={`/students/history/${student?._id || id}`}
                         className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
                         <Book className="w-3.5 h-3.5" /> Class History
@@ -261,7 +297,8 @@ export default function StudentReport() {
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">
                         <DetailRow label="Registration No" value={student.registrationNo || student.admNo} />
                         <DetailRow label="Date Of Admission" value={student.admissionDate} />
-                        <DetailRow label="Class" value={student.studentClass || student.currentClass} />
+                        <DetailRow label="Class" value={student.studentClass || student.currentClass || (currentStatus !== "Active" ? student.statusPrevClass?.studentClass : "")} />
+                        <DetailRow label="Status" value={currentStatus} />
                         <DetailRow label="Family" value={student.family || ""} />
                         <DetailRow label="Discount in Fee" value={student.discount ? `${student.discount}%` : ""} />
                     </div>
@@ -535,6 +572,75 @@ export default function StudentReport() {
 
                 </div>
             </div>
+
+            {/* Manage Student Modal */}
+            {isManageOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                            <div>
+                                <h3 className="font-black text-slate-800 text-lg">Manage Student</h3>
+                                <p className="text-xs font-bold text-slate-500">{student.studentName || `${student.firstName} ${student.lastName}`}</p>
+                            </div>
+                            <button onClick={() => setIsManageOpen(false)} className="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4 bg-[#f4f7f6]">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Student status</label>
+                                <select
+                                    value={manageStatus}
+                                    onChange={e => setManageStatus(e.target.value)}
+                                    className="w-full h-11 px-3 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-bold text-slate-700 cursor-pointer"
+                                >
+                                    <option value="Active">Active</option>
+                                    <option value="Transferred">Transferred</option>
+                                    <option value="Graduated">Graduated</option>
+                                </select>
+                            </div>
+
+                            {manageStatus !== "Active" && (
+                                <div>
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Note (optional)</label>
+                                    <textarea
+                                        value={manageReason}
+                                        onChange={e => setManageReason(e.target.value)}
+                                        rows={2}
+                                        placeholder={manageStatus === "Transferred" ? "e.g. Transferred to Alliance High School" : "e.g. Completed Form 4, KCSE 2026"}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700 resize-none"
+                                    />
+                                </div>
+                            )}
+
+                            {manageStatus !== currentStatus && (
+                                <p className={`text-xs font-medium rounded-xl p-3 border ${manageStatus === "Active" ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-amber-50 border-amber-100 text-amber-800"}`}>
+                                    {manageStatus === "Active"
+                                        ? "The student will be placed back in the class they left."
+                                        : `The student will be removed from ${student.studentClass || student.currentClass || "their class"} and won't appear in class lists, attendance or marks entry. Their records and fee history are kept, and setting them back to Active restores their class.`}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsManageOpen(false)}
+                                className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveStatus}
+                                disabled={isSavingStatus || manageStatus === currentStatus}
+                                className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#868DF4] hover:bg-[#5C67F2] transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isSavingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Assign Subjects Modal */}
             {isAssignOpen && (

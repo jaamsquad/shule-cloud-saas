@@ -54,6 +54,7 @@ export function useItems<T = any>(collection: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [collection] });
+            queryClient.invalidateQueries({ queryKey: [`${collection}-trash`] });   // deleted items land in the trash
             toast.success("Item deleted/archived successfully");
         },
         onError: (err: any) => {
