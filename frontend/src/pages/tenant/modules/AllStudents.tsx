@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X } from "lucide-react";
+import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X, ListChecks } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import { useItems } from "@/hooks/useItems";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -27,6 +28,28 @@ export default function AllStudents() {
     const [sortBy, setSortBy] = useState("name_asc");
     const [filterStatus, setFilterStatus] = useState("Active");   // Transferred/Graduated students are hidden by default
     const [showTrash, setShowTrash] = useState(false);
+    // Select mode: tick students, then delete them together (they go to the Trash, where they can be restored).
+    const queryClient = useQueryClient();
+    const [selectMode, setSelectMode] = useState(false);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const toggleSelected = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    const exitSelect = () => { setSelectMode(false); setSelected(new Set()); setConfirmDelete(false); };
+    const deleteSelected = async () => {
+        const ids = Array.from(selected);
+        setDeleting(true);
+        let ok = 0, failed = 0;
+        for (let i = 0; i < ids.length; i += 4) {   // a few at a time
+            await Promise.all(ids.slice(i, i + 4).map(id => api.delete(`/students/${id}`).then(() => { ok++; }).catch(() => { failed++; })));
+        }
+        setDeleting(false);
+        queryClient.invalidateQueries({ queryKey: ["students"] });
+        queryClient.invalidateQueries({ queryKey: STUDENT_TRASH_KEY });
+        if (ok) toast.success(`${ok} student${ok === 1 ? "" : "s"} moved to Trash${failed ? ` · ${failed} could not be deleted` : ""}`);
+        else toast.error("Could not delete the selected students.");
+        exitSelect();
+    };
     const [viewMode, setViewMode] = useState<'grid'|'list'>(localStorage.getItem('studentViewMode') as any || 'grid');
     const [editingId, setEditingId] = useState<string | null>(null);   // inline class edit
 
@@ -163,6 +186,14 @@ export default function AllStudents() {
                     <div className="flex items-center gap-2">
                         {canDelete && (
                             <button
+                                onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
+                                className={`h-10 px-3 border rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${selectMode ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "bg-white border-gray-200 text-gray-700 hover:border-[#5C67F2] hover:text-[#5C67F2]"}`}
+                            >
+                                <ListChecks className="w-4 h-4" /> {selectMode ? "Cancel" : "Select"}
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button
                                 onClick={() => setShowTrash(true)}
                                 className="h-10 px-3 border border-gray-200 hover:border-rose-300 rounded-lg text-sm bg-white font-medium text-gray-700 hover:text-rose-600 flex items-center gap-2 transition-colors"
                             >
@@ -206,7 +237,8 @@ export default function AllStudents() {
                             </div>
                         ) : (
                             filteredAndSorted.map((student: any) => (
-                                <div key={student._id} className="w-52 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col items-center relative hover:shadow-md transition-shadow">
+                                <div key={student._id} className={`w-52 bg-white rounded-2xl shadow-sm border p-5 flex flex-col items-center relative hover:shadow-md transition-shadow ${selected.has(student._id) ? "border-[#5C67F2] ring-2 ring-[#5C67F2]/30" : "border-gray-100"}`}>
+                                    {selectMode && <input type="checkbox" checked={selected.has(student._id)} onChange={() => toggleSelected(student._id)} className="absolute top-3 left-3 w-4 h-4 accent-[#5C67F2] cursor-pointer" aria-label={`Select ${student.studentName || student.name}`} />}
                                     <div className="w-16 h-16 bg-gray-100 rounded-full border-4 border-[#868DF4]/20 flex items-center justify-center overflow-hidden mb-3 text-[#5C67F2]">
                                         {student.avatar || student.studentPhoto ? (
                                             <img src={student.avatar || student.studentPhoto} alt={student.studentName || student.name} className="w-full h-full object-cover" />
@@ -261,6 +293,13 @@ export default function AllStudents() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-gray-100 bg-gray-50/50">
+                                    {selectMode && (
+                                        <th className="p-4 w-10">
+                                            <input type="checkbox" className="w-4 h-4 accent-[#5C67F2] cursor-pointer" aria-label="Select all"
+                                                checked={filteredAndSorted.length > 0 && filteredAndSorted.every((x: any) => selected.has(x._id))}
+                                                onChange={e => setSelected(e.target.checked ? new Set(filteredAndSorted.map((x: any) => x._id)) : new Set())} />
+                                        </th>
+                                    )}
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Student</th>
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
                                     <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Gender</th>
@@ -271,13 +310,16 @@ export default function AllStudents() {
                             <tbody>
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center">
+                                        <td colSpan={selectMode ? 6 : 5} className="p-8 text-center">
                                             <Loader2 className="w-8 h-8 animate-spin text-[#5C67F2] mx-auto" />
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredAndSorted.map((student: any) => (
-                                        <tr key={student._id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                                        <tr key={student._id} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${selected.has(student._id) ? "bg-indigo-50/50" : ""}`}>
+                                            {selectMode && (
+                                                <td className="p-4 w-10"><input type="checkbox" checked={selected.has(student._id)} onChange={() => toggleSelected(student._id)} className="w-4 h-4 accent-[#5C67F2] cursor-pointer" aria-label={`Select ${student.studentName || student.name}`} /></td>
+                                            )}
                                             <td className="p-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden border border-gray-200 text-[#5C67F2]">
@@ -345,7 +387,7 @@ export default function AllStudents() {
                                 )}
                                 {!isLoading && (
                                     <tr>
-                                        <td colSpan={5} className="p-4 text-center">
+                                        <td colSpan={selectMode ? 6 : 5} className="p-4 text-center">
                                             <Link to="/students/new" className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-[#5C67F2] font-bold rounded-lg transition-colors text-sm border border-indigo-100">
                                                 <Plus className="w-4 h-4" /> Add New Student
                                             </Link>
@@ -357,6 +399,38 @@ export default function AllStudents() {
                     </div>
                 )}
             </div>
+
+            {selectMode && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+                    <div className="bg-gray-900 text-white pl-5 pr-3 py-3 rounded-2xl shadow-2xl flex items-center gap-4 text-sm font-bold">
+                        <span>{selected.size} selected</span>
+                        {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:text-white">Clear</button>}
+                        <button onClick={() => setConfirmDelete(true)} disabled={selected.size === 0}
+                            className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-40 disabled:hover:bg-rose-500 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" /> Delete {selected.size > 1 ? "students" : "student"}
+                        </button>
+                        <button onClick={exitSelect} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center" title="Cancel"><X className="w-4 h-4" /></button>
+                    </div>
+                </div>
+            )}
+
+            {confirmDelete && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => !deleting && setConfirmDelete(false)}>
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                        <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center"><Trash2 className="w-5 h-5" /></div>
+                        <div>
+                            <h3 className="font-black text-slate-800 text-lg">Delete {selected.size} student{selected.size === 1 ? "" : "s"}?</h3>
+                            <p className="text-sm text-slate-500 mt-1">They move to the Trash, where they can be restored. Deleting them for good needs the administrator's password and an emailed code.</p>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setConfirmDelete(false)} disabled={deleting} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={deleteSelected} disabled={deleting} className="px-5 py-2.5 rounded-xl font-bold text-white bg-rose-500 hover:bg-rose-600 transition-colors flex items-center gap-2 disabled:opacity-60">
+                                {deleting && <Loader2 className="w-4 h-4 animate-spin" />} Move to Trash
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showTrash && <StudentTrashDialog onClose={() => setShowTrash(false)} />}
         </div>

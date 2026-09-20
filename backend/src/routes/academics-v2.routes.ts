@@ -19,6 +19,7 @@ import { ObjectId } from 'mongodb';
 import { loadCurricula, canonicalCode } from '../lib/curriculum';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { canonicalStatus } from '../lib/studentStatus';
+import { resolveStaffPermissions, permsToModules } from '../lib/permissions';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 const router = Router();
@@ -270,8 +271,25 @@ router.get('/v2/streams/:id/roster', async (req, res) => {
             try { teacher = await db.collection('staff').findOne({ _id: new ObjectId(String(stream.classTeacherId)) }); } catch { /* not an id */ }
         }
 
+        // Fees are finance data: the school admin and head teacher always see them; the class teacher
+        // only when an admin has given them finance access; nobody else. Enforced here, not just hidden in the page.
+        const canViewFinance = await (async () => {
+            if (scope.isAdmin) return true;
+            if (!scope.staffId) return false;
+            let me: any = null;
+            try { me = await db.collection('staff').findOne({ _id: new ObjectId(scope.staffId) }); } catch { /* not an id */ }
+            if (!me) return false;
+            const titles = [me.designation, ...(Array.isArray(me.roles) ? me.roles : [])].filter(Boolean).join(' ');
+            if (/head\s*-?\s*teacher|head\s*master|head\s*mistress|principal/i.test(titles)) return true;
+            if (String(stream.classTeacherId || '') === scope.staffId) {
+                const perms = await resolveStaffPermissions(db, me, { teacherFallback: false, useRoleDefaults: false });   // only what was explicitly granted
+                return perms.includes('*') || permsToModules(perms).includes('fees');
+            }
+            return false;
+        })();
+
         // fee balances (voided invoices ignored; overpayment credit taken off)
-        const invoices: any[] = ids.length ? await db.collection('invoices').find({ status: { $ne: 'VOIDED' }, $or: [{ student_id: { $in: ids } }, { studentId: { $in: ids } }] }).toArray().catch(() => []) : [];
+        const invoices: any[] = ids.length && canViewFinance ? await db.collection('invoices').find({ status: { $ne: 'VOIDED' }, $or: [{ student_id: { $in: ids } }, { studentId: { $in: ids } }] }).toArray().catch(() => []) : [];
         const fee: Record<string, { billed: number; paid: number; balance: number }> = {};
         for (const inv of invoices) {
             const key = String(inv.student_id || inv.studentId);
@@ -302,8 +320,8 @@ router.get('/v2/streams/:id/roster', async (req, res) => {
                 _id: id, studentName: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student',
                 registrationNo: s.registrationNo || s.admNo || '', gender: s.gender || '', avatar: s.avatar || s.studentPhoto || '',
                 phone: s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone || '',
-                feeBilled: Math.round((f?.billed || 0) * 100) / 100, feePaid: Math.round((f?.paid || 0) * 100) / 100,
-                feeDue: Math.max(0, Math.round(((f?.balance || 0) - credit) * 100) / 100),
+                feeBilled: canViewFinance ? Math.round((f?.billed || 0) * 100) / 100 : null, feePaid: canViewFinance ? Math.round((f?.paid || 0) * 100) / 100 : null,
+                feeDue: canViewFinance ? Math.max(0, Math.round(((f?.balance || 0) - credit) * 100) / 100) : null,
                 average: p && p.n ? Math.round((p.sum / p.n) * 10) / 10 : null, examsCount: p ? p.exams.size : 0, position: null as number | null,
             };
         });
@@ -313,13 +331,14 @@ router.get('/v2/streams/:id/roster', async (req, res) => {
 
         const withAvg = ranked.map(s => s.average as number);
         res.json({
+            canViewFinance,
             stream: { _id: String(stream._id), name: fullName, classId: stream.classId, className: stream.className, capacity: Number(stream.capacity) || 0 },
             teacher: teacher ? { _id: String(teacher._id), name: teacher.employeeName || teacher.name || '', designation: teacher.designation || '', phone: teacher.phone || '', email: teacher.email || '' } : null,
             exams: [...examMap.values()],
             summary: {
                 total: students.length, boys: students.filter(s => /^m/i.test(s.gender)).length, girls: students.filter(s => /^f/i.test(s.gender)).length,
-                feeDueTotal: Math.round(students.reduce((t, s) => t + s.feeDue, 0) * 100) / 100,
-                owing: students.filter(s => s.feeDue > 0).length,
+                feeDueTotal: canViewFinance ? Math.round(students.reduce((t, s) => t + (s.feeDue || 0), 0) * 100) / 100 : null,
+                owing: canViewFinance ? students.filter(s => (s.feeDue || 0) > 0).length : null,
                 classMean: withAvg.length ? Math.round((withAvg.reduce((t, v) => t + v, 0) / withAvg.length) * 10) / 10 : null,
             },
             students,

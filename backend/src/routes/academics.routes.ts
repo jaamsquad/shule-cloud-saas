@@ -10,6 +10,9 @@ import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
+import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
+import { notifyOwner } from '../services/ownerNotify.service';
+import bcrypt from 'bcrypt';
 
 const router = Router();
 
@@ -629,14 +632,82 @@ router.post('/students/trash/:id/restore', enforceCrud('students', 'delete'), as
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-router.delete('/students/trash/:id', enforceCrud('students', 'delete'), async (req, res) => {
+// ─── Delete for good (emptying the trash) needs the school administrator's password + an emailed code ───
+// Step 1  POST /students/trash/purge/request  { ids, password }  → checks the administrator's password,
+//         then emails a 6-digit code to the administrator.
+// Step 2  POST /students/trash/purge/confirm  { ids, otp }       → checks the code, then deletes.
+// (There is deliberately no single-call delete: the API can't be used to skip the checks.)
+const purgeIds = (raw: any): string[] => Array.from(new Set((Array.isArray(raw) ? raw : []).map((x: any) => String(x)).filter((x: string) => !!toObjectId(x)))).slice(0, 200);
+const purgeWho = (req: Request) => { const u = (req as any).tenantContext?.user || {}; return String(u.staffId || u.name || 'admin'); };
+
+router.post('/students/trash/purge/request', enforceCrud('students', 'delete'), async (req, res) => {
     try {
-        const db = getRequestDb(req);
-        const oid = toObjectId(req.params.id);
-        if (!oid) return res.status(400).json({ message: 'Invalid id' });
-        const r = await db.collection('archives').deleteOne(await trashQuery(req, db, { _id: oid }));
-        if (!r.deletedCount) return res.status(404).json({ message: 'Deleted student not found in trash' });
-        res.json({ message: 'Student permanently deleted' });
+        const db = getRequestDb(req), meta = getMetaDb();
+        const tenantId = String((req as any).tenantContext?.tenantId || '');
+        if (!tenantId) return res.status(400).json({ message: 'No school context.' });
+        const ids = purgeIds(req.body?.ids);
+        if (!ids.length) return res.status(400).json({ message: 'Choose the students to delete.' });
+        const password = String(req.body?.password || '');
+        if (!password) return res.status(400).json({ message: 'Enter the school administrator\'s password.' });
+
+        if (await passwordLocked(meta, tenantId)) return res.status(429).json({ message: 'Too many wrong passwords. Try again in 15 minutes.' });
+        const admin = await findSchoolAdmin(meta, tenantId);
+        if (!admin?.email || !admin.passwordHash) return res.status(409).json({ message: 'No school administrator account was found for this school.' });
+        if (!(await bcrypt.compare(password, admin.passwordHash))) {
+            await recordPasswordFailure(meta, tenantId, purgeWho(req));
+            return res.status(401).json({ message: 'That is not the school administrator\'s password.' });
+        }
+
+        // the students must be in this user's trash
+        const found: any[] = await db.collection('archives').find(await trashQuery(req, db, { _id: { $in: ids.map(i => new ObjectId(i)) } }), { projection: { studentName: 1, name: 1, registrationNo: 1 } }).toArray();
+        if (found.length !== ids.length) return res.status(404).json({ message: 'Some of these students are no longer in the trash.' });
+
+        const requester = purgeWho(req);
+        const code = await issueOtp(meta, { tenantId, requester, ids, adminEmail: admin.email });
+        const names = found.slice(0, 8).map(s => `${s.studentName || s.name || 'Student'}${s.registrationNo ? ` (${s.registrationNo})` : ''}`);
+        const by = (req as any).tenantContext?.user?.name || 'a user';
+        const html = `<div style="font-family:Arial,sans-serif;color:#1f2937;max-width:480px;margin:auto">
+            <h2 style="color:#dc2626">Confirm permanent deletion</h2>
+            <p>${by} asked to permanently delete <b>${found.length}</b> student${found.length === 1 ? '' : 's'} from your school:</p>
+            <ul>${names.map(n => `<li>${n}</li>`).join('')}${found.length > names.length ? `<li>…and ${found.length - names.length} more</li>` : ''}</ul>
+            <p>Your verification code is:</p>
+            <p style="font-size:30px;font-weight:900;letter-spacing:6px;color:#dc2626">${code}</p>
+            <p style="color:#6b7280;font-size:13px">It expires in ${OTP_TTL_MIN} minutes. Permanent deletion cannot be undone. If you did not expect this, do not share the code — change your password.</p></div>`;
+        const text = `ShuleCloud: code to permanently delete ${found.length} student(s): ${code}. Expires in ${OTP_TTL_MIN} minutes. If you did not expect this, do not share it.`;
+        const sent = await notifyOwner({ email: admin.email }, 'Confirm permanent deletion of students', html, text);
+        if (!sent.email) {
+            await cancelOtps(meta, tenantId, requester);
+            return res.status(502).json({ message: 'We could not email the verification code. Ask ShuleCloud support to check the email settings, then try again.' });
+        }
+        res.json({ sentTo: maskEmail(admin.email), expiresInMinutes: OTP_TTL_MIN });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/students/trash/purge/confirm', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req), meta = getMetaDb();
+        const tenantId = String((req as any).tenantContext?.tenantId || '');
+        const ids = purgeIds(req.body?.ids);
+        if (!tenantId || !ids.length) return res.status(400).json({ message: 'Choose the students to delete.' });
+
+        const check = await verifyOtp(meta, { tenantId, requester: purgeWho(req), ids, code: String(req.body?.otp || '') });
+        if (!check.ok) {
+            const msg = check.reason === 'wrong' ? `That code is not right. ${check.attemptsLeft} ${check.attemptsLeft === 1 ? 'try' : 'tries'} left.`
+                : check.reason === 'locked' ? 'Too many wrong codes. Start again to get a new code.'
+                : check.reason === 'expired' ? 'That code has expired. Start again to get a new one.'
+                : 'No active code for this deletion. Start again to get a new one.';
+            return res.status(check.reason === 'locked' ? 429 : 400).json({ message: msg, reason: check.reason });
+        }
+
+        const q = await trashQuery(req, db, { _id: { $in: ids.map(i => new ObjectId(i)) } });
+        const doomed: any[] = await db.collection('archives').find(q, { projection: { studentName: 1, name: 1, registrationNo: 1 } }).toArray();
+        const r = await db.collection('archives').deleteMany(q);
+        await db.collection('audit_logs').insertOne({
+            action: 'PERMANENT_DELETE_STUDENTS', collection: 'students', changedBy: purgeWho(req), changedByName: (req as any).tenantContext?.user?.name || '',
+            changedAt: new Date(), count: r.deletedCount, students: doomed.map(s => ({ name: s.studentName || s.name, registrationNo: s.registrationNo })),
+            verifiedWith: 'school administrator password + emailed code',
+        }).catch(() => {});
+        res.json({ message: `${r.deletedCount} student${r.deletedCount === 1 ? '' : 's'} permanently deleted`, deleted: r.deletedCount });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

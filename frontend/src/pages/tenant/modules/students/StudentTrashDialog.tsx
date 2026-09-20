@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import PurgeVerifyDialog from "./PurgeVerifyDialog";
 
 export const STUDENT_TRASH_KEY = ["students-trash"];
 
@@ -28,16 +29,13 @@ export default function StudentTrashDialog({ onClose }: { onClose: () => void })
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed to restore student"),
     });
 
-    const purge = useMutation({
-        mutationFn: (id: string) => api.delete(`/students/trash/${id}`),
-        onSuccess: () => { refresh(); toast.success("Student permanently deleted"); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to delete student"),
-    });
+    // Deleting for good asks for the administrator's password and an emailed code (see PurgeVerifyDialog).
+    const [purging, setPurging] = useState<{ ids: string[]; label: string } | null>(null);
 
     const nameOf = (s: any) => s.studentName || s.name || `${s.firstName || ""} ${s.lastName || ""}`.trim() || "Unnamed student";
     const q = search.trim().toLowerCase();
     const rows = trash.filter((s: any) => !q || nameOf(s).toLowerCase().includes(q) || String(s.registrationNo || "").toLowerCase().includes(q));
-    const busy = restore.isPending || purge.isPending;
+    const busy = restore.isPending;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -96,7 +94,7 @@ export default function StudentTrashDialog({ onClose }: { onClose: () => void })
                                 <RotateCcw className="w-3.5 h-3.5" /> Restore
                             </button>
                             <button
-                                onClick={() => { if (confirm(`Permanently delete ${nameOf(s)}? This cannot be undone.`)) purge.mutate(s._id); }}
+                                onClick={() => setPurging({ ids: [s._id], label: nameOf(s) })}
                                 disabled={busy}
                                 title="Delete permanently"
                                 className="h-9 px-3 rounded-full bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
@@ -107,6 +105,13 @@ export default function StudentTrashDialog({ onClose }: { onClose: () => void })
                     ))}
                 </div>
             </div>
+            {purging && (
+                <PurgeVerifyDialog
+                    ids={purging.ids} label={purging.label}
+                    onClose={() => setPurging(null)}
+                    onDone={n => { setPurging(null); refresh(); toast.success(`${n} student${n === 1 ? "" : "s"} permanently deleted`); }}
+                />
+            )}
         </div>
     );
 }

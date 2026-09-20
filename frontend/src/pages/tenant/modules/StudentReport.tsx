@@ -467,46 +467,6 @@ export default function StudentReport() {
                         </div>
                     </div>
 
-                    {/* 3 Examination Report */}
-                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col break-inside-avoid mb-6">
-                        <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">3</div>
-                            <h3 className="text-[#868DF4] font-bold">Examination Report</h3>
-                        </div>
-                        <div className="flex-1 flex flex-col items-center justify-center pb-2 w-full">
-                            {historicalExams.length > 0 ? (
-                                <div className="w-full space-y-3">
-                                    {historicalExams.map((exam: any, idx: number) => (
-                                        <div key={idx} className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-center justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-slate-700 text-sm truncate">{exam.examName}</p>
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase">{exam.term}</p>
-                                            </div>
-                                            <div className="text-right flex-shrink-0">
-                                                <p className="font-black text-[#868DF4]">{exam.average}% avg</p>
-                                                <p className="text-[9px] text-slate-500 font-bold">GPA: {exam.gpa}</p>
-                                            </div>
-                                            <button
-                                                onClick={() => printReportCard(exam)}
-                                                title="Print Report Card"
-                                                className="w-9 h-9 flex-shrink-0 rounded-xl bg-[#868DF4]/10 hover:bg-[#868DF4] text-[#868DF4] hover:text-white flex items-center justify-center transition-all group"
-                                            >
-                                                <Printer className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="w-32 h-32 bg-indigo-50/50 rounded-full flex items-center justify-center mb-4 relative">
-                                        <Search className="w-12 h-12 text-[#868DF4] opacity-50" />
-                                    </div>
-                                    <p className="font-bold text-[#868DF4]">No Record Found.</p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
                     {/* Performance Trends Chart */}
                     {trendData.length >= 2 && (
                         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 break-inside-avoid mb-6">
@@ -608,7 +568,7 @@ export default function StudentReport() {
                     {/* 4 Fee Report */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col break-inside-avoid mb-6">
                         <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">4</div>
+                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">3</div>
                             <h3 className="text-[#868DF4] font-bold">Fee Report</h3>
                         </div>
                         <div className="flex-1 flex flex-col justify-center pb-8 w-full">

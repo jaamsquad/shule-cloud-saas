@@ -65,6 +65,7 @@ export default function ClassRoster() {
     }
 
     const { stream, teacher, summary, exams } = data;
+    const finance: boolean = !!data.canViewFinance;   // fee figures are sent (and shown) only to people allowed to see student finance
     const examName = exams.find((e: any) => e._id === examId)?.name;
     const sortLabel = SORTS.find(s => s.v === sortBy)?.l || "";
 
@@ -75,9 +76,9 @@ export default function ClassRoster() {
             <div><b>Students:</b> ${summary.total} (${summary.boys} boys, ${summary.girls} girls)</div>
           </div>
           <div style="font-size:11px;color:#64748b;margin-bottom:8px">Sorted by: ${esc(sortLabel)}${examName ? ` · Performance: ${esc(examName)}` : ""}${summary.classMean != null ? ` · Class mean: ${summary.classMean}%` : ""}</div>
-          <table><thead><tr><th>#</th><th>Student</th><th>Reg No</th><th>Gender</th><th>Contact</th><th style="text-align:right">Fee balance</th><th style="text-align:right">Average</th><th style="text-align:right">Position</th></tr></thead><tbody>
-          ${rows.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.studentName)}</td><td>${esc(s.registrationNo)}</td><td>${esc(s.gender)}</td><td>${esc(s.phone)}</td><td style="text-align:right">${s.feeDue > 0 ? esc(money(s.feeDue)) : "—"}</td><td style="text-align:right">${s.average != null ? s.average + "%" : "—"}</td><td style="text-align:right">${s.position ?? "—"}</td></tr>`).join("")}
-          </tbody><tfoot><tr><td colspan="5">Total fee balance (${summary.owing} owing)</td><td style="text-align:right">${esc(money(summary.feeDueTotal))}</td><td colspan="2"></td></tr></tfoot></table>`;
+          <table><thead><tr><th>#</th><th>Student</th><th>Reg No</th><th>Gender</th><th>Contact</th>${finance ? `<th style="text-align:right">Fee balance</th>` : ""}<th style="text-align:right">Average</th><th style="text-align:right">Position</th></tr></thead><tbody>
+          ${rows.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.studentName)}</td><td>${esc(s.registrationNo)}</td><td>${esc(s.gender)}</td><td>${esc(s.phone)}</td>${finance ? `<td style="text-align:right">${s.feeDue > 0 ? esc(money(s.feeDue)) : "—"}</td>` : ""}<td style="text-align:right">${s.average != null ? s.average + "%" : "—"}</td><td style="text-align:right">${s.position ?? "—"}</td></tr>`).join("")}
+          </tbody>${finance ? `<tfoot><tr><td colspan="5">Total fee balance (${summary.owing} owing)</td><td style="text-align:right">${esc(money(summary.feeDueTotal))}</td><td colspan="2"></td></tr></tfoot>` : ""}</table>`;
         printBranded(school, `Class list — ${stream.name}`, body, "#5C67F2");
     };
 
@@ -118,10 +119,10 @@ export default function ClassRoster() {
                             )}
                         </div>
                     </div>
-                    <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className={`lg:col-span-2 grid grid-cols-2 gap-3 ${finance ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                         {[
                             { icon: Users, label: "Students", value: summary.total, sub: `${summary.boys} boys · ${summary.girls} girls${stream.capacity ? ` · capacity ${stream.capacity}` : ""}`, color: "text-[#5C67F2]" },
-                            { icon: Wallet, label: "Fee balance", value: money(summary.feeDueTotal), sub: `${summary.owing} student${summary.owing === 1 ? "" : "s"} owing`, color: summary.feeDueTotal > 0 ? "text-rose-600" : "text-emerald-600" },
+                            ...(finance ? [{ icon: Wallet, label: "Fee balance", value: money(summary.feeDueTotal), sub: `${summary.owing} student${summary.owing === 1 ? "" : "s"} owing`, color: summary.feeDueTotal > 0 ? "text-rose-600" : "text-emerald-600" }] : []),
                             { icon: GraduationCap, label: "Class mean", value: summary.classMean != null ? `${summary.classMean}%` : "—", sub: examName || "All exams", color: "text-emerald-600" },
                             { icon: Trophy, label: "Top student", value: (data.students.filter((s: any) => s.position === 1)[0]?.studentName || "—"), sub: (() => { const t = data.students.find((s: any) => s.position === 1); return t ? `${t.average}%` : "No marks yet"; })(), color: "text-amber-600", small: true },
                         ].map((c: any) => (
@@ -138,7 +139,7 @@ export default function ClassRoster() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-3">
                         <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 cursor-pointer">
-                            {SORTS.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+                            {SORTS.filter(s => finance || !s.v.startsWith("fee_")).map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
                         </select>
                         <select value={examId} onChange={e => setExamId(e.target.value)} className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 cursor-pointer" title="Which exam the average is worked out from">
                             <option value="">Performance: all exams</option>
@@ -157,12 +158,12 @@ export default function ClassRoster() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                                    {["#", "Student", "Gender", "Contact", "Billed", "Paid", "Fee balance", "Average", "Position"].map((h, i) => <th key={h} className={`p-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${i >= 4 ? "text-right" : ""}`}>{h}</th>)}
+                                    {["#", "Student", "Gender", "Contact", ...(finance ? ["Billed", "Paid", "Fee balance"] : []), "Average", "Position"].map((h, i) => <th key={h} className={`p-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${i >= 4 ? "text-right" : ""}`}>{h}</th>)}
                                 </tr>
                             </thead>
                             <tbody>
                                 {rows.length === 0 ? (
-                                    <tr><td colSpan={9} className="p-12 text-center text-sm font-bold text-gray-400">{summary.total ? "No students match your search." : "No students in this class yet."}</td></tr>
+                                    <tr><td colSpan={finance ? 9 : 6} className="p-12 text-center text-sm font-bold text-gray-400">{summary.total ? "No students match your search." : "No students in this class yet."}</td></tr>
                                 ) : rows.map((s, i) => (
                                     <tr key={s._id} onClick={() => navigate(`/students/report/${s._id}`)} className="border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer transition-colors">
                                         <td className="p-4 text-xs text-gray-400">{i + 1}</td>
@@ -176,9 +177,11 @@ export default function ClassRoster() {
                                         </td>
                                         <td className="p-4 text-xs text-gray-600">{s.gender || "—"}</td>
                                         <td className="p-4 text-xs text-gray-600">{s.phone || "—"}</td>
-                                        <td className="p-4 text-xs text-gray-500 text-right">{s.feeBilled ? money(s.feeBilled) : "—"}</td>
-                                        <td className="p-4 text-xs text-gray-500 text-right">{s.feePaid ? money(s.feePaid) : "—"}</td>
-                                        <td className={`p-4 text-sm font-black text-right ${s.feeDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>{s.feeDue > 0 ? money(s.feeDue) : "Cleared"}</td>
+                                        {finance && <>
+                                            <td className="p-4 text-xs text-gray-500 text-right">{s.feeBilled ? money(s.feeBilled) : "—"}</td>
+                                            <td className="p-4 text-xs text-gray-500 text-right">{s.feePaid ? money(s.feePaid) : "—"}</td>
+                                            <td className={`p-4 text-sm font-black text-right ${s.feeDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>{s.feeDue > 0 ? money(s.feeDue) : "Cleared"}</td>
+                                        </>}
                                         <td className="p-4 text-sm font-bold text-right text-gray-700">{s.average != null ? `${s.average}%` : "—"}</td>
                                         <td className="p-4 text-right">{s.position ? <span className={`inline-block min-w-8 px-2 py-0.5 rounded-full text-[11px] font-black ${s.position === 1 ? "bg-amber-100 text-amber-700" : s.position <= 3 ? "bg-indigo-50 text-[#5C67F2]" : "bg-gray-100 text-gray-500"}`}>{s.position}</span> : <span className="text-gray-300">—</span>}</td>
                                     </tr>
