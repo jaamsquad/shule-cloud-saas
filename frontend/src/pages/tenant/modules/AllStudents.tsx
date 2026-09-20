@@ -7,6 +7,7 @@ import { useItems } from "@/hooks/useItems";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
 import StudentTrashDialog, { STUDENT_TRASH_KEY } from "./students/StudentTrashDialog";
 
+const NO_CLASS = "__none__";   // class filter value for students who aren't in any class
 const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
 // Students with no status yet (older records) count as Active.
@@ -31,7 +32,7 @@ export default function AllStudents() {
 
     // v2 classes (Form 4) + streams for the chosen filter class.
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
-    const { data: filterStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", filterClassId], enabled: !!filterClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: filterClassId } })).data || [] });
+    const { data: filterStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", filterClassId], enabled: !!filterClassId && filterClassId !== NO_CLASS, queryFn: async () => (await api.get("/v2/streams", { params: { classId: filterClassId } })).data || [] });
     // Soft-deleted students (for the Trash button's count). Only people who may delete can open the trash.
     const { data: trash = [] } = useQuery<any[]>({ queryKey: STUDENT_TRASH_KEY, enabled: canDelete, queryFn: async () => (await api.get("/students/trash")).data || [] });
     const filterCls = classes.find((c: any) => String(c._id) === filterClassId);
@@ -58,8 +59,10 @@ export default function AllStudents() {
     };
 
     // A student matches the class/stream filter by v2 ids or by class/stream TEXT.
+    const hasClass = (s: any) => !!(String(s.classId || "").trim() || String(s.studentClass || s.currentClass || s.className || "").trim());
     const matchesClassFilter = (s: any) => {
         if (!filterClassId) return true;
+        if (filterClassId === NO_CLASS) return !hasClass(s);
         const classOk = String(s.classId) === filterClassId || norm(s.studentClass || s.currentClass) === norm(filterCls?.name) || norm(s.studentClass).startsWith(norm(filterCls?.name));
         if (!classOk) return false;
         if (!filterStreamId) return true;
@@ -116,6 +119,7 @@ export default function AllStudents() {
                             className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 flex-1 md:flex-none cursor-pointer"
                         >
                             <option value="">All Classes</option>
+                            <option value={NO_CLASS}>No class</option>
                             {classes.map((c: any) => (
                                 <option key={c._id} value={c._id}>{c.name}</option>
                             ))}
@@ -124,7 +128,7 @@ export default function AllStudents() {
                         <select
                             value={filterStreamId}
                             onChange={(e) => setFilterStreamId(e.target.value)}
-                            disabled={!filterClassId}
+                            disabled={!filterClassId || filterClassId === NO_CLASS}
                             className="h-10 px-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-sm bg-white font-medium text-gray-700 flex-1 md:flex-none cursor-pointer disabled:bg-gray-50"
                         >
                             <option value="">All Streams</option>

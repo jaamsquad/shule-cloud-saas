@@ -49,9 +49,7 @@ export async function notifyTransport(
             sent.push('whatsapp');
         }
         if (settings.notifySms && phone) {
-            const { getSmsSettings, queueSms } = await import('./smsGateway.service');
-            const smsSettings = await getSmsSettings(db);
-            const cfg: any = smsSettings.apiConfig || {};
+            const { queueSms } = await import('./smsGateway.service');
             let schoolName = opts.tenantName || '';
             if (!schoolName && opts.tenantId) {
                 try {
@@ -60,11 +58,10 @@ export async function notifyTransport(
                     schoolName = t?.instituteName || t?.name || '';
                 } catch { /* ignore */ }
             }
-            const { brandMessage, talksasaSend } = await import('./talksasa.service');
+            const { brandMessage } = await import('./talksasa.service');
             const branded = brandMessage(schoolName, msg);
-            let ok = false;
-            if (cfg.apiToken) { const r = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, [phone], branded); ok = r.ok; }
-            else { await queueSms(db, String(opts.tenantId || 'default'), [phone], branded, { audience: 'transport' }); ok = true; }
+            const sr: any = await queueSms(db, String(opts.tenantId || 'default'), [phone], branded, { audience: 'transport' });
+            const ok = sr.provider === 'device' || sr.sent > 0;
             await db.collection('sms_logs').insertOne({ to: phone, message: branded, status: ok ? 'Sent' : 'Failed', purpose: 'transport', createdAt: at });
             if (ok) sent.push('sms');
         }

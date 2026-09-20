@@ -22,9 +22,12 @@ import { Router, Request, Response } from 'express';
 import { ObjectId, Db } from 'mongodb';
 import {
     getSmsSettings, saveSmsSettings, queueSms, claimJobs, updateJobStatus,
-    deviceStats, newToken, normalizePhone, buildResultMessages, listResultSources,
+    deviceStats, newToken, buildResultMessages, listResultSources,
+    getProviderStates, normalizePriority, SMS_PROVIDER_NAMES, SmsProviderKey,
 } from '../services/smsGateway.service';
 import { resolvePhones } from '../services/communications.service';
+import { atBalance } from '../services/africasTalking.service';
+import { enforceCrud } from '../lib/permissions';
 
 const router = Router();
 const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
@@ -55,7 +58,9 @@ async function brandFor(req: Request, db: Db, message: string): Promise<string> 
 
 router.get('/communications/sms/settings', async (req, res) => {
     const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
-    res.json(await getSmsSettings(db));
+    const { apiConfig, ...rest } = await getSmsSettings(db);
+    // Credentials stay on the server: the browser only learns which vendor is active.
+    res.json({ ...rest, apiConfig: { vendor: (apiConfig as any)?.vendor || null, senderId: (apiConfig as any)?.senderId || null } });
 });
 
 router.post('/communications/sms/settings', async (req, res) => {
@@ -63,7 +68,11 @@ router.post('/communications/sms/settings', async (req, res) => {
     res.json(await saveSmsSettings(db, req.body || {}));
 });
 
-// Send / queue SMS. Routes to the device queue or the HTTP API per settings.
+// A send that reached nobody is an error, not a success - otherwise the admin sees "sent"
+// while nothing left. Waiting for a phone to collect the message is not a failure.
+const failedOutright = (r: any) => r.queued > 0 && r.sent === 0 && r.failed > 0 && r.provider !== 'device';
+
+// Send / queue SMS through the school's SMS gateways, in the order of its priority.
 router.post('/communications/sms/send', async (req, res) => {
     try {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
@@ -77,23 +86,13 @@ router.post('/communications/sms/send', async (req, res) => {
         numbers = Array.from(new Set(numbers.filter(Boolean)));
         if (numbers.length === 0) return res.status(400).json({ message: 'No recipients with phone numbers were found' });
 
-        const audienceLabel = audList.join(',') || null;
-        const settings = await getSmsSettings(db);
-        // queueSms now dispatches immediately via Talksasa when configured, else
-        // notifies devices. Non-Africa's-Talking API still uses the legacy path.
-        if (settings.provider === 'api' && !settings.apiConfig?.apiToken) {
-            const { queued } = await queueSms(db, schoolId(req), numbers, message, { audience: audienceLabel || undefined, createdBy: (req as any).user?.id });
-            const sent = await sendViaApi(db, settings.apiConfig, numbers, message);
-            return res.json({ provider: 'api', queued, ...sent });
-        }
-
-        const result = await queueSms(db, schoolId(req), numbers, message, {
-            audience: audienceLabel || undefined, createdBy: (req as any).user?.id,
+        const result: any = await queueSms(db, schoolId(req), numbers, message, {
+            audience: audList.join(',') || undefined, createdBy: (req as any).user?.id,
             scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         });
-        if ((result as any).provider === 'talksasa') return res.json({ provider: 'talksasa', ...result });
-        const devices = await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true });
-        res.json({ provider: 'device', ...result, onlineDevices: devices });
+        if (failedOutright(result)) return res.status(502).json({ ...result, message: result.error || 'The SMS could not be sent.' });
+        const onlineDevices = result.provider === 'device' ? await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true }) : undefined;
+        res.json({ ...result, ...(onlineDevices !== undefined ? { onlineDevices } : {}) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -103,18 +102,11 @@ router.post('/communications/sms/test', async (req, res) => {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
         const { phone } = req.body || {};
         if (!phone) return res.status(400).json({ message: 'A test phone number is required' });
-        const message = await brandFor(req, db, 'SMS test — your gateway is connected and working. ✅');
-        const settings = await getSmsSettings(db);
-        if (settings.provider === 'api' && !settings.apiConfig?.apiToken) {
-            await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
-            const sent = await sendViaApi(db, settings.apiConfig, [phone], message);
-            return res.json({ provider: 'api', ...sent });
-        }
-        // Talksasa: queueSms sends immediately. Device: it notifies the phone.
-        const tr = await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
-        if ((tr as any).provider === 'talksasa') return res.json({ provider: 'talksasa', ...tr });
-        const online = await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true });
-        res.json({ provider: 'device', ...tr, onlineDevices: online });
+        const message = await brandFor(req, db, 'SMS test - your gateway is connected and working.');
+        const result: any = await queueSms(db, schoolId(req), [phone], message, { audience: 'test' });
+        if (failedOutright(result)) return res.status(502).json({ ...result, message: result.error || 'The test SMS could not be sent.' });
+        const onlineDevices = result.provider === 'device' ? await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true }) : undefined;
+        res.json({ ...result, ...(onlineDevices !== undefined ? { onlineDevices } : {}) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -140,19 +132,16 @@ router.post('/communications/sms/send-results', async (req, res) => {
         // Prefix the school name on every result message.
         const messages = await Promise.all(messagesRaw.map(async (m: any) => ({ ...m, text: await brandFor(req, db, m.text) })));
 
-        const settings = await getSmsSettings(db);
         const when = scheduledAt ? new Date(scheduledAt) : null;
-        let queued = 0;
-        for (const m of messages) {
-            const r = await queueSms(db, schoolId(req), [m.phone], m.text, { audience: `results:${type}`, scheduledAt: when, createdBy: (req as any).user?.id });
-            queued += r.queued;
+        // Each learner's message is different, so each is its own send - a few at a time.
+        let queued = 0, sent = 0, failed = 0, provider: string | null = null, error: string | undefined;
+        for (let i = 0; i < messages.length; i += 5) {
+            const rs: any[] = await Promise.all(messages.slice(i, i + 5).map((m: any) =>
+                queueSms(db, schoolId(req), [m.phone], m.text, { audience: `results:${type}`, scheduledAt: when, createdBy: (req as any).user?.id })));
+            rs.forEach(r => { queued += r.queued; sent += r.sent || 0; failed += r.failed || 0; provider = provider || r.provider; error = error || r.error; });
         }
-        // queueSms already dispatched via Talksasa (immediate). Only the legacy
-        // non-token API provider needs the extra sendViaApi call.
-        if (settings.provider === 'api' && !settings.apiConfig?.apiToken && !when) {
-            for (const m of messages) await sendViaApi(db, settings.apiConfig, [m.phone], m.text);
-        }
-        res.json({ provider: settings.provider, recipients: messages.length, queued });
+        if (queued > 0 && sent === 0 && failed > 0 && provider !== 'device') return res.status(502).json({ message: error || 'The results could not be sent.', recipients: messages.length, queued, sent, failed });
+        res.json({ provider, recipients: messages.length, queued, sent, failed });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -167,7 +156,7 @@ router.get('/communications/sms/status', async (req, res) => {
         const settings = await getSmsSettings(db);
         const stats = await deviceStats(db, schoolId(req));
         const webConnected = true; // the admin is making this authenticated request, so the web side is up
-        const deviceConnected = settings.provider === 'api' ? !!(settings.apiConfig?.apiKey) : !!(connectedDevice && connectedDevice.online);
+        const deviceConnected = settings.provider === 'api' ? !!((settings.apiConfig as any)?.apiKey || (settings.apiConfig as any)?.apiToken) : !!(connectedDevice && connectedDevice.online);
         res.json({
             provider: settings.provider,
             webConnected,
@@ -309,55 +298,50 @@ router.post('/mobile/update', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// ─── HTTP gateway sender (Africa's Talking-style) ────────────────────────────
-// SMS balance + profile (Talksasa). Reads the school's saved token.
+// ─── SMS gateways: which are on, and in what order they are tried ───────────────
+const providerView = async (db: Db) => {
+    const { states, priority, order } = await getProviderStates(db);
+    return {
+        providers: priority.map(k => ({ key: k, name: states[k].name, configured: states[k].configured, enabled: states[k].enabled, ready: states[k].ready })),
+        priority, order, active: order[0] || null,
+    };
+};
+router.get('/communications/sms/providers', async (req, res) => {
+    try { const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' }); res.json(await providerView(db)); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// Body: { priority?: string[], disable?: string[] } - used when an admin switches a gateway on and
+// picks either "turn the others off" or "keep them, in this order".
+router.put('/communications/sms/providers', enforceCrud('communications', 'update'), async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const disable: SmsProviderKey[] = (Array.isArray(req.body?.disable) ? req.body.disable : []).filter((k: any) => k in SMS_PROVIDER_NAMES);
+        for (const k of disable) {
+            if (k === 'device') await db.collection('sms_settings').updateOne({ _id: 'sms' as any }, { $set: { deviceEnabled: false, updatedAt: new Date() } }, { upsert: true });
+            else await db.collection('integration_settings').updateMany({ integration: k }, { $set: { enabled: false, updatedAt: new Date() } });
+        }
+        if (Array.isArray(req.body?.priority)) await db.collection('sms_settings').updateOne({ _id: 'sms' as any }, { $set: { priority: normalizePriority(req.body.priority), updatedAt: new Date() } }, { upsert: true });
+        res.json(await providerView(db));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Credit left with the gateway that is currently first in line.
 router.get('/communications/sms/balance', async (req, res) => {
     try {
         const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
-        const settings = await getSmsSettings(db);
-        const token = settings.apiConfig?.apiToken;
-        if (!token) return res.json({ configured: false, message: 'Talksasa not configured.' });
-        const { talksasaBalance } = await import('../services/talksasa.service');
-        const b = await talksasaBalance({ apiToken: token });
-        res.json({ configured: true, vendor: 'talksasa', balance: b.balance, raw: b.raw, topupUrl: 'https://bulksms.talksasa.com' });
+        const { states, order } = await getProviderStates(db);
+        const first = order.find(k => k !== 'device');
+        if (first === 'africas_talking') {
+            const b = await atBalance(states.africas_talking.config);
+            return res.json({ configured: true, vendor: 'africas_talking', balance: b.balance, raw: b.raw, topupUrl: 'https://account.africastalking.com' });
+        }
+        if (first === 'talksasa') {
+            const { talksasaBalance } = await import('../services/talksasa.service');
+            const b = await talksasaBalance({ apiToken: states.talksasa.config.apiToken });
+            return res.json({ configured: true, vendor: 'talksasa', balance: b.balance, raw: b.raw, topupUrl: 'https://bulksms.talksasa.com' });
+        }
+        res.json({ configured: false, message: 'No SMS API is switched on.' });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
-
-async function sendViaApi(db: Db, cfg: any, numbers: string[], rawMessage: string) {
-    const results: any[] = [];
-    // The message is already branded (school name prefixed) at queue time, so we
-    // dispatch it as-is. The job lookup below also keys on this exact text.
-    const message = rawMessage;
-
-    // ── Talksasa vendor ───────────────────────────────────────────────────────
-    if (cfg?.vendor === 'talksasa' || cfg?.apiToken) {
-        const { talksasaSend } = await import('../services/talksasa.service');
-        const r = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, numbers, message);
-        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: r.ok ? 'sent' : 'failed', provider: 'talksasa', error: r.error, updatedAt: new Date() } });
-        return { sent: r.sent, failed: r.failed, error: r.error, raw: r.raw };
-    }
-
-    if (!cfg?.apiKey || !cfg?.username) {
-        // No API configured — log as failed so the school notices.
-        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: 'failed', error: 'SMS API not configured', updatedAt: new Date() } });
-        return { sent: 0, failed: numbers.length, error: 'SMS API not configured' };
-    }
-    try {
-        const to = numbers.map(n => '+' + normalizePhone(n)).join(',');
-        const resp = await fetch('https://api.africastalking.com/version1/messaging', {
-            method: 'POST',
-            headers: { apiKey: cfg.apiKey, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-            body: new URLSearchParams({ username: cfg.username, to, message, ...(cfg.senderId ? { from: cfg.senderId } : {}) }),
-        });
-        const data: any = await resp.json().catch(() => ({}));
-        const recipients = data?.SMSMessageData?.Recipients || [];
-        const sent = recipients.filter((r: any) => /success|sent/i.test(r.status)).length;
-        for (const phone of numbers) await db.collection('sms_jobs').updateOne({ phone, message: rawMessage, status: 'queued' }, { $set: { status: sent ? 'sent' : 'failed', provider: 'api', updatedAt: new Date() } });
-        results.push(data);
-        return { sent: sent || (resp.ok ? numbers.length : 0), failed: numbers.length - (sent || (resp.ok ? numbers.length : 0)), raw: data };
-    } catch (e: any) {
-        return { sent: 0, failed: numbers.length, error: e.message };
-    }
-}
 
 export default router;

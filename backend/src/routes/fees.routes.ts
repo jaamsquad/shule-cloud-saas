@@ -1673,8 +1673,8 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
             const { queueSms } = await import('../services/smsGateway.service');
             const schoolId = String((req as any).tenantContext?.tenantId || 'default');
             const r: any = await queueSms(tenantDb, schoolId, [phone], text, { audience: 'fee_reminder' });
-            await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: r.provider === 'talksasa' ? (r.sent ? 'Sent' : 'Failed') : 'Queued', purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });
-            if (r.provider === 'talksasa' && !r.sent) return res.status(400).json({ message: r.error || 'SMS failed to send.' });
+            await tenantDb.collection('sms_logs').insertOne({ to: phone, message: text, status: r.provider === 'device' ? 'Queued' : (r.sent ? 'Sent' : 'Failed'), purpose: 'fee_reminder', invoiceId: String(invoice._id), createdAt: new Date() });
+            if (r.provider !== 'device' && !r.sent) return res.status(400).json({ message: r.error || 'SMS failed to send.' });
         }
         res.json({ data: { sent: true, channel, to: channel === 'email' ? email : phone }, message: 'Reminder sent' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

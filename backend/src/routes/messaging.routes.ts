@@ -97,7 +97,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             const schoolId = String((req as any).tenantContext?.tenantId || 'default');
             for (const t of smsTargets) {
                 const r: any = await queueSms(database, schoolId, [t.phone], brandMessage(schoolName, t.text), { audience: 'parent_message' });
-                if (r.provider !== 'talksasa' || r.sent) smsSent++;
+                if (r.provider === 'device' || r.sent) smsSent++;
             }
         }
         res.json({ ok: true, sent: docs.length, smsSent });

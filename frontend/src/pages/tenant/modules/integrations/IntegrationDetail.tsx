@@ -10,6 +10,7 @@ import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 import { INTEGRATIONS_CONFIG, BrandLogo } from "./IntegrationsPage";
+import { SMS_API_KEYS, SMS_PROVIDERS_KEY, SmsChoice, SmsChoiceDialog, SmsPriorityCard, useSmsProviders } from "./SmsProviderChoice";
 
 export default function IntegrationDetail() {
     const { key } = useParams<{ key: string }>();
@@ -33,6 +34,13 @@ export default function IntegrationDetail() {
     const [registering, setRegistering] = useState(false);   // C2B URL registration (daraja only)
 
     const isDaraja = key === "daraja";
+
+    // SMS gateways share one priority order. Switching one ON while another is on asks what to do.
+    const isSmsApi = SMS_API_KEYS.includes(key || "");
+    const { data: smsState } = useSmsProviders(isSmsApi);
+    const [choiceOpen, setChoiceOpen] = useState(false);
+    const [smsChoice, setSmsChoice] = useState<SmsChoice | null>(null);   // applied when Save is pressed
+    const otherSmsOn = (smsState?.providers || []).filter(p => p.key !== key && p.ready);
     // M-PESA C2B registration status (only relevant for Daraja).
     const { data: mpesaStatus } = useQuery({
         queryKey: ["mpesa_settings"],
@@ -114,6 +122,12 @@ export default function IntegrationDetail() {
             } else {
                 const r = await api.post("/integration_settings", payload);
                 setSettingsId(r.data?.id || r.data?._id);
+            }
+            // The admin's answer to "other SMS providers are on": turn them off / set the order.
+            if (smsChoice) {
+                await api.put("/communications/sms/providers", smsChoice);
+                setSmsChoice(null);
+                qc.invalidateQueries({ queryKey: SMS_PROVIDERS_KEY });
             }
             toast.success(`${intg.name} settings saved successfully`);
             qc.invalidateQueries({ queryKey: ["integration_settings"] });
@@ -206,7 +220,10 @@ export default function IntegrationDetail() {
                             {/* Enable/disable toggle */}
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <div className={`relative w-10 h-6 rounded-full transition-colors ${enabled ? "bg-[#5C67F2]" : "bg-gray-200"}`}
-                                    onClick={() => { setEnabled(v => !v); setDirty(true); }}>
+                                    onClick={() => {
+                                        if (!enabled && isSmsApi && otherSmsOn.length) { setChoiceOpen(true); return; }   // ask before switching on
+                                        setEnabled(v => !v); setDirty(true);
+                                    }}>
                                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${enabled ? "right-0.5" : "left-0.5"}`} />
                                 </div>
                                 <span className="text-sm font-bold text-gray-600">{enabled ? "Enabled" : "Disabled"}</span>
@@ -280,6 +297,8 @@ export default function IntegrationDetail() {
                                 ))}
                             </div>
                         </div>
+
+                        {isSmsApi && <SmsPriorityCard />}
 
                         {/* Test Connection */}
                         {hasTest && (
@@ -510,6 +529,14 @@ export default function IntegrationDetail() {
                     </div>
                 )}
             </div>
+
+            {choiceOpen && (
+                <SmsChoiceDialog
+                    thisKey={intg.key} thisName={intg.name} others={otherSmsOn}
+                    onCancel={() => setChoiceOpen(false)}
+                    onConfirm={c => { setSmsChoice(c); setEnabled(true); setDirty(true); setChoiceOpen(false); }}
+                />
+            )}
 
             {/* ── Sticky save bar ──────────────────────────────────────── */}
             {dirty && (

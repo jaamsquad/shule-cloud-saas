@@ -243,13 +243,24 @@ app.post('/api/v1/integrations/test/:type', async (req, res) => {
                 return res.status(400).json({ message: 'SendGrid send failed. Check API key.' });
             }
             case 'at': { // Africa's Talking
-                if (!body.username || !body.apiKey) return res.status(400).json({ message: 'Username and API Key are required' });
-                // Just validate credentials by hitting the user data endpoint
-                const r = await fetch(`https://api.africastalking.com/version1/user?username=${body.username}`, {
-                    headers: { 'apiKey': body.apiKey, 'Accept': 'application/json' }
-                });
-                if (r.ok) return res.json({ message: "Africa's Talking connection successful!" });
-                return res.status(400).json({ message: "Invalid Africa's Talking credentials." });
+                if (!body.apiKey || (!body.username && !/sandbox/i.test(body.environment || ''))) return res.status(400).json({ message: 'Username and API Key are required' });
+                const { atBalance, atSendSms, isSandbox } = await import('./services/africasTalking.service');
+                const cfg = { username: body.username, apiKey: body.apiKey, senderId: body.senderId, environment: body.environment };
+                // 1) credentials + environment: read the account balance
+                let balance = '';
+                try { balance = (await atBalance(cfg)).balance; } catch (e: any) { return res.status(400).json({ message: e.message }); }
+                const where = isSandbox(cfg) ? 'sandbox' : 'live';
+                // 2) optional: send one real message and report exactly what Africa's Talking said about it
+                if (body.testPhone) {
+                    const { normalizePhone } = await import('./services/smsGateway.service');
+                    const to = '+' + normalizePhone(body.testPhone);
+                    const out = await atSendSms(cfg, [to], 'ShuleCloud test - Africa\'s Talking is connected and sending.');
+                    const r0 = out.recipients[0];
+                    if (out.requestError) return res.status(400).json({ message: out.requestError.message });
+                    if (!r0?.ok) return res.status(400).json({ message: r0?.error || 'Africa\'s Talking did not accept the test message.' });
+                    return res.json({ message: `Connected (${where}, balance ${balance}). Test SMS to ${to}: ${r0.status}${r0.cost ? `, cost ${r0.cost}` : ''}${r0.messageId ? `, id ${r0.messageId}` : ''}.${out.senderIdDropped ? ` Note: sender ID "${cfg.senderId}" is not registered on your account, so it was sent from the default sender.` : ''}${isSandbox(cfg) ? ' (Sandbox messages only show in the Africa\'s Talking simulator, not on a real phone.)' : ''}` });
+                }
+                return res.json({ message: `Africa's Talking connection successful (${where}). Balance: ${balance}.` });
             }
             case 'twilio': {
                 if (!body.accountSid || !body.authToken) return res.status(400).json({ message: 'Account SID and Auth Token are required' });

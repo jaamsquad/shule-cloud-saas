@@ -1360,17 +1360,14 @@ router.post('/transport/pickup', async (req, res) => {
                 // Actually send via the school's SMS gateway (Talksasa / device),
                 // branded with the school name. Previously this only logged a row
                 // and never sent anything.
-                const { getSmsSettings } = await import('../services/smsGateway.service');
-                const smsSettings = await getSmsSettings(db);
-                const cfg = smsSettings.apiConfig || {};
                 const tenant: any = (req as any).tenantContext;
                 let schoolName = tenant?.tenantName || '';
                 if (!schoolName) { try { const { getMetaDb } = await import('../lib/mongodb'); const t: any = tenant?.tenantId ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenant.tenantId)) }) : null; schoolName = t?.instituteName || t?.name || ''; } catch { /* ignore */ } }
-                const { brandMessage, talksasaSend } = await import('../services/talksasa.service');
+                const { brandMessage } = await import('../services/talksasa.service');
                 const branded = brandMessage(schoolName, msg);
-                let ok = false;
-                if (cfg.apiToken) { const r = await talksasaSend({ apiToken: cfg.apiToken, senderId: cfg.senderId }, [phone], branded); ok = r.ok; }
-                else { const { queueSms } = await import('../services/smsGateway.service'); await queueSms(db, String(tenant?.tenantId || 'default'), [phone], branded, { audience: 'transport' }); ok = true; }
+                const { queueSms } = await import('../services/smsGateway.service');
+                const sr: any = await queueSms(db, String(tenant?.tenantId || 'default'), [phone], branded, { audience: 'transport' });
+                const ok = sr.provider === 'device' || sr.sent > 0;
                 await db.collection('sms_logs').insertOne({ to: phone, message: branded, status: ok ? 'Sent' : 'Failed', purpose: 'transport', createdAt: at });
                 if (ok) sent.push('sms');
             }

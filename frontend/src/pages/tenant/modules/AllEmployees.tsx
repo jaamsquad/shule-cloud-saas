@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
@@ -21,6 +21,35 @@ export default function AllEmployees() {
         : ["Teacher","Admin","Staff","Accountant","Principal","Librarian","Transport Manager","Hostel Warden","Head of Department","Deputy Principal","Exam Director","HR Officer","ICT Officer","Bus Driver","Security","Other"];
     
     const [view, setView] = useState<"cards" | "list">("cards");
+    const [search, setSearch] = useState("");
+    const [sortBy, setSortBy] = useState("name_asc");
+
+    // When the employee was added to the system: createdAt, or the time baked into the record id for older records.
+    const registeredAt = (e: any): number => {
+        const t = e.createdAt ? new Date(e.createdAt).getTime() : NaN;
+        if (Number.isFinite(t)) return t;
+        const fromId = parseInt(String(e._id || "").slice(0, 8), 16);
+        return Number.isFinite(fromId) ? fromId * 1000 : 0;
+    };
+    const nameOf = (e: any) => String(e.name || e.employeeName || "");
+    const roleOf = (e: any) => String(e.designation || "Staff");
+
+    const visible = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        const byName = (a: any, b: any) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" });
+        return staff
+            .filter((e: any) => !q || `${nameOf(e)} ${roleOf(e)} ${e.email || ""} ${e.phone || ""}`.toLowerCase().includes(q))
+            .sort((a: any, b: any) => {
+                switch (sortBy) {
+                    case "name_desc": return byName(b, a);
+                    case "role_asc": return roleOf(a).localeCompare(roleOf(b), undefined, { sensitivity: "base" }) || byName(a, b);
+                    case "role_desc": return roleOf(b).localeCompare(roleOf(a), undefined, { sensitivity: "base" }) || byName(a, b);
+                    case "registered_new": return registeredAt(b) - registeredAt(a) || byName(a, b);
+                    case "registered_old": return registeredAt(a) - registeredAt(b) || byName(a, b);
+                    default: return byName(a, b);
+                }
+            });
+    }, [staff, search, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
     const [editingEmployee, setEditingEmployee] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({
         employeeName: "",
@@ -108,15 +137,26 @@ export default function AllEmployees() {
                         <button onClick={() => setView("cards")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "cards" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-3.5 h-3.5" /> Cards</button>
                         <button onClick={() => setView("list")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> List</button>
                     </div>
-                    <input type="text" placeholder="Search employee…"
-                        className="w-72 h-11 px-5 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white" />
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                            className="h-11 px-4 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm font-medium bg-white cursor-pointer">
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="role_asc">Role (A-Z)</option>
+                            <option value="role_desc">Role (Z-A)</option>
+                            <option value="registered_new">Newest registered</option>
+                            <option value="registered_old">Oldest registered</option>
+                        </select>
+                        <input type="text" placeholder="Search employee…" value={search} onChange={e => setSearch(e.target.value)}
+                            className="w-72 h-11 px-5 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm bg-white" />
+                    </div>
                 </div>
 
                 {/* ── LIST (Excel-style) view ─────────────────────────────── */}
                 {view === "list" ? (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                            <p className="text-xs font-black text-slate-400 uppercase">{staff.length} Employees</p>
+                            <p className="text-xs font-black text-slate-400 uppercase">{visible.length} Employees</p>
                             <Link to="/staff/new" className="inline-flex items-center gap-1.5 text-xs font-bold bg-[#5C67F2] text-white px-4 py-2 rounded-lg"><Plus className="w-4 h-4" /> Add New</Link>
                         </div>
                         <div className="overflow-x-auto">
@@ -133,9 +173,9 @@ export default function AllEmployees() {
                                 <tbody>
                                     {isLoading ? (
                                         <tr><td colSpan={5} className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin text-[#5C67F2] mx-auto" /></td></tr>
-                                    ) : staff.length === 0 ? (
-                                        <tr><td colSpan={5} className="py-10 text-center text-slate-400">No employees yet.</td></tr>
-                                    ) : staff.map((employee: any) => (
+                                    ) : visible.length === 0 ? (
+                                        <tr><td colSpan={5} className="py-10 text-center text-slate-400">{staff.length ? "No employees match your search." : "No employees yet."}</td></tr>
+                                    ) : visible.map((employee: any) => (
                                         <tr key={employee._id} className="border-b border-slate-50 hover:bg-slate-50/50">
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center gap-3">
@@ -168,7 +208,7 @@ export default function AllEmployees() {
                             <Loader2 className="w-12 h-12 animate-spin text-[#5C67F2]" />
                         </div>
                     ) : (
-                        staff.map((employee: any) => (
+                        visible.map((employee: any) => (
                             <div key={employee._id} className="w-56 h-64 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center relative hover:shadow-md transition-shadow">
                                 <div className="w-20 h-20 bg-gray-100 rounded-full border-4 border-[#868DF4]/20 flex items-center justify-center overflow-hidden mb-4 relative z-10 text-[#5C67F2]">
                                     <User className="w-10 h-10" />
