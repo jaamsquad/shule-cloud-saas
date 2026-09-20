@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { BookOpenCheck } from "lucide-react";
+import { CbcTermProvider } from "./cbcTerm";
 
 const TABS = [
     { to: "/cbc", label: "Dashboard", end: true },
@@ -28,7 +29,7 @@ export default function CbcLayout() {
                     {TABS.map(t => <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `px-4 py-2.5 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${isActive ? "border-[#7C3AED] text-[#7C3AED]" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{t.label}</NavLink>)}
                 </div>
             </div>
-            <div className="p-6"><Outlet /></div>
+            <div className="p-6"><CbcTermProvider><Outlet /></CbcTermProvider></div>
         </div>
     );
 }

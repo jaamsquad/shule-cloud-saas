@@ -7,6 +7,7 @@ import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStat
 import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete, platformCallbackBaseV1 } from '../services/mpesa.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
+import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
 
 const router = Router();
 
@@ -2884,9 +2885,10 @@ router.post('/staff-portal/cbc/activities', authed(async (req, res, db, decoded)
     const className = b.grade || b.class || b.className || '';
     const scope = await cbcScope(db, decoded);
     if (!cbcAllows(scope, className)) return res.status(403).json({ message: 'You can only create activities for the classes you teach.' });
+    const cur = await cbcCurrentTerm(db).catch(() => null);   // tag with the school's current term
     const doc = {
         title: b.title || 'CBC Activity', learningArea: b.learningArea || '', strand: b.strand || '',
-        grade: className, class: className, term: b.term || '', year: b.year || String(new Date().getFullYear()),
+        grade: className, class: className, term: b.term || cur?.term || '', year: b.year || cur?.year || String(new Date().getFullYear()),
         assessmentType: b.assessmentType || 'Observation', maxMarks: Number(b.maxMarks) || 0,
         teacherId: decoded.staffId, teacherName: decoded.name, createdAt: new Date(),
     };
@@ -2918,6 +2920,7 @@ router.post('/staff-portal/cbc/assess', authed(async (req, res, db, decoded) => 
     const records: any[] = Array.isArray(b.records) ? b.records : [];
     const activity: any = b.activityId ? await db.collection('cbc_activities').findOne({ _id: safeObjId(b.activityId)! }).catch(() => null) : null;
     const maxMarks = Number(activity?.maxMarks || b.maxMarks || 0);
+    const cur = await cbcCurrentTerm(db).catch(() => null);
     const ops = records.filter(r => r.studentId && (r.level || r.marks != null && r.marks !== '')).map(r => {
         // If only marks given, derive the level band; if only level given, keep it.
         let level = r.level;
@@ -2932,7 +2935,7 @@ router.post('/staff-portal/cbc/assess', authed(async (req, res, db, decoded) => 
                     $set: {
                         studentId: String(r.studentId), activityId: b.activityId || '',
                         learningArea: b.learningArea || activity?.learningArea || '', strand: b.strand || activity?.strand || '',
-                        grade: className, class: className, term: b.term || activity?.term || '', year: b.year || activity?.year || String(new Date().getFullYear()),
+                        grade: className, class: className, term: b.term || activity?.term || cur?.term || '', year: b.year || activity?.year || cur?.year || String(new Date().getFullYear()),
                         level: level || '', score: CBC_LEVEL_SCORE[level] || 0,
                         marks: r.marks != null && r.marks !== '' ? Number(r.marks) : null, maxMarks,
                         teacherId: decoded.staffId, teacherName: decoded.name, updatedAt: new Date(),

@@ -309,6 +309,46 @@ router.patch('/mark-approvals/:id/:action', async (req: Request, res: Response) 
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ── One batch with the marks inside it (the review page) ─────────────────────
+// Same access rule as approving: the caller must be able to moderate the subject.
+router.get('/mark-approvals/:id', async (req: Request, res: Response) => {
+    try {
+        const d = db(req);
+        const id = (() => { try { return new ObjectId(req.params.id); } catch { return null; } })();
+        if (!id) return res.status(400).json({ message: 'Invalid id' });
+        const batch: any = await d.collection('mark_approvals').findOne({ _id: id });
+        if (!batch) return res.status(404).json({ message: 'Approval batch not found' });
+        if (!(await canModerateSubject(req, d, batch.subject))) return res.status(403).json({ message: 'You cannot view this subject.' });
+
+        const rows: any[] = await d.collection('exam_marks').find({ examId: String(batch.examId), $or: [{ subjectName: batch.subject }, { subject: batch.subject }] }).toArray().catch(() => []);
+        const oids = rows.map(r => { try { return new ObjectId(String(r.studentId)); } catch { return null; } }).filter(Boolean) as ObjectId[];
+        const students: any[] = oids.length ? await d.collection('students').find({ _id: { $in: oids } }).toArray().catch(() => []) : [];
+        const byId = new Map(students.map(s => [String(s._id), s]));
+
+        const marks = rows.map(r => {
+            const s = byId.get(String(r.studentId));
+            const obtained = r.marksObtained ?? r.marks ?? null, total = Number(r.totalMarks || r.outOf || 100);
+            return {
+                studentId: String(r.studentId),
+                name: s?.studentName || s?.name || r.studentName || 'Student',
+                regNo: s?.registrationNo || s?.admNo || '',
+                className: r.className || s?.studentClass || '',
+                marksObtained: obtained, totalMarks: total,
+                percentage: obtained == null || !total ? null : Math.round((Number(obtained) / total) * 1000) / 10,
+            };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+
+        const scored = marks.filter(m => m.percentage != null).map(m => m.percentage as number);
+        const stats = {
+            count: marks.length,
+            mean: scored.length ? Math.round((scored.reduce((x, y) => x + y, 0) / scored.length) * 10) / 10 : null,
+            highest: scored.length ? Math.max(...scored) : null,
+            lowest: scored.length ? Math.min(...scored) : null,
+        };
+        res.json({ batch: { ...batch, history: (batch.history || []).slice().reverse() }, marks, stats });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── Moderation history for a batch ───────────────────────────────────────────
 router.get('/mark-approvals/:id/history', async (req: Request, res: Response) => {
     try {

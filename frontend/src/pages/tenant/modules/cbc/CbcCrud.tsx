@@ -2,14 +2,18 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Trash2, Pencil, X, Search } from "lucide-react";
 import { toast } from "sonner";
-import { cbc } from "./cbcApi";
+import { cbc, TERM_SCOPED } from "./cbcApi";
+import { useCbcTerm } from "./cbcTerm";
 
 export type Fld = { k: string; label: string; type?: "text" | "number" | "date" | "select" | "textarea"; options?: string[] | (() => string[]); required?: boolean; allowCustom?: boolean };
 const ACCENT = "#7C3AED";
 
 export default function CbcCrud({ collection, title, addLabel = "Add", fields, columns, searchKeys }: { collection: string; title: string; addLabel?: string; fields: Fld[]; columns: { k: string; label: string }[]; searchKeys?: string[] }) {
     const qc = useQueryClient();
-    const { data: rows = [], isLoading } = useQuery({ queryKey: ["cbc", collection], queryFn: () => cbc.list(collection) });
+    // Activities / comments etc. are per term; learning areas, competencies and strands are not.
+    const scoped = TERM_SCOPED.has(collection);
+    const { params, stamp, key, label } = useCbcTerm();
+    const { data: rows = [], isLoading } = useQuery({ queryKey: scoped ? ["cbc", collection, key] : ["cbc", collection], queryFn: () => cbc.list(collection, scoped ? params : {}) });
     const [q, setQ] = useState(""); const [open, setOpen] = useState(false); const [editId, setEditId] = useState<string | null>(null); const [form, setForm] = useState<Record<string, any>>({}); const [saving, setSaving] = useState(false);
     const opts = (f: Fld) => (typeof f.options === "function" ? f.options() : f.options) || [];
     const sKeys = searchKeys || columns.map(c => c.k);
@@ -18,7 +22,7 @@ export default function CbcCrud({ collection, title, addLabel = "Add", fields, c
     const save = async () => {
         for (const f of fields) if (f.required && !form[f.k]) return toast.error(`${f.label} is required`);
         setSaving(true);
-        try { if (editId) await cbc.update(collection, editId, form); else await cbc.add(collection, form); toast.success(editId ? "Updated" : "Saved"); setOpen(false); qc.invalidateQueries({ queryKey: ["cbc", collection] }); }
+        try { if (editId) await cbc.update(collection, editId, form); else await cbc.add(collection, scoped ? { ...form, ...stamp } : form); toast.success(editId ? "Updated" : "Saved"); setOpen(false); qc.invalidateQueries({ queryKey: ["cbc", collection] }); }
         catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } finally { setSaving(false); }
     };
     const del = async (id: string) => { if (!confirm("Delete this record?")) return; await cbc.remove(collection, id); qc.invalidateQueries({ queryKey: ["cbc", collection] }); toast.success("Deleted"); };
@@ -43,7 +47,7 @@ export default function CbcCrud({ collection, title, addLabel = "Add", fields, c
                                     <td className="px-4 py-3 text-right"><div className="flex gap-1 justify-end"><button onClick={() => { setEditId(r._id); setForm({ ...r }); setOpen(true); }} className="w-7 h-7 rounded-lg bg-slate-50 text-slate-400 hover:text-[#7C3AED] flex items-center justify-center"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => del(r._id)} className="w-7 h-7 rounded-lg bg-red-50 text-red-400 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button></div></td>
                                 </tr>
                             ))}
-                            {filtered.length === 0 && <tr><td colSpan={columns.length + 1} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">No records</td></tr>}
+                            {filtered.length === 0 && <tr><td colSpan={columns.length + 1} className="py-12 text-center text-slate-400 text-xs font-bold uppercase">{scoped && label ? `No records for ${label}` : "No records"}</td></tr>}
                         </tbody>
                     </table>
                 )}

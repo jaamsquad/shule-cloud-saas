@@ -335,6 +335,8 @@ import LiveTracking from "./pages/tenant/modules/transport/LiveTracking";
 import InstituteProfile from "./pages/tenant/modules/InstituteProfile";
 import AccountsForFees from "./pages/tenant/modules/AccountsForFees";
 import RulesRegulations from "./pages/tenant/modules/RulesRegulations";
+import NumberingSettings from "./pages/tenant/modules/NumberingSettings";
+import { MarksApprovalList, MarksApprovalReview } from "./pages/tenant/modules/MarksApprovals";
 import GradingTemplates from "./pages/tenant/modules/settings/GradingTemplates";
 import CurriculumSettings from "./pages/tenant/modules/CurriculumSettings";
 import ReportCardTemplates from "./pages/tenant/modules/ReportCardTemplates";
@@ -1012,6 +1014,9 @@ const App = () => {
               <Route path="/settings/discount-type" element={<DiscountTypes />} />
               <Route path="/settings/accounts" element={<AccountsForFees />} />
               <Route path="/settings/rules" element={<RulesRegulations />} />
+              <Route path="/settings/numbering" element={<NumberingSettings />} />
+              <Route path="/marks-approval" element={<MarksApprovalList />} />
+              <Route path="/marks-approval/:id" element={<MarksApprovalReview />} />
               <Route path="/settings/grading" element={<Navigate to="/settings/grading-templates" replace />} />
               <Route path="/settings/grading-templates" element={<GradingTemplates />} />
               <Route path="/settings/curriculum" element={<CurriculumSettings />} />

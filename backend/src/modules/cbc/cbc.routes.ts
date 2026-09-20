@@ -10,6 +10,8 @@ import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
 import { sanitizeUpdate } from '../../lib/sanitizeUpdate';
+import { resolveScope } from '../../lib/dataScope';
+import { loadTerms, pickCurrent, belongsToTerm, termOption, TermInfo } from './cbcTerm';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -25,17 +27,57 @@ const audit = async (req: Request, action: string, target: string, meta: any = {
     try { await db(req).collection('audit_logs').insertOne({ scope: 'cbc', action, target, meta, user: user(req), changedAt: new Date(), createdAt: new Date() }); } catch { /* */ }
 };
 
+// ── Terms ─────────────────────────────────────────────────────────────────────
+// Activities, assessments and comments belong to a term; learning areas, competencies
+// and strands are the curriculum itself and are not term-based.
+const TERM_SCOPED = new Set(['cbc_activities', 'cbc_assessments', 'cbc_comments', 'cbc_feedback']);
+
+// Which term is this request looking at? Everyone gets the CURRENT term. Only admins may
+// pick another (?term=Term 1&year=2026) or every term (?term=all) — enforced here, so a
+// teacher can't widen it from the browser. With no terms set up, nothing is filtered.
+async function termScope(req: Request) {
+    const d = db(req);
+    const [terms, scope] = await Promise.all([loadTerms(d), resolveScope(req, d)]);
+    const current = pickCurrent(terms);
+    const asked = String(req.query.term || '').trim(), askedYear = String(req.query.year || '').trim();
+    let sel: TermInfo | null = current, all = false;
+    if (scope.isAdmin && asked) {
+        if (asked.toLowerCase() === 'all') all = true;
+        else sel = terms.find(t => t.term.toLowerCase() === asked.toLowerCase() && (!askedYear || t.year === askedYear)) || current;
+    }
+    return { terms, current, sel, all, isAdmin: scope.isAdmin, match: (doc: any) => all || !sel || belongsToTerm(doc, sel) };
+}
+
+// Tag a new record with its term: the current one, unless an admin chose another.
+async function stampTerm(req: Request, body: any) {
+    const { current, isAdmin } = await termScope(req);
+    if (!current || (isAdmin && String(body?.term || '').trim())) return body;
+    return { ...body, term: current.term, year: current.year };
+}
+
+// GET /cbc/terms — the terms to show in the selector, and whether this user may switch.
+router.get('/cbc/terms', async (req, res) => {
+    try {
+        const ts = await termScope(req);
+        res.json({ terms: ts.terms.map(termOption), current: ts.current ? termOption(ts.current) : null, canChoose: ts.isAdmin });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ── Generic soft-delete CRUD ──────────────────────────────────────────────────
 function crud(coll: string) {
+    const scoped = TERM_SCOPED.has(coll);
     router.get(`/${coll}`, async (req, res) => {
         try {
             const q: any = { deletedAt: { $exists: false } };
-            ['grade', 'class', 'learningArea', 'teacher', 'term', 'year', 'studentId', 'status', 'strand'].forEach(k => { if (req.query[k]) q[k] = String(req.query[k]); });
-            res.json(await db(req).collection(coll).find(q).sort({ createdAt: -1 }).limit(2000).toArray());
+            // (term/year on term-scoped collections are handled by termScope, not as exact matches)
+            ['grade', 'class', 'learningArea', 'teacher', ...(scoped ? [] : ['term', 'year']), 'studentId', 'status', 'strand'].forEach(k => { if (req.query[k]) q[k] = String(req.query[k]); });
+            let rows = await db(req).collection(coll).find(q).sort({ createdAt: -1 }).limit(2000).toArray();
+            if (scoped) rows = rows.filter((await termScope(req)).match);
+            res.json(rows);
         } catch (e: any) { res.status(500).json({ message: e.message }); }
     });
     router.post(`/${coll}`, async (req, res) => {
-        try { const doc = { ...req.body, createdBy: user(req), createdAt: new Date() }; const r = await db(req).collection(coll).insertOne(doc); await audit(req, `create_${coll}`, String(r.insertedId)); res.status(201).json({ _id: r.insertedId, ...doc }); }
+        try { const doc = { ...(scoped ? await stampTerm(req, req.body) : req.body), createdBy: user(req), createdAt: new Date() }; const r = await db(req).collection(coll).insertOne(doc); await audit(req, `create_${coll}`, String(r.insertedId)); res.status(201).json({ _id: r.insertedId, ...doc }); }
         catch (e: any) { res.status(500).json({ message: e.message }); }
     });
     router.patch(`/${coll}/:id`, async (req, res) => {
@@ -54,10 +96,14 @@ router.post('/cbc/assessments/bulk', async (req, res) => {
     try {
         const records: any[] = Array.isArray(req.body?.records) ? req.body.records : [];
         if (!records.length) return res.status(400).json({ message: 'No records' });
+        // Each assessment belongs to the term of its activity (else the current term).
+        const activity: any = req.body.activityId ? await db(req).collection('cbc_activities').findOne({ _id: oid(String(req.body.activityId))! }).catch(() => null) : null;
+        const { current } = await termScope(req);
+        const term = activity?.term || current?.term || '', year = activity?.year || current?.year || '';
         const ops = records.filter(r => r.studentId && r.level).map(r => ({
             updateOne: {
                 filter: { studentId: r.studentId, activityId: r.activityId },
-                update: { $set: { ...r, level: r.level, score: LEVEL_SCORE[r.level] || 0, updatedAt: new Date(), updatedBy: user(req) }, $setOnInsert: { createdAt: new Date() } },
+                update: { $set: { ...r, term: r.term || term, year: r.year || year, level: r.level, score: LEVEL_SCORE[r.level] || 0, updatedAt: new Date(), updatedBy: user(req) }, $setOnInsert: { createdAt: new Date() } },
                 upsert: true,
             },
         }));
@@ -83,13 +129,17 @@ router.post('/cbc/seed', async (req, res) => {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 router.get('/cbc/stats', async (req, res) => {
     try {
-        const [students, areas, activities, assessments] = await Promise.all([
+        const ts = await termScope(req);
+        const [students, areas, allActivities, allAssessments, allComments] = await Promise.all([
             db(req).collection('students').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
             db(req).collection('cbc_learning_areas').countDocuments({ deletedAt: { $exists: false } }).catch(() => 0),
             db(req).collection('cbc_activities').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
             db(req).collection('cbc_assessments').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
+            db(req).collection('cbc_comments').find({ deletedAt: { $exists: false } }).toArray().catch(() => []),
         ]);
-        const comments = await db(req).collection('cbc_comments').countDocuments({ deletedAt: { $exists: false } }).catch(() => 0);
+        // Only this term's activities, assessments and comments feed the dashboard.
+        const activities = allActivities.filter(ts.match), assessments = allAssessments.filter(ts.match);
+        const comments = allComments.filter(ts.match).length;
         const avgScore = assessments.length ? assessments.reduce((s: number, a: any) => s + (a.score || 0), 0) / assessments.length : 0;
 
         const byGrade: Record<string, { sum: number; n: number }> = {}; const byArea: Record<string, { sum: number; n: number }> = {}; const compAch: Record<string, number> = { EE: 0, ME: 0, AE: 0, BE: 0 }; const byGender: Record<string, { sum: number; n: number }> = {};
@@ -121,9 +171,10 @@ router.get('/cbc/stats', async (req, res) => {
 router.get('/cbc/progress/:studentId', async (req, res) => {
     try {
         const sid = req.params.studentId;
+        const ts = await termScope(req);
         const student = await db(req).collection('students').findOne({ _id: oid(sid)! }).catch(() => null);
-        const assessments = await db(req).collection('cbc_assessments').find({ studentId: sid, deletedAt: { $exists: false } }).sort({ createdAt: -1 }).toArray().catch(() => []);
-        const comments = await db(req).collection('cbc_comments').find({ studentId: sid }).sort({ createdAt: -1 }).toArray().catch(() => []);
+        const assessments = (await db(req).collection('cbc_assessments').find({ studentId: sid, deletedAt: { $exists: false } }).sort({ createdAt: -1 }).toArray().catch(() => [])).filter(ts.match);
+        const comments = (await db(req).collection('cbc_comments').find({ studentId: sid }).sort({ createdAt: -1 }).toArray().catch(() => [])).filter(ts.match);
 
         const byArea: Record<string, { sum: number; n: number }> = {};
         assessments.forEach((a: any) => { (byArea[a.learningArea || 'Other'] ||= { sum: 0, n: 0 }); byArea[a.learningArea || 'Other'].sum += a.score || 0; byArea[a.learningArea || 'Other'].n++; });
@@ -139,12 +190,10 @@ router.get('/cbc/progress/:studentId', async (req, res) => {
 router.get('/cbc/report-card/:studentId', async (req, res) => {
     try {
         const sid = req.params.studentId;
-        const { term, year } = req.query as any;
+        const ts = await termScope(req);   // the report card is for one term: the current one unless an admin picked another
         const student = await db(req).collection('students').findOne({ _id: oid(sid)! }).catch(() => null);
         if (!student) return res.status(404).json({ message: 'Student not found' });
-        const q: any = { studentId: sid, deletedAt: { $exists: false } };
-        if (term) q.term = term; if (year) q.year = year;
-        const assessments = await db(req).collection('cbc_assessments').find(q).toArray().catch(() => []);
+        const assessments = (await db(req).collection('cbc_assessments').find({ studentId: sid, deletedAt: { $exists: false } }).toArray().catch(() => [])).filter(ts.match);
 
         const byArea: Record<string, { sum: number; n: number; strands: Record<string, { sum: number; n: number }> }> = {};
         assessments.forEach((a: any) => {
@@ -157,24 +206,13 @@ router.get('/cbc/report-card/:studentId', async (req, res) => {
             strands: Object.entries(v.strands).map(([strand, sv]) => ({ strand, level: SCORE_LEVEL(sv.sum / sv.n), levelLabel: LEVEL_LABEL[SCORE_LEVEL(sv.sum / sv.n)] })),
         }));
 
-        const comments = await db(req).collection('cbc_comments').find({ studentId: sid }).sort({ createdAt: -1 }).toArray().catch(() => []);
+        const comments = (await db(req).collection('cbc_comments').find({ studentId: sid }).sort({ createdAt: -1 }).toArray().catch(() => [])).filter(ts.match);
         const tenant = await getMetaDb().collection('Tenant').findOne({ _id: oid(String((req as any).tenantContext?.tenantId || '')) || undefined as any }).catch(() => null);
-
-        // Resolve the school's real current academic term/year when not explicitly
-        // requested — mirrors the legacy `periods` and v2 `terms` collections.
-        let curTerm = term as string | undefined;
-        let curYear = year as string | undefined;
-        if (!curTerm || !curYear) {
-            const period = await db(req).collection('periods').findOne({ isCurrent: true }).catch(() => null);
-            const activeTerm = !period ? await db(req).collection('terms').findOne({ isActive: true }).catch(() => null) : null;
-            curTerm = curTerm || period?.label || period?.name || period?.term || period?.title || activeTerm?.name || '';
-            curYear = curYear || String(period?.academicYear || activeTerm?.academicYear || new Date().getFullYear());
-        }
 
         res.json({
             school: { name: tenant?.instituteName || tenant?.name || 'School', logo: tenant?.logo || '' },
             student: { name: student.studentName || student.name, admissionNo: student.registrationNo || student.admNo, grade: student.currentClass || student.studentClass, gender: student.gender },
-            term: curTerm || '', year: curYear || String(new Date().getFullYear()),
+            term: ts.all ? 'All terms' : (ts.sel?.term || ''), year: ts.all ? '' : (ts.sel?.year || String(new Date().getFullYear())),
             learningAreas,
             teacherComment: comments.find((c: any) => /teacher/i.test(c.type || ''))?.text || comments[0]?.text || '',
             headComment: comments.find((c: any) => /head|principal/i.test(c.type || ''))?.text || '',
@@ -192,7 +230,8 @@ router.patch('/cbc/settings', async (req, res) => { await db(req).collection('cb
 // ── Reports ───────────────────────────────────────────────────────────────────
 router.get('/cbc/reports/:kind', async (req, res) => {
     try {
-        const assessments = await db(req).collection('cbc_assessments').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
+        const ts = await termScope(req);
+        const assessments = (await db(req).collection('cbc_assessments').find({ deletedAt: { $exists: false } }).toArray().catch(() => [])).filter(ts.match);
         const students = await db(req).collection('students').find({}).toArray().catch(() => []);
         const byId: Record<string, any> = {}; students.forEach((s: any) => byId[String(s._id)] = s);
         const kind = req.params.kind;

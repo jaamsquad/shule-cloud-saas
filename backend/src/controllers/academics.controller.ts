@@ -3,6 +3,7 @@ import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { syncParentToStudents, syncStudentToParents } from '../services/parent-student-sync.service';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
+import { applyAutoNumber } from '../lib/idNumbering';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -61,6 +62,8 @@ export const bulkCreate = (collectionName: string) => async (req: Request, res: 
         }
 
         const docs = items.map((i: any) => ({ ...i, createdAt: new Date() }));
+        // Rows with no registration / employee number get the next automatic one (when switched on in settings).
+        for (const d of docs) await applyAutoNumber(db, collectionName, d);
         const result = await db.collection(collectionName).insertMany(docs);
         // Auto-create linked Parent records (Father/Mother) for imported students.
         if (collectionName === 'students') {
@@ -115,6 +118,7 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
             }
         }
 
+        await applyAutoNumber(db, collectionName, data);   // automatic registration / employee number, if enabled
         const result = await db.collection(collectionName).insertOne(data);
         // Keep Parents module and student father/mother fields in sync.
         if (collectionName === 'parents') syncParentToStudents(db, { ...data, _id: result.insertedId }).catch(() => {});

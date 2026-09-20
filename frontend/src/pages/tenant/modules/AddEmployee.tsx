@@ -9,6 +9,7 @@ import DataAccessSection from "./DataAccessSection";
 import { toast } from "sonner";
 import { SCHOOL_ROLES, SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
 import { groupDashboardOptions } from "@/components/AppSidebar";
+import { useNumbering, NUMBERING_KEY } from "./NumberingSettings";
 
 // ── Excel column → staff field mapping ──────────────────────────────────────
 const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
@@ -33,6 +34,7 @@ const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
     { header: "Bank Name",           field: "bankName" },
     { header: "Bank Branch",         field: "bankBranch" },
     { header: "Account Number",      field: "accountNo" },
+    { header: "Employee No",         field: "staffNo" },   // leave blank to have it generated (when automatic numbering is on)
 ];
 
 function downloadTemplate() {
@@ -41,7 +43,7 @@ function downloadTemplate() {
         "Jane Doe", "+254712345678", "jane@school.com", "Teacher",
         "12345678", "1990-05-15", "Female", "2024-01-10",
         "45000", "", "Christianity", "O+", "Bachelor of Education", "5 Years",
-        "P.O Box 100, Nairobi", "A012345678B", "", "", "Equity Bank", "Westlands", "0123456789",
+        "P.O Box 100, Nairobi", "A012345678B", "", "", "Equity Bank", "Westlands", "0123456789", "",
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
     ws["!cols"] = headers.map(() => ({ wch: 22 }));
@@ -72,8 +74,11 @@ export default function AddEmployee() {
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
         department: "", reportsTo: "",
         dataAccess: { studentScope: "all", staffScope: "all" } as any,
-        kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: ""
+        kraPin: "", nssfNo: "", nhifNo: "", bankName: "", bankBranch: "", accountNo: "",
+        staffNo: ""
     });
+    const { data: numbering } = useNumbering();
+    const autoStaffNo = !!numbering?.staff.enabled && !isEditMode;   // employee number is assigned on save
 
     // Eligible supervisors for the "Reports To" routing field (other staff).
     const { data: supervisors = [] } = useQuery({
@@ -140,6 +145,7 @@ export default function AddEmployee() {
             bankName:            existingStaff.bankName || "",
             bankBranch:          existingStaff.bankBranch || "",
             accountNo:           existingStaff.accountNo || "",
+            staffNo:             existingStaff.staffNo || "",
         });
     }, [existingStaff, dataLoaded]);
 
@@ -160,7 +166,7 @@ export default function AddEmployee() {
         if (isEditMode) {
             updateMut.mutate(formData);
         } else {
-            createItem(formData, { onSuccess: () => navigate("/staff") });
+            createItem(formData, { onSuccess: () => { qc.invalidateQueries({ queryKey: NUMBERING_KEY }); navigate("/staff"); } });
         }
     };
 
@@ -478,6 +484,9 @@ export default function AddEmployee() {
                                 <SectionHeader num="1" title="Personal & Contact Information" />
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
                                     <InputField name="employeeName" value={formData.employeeName} onChange={handleChange} label="Employee Name*" placeholder="Full Name of Employee" required />
+                                    {autoStaffNo
+                                        ? <InputField name="staffNo" value="" readOnly label="Employee No (automatic)" placeholder={`Assigned on save — next: ${numbering?.staff.preview || ""}`} />
+                                        : <InputField name="staffNo" value={formData.staffNo} onChange={handleChange} label="Employee No" placeholder="e.g. EMP-0001" />}
                                     <InputField name="phone" value={formData.phone} onChange={handleChange} label="Mobile No*" placeholder="e.g. +254xxxxxxxxx" required />
                                     <InputField name="email" value={formData.email} onChange={handleChange} label="Email Address*" placeholder="email@school.com" required />
                                     <SelectField name="designation" value={formData.designation} onChange={handleChange} label="Employee Role*" placeholder="Select Role*" required
@@ -638,7 +647,7 @@ export default function AddEmployee() {
                                         gender: "Male", designation: "", joiningDate: "", salary: "", address: "",
                                         specializedSubjects: [], experience: "", nationalId: "", religion: "",
                                         education: "", bloodGroup: "", kraPin: "", nssfNo: "", nhifNo: "",
-                                        bankName: "", bankBranch: "", accountNo: ""
+                                        bankName: "", bankBranch: "", accountNo: "", staffNo: ""
                                     })}
                                     className="h-12 px-8 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-md flex items-center gap-2 transition-colors">
                                     <RefreshCcw className="w-4 h-4" /> Reset
@@ -668,16 +677,16 @@ function SectionHeader({ num, title }: { num: string; title: string }) {
     );
 }
 
-function InputField({ label, placeholder, required, color = "blue", name, value, onChange }: {
+function InputField({ label, placeholder, required, color = "blue", name, value, onChange, readOnly }: {
     label: string; placeholder: string; required?: boolean; color?: "blue" | "purple" | "gray";
-    name?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    name?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; readOnly?: boolean;
 }) {
     const bg = (label.includes("*") || required) ? (color === "purple" ? "bg-[#868DF4]" : "bg-[#5C67F2]") : "bg-gray-400";
     return (
         <div className="relative">
             <div className={`absolute -top-3 left-6 ${bg} text-white text-[11px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm`}>{label}</div>
-            <input type="text" name={name} value={value} onChange={onChange} placeholder={placeholder}
-                className="w-full h-12 px-6 border border-[#5C67F2]/40 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 placeholder-gray-400 bg-white text-sm" />
+            <input type="text" name={name} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly}
+                className={`w-full h-12 px-6 border border-[#5C67F2]/40 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 placeholder-gray-400 text-sm ${readOnly ? "bg-gray-50 cursor-not-allowed" : "bg-white"}`} />
         </div>
     );
 }

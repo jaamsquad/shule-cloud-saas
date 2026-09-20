@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, Printer, Download, Users, BookOpen, ClipboardCheck, Clock, CheckCircle2, Gauge, AlertTriangle, MessageSquare, Search } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { toast } from "sonner";
 import CbcCrud, { Fld } from "./CbcCrud";
 import { cbc, LEVELS, levelColor, toCSV, download } from "./cbcApi";
+import { useCbcTerm } from "./cbcTerm";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 import { openPrintDoc } from "@/lib/pdfDoc";
 
@@ -32,7 +33,8 @@ const useSubjects = () => {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export function CbcDashboard() {
     const qc = useQueryClient();
-    const { data, isLoading } = useQuery({ queryKey: ["cbc_stats"], queryFn: cbc.stats });
+    const { params, key } = useCbcTerm();
+    const { data, isLoading } = useQuery({ queryKey: ["cbc_stats", key], queryFn: () => cbc.stats(params) });
     const seed = async () => { await cbc.seed(); toast.success("CBC competencies & learning areas loaded"); qc.invalidateQueries(); };
     if (isLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-[#7C3AED]" /></div>;
     const c = data?.cards || {}; const ch = data?.charts || {};
@@ -96,16 +98,18 @@ export function CommentsPage() {
 // ── Record Assessments (bulk class entry) ─────────────────────────────────────
 export function RecordPage() {
     const qc = useQueryClient();
-    const { data: activities = [] } = useQuery({ queryKey: ["cbc", "cbc_activities"], queryFn: () => cbc.list("cbc_activities") });
+    const { params, key } = useCbcTerm();
+    const { data: activities = [] } = useQuery({ queryKey: ["cbc", "cbc_activities", key], queryFn: () => cbc.list("cbc_activities", params) });
     const students = useStudents();
     const [activityId, setActivityId] = useState("");
     const [marks, setMarks] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const activity = activities.find((a: any) => a._id === activityId);
+    useEffect(() => { setActivityId(""); setMarks({}); }, [key]);   // the activity list changes with the term
     const roster = useMemo(() => activity?.grade ? students.filter((s: any) => (s.currentClass || s.studentClass || "") === activity.grade || (s.currentClass || s.studentClass || "").includes(activity.grade)) : students, [students, activity]);
 
     const save = async () => {
-        if (!activityId) return toast.error("Select an activity");
+        if (!activityId || !activity) return toast.error("Select an activity");
         const records = roster.filter((s: any) => marks[s._id]).map((s: any) => ({ studentId: s._id, studentName: s.studentName || s.name, grade: s.currentClass || s.studentClass, learningArea: activity.learningArea, strand: activity.strand, activityId, level: marks[s._id], term: activity.term, year: activity.year }));
         if (!records.length) return toast.error("Mark at least one learner");
         setSaving(true);
@@ -145,7 +149,8 @@ export function RecordPage() {
 export function ProgressPage() {
     const students = useStudents();
     const [sid, setSid] = useState(""); const [search, setSearch] = useState("");
-    const { data, isLoading } = useQuery({ queryKey: ["cbc_progress", sid], queryFn: () => cbc.progress(sid), enabled: !!sid });
+    const { params, key } = useCbcTerm();
+    const { data, isLoading } = useQuery({ queryKey: ["cbc_progress", sid, key], queryFn: () => cbc.progress(sid, params), enabled: !!sid });
     const filtered = students.filter((s: any) => !search || `${s.studentName || s.name} ${s.registrationNo || s.admNo}`.toLowerCase().includes(search.toLowerCase()));
     return (
         <div className="space-y-4">
@@ -175,7 +180,8 @@ export function ProgressPage() {
 export function ReportCardsPage() {
     const students = useStudents();
     const [sid, setSid] = useState(""); const [search, setSearch] = useState("");
-    const { data, isLoading } = useQuery({ queryKey: ["cbc_rc", sid], queryFn: () => cbc.reportCard(sid), enabled: !!sid });
+    const { params, key } = useCbcTerm();
+    const { data, isLoading } = useQuery({ queryKey: ["cbc_rc", sid, key], queryFn: () => cbc.reportCard(sid, params), enabled: !!sid });
     const filtered = students.filter((s: any) => !search || `${s.studentName || s.name} ${s.registrationNo || s.admNo}`.toLowerCase().includes(search.toLowerCase()));
     // Print in the ScholarSheet look — black & white A4 (colour only for the logo).
     const print = () => {
@@ -229,7 +235,8 @@ export function ReportCardsPage() {
 
 // ── Analytics + Reports (reuse the report endpoint) ───────────────────────────
 export function AnalyticsPage() {
-    const { data, isLoading } = useQuery({ queryKey: ["cbc_stats"], queryFn: cbc.stats });
+    const { params, key } = useCbcTerm();
+    const { data, isLoading } = useQuery({ queryKey: ["cbc_stats", key], queryFn: () => cbc.stats(params) });
     if (isLoading) return <Loader2 className="w-6 h-6 animate-spin text-[#7C3AED]" />;
     const ch = data?.charts || {};
     return (
@@ -246,7 +253,8 @@ const REPORTS = [{ k: "progress", l: "Learner Progress" }, { k: "competency", l:
 export function ReportsPage() {
     const [active, setActive] = useState("progress");
     const school = useSchoolBrand();
-    const { data, isLoading } = useQuery({ queryKey: ["cbc_report", active], queryFn: () => cbc.report(active) });
+    const { params, key } = useCbcTerm();
+    const { data, isLoading } = useQuery({ queryKey: ["cbc_report", active, key], queryFn: () => cbc.report(active, params) });
     const cols = data?.columns || []; const rows = data?.rows || [];
     const csv = () => download(toCSV(cols.map((c: any) => c.label), rows.map((r: any) => cols.map((c: any) => r[c.key] ?? ""))), `${data.title}.csv`);
     const print = () => { const head = cols.map((c: any) => `<th>${c.label}</th>`).join(""); const body = rows.map((r: any) => `<tr>${cols.map((c: any) => `<td>${r[c.key] ?? ""}</td>`).join("")}</tr>`).join(""); printBranded(school, data.title, `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`, ACCENT); };

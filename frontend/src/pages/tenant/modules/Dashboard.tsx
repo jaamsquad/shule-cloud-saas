@@ -618,7 +618,7 @@ export default function Dashboard() {
                                 {pendingMarks.length === 0 ? (
                                     <p className="text-xs text-slate-400 py-2">No marks awaiting approval.</p>
                                 ) : pendingMarks.slice(0, 5).map((b: any) => (
-                                    <div key={b._id} className="flex items-center justify-between border-b border-slate-100/70 py-1.5">
+                                    <div key={b._id} onClick={() => navigate(`/marks-approval/${b._id}`)} className="flex items-center justify-between border-b border-slate-100/70 py-1.5 cursor-pointer hover:bg-blue-50/50 rounded">
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-slate-700 truncate">{b.subject}</p>
                                             <p className="text-[11px] text-slate-400 truncate">{b.examName || ""}{b.submittedBy ? ` · ${b.submittedBy}` : ""} · {b.entries} entries</p>
@@ -628,7 +628,7 @@ export default function Dashboard() {
                                 ))}
                                 {pendingMarks.length > 5 && <p className="text-[11px] font-bold text-slate-400 pt-1">+{pendingMarks.length - 5} more</p>}
                             </div>
-                            <button onClick={() => navigate("/departments?tab=marks")} className="mt-3 text-xs font-black text-blue-700 hover:underline self-start flex items-center gap-1">
+                            <button onClick={() => navigate("/marks-approval")} className="mt-3 text-xs font-black text-blue-700 hover:underline self-start flex items-center gap-1">
                                 Review &amp; approve <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                         </div>

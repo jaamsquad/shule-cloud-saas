@@ -8,6 +8,7 @@ import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } fr
 import { syncStudentToParents } from '../services/parent-student-sync.service';
 import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
+import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
 
 const router = Router();
 
@@ -488,6 +489,26 @@ router.post('/students',             enforceCrud('students', 'create'), enforceP
 router.patch('/students/:id',        enforceCrud('students', 'update'), c.updateItem('students'));
 router.delete('/students/:id',       enforceCrud('students', 'delete'), c.deleteItem('students'));
 router.post('/students/bulk',        enforceCrud('students', 'create'), enforcePlanLimit, c.bulkCreate('students'));
+
+// ─── Automatic registration / employee numbers ───────────────────────────────
+// Settings → Registration Numbers. Anyone can read the rule (the add forms need to know
+// whether the number is automatic, and what comes next); only admins can change it.
+const NUMBER_KINDS: NumberKind[] = ['student', 'staff'];
+const numberingView = async (db: Db) => {
+    const out: any = {};
+    for (const k of NUMBER_KINDS) { const rule = await getRule(db, k); out[k] = { ...rule, preview: previewNext(rule) }; }
+    return out;
+};
+router.get('/settings/numbering', async (req, res) => {
+    try { res.json(await numberingView(getRequestDb(req))); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/settings/numbering', enforceCrud('settings', 'update'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        for (const k of NUMBER_KINDS) if (req.body?.[k]) await saveRule(db, k, req.body[k]);
+        res.json(await numberingView(db));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
 // Class membership lives directly on the student (classId / studentClass / stream…),

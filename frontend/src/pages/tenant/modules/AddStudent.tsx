@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Home, Settings, Plus, RotateCcw, Check, Download, Loader2, Upload, X } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Home, Settings, Plus, RotateCcw, Check, Download, Loader2, Upload, X, ArrowLeft, AlertTriangle, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,11 +8,72 @@ import { toast } from "sonner";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
+import { useNumbering, NUMBERING_KEY } from "./NumberingSettings";
+
+const normTxt = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Spreadsheet dates arrive as Excel serial numbers, Date objects or text — bring them to YYYY-MM-DD.
+const toIsoDate = (v: any): string => {
+    if (v === undefined || v === null || String(v).trim() === "") return "";
+    if (v instanceof Date) return isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
+    if (typeof v === "number") { const d = new Date(Math.round((v - 25569) * 86400 * 1000)); return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10); }
+    const s = String(v).trim();
+    if (ISO_DATE.test(s)) return s;
+    const m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);   // DD/MM/YYYY
+    return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : s;   // otherwise leave as typed — the preview flags it
+};
+const toGender = (v: string): string => { const g = normTxt(v); return g.startsWith("f") ? "Female" : g.startsWith("m") ? "Male" : g ? "Other" : "Male"; };
+
+// One spreadsheet row → student fields. Portal login details are added at import time, once the registration number is final.
+const mapSheetRow = (item: any) => {
+    const pick = (...keys: string[]) => { for (const k of keys) { if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== "") return String(item[k]).trim(); } return ""; };
+    const father = { phone: pick("Father Phone", "Father Mobile", "fatherPhone"), email: pick("Father Email", "fatherEmail") };
+    const mother = { phone: pick("Mother Phone", "Mother Mobile", "motherPhone"), email: pick("Mother Email", "motherEmail") };
+    return {
+        studentName: pick("Student Name", "Name", "name", "studentName"),
+        registrationNo: pick("Registration No", "Adm No", "registrationNo", "admNo"),
+        admNo: pick("Admission No", "Adm No", "admNo"),
+        studentClass: pick("Class", "Grade", "studentClass"),
+        gender: toGender(pick("Gender", "gender")),
+        dob: toIsoDate(item["Date of Birth"] ?? item["DOB"] ?? item.dob),
+        email: pick("Email", "Student Email", "email"),
+        phone: pick("Phone", "Mobile", "phone"),
+        address: pick("Address", "Postal Address", "address"),
+        bloodGroup: pick("Blood Group", "bloodGroup"),
+        religion: pick("Religion", "religion"),
+        nationality: pick("Nationality", "nationality"),
+        previousSchool: pick("Previous School", "previousSchool"),
+        transportZone: pick("Transport Zone", "transportZone"),
+        admissionDate: toIsoDate(item["Admission Date"] ?? item.admissionDate) || new Date().toISOString().split("T")[0],
+        // Father / Guardian
+        fatherName: pick("Father Name", "Guardian", "fatherName"),
+        fatherNationalId: pick("Father National ID", "Father ID", "fatherNationalId"),
+        fatherPhone: father.phone,
+        fatherOccupation: pick("Father Occupation", "fatherOccupation"),
+        fatherEmail: father.email,
+        // Mother
+        motherName: pick("Mother Name", "motherName"),
+        motherNationalId: pick("Mother National ID", "Mother ID", "motherNationalId"),
+        motherPhone: mother.phone,
+        motherOccupation: pick("Mother Occupation", "motherOccupation"),
+        motherEmail: mother.email,
+        // General parent contact (used by receipts / result emails)
+        parentEmail: father.email || mother.email || pick("Parent Email"),
+        parentPhone: father.phone || mother.phone || pick("Parent Phone"),
+        status: pick("Status", "status") || "Active",
+        balance: Number(item["Balance"] || item.balance) || 0,
+        discount: String(item["Discount"] || item.discount || "0"),
+        avatar: item["Avatar"] || item.avatar || "",
+    };
+};
 
 export default function AddStudent() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const { createItem, isCreating } = useItems("students");
+    const { items: existingStudents, createItem, isCreating } = useItems("students");
+    const { data: numbering } = useNumbering();
+    const autoReg = !!numbering?.student.enabled;   // registration numbers are generated automatically
     const [formData, setFormData] = useState({
         studentName: "",
         registrationNo: "",
@@ -103,8 +164,10 @@ export default function AddStudent() {
             credentialsGenerated: true,
             lastPasswordReset: new Date().toISOString()
         }, {
-            onSuccess: () => {
-                toast.success(`Student added with credentials. Pass: ${portalPassword}`);
+            onSuccess: (created: any) => {
+                // With automatic numbering the server assigns the number and login, so read them from the reply.
+                queryClient.invalidateQueries({ queryKey: NUMBERING_KEY });   // the "next number" moved on
+                toast.success(`Student added${created?.registrationNo ? ` — Reg No ${created.registrationNo}` : ""}. Login password: ${created?.portalPassword || portalPassword}`);
                 navigate("/students");
             }
         });
@@ -130,69 +193,12 @@ export default function AddStudent() {
                     return;
                 }
 
-                // Map Excel headers to Student fields
-                const formattedItems = data.map((item: any) => {
-                    const studentName = item['Student Name'] || item['Name'] || item.name || '';
-                    const registrationNo = item['Registration No'] || item['Adm No'] || item.registrationNo || item.admNo || '';
-                    const studentClass = item['Class'] || item['Grade'] || item.studentClass || '';
-                    
-                    const cleanReg = registrationNo.toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || "student";
-                    const portalUsername = registrationNo || studentName.toLowerCase().replace(/\s+/g, ".").slice(0, 15);
-                    const portalPassword = `shule@${cleanReg}`;
-
-                    const pick = (...keys: string[]) => { for (const k of keys) { if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== '') return String(item[k]).trim(); } return ''; };
-
-                    return {
-                        studentName,
-                        registrationNo: registrationNo.toString(),
-                        admNo: pick('Admission No', 'Adm No', 'admNo'),
-                        studentClass,
-                        gender: pick('Gender', 'gender') || 'Male',
-                        dob: pick('Date of Birth', 'DOB', 'dob'),
-                        email: pick('Email', 'Student Email', 'email'),
-                        phone: pick('Phone', 'Mobile', 'phone'),
-                        address: pick('Address', 'Postal Address', 'address'),
-                        bloodGroup: pick('Blood Group', 'bloodGroup'),
-                        religion: pick('Religion', 'religion'),
-                        nationality: pick('Nationality', 'nationality'),
-                        previousSchool: pick('Previous School', 'previousSchool'),
-                        transportZone: pick('Transport Zone', 'transportZone'),
-                        admissionDate: pick('Admission Date', 'admissionDate') || new Date().toISOString().split('T')[0],
-                        // Father / Guardian
-                        fatherName: pick('Father Name', 'Guardian', 'fatherName'),
-                        fatherNationalId: pick('Father National ID', 'Father ID', 'fatherNationalId'),
-                        fatherPhone: pick('Father Phone', 'Father Mobile', 'fatherPhone'),
-                        fatherOccupation: pick('Father Occupation', 'fatherOccupation'),
-                        fatherEmail: pick('Father Email', 'fatherEmail'),
-                        // Mother
-                        motherName: pick('Mother Name', 'motherName'),
-                        motherNationalId: pick('Mother National ID', 'Mother ID', 'motherNationalId'),
-                        motherPhone: pick('Mother Phone', 'Mother Mobile', 'motherPhone'),
-                        motherOccupation: pick('Mother Occupation', 'motherOccupation'),
-                        motherEmail: pick('Mother Email', 'motherEmail'),
-                        // General parent contact (used by receipts / result emails)
-                        parentEmail: pick('Father Email', 'Mother Email', 'Parent Email'),
-                        parentPhone: pick('Father Phone', 'Mother Phone', 'Parent Phone'),
-                        status: pick('Status', 'status') || 'Active',
-                        balance: Number(item['Balance'] || item.balance) || 0,
-                        discount: String(item['Discount'] || item.discount || '0'),
-                        avatar: item['Avatar'] || item.avatar || '',
-                        portalUsername,
-                        portalPassword,
-                        credentialsGenerated: true,
-                        lastPasswordReset: new Date().toISOString()
-                    };
-                });
-
-                await api.post("/students/bulk", { items: formattedItems });
-                
-                toast.success(`Successfully imported ${formattedItems.length} students!`);
-                queryClient.invalidateQueries({ queryKey: ["students-list"] });
-                setShowImportModal(false);
-                navigate("/students");
+                // Nothing is saved yet — show the rows in a table so they can be checked first.
+                setPreviewRows(data.map((item: any) => mapSheetRow(item)));
+                setPreviewFile(file.name);
             } catch (error: any) {
                 console.error("Import Error:", error);
-                toast.error(error.response?.data?.message || "Failed to process the student list.");
+                toast.error("Could not read that file. Use the template and save it as .xlsx or .csv.");
             } finally {
                 setIsProcessing(false);
             }
@@ -204,6 +210,86 @@ export default function AddStudent() {
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) processFile(file);
+        e.target.value = "";   // lets the same file be chosen again after fixing it
+    };
+
+    // ── Import preview ────────────────────────────────────────────────────────
+    const [previewRows, setPreviewRows] = useState<any[] | null>(null);
+    const [previewFile, setPreviewFile] = useState("");
+    const [importing, setImporting] = useState(false);
+    const closeImport = () => { setShowImportModal(false); setPreviewRows(null); setPreviewFile(""); };
+    const updatePreviewRow = (i: number, patch: any) => setPreviewRows(rs => rs ? rs.map((r, j) => j === i ? { ...r, ...patch } : r) : rs);
+
+    // Match the typed class ("Form 1 East" / "Form 1") to the school's real class + stream.
+    const resolveClass = (text: string) => {
+        const t = normTxt(text);
+        if (!t) return null;
+        const stream = v2AllStreams.find((s: any) => normTxt(s.fullName || `${s.className || ""} ${s.name}`) === t);
+        const cls = stream ? v2Classes.find((c: any) => String(c._id) === String(stream.classId)) : v2Classes.find((c: any) => normTxt(c.name) === t);
+        if (!cls) return null;
+        return {
+            classId: String(cls._id), className: cls.name,
+            streamId: stream ? String(stream._id) : null, stream: stream?.name || "", streamName: stream?.name || "",
+            studentClass: stream ? (stream.fullName || `${cls.name} ${stream.name}`) : cls.name,
+        };
+    };
+
+    // Problems per row. Errors stop a row being imported; warnings don't.
+    const rowIssues = useMemo(() => {
+        if (!previewRows) return [];
+        const taken = new Set(existingStudents.map((s: any) => normTxt(s.registrationNo)).filter(Boolean));
+        const seen = new Set<string>();
+        return previewRows.map(r => {
+            const errors: string[] = [], warnings: string[] = [];
+            if (!String(r.studentName).trim()) errors.push("Name is missing");
+            const reg = normTxt(r.registrationNo);
+            if (reg) {
+                if (taken.has(reg)) errors.push("Registration no. already exists");
+                else if (seen.has(reg)) errors.push("Repeated registration no. in this file");
+                seen.add(reg);
+            } else if (!autoReg) warnings.push("No registration no.");
+            if (!String(r.studentClass).trim()) warnings.push("No class");
+            else if (!resolveClass(r.studentClass)) warnings.push("Class not found");
+            if (r.dob && !ISO_DATE.test(r.dob)) warnings.push("Date of birth should be YYYY-MM-DD");
+            return { errors, warnings };
+        });
+    }, [previewRows, existingStudents, v2Classes, v2AllStreams, autoReg]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const okCount = rowIssues.filter(x => !x.errors.length).length;
+    const errorCount = rowIssues.filter(x => x.errors.length).length;
+    const warnCount = rowIssues.filter(x => !x.errors.length && x.warnings.length).length;
+
+    // The row as it will be saved: linked to the real class/stream, plus portal login from the reg no.
+    const toStudent = (r: any) => {
+        const reg = String(r.registrationNo || "").trim();
+        const student: any = { ...r, registrationNo: reg, ...(resolveClass(r.studentClass) || {}) };
+        if (reg || !autoReg) {   // with automatic numbers the server makes the login once it has assigned the number
+            student.portalUsername = reg || String(r.studentName).toLowerCase().replace(/\s+/g, ".").slice(0, 15);
+            student.portalPassword = `shule@${reg.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || "student"}`;
+            student.credentialsGenerated = true;
+            student.lastPasswordReset = new Date().toISOString();
+        }
+        return student;
+    };
+
+    const confirmImport = async () => {
+        if (!previewRows) return;
+        const items = previewRows.filter((_, i) => !rowIssues[i]?.errors.length).map(toStudent);
+        if (!items.length) return;
+        setImporting(true);
+        try {
+            await api.post("/students/bulk", { items });
+            toast.success(`Imported ${items.length} student${items.length > 1 ? "s" : ""}${errorCount ? ` · ${errorCount} skipped` : ""}`);
+            queryClient.invalidateQueries({ queryKey: ["students"] });
+            queryClient.invalidateQueries({ queryKey: ["students-list"] });
+            queryClient.invalidateQueries({ queryKey: NUMBERING_KEY });
+            closeImport();
+            navigate("/students");
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || "Failed to import the student list.");
+        } finally {
+            setImporting(false);
+        }
     };
 
     const downloadSample = async () => {
@@ -311,7 +397,9 @@ export default function AddStudent() {
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <InputField name="studentName" value={formData.studentName} onChange={handleChange} label="Student Name*" placeholder="Name of Student" required />
-                                <InputField name="registrationNo" value={formData.registrationNo} onChange={handleChange} label="Last Registration*" placeholder="Registration No" required />
+                                {autoReg
+                                    ? <InputField name="registrationNo" value="" readOnly label="Registration No (automatic)" placeholder={`Assigned on save — next: ${numbering?.student.preview || ""}`} />
+                                    : <InputField name="registrationNo" value={formData.registrationNo} onChange={handleChange} label="Last Registration*" placeholder="Registration No" required />}
                                 {/* Enrollment class (V2) */}
                                 <div className="relative">
                                     <div className="absolute -top-3 left-6 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest z-10 shadow-sm">Class *</div>
@@ -517,23 +605,92 @@ export default function AddStudent() {
             </div>
 
             {/* Import Students Dialog */}
-            <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-                <DialogContent className="p-0 border-none overflow-hidden rounded-[24px] max-w-2xl shadow-2xl bg-white">
+            <Dialog open={showImportModal} onOpenChange={v => v ? setShowImportModal(true) : closeImport()}>
+                <DialogContent className={`p-0 border-none overflow-hidden rounded-[24px] shadow-2xl bg-white ${previewRows ? "max-w-6xl" : "max-w-2xl"}`}>
                     <DialogHeader className="bg-gradient-to-r from-[#5C67F2] to-[#7A85F7] p-6 text-white flex flex-row items-center justify-between space-y-0">
                         <div className="flex flex-col">
-                            <DialogTitle className="text-xl font-bold tracking-tight">Bulk Student Import</DialogTitle>
+                            <DialogTitle className="text-xl font-bold tracking-tight">{previewRows ? "Review before importing" : "Bulk Student Import"}</DialogTitle>
                             <DialogDescription className="text-indigo-100 text-xs mt-1">
-                                Upload a CSV or Excel spreadsheet of student admission details.
+                                {previewRows
+                                    ? `${previewFile} — nothing is saved until you press Import. Fix or remove rows below.`
+                                    : "Upload a CSV or Excel spreadsheet of student admission details."}
                             </DialogDescription>
                         </div>
-                        <button 
-                            onClick={() => setShowImportModal(false)}
+                        <button
+                            onClick={closeImport}
                             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all shadow-sm"
                         >
                             <X className="w-4 h-4" />
                         </button>
                     </DialogHeader>
 
+                    {previewRows ? (
+                        <div className="flex flex-col">
+                            {/* Summary */}
+                            <div className="px-6 pt-5 pb-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+                                <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-600">{previewRows.length} rows</span>
+                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700">{okCount - warnCount} ready</span>
+                                {warnCount > 0 && <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700">{warnCount} with warnings</span>}
+                                {errorCount > 0 && <span className="px-3 py-1 rounded-full bg-red-50 text-red-600">{errorCount} with errors — will be skipped</span>}
+                                {autoReg && <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600">Blank registration numbers are generated automatically</span>}
+                            </div>
+
+                            {/* Table */}
+                            <div className="px-6 overflow-auto max-h-[52vh]">
+                                <table className="w-full text-xs border-separate border-spacing-0">
+                                    <thead className="sticky top-0 bg-white z-10">
+                                        <tr className="text-left text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                            {["#", "Student name", "Reg no.", "Class", "Gender", "Date of birth", "Phone", "Guardian", "Guardian phone", "Issues", ""].map(h => <th key={h} className="py-2 pr-3 border-b border-slate-100 whitespace-nowrap">{h}</th>)}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {previewRows.map((r, i) => {
+                                            const { errors, warnings } = rowIssues[i] || { errors: [], warnings: [] };
+                                            const cell = "py-1.5 pr-3 border-b border-slate-50";
+                                            const box = "h-8 px-2 border border-gray-200 rounded-md bg-white text-xs w-full focus:outline-none focus:border-[#5C67F2]";
+                                            return (
+                                                <tr key={i} className={errors.length ? "bg-red-50/60" : warnings.length ? "bg-amber-50/40" : ""}>
+                                                    <td className={`${cell} pl-1 text-slate-400`}>{i + 1}</td>
+                                                    <td className={`${cell} min-w-[160px]`}><input value={r.studentName} onChange={e => updatePreviewRow(i, { studentName: e.target.value })} className={box} /></td>
+                                                    <td className={`${cell} min-w-[110px]`}><input value={r.registrationNo} onChange={e => updatePreviewRow(i, { registrationNo: e.target.value })} placeholder={autoReg ? "Auto" : ""} className={box} /></td>
+                                                    <td className={`${cell} min-w-[120px]`}><input value={r.studentClass} onChange={e => updatePreviewRow(i, { studentClass: e.target.value })} className={box} /></td>
+                                                    <td className={cell}>
+                                                        <select value={r.gender} onChange={e => updatePreviewRow(i, { gender: e.target.value })} className={box}>
+                                                            <option>Male</option><option>Female</option><option>Other</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className={`${cell} whitespace-nowrap text-slate-600`}>{r.dob || "—"}</td>
+                                                    <td className={`${cell} whitespace-nowrap text-slate-600`}>{r.phone || "—"}</td>
+                                                    <td className={`${cell} whitespace-nowrap text-slate-600`}>{r.fatherName || r.motherName || "—"}</td>
+                                                    <td className={`${cell} whitespace-nowrap text-slate-600`}>{r.fatherPhone || r.motherPhone || "—"}</td>
+                                                    <td className={`${cell} min-w-[170px]`}>
+                                                        {errors.map(m => <div key={m} className="text-red-600 font-bold">{m}</div>)}
+                                                        {warnings.map(m => <div key={m} className="text-amber-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0" />{m}</div>)}
+                                                        {!errors.length && !warnings.length && <span className="text-emerald-600 font-bold">OK</span>}
+                                                    </td>
+                                                    <td className={cell}>
+                                                        <button onClick={() => setPreviewRows(rs => rs ? rs.filter((_, j) => j !== i) : rs)} title="Remove row" className="w-7 h-7 rounded-full bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {previewRows.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-400 font-bold">No rows left to import.</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="p-6 flex items-center justify-between gap-3 border-t border-slate-100 mt-3">
+                                <button type="button" onClick={() => { setPreviewRows(null); setPreviewFile(""); }} className="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-full hover:border-[#5C67F2] hover:text-[#5C67F2] transition-colors inline-flex items-center gap-2">
+                                    <ArrowLeft className="w-3.5 h-3.5" /> Choose another file
+                                </button>
+                                <button type="button" onClick={confirmImport} disabled={importing || okCount === 0} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-bold rounded-full shadow-sm inline-flex items-center gap-2 disabled:opacity-50 transition-colors">
+                                    {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                    Import {okCount} student{okCount === 1 ? "" : "s"}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
                     <div className="p-6 space-y-6">
                         {/* Drag and Drop Zone */}
                         <div
@@ -599,10 +756,12 @@ export default function AddStudent() {
                                     <li>Registration No must be unique.</li>
                                     <li>Class names must match existing class levels.</li>
                                     <li>Date fields must follow YYYY-MM-DD.</li>
+                                    <li>You can review every row before anything is saved.</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
+                    )}
                 </DialogContent>
             </Dialog>
 
@@ -613,7 +772,7 @@ export default function AddStudent() {
                 classes={v2Classes}
                 allStreams={v2AllStreams}
                 activeYear={activeYear}
-                onDone={() => { queryClient.invalidateQueries({ queryKey: ["students"] }); queryClient.invalidateQueries({ queryKey: ["students-list"] }); }}
+                onDone={() => { queryClient.invalidateQueries({ queryKey: ["students"] }); queryClient.invalidateQueries({ queryKey: ["students-list"] }); queryClient.invalidateQueries({ queryKey: NUMBERING_KEY }); }}
             />
         </div>
     );
@@ -630,6 +789,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
     activeYear: any;
     onDone: () => void;
 }) {
+    const { data: numbering } = useNumbering();   // blank reg numbers are generated when automatic numbering is on
     type Row = { name: string; classId: string; streamId: string; reg: string; gender: string };
     const blank = (): Row => ({ name: "", classId: "", streamId: "", reg: "", gender: "Male" });
     const [rows, setRows] = useState<Row[]>([blank(), blank(), blank()]);
@@ -707,7 +867,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
                                 <tr key={i} className="border-b border-slate-50">
                                     <td className="py-1.5 pr-2 text-slate-400 font-bold">{i + 1}</td>
                                     <td className="py-1.5 pr-2"><input value={r.name} onChange={e => setRow(i, { name: e.target.value })} placeholder="Student name" className="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" /></td>
-                                    <td className="py-1.5 pr-2"><input value={r.reg} onChange={e => setRow(i, { reg: e.target.value })} placeholder="e.g. BS120" className="w-28 h-9 px-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" /></td>
+                                    <td className="py-1.5 pr-2"><input value={r.reg} onChange={e => setRow(i, { reg: e.target.value })} placeholder={numbering?.student.enabled ? "Auto" : "e.g. BS120"} className="w-28 h-9 px-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-[#5C67F2]" /></td>
                                     <td className="py-1.5 pr-2">
                                         <select value={r.classId} onChange={e => setRow(i, { classId: e.target.value, streamId: "" })} className="w-32 h-9 px-2 rounded-lg border border-slate-200 text-sm bg-white">
                                             <option value="">— Class —</option>
@@ -747,7 +907,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
     );
 }
 
-function InputField({ label, placeholder, required, isDate, name, value, onChange }: { label: string, placeholder: string, required?: boolean, isDate?: boolean, name?: string, value?: string, onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+function InputField({ label, placeholder, required, isDate, name, value, onChange, readOnly }: { label: string, placeholder: string, required?: boolean, isDate?: boolean, name?: string, value?: string, onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void, readOnly?: boolean }) {
     const isReq = label.includes('*') || required;
     const colorClass = isReq ? "bg-[#5C67F2]" : "bg-gray-400";
     return (
@@ -760,8 +920,9 @@ function InputField({ label, placeholder, required, isDate, name, value, onChang
                 name={name}
                 value={value}
                 onChange={onChange}
+                readOnly={readOnly}
                 placeholder={placeholder}
-                className="w-full h-12 px-5 border border-gray-300 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 placeholder-gray-400 bg-white text-sm"
+                className={`w-full h-12 px-5 border border-gray-300 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 placeholder-gray-400 text-sm ${readOnly ? "bg-gray-50 cursor-not-allowed" : "bg-white"}`}
             />
         </div>
     );
