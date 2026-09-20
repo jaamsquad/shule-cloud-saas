@@ -62,6 +62,7 @@ import OwnerSettings from "./pages/owner/Settings";
 import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
+import ClassRoster from "./pages/tenant/modules/ClassRoster";
 import InstallPrompt from "./components/InstallPrompt";
 import ManageSchool from "./pages/owner/ManageSchool";
 
@@ -633,6 +634,7 @@ const App = () => {
               {/* Classes */}
               <Route path="/classes" element={<Classes />} />
               <Route path="/classes/new" element={<NewClass />} />
+              <Route path="/classes/room/:streamId" element={<ClassRoster />} />
               <Route path="/classes/:id" element={<ClassDetail />} />
               <Route path="/classes/streams" element={<Classes />} />
               <Route path="/classes/strands" element={<Strands />} />

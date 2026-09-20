@@ -316,14 +316,6 @@ publicDocsRouter.get('/:type/:publicId', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// A little protection for the STK endpoint: a handful of prompts per invoice + phone per few minutes.
-const recentPrompts = new Map<string, number[]>();
-const tooManyPrompts = (key: string) => {
-    const now = Date.now(), list = (recentPrompts.get(key) || []).filter(t => now - t < 5 * 60_000);
-    if (list.length >= 3) { recentPrompts.set(key, list); return true; }
-    list.push(now); recentPrompts.set(key, list); return false;
-};
-
 // Customer pays an invoice: M-PESA STK push to the platform paybill for the balance due (or a part of it).
 publicDocsRouter.post('/invoice/:publicId/pay', async (req, res) => {
     try {
@@ -338,7 +330,6 @@ publicDocsRouter.post('/invoice/:publicId/pay', async (req, res) => {
         const asked = req.body?.amount === undefined || req.body?.amount === '' ? balance : num(req.body.amount);
         const amount = Math.round(asked);
         if (!(amount >= 1) || amount > Math.ceil(balance)) return res.status(400).json({ message: `Enter an amount between 1 and ${Math.ceil(balance).toLocaleString()}.` });
-        if (tooManyPrompts(`${d._id}:${phone}`)) return res.status(429).json({ message: 'A payment prompt was just sent. Please check your phone, or wait a few minutes before trying again.' });
 
         const cfg = await resolveMpesaConfig(meta());
         if (!isMpesaConfigured(cfg) || cfg.enabled === false) return res.status(503).json({ message: 'Online payment is not available right now. Please use the payment details on the invoice.' });

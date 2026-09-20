@@ -17,6 +17,8 @@ import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { loadCurricula, canonicalCode } from '../lib/curriculum';
+import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
+import { canonicalStatus } from '../lib/studentStatus';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 const router = Router();
@@ -242,6 +244,86 @@ router.delete('/v2/streams/:id', async (req, res) => {
         const db = getRequestDb(req);
         await db.collection('v2_streams').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
         res.json({ message: 'Deleted' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Class list: one stream's students with fee balance + performance, and its class teacher ──
+// Members are the ACTIVE students whose streamId matches or whose class text is this stream's
+// full name (same rule the Classes page counts with). Scoped to what the caller may see.
+router.get('/v2/streams/:id/roster', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        let sid: ObjectId; try { sid = toOid(req.params.id); } catch { return res.status(400).json({ message: 'Invalid class id' }); }
+        const stream: any = await db.collection('v2_streams').findOne({ _id: sid, deletedAt: { $exists: false } });
+        if (!stream) return res.status(404).json({ message: 'Class not found' });
+        const fullName = String(stream.fullName || `${stream.className || ''} ${stream.name}`).trim();
+        const rx = new RegExp(`^\\s*${fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\s*$`, 'i');
+
+        const scope = await resolveScope(req, db);
+        const filter = mergeFilter({ $or: [{ streamId: String(stream._id) }, { studentClass: rx }, { currentClass: rx }] }, scopeForCollection('students', scope));
+        const members: any[] = (await db.collection('students').find(filter).toArray()).filter((s: any) => canonicalStatus(s.status) === 'Active');
+        const ids = members.map(s => String(s._id));
+
+        // class teacher
+        let teacher: any = null;
+        if (stream.classTeacherId) {
+            try { teacher = await db.collection('staff').findOne({ _id: new ObjectId(String(stream.classTeacherId)) }); } catch { /* not an id */ }
+        }
+
+        // fee balances (voided invoices ignored; overpayment credit taken off)
+        const invoices: any[] = ids.length ? await db.collection('invoices').find({ status: { $ne: 'VOIDED' }, $or: [{ student_id: { $in: ids } }, { studentId: { $in: ids } }] }).toArray().catch(() => []) : [];
+        const fee: Record<string, { billed: number; paid: number; balance: number }> = {};
+        for (const inv of invoices) {
+            const key = String(inv.student_id || inv.studentId);
+            const totalDue = parseFloat(inv.total_due ?? inv.total) || 0;
+            const paid = parseFloat(inv.amount_paid ?? (String(inv.status || '').toLowerCase() === 'paid' ? totalDue : 0)) || 0;
+            const balance = parseFloat(inv.balance ?? (String(inv.status || '').toLowerCase() === 'paid' ? 0 : totalDue)) || 0;
+            const f = (fee[key] ||= { billed: 0, paid: 0, balance: 0 });
+            f.billed += totalDue; f.paid += paid; f.balance += balance;
+        }
+
+        // performance: mean percentage over the student's marks (optionally for one exam)
+        const examId = req.query.examId ? String(req.query.examId) : '';
+        const marks: any[] = ids.length ? await db.collection('exam_marks').find({ studentId: { $in: ids }, ...(examId ? { examId } : {}) }).toArray().catch(() => []) : [];
+        const perf: Record<string, { sum: number; n: number; exams: Set<string> }> = {};
+        const examMap = new Map<string, { _id: string; name: string; term: string }>();
+        for (const m of marks) {
+            const obtained = Number(m.marksObtained ?? m.marks ?? m.score); const total = Number(m.totalMarks || m.outOf || 100);
+            if (!Number.isFinite(obtained) || !total) continue;
+            const p = (perf[String(m.studentId)] ||= { sum: 0, n: 0, exams: new Set() });
+            p.sum += (obtained / total) * 100; p.n++; p.exams.add(String(m.examId));
+            if (m.examId && !examMap.has(String(m.examId))) examMap.set(String(m.examId), { _id: String(m.examId), name: m.examName || 'Exam', term: m.term || '' });
+        }
+
+        const students = members.map(s => {
+            const id = String(s._id), f = fee[id], p = perf[id];
+            const credit = Math.max(0, Number(s.feeCredit) || 0);
+            return {
+                _id: id, studentName: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student',
+                registrationNo: s.registrationNo || s.admNo || '', gender: s.gender || '', avatar: s.avatar || s.studentPhoto || '',
+                phone: s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone || '',
+                feeBilled: Math.round((f?.billed || 0) * 100) / 100, feePaid: Math.round((f?.paid || 0) * 100) / 100,
+                feeDue: Math.max(0, Math.round(((f?.balance || 0) - credit) * 100) / 100),
+                average: p && p.n ? Math.round((p.sum / p.n) * 10) / 10 : null, examsCount: p ? p.exams.size : 0, position: null as number | null,
+            };
+        });
+        // rank by average, best first (equal averages share a position)
+        const ranked = students.filter(s => s.average != null).sort((a, b) => (b.average as number) - (a.average as number));
+        ranked.forEach((s, i) => { s.position = i > 0 && ranked[i - 1].average === s.average ? ranked[i - 1].position : i + 1; });
+
+        const withAvg = ranked.map(s => s.average as number);
+        res.json({
+            stream: { _id: String(stream._id), name: fullName, classId: stream.classId, className: stream.className, capacity: Number(stream.capacity) || 0 },
+            teacher: teacher ? { _id: String(teacher._id), name: teacher.employeeName || teacher.name || '', designation: teacher.designation || '', phone: teacher.phone || '', email: teacher.email || '' } : null,
+            exams: [...examMap.values()],
+            summary: {
+                total: students.length, boys: students.filter(s => /^m/i.test(s.gender)).length, girls: students.filter(s => /^f/i.test(s.gender)).length,
+                feeDueTotal: Math.round(students.reduce((t, s) => t + s.feeDue, 0) * 100) / 100,
+                owing: students.filter(s => s.feeDue > 0).length,
+                classMean: withAvg.length ? Math.round((withAvg.reduce((t, v) => t + v, 0) / withAvg.length) * 10) / 10 : null,
+            },
+            students,
+        });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

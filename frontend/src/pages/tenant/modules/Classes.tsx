@@ -365,7 +365,7 @@ export default function Classes() {
                                     const stats = getGenderStats(getClassStudents(cls));
                                     return (
                                         <tr key={cls._id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                            <td className="px-5 py-3 font-bold text-slate-700 cursor-pointer" onClick={() => navigate(cls.isV2 ? `/students` : `/classes/${cls._id}`)}>{cls.name}{cls.isV2 && <span className="ml-2 text-[8px] font-black text-[#5C67F2] bg-indigo-50 px-1.5 py-0.5 rounded">V2</span>}</td>
+                                            <td className="px-5 py-3 font-bold text-slate-700 cursor-pointer" onClick={() => navigate(cls.isV2 ? `/classes/room/${(cls as any).streamId}` : `/classes/${cls._id}`)}>{cls.name}{cls.isV2 && <span className="ml-2 text-[8px] font-black text-[#5C67F2] bg-indigo-50 px-1.5 py-0.5 rounded">V2</span>}</td>
                                             <td className="px-3 py-3 text-center font-black text-slate-700">{stats.total}</td>
                                             <td className="px-3 py-3 text-center text-blue-600 font-bold">{stats.boys}</td>
                                             <td className="px-3 py-3 text-center text-pink-600 font-bold">{stats.girls}</td>
@@ -390,7 +390,7 @@ export default function Classes() {
                             return (
                                 <div key={cls._id}
                                     className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col hover:shadow-lg transition-all group relative cursor-pointer"
-                                    onClick={() => navigate(cls.isV2 ? `/students` : `/classes/${cls._id}`)}>
+                                    onClick={() => navigate(cls.isV2 ? `/classes/room/${(cls as any).streamId}` : `/classes/${cls._id}`)}>
 
                                     {/* V2 badge */}
                                     {cls.isV2 && (
