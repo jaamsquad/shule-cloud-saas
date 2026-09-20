@@ -9,6 +9,7 @@ import { syncStudentToParents } from '../services/parent-student-sync.service';
 import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
+import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 
 const router = Router();
 
@@ -511,60 +512,82 @@ router.put('/settings/numbering', enforceCrud('settings', 'update'), async (req,
 });
 
 // ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
-// Class membership lives directly on the student (classId / studentClass / stream…),
-// so a Transferred or Graduated student is taken OUT of their class by clearing those
-// fields — every class roster, attendance sheet and marks list then drops them with
-// no per-query filtering. The class they left is kept in classHistory and in
-// statusPrevClass, so setting them back to Active puts them in it again.
-const STUDENT_STATUSES = ['Active', 'Transferred', 'Graduated'];
-const STUDENT_CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName'];
+// See lib/studentStatus.ts: Transferred / Graduated students are taken out of their class
+// (the class they left is kept), and Active puts them back.
+const actorName = (req: any) => { const u = req.tenantContext?.user || {}; return u.name || u.staffId || 'admin'; };
+const loadStudent = async (req: Request, db: Db) => {
+    let oid: ObjectId;
+    try { oid = new ObjectId(req.params.id); } catch { return { error: 'Invalid student id' as const }; }
+    const scope = await resolveScope(req, db);
+    const student: any = await db.collection('students').findOne(mergeFilter({ _id: oid }, scopeForCollection('students', scope)));
+    return student ? { student, oid } : { error: 'Student not found' as const };
+};
 
 router.post('/students/:id/status', enforceCrud('students', 'update'), async (req, res) => {
     try {
         const db = getRequestDb(req);
         const status = STUDENT_STATUSES.find(s => s.toLowerCase() === String(req.body?.status || '').toLowerCase());
         if (!status) return res.status(400).json({ message: `Status must be one of: ${STUDENT_STATUSES.join(', ')}` });
-        let oid: ObjectId;
-        try { oid = new ObjectId(req.params.id); } catch { return res.status(400).json({ message: 'Invalid student id' }); }
+        const found = await loadStudent(req, db);
+        if ('error' in found) return res.status(found.error === 'Student not found' ? 404 : 400).json({ message: found.error });
 
-        const scope = await resolveScope(req, db);
-        const student: any = await db.collection('students').findOne(mergeFilter({ _id: oid }, scopeForCollection('students', scope)));
-        if (!student) return res.status(404).json({ message: 'Student not found' });
+        const { update, nothingToDo } = buildStatusUpdate(found.student, status, { reason: req.body?.reason, by: actorName(req) });
+        if (nothingToDo) return res.json({ message: `Student is already ${status}`, status });
+        await db.collection('students').updateOne({ _id: found.oid }, update);
+        res.json({ message: `Student marked ${status}`, status });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
-        const from = String(student.status || 'Active');
-        if (from.toLowerCase() === status.toLowerCase()) return res.json({ message: `Student is already ${status}`, status });
+// ─── Transfer to another school (with transfer letter) ───────────────────────
+// Body: { toSchool, date?, reason?, mode: 'draft' | 'permanent' }
+//   draft      the details and letter are saved, but the student stays Active in their class
+//   permanent  the student is marked Transferred and taken out of their class
+// Either way the student gets a `transfer` record (reference number, destination school, date,
+// reason) that the transfer letter is generated from.
+router.post('/students/:id/transfer', enforceCrud('students', 'update'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const found = await loadStudent(req, db);
+        if ('error' in found) return res.status(found.error === 'Student not found' ? 404 : 400).json({ message: found.error });
+        const { student, oid } = found;
 
-        const now = new Date();
+        const toSchool = String(req.body?.toSchool || '').trim();
+        if (!toSchool) return res.status(400).json({ message: 'Enter the school the student is transferring to.' });
+        const mode = req.body?.mode === 'permanent' ? 'permanent' : 'draft';
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? String(req.body.date) : new Date().toISOString().slice(0, 10);
         const reason = String(req.body?.reason || '').trim();
-        const actor = (req as any).tenantContext?.user || {};
-        const set: any = { status, statusChangedAt: now, statusReason: reason, updatedAt: now };
-        const update: any = {
-            $set: set,
-            $push: { statusHistory: { from, to: status, reason, at: now, by: actor.name || actor.staffId || 'admin' } },
+        const wasTransferred = canonicalStatus(student.status) === 'Transferred';
+        if (mode === 'draft' && wasTransferred) return res.status(409).json({ message: 'This student is already transferred — edit the transfer details instead.' });
+
+        const old = student.transfer || {};
+        const now = new Date();
+        const transfer = {
+            refNo: old.refNo || await nextTransferRef(db),      // one reference number per transfer, kept across edits
+            toSchool, date, reason,
+            status: mode === 'permanent' ? 'completed' : 'draft',
+            preparedBy: old.preparedBy || actorName(req), preparedAt: old.preparedAt || now,
+            ...(mode === 'permanent' ? { completedBy: actorName(req), completedAt: now } : {}),
         };
 
-        if (status === 'Active') {
-            // Back into the class they left — unless they've been placed in a new one since.
-            const prev = student.statusPrevClass;
-            const hasClass = STUDENT_CLASS_FIELDS.some(f => student[f]);
-            if (prev && !hasClass) Object.assign(set, prev);
-            update.$unset = { statusPrevClass: '' };
-        } else if (STUDENT_CLASS_FIELDS.some(f => student[f])) {
-            // Leaving the class (Active → Transferred/Graduated). A Transferred → Graduated
-            // move has no class left to clear, so the saved statusPrevClass is kept as is.
-            const prev: any = {};
-            for (const f of STUDENT_CLASS_FIELDS) if (student[f] !== undefined) prev[f] = student[f];
-            set.statusPrevClass = prev;
-            for (const f of STUDENT_CLASS_FIELDS) set[f] = f === 'streamId' ? null : '';
-            update.$push.classHistory = {
-                className: student.studentClass || student.currentClass || '', classId: student.classId || '',
-                streamId: student.streamId || '', streamName: student.stream || student.streamName || '',
-                academicYear: student.academicYear || '', leftAt: now, reason: status,
-            };
+        if (mode === 'draft') {
+            await db.collection('students').updateOne({ _id: oid }, { $set: { transfer, updatedAt: now } });
+            return res.json({ message: 'Transfer saved as a draft', transfer, status: canonicalStatus(student.status) });
         }
-
+        const { update } = buildStatusUpdate(student, 'Transferred', { reason: reason || `Transferred to ${toSchool}`, by: actorName(req), extraSet: { transfer } });
         await db.collection('students').updateOne({ _id: oid }, update);
-        res.json({ message: `Student marked ${status}`, status });
+        res.json({ message: `Student transferred to ${toSchool}`, transfer, status: 'Transferred' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Throw away a draft (a completed transfer is undone by setting the student back to Active).
+router.delete('/students/:id/transfer', enforceCrud('students', 'update'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const found = await loadStudent(req, db);
+        if ('error' in found) return res.status(found.error === 'Student not found' ? 404 : 400).json({ message: found.error });
+        if (found.student.transfer?.status !== 'draft') return res.status(409).json({ message: 'Only a draft transfer can be discarded.' });
+        await db.collection('students').updateOne({ _id: found.oid }, { $unset: { transfer: '' }, $set: { updatedAt: new Date() } });
+        res.json({ message: 'Draft discarded' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

@@ -304,6 +304,12 @@ export default function AllStudents() {
                                                         onCancel={() => setEditingId(null)}
                                                         onSave={(payload) => { updateItem({ id: student._id, ...payload }); setEditingId(null); }}
                                                     />
+                                                ) : STATUS_BADGE[norm(statusOf(student))] ? (
+                                                    // Transferred / graduated: they are out of their class, so show the class they were in (read-only).
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-gray-400 uppercase">{student.studentClass || student.currentClass || student.statusPrevClass?.studentClass || '—'}</span>
+                                                        {(student.studentClass || student.currentClass || student.statusPrevClass?.studentClass) && <span className="text-[9px] font-bold uppercase text-gray-400">previous</span>}
+                                                    </div>
                                                 ) : (
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-[#5C67F2] uppercase">{student.studentClass || '—'}</span>

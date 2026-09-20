@@ -1,14 +1,16 @@
 import { useParams, Link } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2 } from "lucide-react";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2 } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, LabelList } from "recharts";
 import { openPrintDoc, printElementToPdf } from "@/lib/pdfDoc";
 import AcademicHistoryCard from "@/components/AcademicHistoryCard";
+import { useSchoolBrand } from "@/lib/printDoc";
+import { printTransferLetter, displayDate } from "./students/transferLetter";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -22,27 +24,40 @@ export default function StudentReport() {
     const [isAssignOpen, setIsAssignOpen] = useState(false);
     const [selectedSubjects, setSelectedSubjects] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [trendOpen, setTrendOpen] = useState(false);   // Performance Trends — wide view
 
-    // Manage Student — lifecycle status (Active / Transferred / Graduated)
+    // Manage Student — lifecycle status (Active / Transferred / Graduated) + transfer letter
     const queryClient = useQueryClient();
+    const school = useSchoolBrand();
     const { canUpdate } = useModuleCrud("students");
     const [isManageOpen, setIsManageOpen] = useState(false);
     const [manageStatus, setManageStatus] = useState("Active");
     const [manageReason, setManageReason] = useState("");
+    const [tfSchool, setTfSchool] = useState("");
+    const [tfDate, setTfDate] = useState("");
     const [isSavingStatus, setIsSavingStatus] = useState(false);
-    const currentStatus = String(student?.status || "Active");
+    // Records written by older code used lower case ("transferred").
+    const currentStatus = (() => { const t = String(student?.status || "Active").toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); })();
+    const transfer = student?.transfer;   // { refNo, toSchool, date, reason, status: "draft" | "completed" }
+    const isTransferred = currentStatus === "Transferred";
+    const isDraft = !isTransferred && transfer?.status === "draft";
+    const studentLabel = student?.studentName || `${student?.firstName || ""} ${student?.lastName || ""}`.trim();
 
     const handleOpenManage = () => {
-        setManageStatus(currentStatus);
-        setManageReason("");
+        setManageStatus(isDraft ? "Transferred" : currentStatus);
+        setManageReason(transfer?.reason || "");
+        setTfSchool(transfer?.toSchool || "");
+        setTfDate(transfer?.date || new Date().toISOString().slice(0, 10));
         setIsManageOpen(true);
     };
+    const refreshStudents = () => queryClient.invalidateQueries({ queryKey: ["students"] });
 
+    // Active / Graduated (and moving a transferred student back)
     const handleSaveStatus = async () => {
         try {
             setIsSavingStatus(true);
             await api.post(`/students/${student?._id || id}/status`, { status: manageStatus, reason: manageReason });
-            await queryClient.invalidateQueries({ queryKey: ["students"] });
+            await refreshStudents();
             toast.success(`Student marked ${manageStatus}`);
             setIsManageOpen(false);
         } catch (e: any) {
@@ -51,6 +66,37 @@ export default function StudentReport() {
             setIsSavingStatus(false);
         }
     };
+
+    // Transfer to another school: a draft keeps the student Active; permanent takes them out of their class.
+    const saveTransfer = async (mode: "draft" | "permanent") => {
+        if (!tfSchool.trim()) { toast.error("Enter the school the student is transferring to."); return; }
+        if (mode === "permanent" && !isTransferred && !confirm(`Transfer ${studentLabel} to ${tfSchool.trim()} permanently? They will be removed from their class. You can set them back to Active later.`)) return;
+        try {
+            setIsSavingStatus(true);
+            const r = await api.post(`/students/${student?._id || id}/transfer`, { toSchool: tfSchool.trim(), date: tfDate, reason: manageReason, mode });
+            await refreshStudents();
+            toast.success(r.data?.message || "Saved");
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Failed to save the transfer");
+        } finally {
+            setIsSavingStatus(false);
+        }
+    };
+    const discardDraft = async () => {
+        if (!confirm("Discard this draft transfer?")) return;
+        try {
+            setIsSavingStatus(true);
+            await api.delete(`/students/${student?._id || id}/transfer`);
+            await refreshStudents();
+            toast.success("Draft discarded");
+            setIsManageOpen(false);
+        } catch (e: any) {
+            toast.error(e.response?.data?.message || "Failed to discard the draft");
+        } finally {
+            setIsSavingStatus(false);
+        }
+    };
+    const printLetter = () => { if (transfer && student) printTransferLetter(school, student, transfer); };
 
     // Initialize selected subjects when student loads
     useState(() => {
@@ -167,6 +213,17 @@ export default function StudentReport() {
         GPA: Number(e.gpa || 0),
     })).reverse();
 
+    // Wide chart rows: every exam gets a distinct label (two "Term Exam (Term 1)" would otherwise look identical).
+    const trendRows = (() => {
+        const seen: Record<string, number> = {};
+        return historicalExams.slice().reverse().map((e: any) => {
+            const base = [e.examName, e.term].filter(Boolean).join(" · ") || "Exam";
+            const label = e.academicYear ? `${base} ${e.academicYear}` : base;
+            seen[label] = (seen[label] || 0) + 1;
+            return { name: seen[label] > 1 ? `${label} (#${seen[label]})` : label, Average: Number(e.average || 0), GPA: Number(e.gpa || 0), total: e.totalMarks, term: e.term || "", year: e.academicYear || "" };
+        });
+    })();
+
     function printReportCard(exam: any) {
         const win = openPrintDoc();
         if (!win) { toast.error("Allow popups to print"); return; }
@@ -257,6 +314,12 @@ export default function StudentReport() {
                             <Settings2 className="w-3.5 h-3.5" /> Manage Student
                         </button>
                     )}
+                    {transfer && (
+                        <button onClick={printLetter}
+                            className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                            <FileText className="w-3.5 h-3.5" /> Transfer Letter{isDraft ? " (Draft)" : ""}
+                        </button>
+                    )}
                     <Link to={`/students/history/${student?._id || id}`}
                         className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
                         <Book className="w-3.5 h-3.5" /> Class History
@@ -267,6 +330,18 @@ export default function StudentReport() {
                     </button>
                 </div>
             </div>
+
+            {isTransferred && (
+                <div className="mx-4 mb-2 w-[calc(100%-2rem)] bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 text-sm text-amber-900">
+                    <b>Transferred{transfer?.toSchool ? ` to ${transfer.toSchool}` : ""}{transfer?.date ? ` on ${displayDate(transfer.date)}` : ""}.</b>{" "}
+                    This is a record of their time at the school — the student is no longer in a class.
+                </div>
+            )}
+            {isDraft && (
+                <div className="mx-4 mb-2 w-[calc(100%-2rem)] bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-sm text-slate-700">
+                    <b>Draft transfer to {transfer.toSchool}.</b> The student is still active — open Manage Student to complete the transfer.
+                </div>
+            )}
 
             <div ref={reportRef} className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">
                 
@@ -285,20 +360,23 @@ export default function StudentReport() {
                             )}
                         </div>
                         <h2 className="text-xl font-bold text-[#868DF4] mb-4">{student.studentName || `${student.firstName} ${student.lastName}`}</h2>
+                        {!isTransferred && (
                         <button 
                             onClick={handleOpenAssignModal}
                             className="w-full bg-[#868DF4]/10 hover:bg-[#868DF4]/20 text-[#868DF4] font-bold py-2 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
                         >
                             <Book className="w-4 h-4" /> Assign Subjects
                         </button>
+                        )}
                     </div>
 
                     {/* Details List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">
                         <DetailRow label="Registration No" value={student.registrationNo || student.admNo} />
-                        <DetailRow label="Date Of Admission" value={student.admissionDate} />
-                        <DetailRow label="Class" value={student.studentClass || student.currentClass || (currentStatus !== "Active" ? student.statusPrevClass?.studentClass : "")} />
+                        <DetailRow label="Date Of Admission" value={displayDate(student.admissionDate)} />
+                        <DetailRow label={currentStatus !== "Active" ? "Previous Class" : "Class"} value={student.studentClass || student.currentClass || (currentStatus !== "Active" ? student.statusPrevClass?.studentClass : "")} />
                         <DetailRow label="Status" value={currentStatus} />
+                        {transfer && <DetailRow label="Transfer" value={`${transfer.status === "draft" ? "Draft — " : ""}${transfer.toSchool}${transfer.date ? `, ${displayDate(transfer.date)}` : ""}${transfer.refNo ? ` (${transfer.refNo})` : ""}`} />}
                         <DetailRow label="Family" value={student.family || ""} />
                         <DetailRow label="Discount in Fee" value={student.discount ? `${student.discount}%` : ""} />
                     </div>
@@ -308,7 +386,7 @@ export default function StudentReport() {
 
                     {/* Extended Details List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">
-                        <DetailRow label="Date Of Birth" value={student.dob} />
+                        <DetailRow label="Date Of Birth" value={displayDate(student.dob)} />
                         <DetailRow label="Gender" value={student.gender} />
                         <DetailRow label="Any Identification Mark?" value={student.idMark} />
                         <DetailRow label="Blood Group" value={student.bloodGroup} />
@@ -432,11 +510,16 @@ export default function StudentReport() {
                     {/* Performance Trends Chart */}
                     {trendData.length >= 2 && (
                         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 break-inside-avoid mb-6">
-                            <div className="flex items-center gap-2 mb-5">
-                                <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
-                                    <TrendingUp className="w-3.5 h-3.5" />
+                            <div className="flex items-center justify-between gap-2 mb-5">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
+                                        <TrendingUp className="w-3.5 h-3.5" />
+                                    </div>
+                                    <h3 className="text-emerald-600 font-bold">Performance Trends</h3>
                                 </div>
-                                <h3 className="text-emerald-600 font-bold">Performance Trends</h3>
+                                <button onClick={() => setTrendOpen(true)} className="h-8 px-3 rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 text-[11px] font-bold flex items-center gap-1.5 transition-colors print:hidden">
+                                    <Maximize2 className="w-3 h-3" /> View more
+                                </button>
                             </div>
                             <ResponsiveContainer width="100%" height={220}>
                                 <LineChart data={trendData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
@@ -573,21 +656,96 @@ export default function StudentReport() {
                 </div>
             </div>
 
+            {/* Performance Trends — wide view */}
+            {trendOpen && trendRows.length >= 2 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setTrendOpen(false)}>
+                    <div className="bg-white rounded-3xl w-full max-w-6xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-lg">Performance Trends</h3>
+                                    <p className="text-xs font-bold text-slate-500">{studentLabel} · {trendRows.length} exams</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setTrendOpen(false)} className="w-9 h-9 flex items-center justify-center bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors"><X className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-6 bg-[#f4f7f6]">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                                <ResponsiveContainer width="100%" height={430}>
+                                    <LineChart data={trendRows} margin={{ top: 28, right: 24, left: 4, bottom: trendRows.length > 4 ? 60 : 24 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                        <XAxis dataKey="name" interval={0} angle={trendRows.length > 4 ? -25 : 0} textAnchor={trendRows.length > 4 ? "end" : "middle"} height={trendRows.length > 4 ? 70 : 40}
+                                            tick={{ fontSize: 11, fill: "#64748b", fontWeight: 700 }} axisLine={false} tickLine={false} />
+                                        {/* Average is a percentage; GPA is a small number — each gets its own axis so neither is squashed. */}
+                                        <YAxis yAxisId="avg" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11, fill: "#868DF4", fontWeight: 700 }} axisLine={false} tickLine={false} width={44} />
+                                        <YAxis yAxisId="gpa" orientation="right" domain={[0, (max: number) => Math.max(5, Math.ceil(max))]} allowDecimals={false} tick={{ fontSize: 11, fill: "#10b981", fontWeight: 700 }} axisLine={false} tickLine={false} width={34} />
+                                        <Tooltip
+                                            formatter={(v: any, name: string) => [name === "Average" ? `${Number(v).toFixed(1)}%` : Number(v).toFixed(2), name]}
+                                            contentStyle={{ borderRadius: "12px", fontSize: "12px", fontWeight: 700, border: "1px solid #e2e8f0" }}
+                                        />
+                                        <Legend wrapperStyle={{ fontSize: "12px", fontWeight: 700, paddingTop: 8 }} />
+                                        <ReferenceLine yAxisId="avg" y={50} stroke="#fca5a5" strokeDasharray="4 4" label={{ value: "Pass mark (50%)", position: "insideTopRight", fontSize: 11, fill: "#f87171", fontWeight: 700 }} />
+                                        <Line yAxisId="avg" type="monotone" dataKey="Average" name="Average" stroke="#868DF4" strokeWidth={3} dot={{ fill: "#868DF4", r: 5, strokeWidth: 2, stroke: "white" }} activeDot={{ r: 8 }}>
+                                            <LabelList dataKey="Average" position="top" formatter={(v: any) => `${Number(v).toFixed(0)}%`} style={{ fontSize: 11, fontWeight: 800, fill: "#5C67F2" }} />
+                                        </Line>
+                                        <Line yAxisId="gpa" type="monotone" dataKey="GPA" name="GPA" stroke="#10b981" strokeWidth={2.5} strokeDasharray="6 4" dot={{ fill: "#10b981", r: 4, strokeWidth: 2, stroke: "white" }} activeDot={{ r: 7 }}>
+                                            <LabelList dataKey="GPA" position="bottom" formatter={(v: any) => Number(v).toFixed(1)} style={{ fontSize: 10, fontWeight: 800, fill: "#059669" }} />
+                                        </Line>
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {[
+                                    { label: "Best average", value: `${Math.max(...trendRows.map((d: any) => d.Average)).toFixed(1)}%`, color: "text-emerald-600" },
+                                    { label: "Latest average", value: `${trendRows[trendRows.length - 1].Average.toFixed(1)}%`, color: "text-[#5C67F2]" },
+                                    { label: "Trend", value: trendRows[trendRows.length - 1].Average >= trendRows[0].Average ? "Improving" : "Declining", color: trendRows[trendRows.length - 1].Average >= trendRows[0].Average ? "text-emerald-600" : "text-rose-500" },
+                                ].map(c => (
+                                    <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{c.label}</p>
+                                        <p className={`text-2xl font-black mt-1 ${c.color}`}>{c.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                                <table className="w-full text-left text-sm">
+                                    <thead><tr className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-400">{["#", "Exam", "Average", "GPA", "Total marks"].map(h => <th key={h} className="px-4 py-3 font-black">{h}</th>)}</tr></thead>
+                                    <tbody>
+                                        {trendRows.map((r: any, i: number) => (
+                                            <tr key={r.name} className="border-t border-slate-50">
+                                                <td className="px-4 py-2.5 text-slate-400">{i + 1}</td>
+                                                <td className="px-4 py-2.5 font-bold text-slate-700">{r.name}</td>
+                                                <td className="px-4 py-2.5 font-black text-[#5C67F2]">{r.Average.toFixed(1)}%</td>
+                                                <td className="px-4 py-2.5 font-bold text-emerald-600">{r.GPA.toFixed(1)}</td>
+                                                <td className="px-4 py-2.5 text-slate-500">{r.total ?? "—"}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Manage Student Modal */}
             {isManageOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
                         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-slate-50">
                             <div>
                                 <h3 className="font-black text-slate-800 text-lg">Manage Student</h3>
-                                <p className="text-xs font-bold text-slate-500">{student.studentName || `${student.firstName} ${student.lastName}`}</p>
+                                <p className="text-xs font-bold text-slate-500">{studentLabel}</p>
                             </div>
                             <button onClick={() => setIsManageOpen(false)} className="w-8 h-8 flex items-center justify-center bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 transition-colors">
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-4 bg-[#f4f7f6]">
+                        <div className="p-6 space-y-4 bg-[#f4f7f6] overflow-y-auto">
                             <div>
                                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Student status</label>
                                 <select
@@ -601,42 +759,96 @@ export default function StudentReport() {
                                 </select>
                             </div>
 
-                            {manageStatus !== "Active" && (
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Note (optional)</label>
-                                    <textarea
-                                        value={manageReason}
-                                        onChange={e => setManageReason(e.target.value)}
-                                        rows={2}
-                                        placeholder={manageStatus === "Transferred" ? "e.g. Transferred to Alliance High School" : "e.g. Completed Form 4, KCSE 2026"}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700 resize-none"
-                                    />
-                                </div>
-                            )}
-
-                            {manageStatus !== currentStatus && (
-                                <p className={`text-xs font-medium rounded-xl p-3 border ${manageStatus === "Active" ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-amber-50 border-amber-100 text-amber-800"}`}>
-                                    {manageStatus === "Active"
-                                        ? "The student will be placed back in the class they left."
-                                        : `The student will be removed from ${student.studentClass || student.currentClass || "their class"} and won't appear in class lists, attendance or marks entry. Their records and fee history are kept, and setting them back to Active restores their class.`}
-                                </p>
+                            {manageStatus === "Transferred" ? (
+                                <>
+                                    {/* Transfer to another school + letter */}
+                                    {transfer && (
+                                        <div className={`text-xs font-bold rounded-xl px-3 py-2 border ${isDraft ? "bg-slate-100 border-slate-200 text-slate-600" : "bg-emerald-50 border-emerald-100 text-emerald-700"}`}>
+                                            {isDraft ? "Draft transfer" : "Transfer completed"}{transfer.refNo ? ` · Ref ${transfer.refNo}` : ""}
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">School transferring to *</label>
+                                        <input value={tfSchool} onChange={e => setTfSchool(e.target.value)} placeholder="e.g. Alliance High School"
+                                            className="w-full h-11 px-3 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Date of transfer</label>
+                                        <input type="date" value={tfDate} onChange={e => setTfDate(e.target.value)}
+                                            className="w-full h-11 px-3 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Reason (optional)</label>
+                                        <textarea value={manageReason} onChange={e => setManageReason(e.target.value)} rows={2} placeholder="e.g. Family relocation"
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700 resize-none" />
+                                    </div>
+                                    {!isTransferred && (
+                                        <p className="text-xs font-medium rounded-xl p-3 border bg-amber-50 border-amber-100 text-amber-800">
+                                            <b>Save as draft</b> keeps {studentLabel || "the student"} active in {student.studentClass || student.currentClass || "their class"} and prepares the letter.{" "}
+                                            <b>Transfer permanently</b> removes them from the class; their records and fee history are kept, and setting them back to Active restores the class.
+                                        </p>
+                                    )}
+                                    {transfer && (
+                                        <button type="button" onClick={printLetter} className="w-full h-10 rounded-xl border border-[#5C67F2]/40 text-[#5C67F2] text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 transition-colors">
+                                            <Printer className="w-4 h-4" /> Print transfer letter{isDraft ? " (marked DRAFT)" : ""}
+                                        </button>
+                                    )}
+                                    {transfer && <p className="text-[11px] text-slate-400 -mt-2">The letter uses the details saved last — save your changes first.</p>}
+                                </>
+                            ) : (
+                                <>
+                                    {manageStatus !== "Active" && (
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Note (optional)</label>
+                                            <textarea
+                                                value={manageReason}
+                                                onChange={e => setManageReason(e.target.value)}
+                                                rows={2}
+                                                placeholder="e.g. Completed Form 4, KCSE 2026"
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm bg-white text-slate-700 resize-none"
+                                            />
+                                        </div>
+                                    )}
+                                    {manageStatus !== currentStatus && (
+                                        <p className={`text-xs font-medium rounded-xl p-3 border ${manageStatus === "Active" ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-amber-50 border-amber-100 text-amber-800"}`}>
+                                            {manageStatus === "Active"
+                                                ? "The student will be placed back in the class they left."
+                                                : `The student will be removed from ${student.studentClass || student.currentClass || "their class"} and won't appear in class lists, attendance or marks entry. Their records and fee history are kept, and setting them back to Active restores their class.`}
+                                        </p>
+                                    )}
+                                </>
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3">
-                            <button
-                                onClick={() => setIsManageOpen(false)}
-                                className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-                            >
-                                Cancel
+                        <div className="p-6 border-t border-gray-100 bg-white flex flex-wrap justify-end gap-3">
+                            <button onClick={() => setIsManageOpen(false)} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+                                Close
                             </button>
-                            <button
-                                onClick={handleSaveStatus}
-                                disabled={isSavingStatus || manageStatus === currentStatus}
-                                className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#868DF4] hover:bg-[#5C67F2] transition-colors flex items-center gap-2 disabled:opacity-50"
-                            >
-                                {isSavingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save
-                            </button>
+                            {manageStatus === "Transferred" ? (
+                                <>
+                                    {isDraft && (
+                                        <button onClick={discardDraft} disabled={isSavingStatus} className="px-5 py-2.5 rounded-xl font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors disabled:opacity-50">
+                                            Discard draft
+                                        </button>
+                                    )}
+                                    {!isTransferred && (
+                                        <button onClick={() => saveTransfer("draft")} disabled={isSavingStatus} className="px-5 py-2.5 rounded-xl font-bold text-[#5C67F2] bg-white border border-[#5C67F2]/40 hover:bg-indigo-50 transition-colors disabled:opacity-50">
+                                            {isDraft ? "Update draft" : "Save as draft"}
+                                        </button>
+                                    )}
+                                    <button onClick={() => saveTransfer("permanent")} disabled={isSavingStatus} className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#868DF4] hover:bg-[#5C67F2] transition-colors flex items-center gap-2 disabled:opacity-50">
+                                        {isSavingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {isTransferred ? "Save details" : "Transfer permanently"}
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={handleSaveStatus}
+                                    disabled={isSavingStatus || manageStatus === currentStatus}
+                                    className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#868DF4] hover:bg-[#5C67F2] transition-colors flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isSavingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

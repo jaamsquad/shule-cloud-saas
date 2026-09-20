@@ -7,6 +7,7 @@ import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
+import { ownerBusinessRouter, publicDocsRouter } from './routes/business.routes';
 import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
 import analyticsRoutes from './routes/analytics.routes';
@@ -369,6 +370,8 @@ app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1', driverRoutes);         // ShuleCloud Driver app (transport/GPS)
 app.use('/api/v1/onboard', onboardRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/owner/business', ownerBusinessRouter);   // quotations / invoices / contracts (owner portal)
+app.use('/api/v1/public/docs', publicDocsRouter);         // their shareable, printable links (+ pay / accept / sign)
 app.use('/api/v1/owner/auth', ownerAuthRoutes);
 app.use('/api/v1/owner', ownerRoutes);
 

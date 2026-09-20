@@ -61,6 +61,8 @@ import OwnerAnnouncements from "./pages/owner/Announcements";
 import OwnerSettings from "./pages/owner/Settings";
 import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
+import PublicDoc from "./pages/public/PublicDoc";
+import InstallPrompt from "./components/InstallPrompt";
 import ManageSchool from "./pages/owner/ManageSchool";
 
 // Onboarding
@@ -441,6 +443,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <InstallPrompt />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             {portalApp}
           </BrowserRouter>
@@ -455,6 +458,7 @@ const App = () => {
         <PermissionsProvider>
         <Toaster />
         <Sonner />
+        <InstallPrompt />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* 1. PUBLIC WEBSITE */}
@@ -470,6 +474,7 @@ const App = () => {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/find-school" element={<TenantResolver />} />
+            <Route path="/lnk/doc/:type/:publicId" element={<PublicDoc />} />   {/* shareable invoice / quotation / contract */}
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<Activate />} />
             <Route path="/onboarding" element={<OnboardingWizard />} />

@@ -1,3 +1,4 @@
+import { buildStatusUpdate } from '../lib/studentStatus';
 import { Router, Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
@@ -293,10 +294,12 @@ router.post('/org/transfer/student', requireOrgAuth, requireOrgRole('ORG_OWNER',
         });
 
         // Flag the source record (kept as history, marked transferred out).
-        await fromDb.collection('students').updateOne(
-            { _id: student._id },
-            { $set: { status: 'transferred', transferredOut: true, transferredOutAt: now, transferHistory }, $unset: { } },
-        );
+        // (also takes them out of their class, keeping it as their previous class — see lib/studentStatus.ts)
+        const { update: outUpdate } = buildStatusUpdate(student, 'Transferred', {
+            reason: `Transferred to ${toMeta?.name || 'another branch'}`, by: req.orgUser!.name || req.orgUser!.email,
+            extraSet: { transferredOut: true, transferredOutAt: now, transferHistory },
+        });
+        await fromDb.collection('students').updateOne({ _id: student._id }, outUpdate);
 
         // Log in both branch DBs + the org audit trail.
         const log = { studentId: String(student._id), studentName: student.studentName, ...historyEntry, type: 'student' };

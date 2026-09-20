@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { parseStkCallback, applyMpesaPayment, stkResultMessage } from '../services/mpesa.service';
 import { creditWallet } from '../services/wallet.service';
+import { handleBusinessCallback } from '../services/bizDocs.service';
+import { activateSubscription } from '../services/subscription.service';
 
 const router = Router();
 
@@ -18,21 +20,7 @@ async function handleSubscriptionCallback(meta: any, stk: any) {
             { $set: { status: 'completed', mpesaReceipt: m.mpesaReceiptNumber, completedAt: new Date() } },
         );
         if (upd.modifiedCount > 0) {
-            const plan = await meta.collection('Plan').findOne({ _id: new ObjectId(String(pay.planId)) });
-            const durationDays = Number(plan?.durationDays) > 0 ? Number(plan.durationDays) : 30;
-            const graceDays = Number(plan?.graceDays) >= 0 ? Number(plan.graceDays) : 0;
-            const expiresAt = new Date(Date.now() + durationDays * 86400000);
-            const graceUntil = new Date(expiresAt.getTime() + graceDays * 86400000);
-            const tenantId = new ObjectId(String(pay.tenantId));
-            await meta.collection('TenantSubscription').updateOne(
-                { tenantId },
-                { $set: { tenantId, planId: pay.planId, planName: pay.planName, amount: pay.amount, status: 'active', expiresAt, graceUntil, mpesaReceipt: m.mpesaReceiptNumber, updatedAt: new Date() }, $unset: { pendingPlanId: '', pendingPlanName: '' } },
-                { upsert: true },
-            );
-            await meta.collection('Tenant').updateOne(
-                { _id: tenantId },
-                { $set: { planId: pay.planId, plan: pay.planName, enabledModules: plan?.modules || [], status: 'active', updatedAt: new Date() } },
-            );
+            await activateSubscription(meta, { tenantId: pay.tenantId, planId: pay.planId, planName: pay.planName, amount: pay.amount, receipt: m.mpesaReceiptNumber });
             console.log('[M-PESA] subscription activated:', pay.planName, 'for tenant', String(pay.tenantId));
         }
     } else {
@@ -54,7 +42,8 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
         const meta = getMetaDb();
         const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId: stk.CheckoutRequestID });
         if (!txn) {
-            // Not a fee/wallet payment — maybe a school subscription payment.
+            // Not a fee/wallet payment — an invoice paid from its shareable link, or a school subscription payment.
+            if (await handleBusinessCallback(meta, stk)) return;
             await handleSubscriptionCallback(meta, stk);
             return;
         }
