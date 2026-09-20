@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { reportQr } from "@/lib/reportQr";
 
 function grade(pct: number | null) { if (pct === null) return "—"; if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B"; if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F"; }
 function gradeColor(pct: number | null) { if (pct === null) return "text-gray-400"; return pct >= 70 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-rose-600"; }
@@ -44,10 +45,16 @@ export default function V2ReportCard() {
         } catch { toast.error("Failed"); } finally { setIsSaving(false); }
     };
 
-    const printReportCard = () => {
+    const printReportCard = async () => {
         if (!reportCard) return;
         const win = openPrintDoc();
         if (!win) { toast.error("Allow popups"); return; }
+        const rc: any = reportCard;
+        const qr = await reportQr({
+            studentId: String(selectedStudent?._id || ""), className: rc.enrollment?.fullClass || "",
+            year: String(rc.enrollment?.academicYear || ""), exam: exams.find((e: any) => e._id === selectedExamId)?.name || "",
+            average: rc.summary?.average ?? null, grade: rc.summary?.meanGrade || "",
+        });
         const rows = (reportCard.subjects || []).map((s: any) => `
             <tr style="${!s.hasMarks ? 'color:#94a3b8' : ''}">
                 <td>${s.subjectName}</td>
@@ -83,6 +90,7 @@ export default function V2ReportCard() {
         </style></head><body>
         <div class="header">
             <div><h1>Academic Report Card</h1><p style="font-size:11px;color:#94a3b8">${reportCard.enrollment?.academicYear} · ${reportCard.enrollment?.class} ${reportCard.enrollment?.stream}</p></div>
+            ${qr ? `<div style="text-align:center;font-size:8px;color:#64748b"><img src="${qr}" style="width:78px;height:78px;display:block" alt="QR"/>Scan to verify</div>` : ""}
         </div>
         <div class="info">
             <div class="info-item"><label>Student Name</label><span>${reportCard.student?.name}</span></div>

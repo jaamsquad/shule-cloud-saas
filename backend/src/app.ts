@@ -15,11 +15,14 @@ import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
 import feesRoutes from './routes/fees.routes';
+import feesOverviewRoutes from './routes/feesOverview.routes';
 import questionImportRoutes from './modules/questionImport/questionImport.routes';
 import questionBankRoutes from './modules/questionBank/questionBank.routes';
 import onlineExamRoutes from './modules/onlineExam/onlineExam.routes';
 import examGeneratorRoutes from './modules/examGenerator/examGenerator.routes';
 import certificatesRoutes from './modules/certificates/certificates.routes';
+import { studentCertRouter, publicVerifyRouter } from './modules/certificates/studentCerts.routes';
+import skillsRoutes from './modules/skills/skills.routes';
 import classTestsRoutes from './modules/classTests/classTests.routes';
 import behaviourRoutes from './modules/behaviour/behaviour.routes';
 import salaryRoutes from './routes/salary.routes';
@@ -328,11 +331,15 @@ app.use('/api/v1', analyticsRoutes);
 app.use('/api/v1', messagingRoutes);
 app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
+app.use('/api/v1', feesOverviewRoutes);         // Fees dashboard (overview, overdue, records, M-PESA in process…)
 app.use('/api/v1', feesRoutes);
 app.use('/api/v1', questionImportRoutes);
 app.use('/api/v1', questionBankRoutes);
 app.use('/api/v1', onlineExamRoutes);
 app.use('/api/v1', examGeneratorRoutes);
+app.use('/api/v1', skillsRoutes);               // skill-based reports (skills per subject, rated per term)
+app.use('/api/v1', studentCertRouter);           // certificates issued to students (+ QR verification links)
+app.use('/api/v1/public/verify', publicVerifyRouter);   // public: scan a QR → is this certificate / report card genuine?
 app.use('/api/v1', certificatesRoutes);
 app.use('/api/v1', classTestsRoutes);
 app.use('/api/v1', behaviourRoutes);

@@ -27,6 +27,7 @@ interface PrintProps {
     gradingScale?: any[];
     curriculumId?: string;
     subjectTeachers?: Record<string, string>; // subjectName → teacherName
+    qrUrl?: string; // QR image (data URL) that opens the online verification page
 }
 
 // Shared logo block — shows img if available, else colored initials
@@ -606,7 +607,7 @@ export function TemplateSplitPanel(p: PrintProps) {
 // ── Template router ──────────────────────────────────────────────────────
 // Maps all 16 template IDs (from ReportCardTemplates.tsx) to print layouts.
 // CBC → Cherith (green tones), 8-4-4 → Islamabad (indigo), Cambridge → CBSE (purple), IB → SplitPanel (pink)
-export function RenderPrintTemplate({ templateId, curriculumId, ...props }: PrintProps & { templateId: string; curriculumId?: string }) {
+function PickTemplate({ templateId, curriculumId, ...props }: PrintProps & { templateId: string; curriculumId?: string }) {
     // Auto-select by curriculum when no explicit template or using legacy IDs
     const resolved = templateId || (
         curriculumId === "CBC"       ? "cbc_classic"  :
@@ -649,4 +650,22 @@ export function RenderPrintTemplate({ templateId, curriculumId, ...props }: Prin
 
         default: return <TemplateCherith {...props} />;
     }
+}
+
+/** Any report-card design, followed by a small "scan to verify" strip when a QR is supplied. */
+export function RenderPrintTemplate(props: PrintProps & { templateId: string; curriculumId?: string }) {
+    const { qrUrl, ...rest } = props;
+    return (
+        <>
+            <PickTemplate {...rest} />
+            {qrUrl && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "6px 12px 0", breakInside: "avoid" }}>
+                    <div style={{ textAlign: "right", fontSize: 8, color: "#64748b", lineHeight: 1.35 }}>
+                        <b style={{ color: "#334155" }}>Scan to verify this report</b><br />Confirms it was issued by {props.schoolName}
+                    </div>
+                    <img src={qrUrl} alt="QR" style={{ width: 54, height: 54 }} />
+                </div>
+            )}
+        </>
+    );
 }

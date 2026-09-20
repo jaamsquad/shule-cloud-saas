@@ -62,6 +62,9 @@ import OwnerSettings from "./pages/owner/Settings";
 import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
+import VerifyDoc from "./pages/public/VerifyDoc";
+import SkillReports from "./pages/tenant/modules/skills/SkillReports";
+import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
 import ClassRoster from "./pages/tenant/modules/ClassRoster";
 import InstallPrompt from "./components/InstallPrompt";
 import ManageSchool from "./pages/owner/ManageSchool";
@@ -475,7 +478,10 @@ const App = () => {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/find-school" element={<TenantResolver />} />
-            <Route path="/lnk/doc/:type/:publicId" element={<PublicDoc />} />   {/* shareable invoice / quotation / contract */}
+            <Route path="/lnk/doc/:type/:publicId" element={<PublicDoc />} />
+            {/* what a certificate / report-card QR code opens */}
+            <Route path="/:school/certificate/verify/online/:certId" element={<VerifyDoc kind="certificate" />} />
+            <Route path="/:school/report/verify/online/:token" element={<VerifyDoc kind="report" />} />   {/* shareable invoice / quotation / contract */}
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<Activate />} />
             <Route path="/onboarding" element={<OnboardingWizard />} />
@@ -758,6 +764,7 @@ const App = () => {
               {/* Exams Management Module */}
               <Route path="/exams" element={<Exams />} />
               <Route path="/exams/create" element={<CreateExam />} />
+              <Route path="/exams/skills" element={<SkillReports />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
               <Route path="/exams/generate-reports" element={<GenerateReportCards />} />
@@ -834,6 +841,7 @@ const App = () => {
               {/* Finance */}
               <Route path="/fees/till-transactions" element={<TillTransactions />} />
               <Route path="/fees/payment-inbox" element={<PaymentInbox />} />
+              <Route path="/fees/dashboard" element={<FeesDashboard />} />
               <Route path="/fees/generate-invoice" element={<GenerateFeesInvoice />} />
               <Route path="/fees/invoices" element={<GeneratedInvoices />} />
               <Route path="/fees/generate-student-invoice" element={<GenerateStudentInvoice />} />

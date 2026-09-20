@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { reportQr } from "@/lib/reportQr";
+import { flushSync } from "react-dom";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function useGradingFns() {
@@ -188,10 +190,19 @@ export default function ClassReportCards() {
     const periodLabel    = currentPeriod ? `${currentPeriod.label} · ${currentPeriod.academicYear}` : selectedExam?.academicYear || "—";
     const className      = selectedClass?.levelName || selectedClass?.name || "—";
 
+    // One QR per learner, made when printing (each is a signed link to the online verification page)
+    const [qrMap, setQrMap] = useState<Record<string, string>>({});
+    const qrFor = (row: any) => reportQr({
+        studentId: String(row.student?._id || ""), className, term: currentPeriod?.label || "",
+        year: String(currentPeriod?.academicYear || selectedExam?.academicYear || ""),
+        exam: selectedExam?.examName || selectedExam?.name || "", average: row.pct, grade: row.grade,
+    });
+
     // ── Print single student ───────────────────────────────────────────────────
-    const printStudent = (row: typeof studentSummaries[0]) => {
+    const printStudent = async (row: typeof studentSummaries[0]) => {
         const win = openPrintDoc();
         if (!win) return;
+        const qrUrl = await qrFor(row);
         const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
         // Use this student's own assigned subject list
         const subList = row.ownSubjectNames.length > 0 ? row.ownSubjectNames : subjectNames;
@@ -208,7 +219,7 @@ export default function ClassReportCards() {
             import("react").then(React => {
                 root.render(React.createElement(RenderPrintTemplate, {
                     templateId: reportTemplate, curriculumId,
-                    schoolName, schoolTagline, schoolLogo,
+                    schoolName, schoolTagline, schoolLogo, qrUrl,
                     studentName: row.name, admNo: row.admNo,
                     studentPhoto: row.student?.studentPhoto || row.student?.photo || row.student?.avatar || row.student?.photoUrl || row.student?.profilePhoto || null,
                     className, periodLabel, examName: selectedExam?.examName || selectedExam?.name || "Exam",
@@ -227,11 +238,14 @@ export default function ClassReportCards() {
     };
 
     // ── Print ALL students (batch) ─────────────────────────────────────────────
-    const printAll = () => {
+    const printAll = async () => {
         const el = printAllRef.current;
         if (!el) return;
         const win = openPrintDoc();
         if (!win) return;
+        const map: Record<string, string> = {};
+        await Promise.all(studentSummaries.filter(r => r.scoredSubjects > 0).map(async r => { map[String(r.student._id)] = await qrFor(r); }));
+        flushSync(() => setQrMap(map));
         const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
         win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Class Report Cards – ${className}</title>${styles}<style>@page{size:A4;margin:12mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;background:white}*{box-sizing:border-box}table{border-collapse:collapse;width:100%}th,td{padding:6px 10px;font-size:11px}.page-break{page-break-after:always;break-after:always}</style></head><body>${el.innerHTML}</body></html>`);
         win.document.close(); win.focus(); setTimeout(() => win.print(), 800);
@@ -494,6 +508,7 @@ export default function ClassReportCards() {
                             <RenderPrintTemplate
                                 templateId={reportTemplate} curriculumId={curriculumId}
                                 schoolName={schoolName} schoolTagline={schoolTagline} schoolLogo={schoolLogo}
+                                qrUrl={qrMap[String(row.student._id)]}
                                 studentName={row.name} admNo={row.admNo}
                                 studentPhoto={row.student?.studentPhoto || row.student?.photo || row.student?.avatar || row.student?.photoUrl || row.student?.profilePhoto || null}
                                 className={className} periodLabel={periodLabel}

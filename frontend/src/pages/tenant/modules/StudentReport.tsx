@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2 } from "lucide-react";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -11,6 +11,7 @@ import { openPrintDoc, printElementToPdf } from "@/lib/pdfDoc";
 import AcademicHistoryCard from "@/components/AcademicHistoryCard";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { printTransferLetter, displayDate } from "./students/transferLetter";
+import CertificateModal from "./students/certificates/CertificateModal";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -24,12 +25,14 @@ export default function StudentReport() {
     const [isAssignOpen, setIsAssignOpen] = useState(false);
     const [selectedSubjects, setSelectedSubjects] = useState<any[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [certOpen, setCertOpen] = useState(false);   // Generate certificate
     const [trendOpen, setTrendOpen] = useState(false);   // Performance Trends — wide view
 
     // Manage Student — lifecycle status (Active / Transferred / Graduated) + transfer letter
     const queryClient = useQueryClient();
     const school = useSchoolBrand();
     const { canUpdate } = useModuleCrud("students");
+    const { canCreate: canIssueCert } = useModuleCrud("certificates");
     const [isManageOpen, setIsManageOpen] = useState(false);
     const [manageStatus, setManageStatus] = useState("Active");
     const [manageReason, setManageReason] = useState("");
@@ -312,6 +315,12 @@ export default function StudentReport() {
                         <button onClick={handleOpenManage}
                             className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
                             <Settings2 className="w-3.5 h-3.5" /> Manage Student
+                        </button>
+                    )}
+                    {canIssueCert && (
+                        <button onClick={() => setCertOpen(true)}
+                            className="h-9 px-4 bg-white border border-amber-300 hover:border-amber-500 text-amber-600 text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                            <Award className="w-3.5 h-3.5" /> Generate Certificate
                         </button>
                     )}
                     {transfer && (
@@ -615,6 +624,8 @@ export default function StudentReport() {
 
                 </div>
             </div>
+
+            {certOpen && student && <CertificateModal student={student} onClose={() => setCertOpen(false)} />}
 
             {/* Performance Trends — wide view */}
             {trendOpen && trendRows.length >= 2 && (

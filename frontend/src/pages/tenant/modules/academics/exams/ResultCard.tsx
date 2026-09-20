@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import {
     Search, Printer, Download, Home, User, Award, GraduationCap,
     Loader2, ChevronDown, BarChart3, BookOpen, Mail
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { reportQr } from "@/lib/reportQr";
 
 export default function ResultCard() {
     const [emailing, setEmailing] = useState(false);
@@ -397,6 +398,20 @@ export default function ResultCard() {
     const reportTemplate = tenantProfile?.reportTemplate || "cherith_termly";
     const examDate = selectedExam?.startDate ? new Date(selectedExam.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—";
     const printRef = useRef<HTMLDivElement>(null);
+
+    // QR that opens the online verification page for this report card
+    const [qrUrl, setQrUrl] = useState("");
+    useEffect(() => {
+        let live = true;
+        setQrUrl("");
+        if (!selectedStudent?._id || !selectedExam) return;
+        reportQr({
+            studentId: String(selectedStudent._id), className: selectedClass?.levelName || selectedClass?.name || selectedStudent?.class || "",
+            term: currentPeriod?.label || "", year: String(currentPeriod?.academicYear || selectedExam.academicYear || ""),
+            exam: selectedExam.examName || selectedExam.name || "", average: overall, grade: overallGrade,
+        }).then(u => { if (live) setQrUrl(u); });
+        return () => { live = false; };
+    }, [selectedStudent?._id, selectedExam?._id, overall, overallGrade, currentPeriod?.label]);
 
     const printInNewWindow = () => {
         const content = printRef.current;
@@ -896,6 +911,7 @@ export default function ResultCard() {
                         schoolName={schoolName}
                         schoolTagline={schoolTagline}
                         schoolLogo={schoolLogo}
+                        qrUrl={qrUrl}
                         studentName={getStudentName(selectedStudent)}
                         admNo={getAdmNo(selectedStudent)}
                         studentPhoto={studentPhoto}

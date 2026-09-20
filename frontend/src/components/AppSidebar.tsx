@@ -196,6 +196,7 @@ export const navItems: NavItem[] = [
       { label: "Settings", path: "/accounting/settings" },
   ] },
   { label: "Fees", icon: Banknote, moduleKey: "fees", children: [ 
+      { label: "Fees Dashboard", path: "/fees/dashboard" },
       { label: "Generate Fees Invoice", path: "/fees/generate-invoice" },
       { label: "Generate Per Student", path: "/fees/generate-student-invoice" },
       { label: "Generated Invoices", path: "/fees/invoices" },
@@ -376,6 +377,7 @@ export const navItems: NavItem[] = [
       { label: "Create New Exam", path: "/exams/create" },
       { label: "Online Examinations", path: "/exams/online" },
       { label: "Add / Update Exam Marks", path: "/exams/marks" },
+      { label: "Skill-Based Reports", path: "/exams/skills" },
       { label: "Analytics", path: "/exams/analytics" },
       // { label: "Generate Report Cards", path: "/exams/generate-reports" },
       // { label: "ScholarSheet (A4 Card)", path: "/exams/scholar-sheet" },
