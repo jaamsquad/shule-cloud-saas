@@ -98,6 +98,15 @@ export default function GenerateReportCards() {
     const activeYear = v2Years.find((y: any) => y.isActive);
     const currentTermLabel = activeTerm ? activeTerm.name : "";
 
+    // Terms of the chosen year, each once (the terms list holds every year's Term 1/2/3, so it repeated)
+    const termOptions = useMemo(() => {
+        const ofYear = selectedYear ? v2Terms.filter((t: any) => String(t.academicYear) === selectedYear) : [];
+        const seen = new Set<string>();
+        return (ofYear.length ? ofYear : v2Terms)
+            .filter((t: any) => { const k = norm(t.name); if (seen.has(k)) return false; seen.add(k); return true; })
+            .sort((a: any, b: any) => (Number(a.termNumber) || 0) - (Number(b.termNumber) || 0));
+    }, [v2Terms, selectedYear]);
+
     // Exams matching the chosen year + term
     const termExams = useMemo(() => exams.filter((e: any) =>
         (!selectedTerm || norm(e.term) === norm(selectedTerm)) &&
@@ -381,7 +390,7 @@ export default function GenerateReportCards() {
                                 <select value={selectedTerm} onChange={e => { setSelectedTerm(e.target.value); setEndTermExamId(""); setInternalExamIds([]); }}
                                     className="mt-1.5 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
                                     <option value="">— Choose Term —</option>
-                                    {v2Terms.map((t: any) => <option key={t._id || t.name} value={t.name}>{t.name}</option>)}
+                                    {termOptions.map((t: any) => <option key={t._id || t.name} value={t.name}>{t.name}</option>)}
                                     <option value={YEAR_TERM} disabled={!yearly?.allowed}>Whole Year — yearly report{yearly?.allowed ? "" : " (available in Term 3)"}</option>
                                 </select>
                             </div>

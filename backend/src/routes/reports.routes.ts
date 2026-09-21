@@ -114,12 +114,20 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // pins the End Term (main) exam + optional internal assessments (Mid Term,
         // CAT…) that should appear as columns. We match by classId, or by class name.
         const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
-        const generations = await database.collection('report_card_generations').find({}).toArray().catch(() => []);
-        const gen: any = generations.find((g: any) =>
+        // (Yearly reports are separate documents — never a term card's exam set.)
+        const generations = (await database.collection('report_card_generations').find({}).toArray().catch(() => [])).filter((g: any) => g.kind !== 'yearly');
+        const sameClassGen = (g: any) =>
             (classId && String(g.classId) === classId) ||
             norm(g.className) === norm(myClass) ||
             norm(g.className) === norm(`${myClass} ${myStream}`) ||
-            (g.mainExamId && String(g.mainExamId) === examId && (norm(myClass).includes(norm(g.className)) || norm(g.className).includes(norm(myClass)))));
+            (g.mainExamId && String(g.mainExamId) === examId && (norm(myClass).includes(norm(g.className)) || norm(g.className).includes(norm(myClass))));
+        // The generation for the exam that was OPENED wins. Only its own CATs / Mid Term are shown alongside —
+        // a CAT that belongs to another term's generation of the same class must not leak into this card.
+        const gen: any = generations.find((g: any) => String(g.mainExamId) === examId && sameClassGen(g))
+            || generations.find((g: any) => String(g.mainExamId) === examId)
+            || generations.find(sameClassGen);
+        const genIsForOpenedExam = !!gen && String(gen.mainExamId) === examId;
+        const mainEff = genIsForOpenedExam ? String(gen.mainExamId) : examId;   // the exam this card is built around
 
         // If the class has no generated report card for this term, the result isn't
         // ready — tell the frontend to show "Result not ready yet for this term".
@@ -131,7 +139,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // The exam set = the exam the user opened (always shown) + the generation's
         // main End Term + any additional internal assessments. The selected exam
         // comes first so its column leads. De-duplicated.
-        const examIds: string[] = [String(examId), String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))]
+        const examIds: string[] = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
             .filter((v, i, a) => v && a.indexOf(v) === i);
         const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
         // Additional assessments may be regular exams OR online exams, so look in both
@@ -160,7 +168,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             return (raw || 'EXAM').toUpperCase().slice(0, 14);
         };
         // The main exam defines the leading column's type.
-        const mainType = typeOf(examMeta[String(gen.mainExamId)] || examMeta[examId]) || 'END-TERM';
+        const mainType = typeOf(examMeta[mainEff] || examMeta[examId]) || 'END-TERM';
         // Map each pinned examId → its type, and each type → the examIds under it.
         const typeByExam: Record<string, string> = {};
         const examIdsByType: Record<string, string[]> = {};
@@ -229,7 +237,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
         // Marks used for ranking: the End-Term (main) exam across ALL students. If for
         // some reason that's empty, fall back to the full pinned exam set.
-        const rankExamId = String(gen.mainExamId || examId);
+        const rankExamId = mainEff;
         const rankMarksMain = await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []);
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
@@ -409,9 +417,9 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             // Mid Term before the End Term), not only a previous term.
             const timeOf = (e: any) => { const d = new Date(e?.createdAt || e?.startDate || e?.date || 0).getTime(); return isNaN(d) ? 0 : d; };
             const orderKey = (e: any) => yOf(e) * 1e15 + tOf(e) * 1e13 + timeOf(e);
-            const mainE = examMeta[String(gen.mainExamId)] || exam;
+            const mainE = examMeta[mainEff] || exam;
             const mainOrder = orderKey(mainE);
-            const mainExamId = String(gen.mainExamId || examId);   // never compare an exam to itself
+            const mainExamId = mainEff;   // never compare an exam to itself
             const cardExamIds = new Set(examIds.map(String));      // exams shown ON this card
             // Every one of the student's marks whose exam sorts BEFORE the main exam
             // (and isn't the main exam itself) is a candidate "previous exam".
@@ -583,7 +591,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             settings: rcSettings,   // report-card display settings (KCPE/positions/columns/change)
             issueDate: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
             termYear: `${exam?.academicYear ?? exam?.year ?? ''} ${exam?.term ?? ''}`.trim(),
-            examTitle: formatExamName(examMeta[String(gen.mainExamId)] || exam, classFull),
+            examTitle: formatExamName(examMeta[mainEff] || exam, classFull),
             examColumns,            // [{ examId, title }] — one per exam in the set
             multiExam,              // true when >1 exam (show columns + aggregate)
             student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || student.admissionNo, className: classFull, house: student.house || '', photo: student.photo || student.image || '' },
