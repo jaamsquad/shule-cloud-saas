@@ -12,6 +12,8 @@ const SORTS: { v: string; l: string }[] = [
     { v: "name_asc", l: "Name (A-Z)" },
     { v: "name_desc", l: "Name (Z-A)" },
     { v: "reg_asc", l: "Registration no." },
+    { v: "gender_male", l: "Gender (Male first)" },
+    { v: "gender_female", l: "Gender (Female first)" },
     { v: "fee_desc", l: "Fee balance — highest first" },
     { v: "fee_asc", l: "Fee balance — lowest first" },
     { v: "perf_desc", l: "Most performing first" },
@@ -42,6 +44,11 @@ export default function ClassRoster() {
             switch (sortBy) {
                 case "name_desc": return byName(b, a);
                 case "reg_asc": return String(a.registrationNo).localeCompare(String(b.registrationNo), undefined, { numeric: true }) || byName(a, b);
+                case "gender_male": case "gender_female": {
+                    const order = sortBy === "gender_male" ? ["male", "female"] : ["female", "male"];
+                    const rank = (x: any) => { const i = order.indexOf(String(x.gender || "").toLowerCase().trim()); return i === -1 ? order.length : i; };   // unset last
+                    return rank(a) - rank(b) || byName(a, b);
+                }
                 case "fee_desc": return b.feeDue - a.feeDue || byName(a, b);
                 case "fee_asc": return a.feeDue - b.feeDue || byName(a, b);
                 case "perf_desc": return perf(-1)(a, b);

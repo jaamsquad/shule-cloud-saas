@@ -9,6 +9,7 @@
  *
  * Workload is computed live from timetable_slots (by teacherId).
  */
+import { actorOf } from '../../lib/actor';
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
@@ -29,7 +30,7 @@ const loadTeachers = async (req: Request) => {
 };
 
 const auditLog = async (req: Request, action: string, target: string, meta: any = {}) => {
-    try { await db(req).collection('audit_logs').insertOne({ scope: 'tsc', action, target, meta, user: (req as any).tenantContext?.user || 'admin', changedAt: new Date(), createdAt: new Date() }); } catch { /* */ }
+    try { await db(req).collection('audit_logs').insertOne({ scope: 'tsc', action, target, meta, user: actorOf(req), changedAt: new Date(), createdAt: new Date() }); } catch { /* */ }
 };
 
 // ── Employment-type helper ────────────────────────────────────────────────────

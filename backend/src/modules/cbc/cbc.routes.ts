@@ -6,6 +6,7 @@
  * cbc_comments, cbc_feedback, cbc_settings. Integrates with the existing
  * students / classes collections.
  */
+import { actorOf } from '../../lib/actor';
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
@@ -16,7 +17,7 @@ import { loadTerms, pickCurrent, belongsToTerm, termOption, TermInfo } from './c
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
 const oid = (id: string) => { try { return new ObjectId(id); } catch { return null; } };
-const user = (req: Request) => (req as any).tenantContext?.user || 'admin';
+const user = (req: Request) => actorOf(req);
 
 // Achievement level → numeric score for averaging (EE=4 … BE=1).
 const LEVEL_SCORE: Record<string, number> = { EE: 4, ME: 3, AE: 2, BE: 1 };

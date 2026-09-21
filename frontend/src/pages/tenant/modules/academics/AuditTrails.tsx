@@ -1,3 +1,4 @@
+import { who } from "@/lib/who";
 import { useState } from "react";
 import { Search, Shield, Eye, ChevronRight, User, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,7 @@ export default function AuditTrails() {
                             filtered.map((item: any) => (
                                 <TableRow key={item._id} className="hover:bg-gray-50/50 group border-b border-gray-50 h-10">
                                     <TableCell className="text-[13px] text-gray-800 px-6 font-medium flex items-center gap-2 h-10">
-                                         <User className="w-3.5 h-3.5 text-gray-400" /> {item.user || 'System'}
+                                         <User className="w-3.5 h-3.5 text-gray-400" /> {who(item.user, 'System')}
                                     </TableCell>
                                     <TableCell className="text-[13px] text-gray-600 px-6">{item.action}</TableCell>
                                     <TableCell className="text-[13px] text-gray-500 px-6">{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'N/A'}</TableCell>

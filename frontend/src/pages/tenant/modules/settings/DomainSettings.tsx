@@ -1,3 +1,4 @@
+import { who } from "@/lib/who";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -198,7 +199,7 @@ export default function DomainSettings() {
                                 {history.map((h: any) => (
                                     <div key={h._id} className="flex items-center justify-between text-xs py-2 border-b border-slate-50">
                                         <span className="font-semibold text-slate-700">{String(h.action).replace(/_/g, " ")} <span className="text-slate-400 font-normal">· {h.domain}</span></span>
-                                        <span className="text-slate-400">{h.user || "—"} · {new Date(h.createdAt).toLocaleString("en-GB")}</span>
+                                        <span className="text-slate-400">{who(h.user)} · {new Date(h.createdAt).toLocaleString("en-GB")}</span>
                                     </div>
                                 ))}
                             </div>

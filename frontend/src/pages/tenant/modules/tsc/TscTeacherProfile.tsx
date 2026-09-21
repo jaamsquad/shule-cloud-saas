@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-    ArrowLeft, User, Loader2, Save, Plus, Trash2, FileText, Upload, Award, MapPin,
+    ArrowLeft, User, Loader2, Save, Pencil, Plus, Trash2, FileText, Upload, Award, MapPin,
     CalendarDays, ClipboardCheck, BadgeCheck, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -77,13 +77,15 @@ type EField = [string, string, (string[] | undefined)?, ("date" | "text")?];
 function EditFields({ id, staff, fields, onSaved, readOnly = [] }: { id: string; staff: any; fields: EField[]; onSaved: () => void; readOnly?: string[] }) {
     const [form, setForm] = useState<Record<string, any>>(Object.fromEntries(fields.map(([k]) => [k, staff[k] ?? ""])));
     const [saving, setSaving] = useState(false);
+    const [editing, setEditing] = useState(false);   // the details show read-only until Edit is pressed
+    const reset = () => setForm(Object.fromEntries(fields.map(([k]) => [k, staff[k] ?? ""])));
     const set = (k: string, v: any) => setForm(f => {
         const next = { ...f, [k]: v };
         if (k === "county") { next.subCounty = ""; next.ward = ""; }
         if (k === "subCounty") next.ward = "";
         return next;
     });
-    const save = async () => { setSaving(true); try { await tsc.updateTeacher(id, form); toast.success("Saved"); onSaved(); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } finally { setSaving(false); } };
+    const save = async () => { setSaving(true); try { await tsc.updateTeacher(id, form); toast.success("Saved"); onSaved(); setEditing(false); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } finally { setSaving(false); } };
 
     const render = (k: string, label: string, options?: string[], type?: string) => {
         // Kenya location cascade.
@@ -96,14 +98,32 @@ function EditFields({ id, staff, fields, onSaved, readOnly = [] }: { id: string;
         return <input value={form[k] ?? ""} disabled={readOnly.includes(k)} onChange={e => set(k, e.target.value)} className={base} />;
     };
 
+    const shown = (k: string, type?: string) => { const v = staff[k]; if (v == null || v === "") return "—"; if (type === "date") { const d = new Date(v); return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } return String(v); };
+
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {fields.map(([k, label, options, type]) => (
-                    <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>{render(k, label, options, type)}</div>
-                ))}
-            </div>
-            <button onClick={save} disabled={saving} className="mt-4 h-10 px-5 text-white rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50" style={{ background: BLUE }}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+            {!editing ? (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        {fields.map(([k, label, , type]) => (
+                            <div key={k}><div className="text-[11px] font-bold text-slate-500 mb-0.5">{label}</div><div className="text-sm font-semibold text-slate-800 break-words">{shown(k, type)}</div></div>
+                        ))}
+                    </div>
+                    <button onClick={() => { reset(); setEditing(true); }} className="mt-5 h-10 px-5 text-white rounded-lg text-sm font-bold flex items-center gap-2" style={{ background: BLUE }}><Pencil className="w-4 h-4" /> Edit</button>
+                </>
+            ) : (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {fields.map(([k, label, options, type]) => (
+                            <div key={k}><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>{render(k, label, options, type)}</div>
+                        ))}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                        <button onClick={save} disabled={saving} className="h-10 px-5 text-white rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50" style={{ background: BLUE }}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+                        <button onClick={() => { reset(); setEditing(false); }} className="h-10 px-4 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

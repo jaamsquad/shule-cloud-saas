@@ -1,3 +1,4 @@
+import { who } from "@/lib/who";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Download } from "lucide-react";
@@ -29,7 +30,7 @@ export default function NemisHistory() {
                             {rows.map((x: any) => (
                                 <tr key={x._id} className="border-b border-slate-50">
                                     <td className="px-4 py-3 text-slate-500">{new Date(x.at).toLocaleString("en-GB")}</td>
-                                    <td className="px-4 py-3 text-slate-500">{x.user}</td>
+                                    <td className="px-4 py-3 text-slate-500">{who(x.user)}</td>
                                     <td className="px-4 py-3"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${badge(x.action)}`}>{x.action}</span></td>
                                     <td className="px-4 py-3 font-bold text-slate-700">{x.records ?? "—"}</td>
                                     <td className="px-4 py-3 text-slate-500">{x.status || "—"}</td>

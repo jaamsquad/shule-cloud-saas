@@ -1,4 +1,4 @@
-import { Settings, RefreshCcw, Eye, Lock, Trash2, Check, EyeOff, Loader2, X, AlertTriangle } from "lucide-react";
+import { Settings, RefreshCcw, Eye, Lock, Check, EyeOff, Loader2, X, AlertTriangle } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -106,16 +106,6 @@ export default function AccountSettings() {
         }
     });
 
-    const deleteAccount = useMutation({
-        mutationFn: async (id: string) => await api.delete(`/auth/tenant/user/${id}`),
-        onSuccess: () => {
-            toast.success("Account deleted successfully.");
-            localStorage.clear();
-            navigate("/login");
-        },
-        onError: () => toast.error("Failed to delete account.")
-    });
-
     const handleUpdate = async () => {
         try {
             // Update Tenant settings
@@ -140,14 +130,6 @@ export default function AccountSettings() {
             setPassword(""); // clear password field after update
         } catch (error: any) {
             toast.error(error?.response?.data?.message || "Failed to update settings");
-        }
-    };
-
-    const handleDelete = () => {
-        if (window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-            if (user?.id) {
-                deleteAccount.mutate(user.id);
-            }
         }
     };
 
@@ -315,14 +297,6 @@ export default function AccountSettings() {
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={handleDelete}
-                                disabled={deleteAccount.isPending}
-                                className="h-10 px-6 bg-[#ef4444] hover:bg-[#dc2626] disabled:opacity-70 text-white font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors relative z-10 text-xs tracking-wide"
-                            >
-                                {deleteAccount.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                Delete Account
-                            </button>
                         </div>
                     </div>
                 </div>

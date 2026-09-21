@@ -12,6 +12,7 @@ import AcademicHistoryCard from "@/components/AcademicHistoryCard";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { printTransferLetter, displayDate } from "./students/transferLetter";
 import CertificateModal from "./students/certificates/CertificateModal";
+import NemisDetailsCard from "./students/NemisDetailsCard";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -409,6 +410,9 @@ export default function StudentReport() {
                         <DetailRow label="Any Additional Note" value={student.additionalNote} />
                         <DetailRow label="Religion" value={student.religion} />
                     </div>
+
+                    {/* All NEMIS learner details — read-only, Edit to change */}
+                    <NemisDetailsCard studentId={String(id)} canEdit={!!canUpdate} />
 
                     {/* Assigned Subjects List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">

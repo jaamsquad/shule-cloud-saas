@@ -1,3 +1,4 @@
+import { who } from "@/lib/who";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -283,7 +284,7 @@ export default function StudentProfile() {
                         <TableCell><Badge variant={d.type === "Merit" ? "default" : "destructive"}>{d.type}</Badge></TableCell>
                         <TableCell className={d.points > 0 ? "text-green-600" : "text-red-600"}>{d.points > 0 ? `+${d.points}` : d.points}</TableCell>
                         <TableCell>{d.reason}</TableCell>
-                        <TableCell>{d.by}</TableCell>
+                        <TableCell>{who(d.by)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

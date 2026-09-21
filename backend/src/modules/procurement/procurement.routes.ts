@@ -6,6 +6,7 @@
  * adds: quotations, goods-received (GRN, updates inventory), invoice matching
  * (3-way), contracts, tenders, dashboard, reports, and supplier performance.
  */
+import { actorOf } from '../../lib/actor';
 import { Router, Request } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
@@ -15,7 +16,7 @@ const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
 const num = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const oid = (id: string) => { try { return new ObjectId(id); } catch { return null; } };
-const user = (req: Request) => (req as any).tenantContext?.user || 'admin';
+const user = (req: Request) => actorOf(req);
 const audit = async (req: Request, action: string, target: string, meta: any = {}) => { try { await db(req).collection('audit_logs').insertOne({ scope: 'procurement', action, target, meta, user: user(req), changedAt: new Date(), createdAt: new Date() }); } catch { /* */ } };
 
 async function nextNumber(req: Request, coll: string, prefix: string) {

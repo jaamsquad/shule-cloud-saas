@@ -2,6 +2,7 @@
  * NEMIS Assistant API — prepare, validate, export, import and track NEMIS data.
  * Does NOT talk to NEMIS directly; it readies data for manual portal submission.
  */
+import { actorOf } from '../../lib/actor';
 import { Router, Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { getMetaDb } from '../../lib/mongodb';
@@ -16,7 +17,7 @@ const loadStudents = async (req: Request) =>
 const logSync = async (req: Request, action: string, meta: Record<string, any>) => {
     try {
         await db(req).collection('nemis_sync_log').insertOne({
-            action, ...meta, user: (req as any).tenantContext?.user || 'admin', at: new Date(),
+            action, ...meta, user: actorOf(req), at: new Date(),
         });
     } catch { /* best-effort */ }
 };

@@ -1,3 +1,4 @@
+import { who } from "@/lib/who";
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -776,7 +777,7 @@ function HistoryModal({ batch, onClose }: { batch: any; onClose: () => void }) {
                                 <div key={i} className="flex items-start gap-2 border-l-2 border-slate-100 pl-3 py-1">
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[h.action] || "bg-slate-100 text-slate-500"}`}>{h.action}</span>
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-bold text-slate-700">{h.by}</p>
+                                        <p className="text-xs font-bold text-slate-700">{who(h.by)}</p>
                                         <p className="text-[11px] text-slate-400">{new Date(h.at).toLocaleString()}{h.note ? ` · ${h.note}` : ""}</p>
                                         {Array.isArray(h.changes) && h.changes.length > 0 && (
                                             <div className="mt-1.5 rounded-lg bg-violet-50/70 border border-violet-100 p-2 space-y-0.5">
@@ -1036,7 +1037,7 @@ function Notices({ dept }: { dept: any }) {
                         <div key={n._id} className="border border-slate-100 rounded-xl px-3 py-2.5">
                             <div className="flex items-center gap-2"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{n.kind}</span><p className="text-sm font-bold text-slate-700">{n.title}</p></div>
                             {n.body && <p className="text-[11px] text-slate-500 mt-1">{n.body}</p>}
-                            <p className="text-[10px] text-slate-400 mt-0.5">{n.createdBy} · {new Date(n.createdAt).toLocaleString()}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{who(n.createdBy)} · {new Date(n.createdAt).toLocaleString()}</p>
                         </div>
                     ))}
                 </div>
