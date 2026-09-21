@@ -12,12 +12,30 @@ const TABS = [{ k: "setup", l: "1 · Skills setup", i: Settings2 }, { k: "assess
 const inp = "h-10 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#5C67F2]";
 const TERMS = ["Term 1", "Term 2", "Term 3"];
 
+// The classes the school created (Form 1, Grade 4 …) each with its streams, in the school's own names and order.
+// A class with no streams is offered on its own; streams whose class was removed are grouped by their class name.
+interface ClassGroup { name: string; streams: string[] }
+function classGroups(classes: any[], streams: any[]): ClassGroup[] {
+    const out: ClassGroup[] = classes.map(c => ({ name: String(c.name || ""), streams: streams.filter(s => String(s.classId) === String(c._id)).map(s => s.fullName).filter(Boolean) })).filter(g => g.name);
+    const known = new Set(classes.map(c => String(c._id)));
+    streams.filter(s => !known.has(String(s.classId)) && s.fullName).forEach(s => {
+        const n = String(s.className || s.fullName); const g = out.find(x => x.name.toLowerCase() === n.toLowerCase());
+        if (g) { if (!g.streams.includes(s.fullName)) g.streams.push(s.fullName); } else out.push({ name: n, streams: [s.fullName] });
+    });
+    return out;
+}
+// <option>s for a class picker: one group per class — "Form 1 (all streams)" then each stream; a class without streams is one option.
+const classOptions = (groups: ClassGroup[]) => groups.map(g => g.streams.length
+    ? <optgroup key={g.name} label={g.name}><option value={g.name}>{g.name} (all streams)</option>{g.streams.map(s => <option key={s} value={s}>{s}</option>)}</optgroup>
+    : <option key={g.name} value={g.name}>{g.name}</option>);
+
 function useLists() {
     const classes = useQuery<any[]>({ queryKey: ["skills_streams"], queryFn: async () => (await api.get("/v2/streams")).data || [] });
     const subjects = useQuery<string[]>({ queryKey: ["skills_subjects"], queryFn: async () => { try { const r = await api.get("/subjects"); return Array.from(new Set((Array.isArray(r.data) ? r.data : []).map((s: any) => s.name || s.subjectName).filter(Boolean))) as string[]; } catch { return []; } } });
     const scales = useQuery<Record<string, any>>({ queryKey: ["skill_scales"], queryFn: async () => (await api.get("/skills/scales")).data });
+    const v2 = useQuery<any[]>({ queryKey: ["skills_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const frameworks = useQuery<any[]>({ queryKey: ["skill_frameworks"], queryFn: async () => (await api.get("/skills/frameworks")).data || [] });
-    return { classes: classes.data || [], subjects: subjects.data || [], scales: scales.data || {}, frameworks: frameworks.data || [] };
+    return { classes: classes.data || [], groups: classGroups(v2.data || [], classes.data || []), subjects: subjects.data || [], scales: scales.data || {}, frameworks: frameworks.data || [] };
 }
 
 export default function SkillReports() {
@@ -39,10 +57,10 @@ export default function SkillReports() {
 
 // ── 1. Setup: subject → field of study → skills ───────────────────────────────
 function Setup() {
-    const qc = useQueryClient(); const { classes, subjects, scales, frameworks } = useLists();
+    const qc = useQueryClient(); const { groups, subjects, scales, frameworks } = useLists();
     const blank = { subject: "", area: "", scale: "mastery", skills: "", levels: [] as string[] };
     const [f, setF] = useState<any>(blank); const [editId, setEditId] = useState<string | null>(null); const [saving, setSaving] = useState(false);
-    const levels = useMemo(() => Array.from(new Set(classes.map((s: any) => s.className).filter(Boolean))) as string[], [classes]);
+    const toggle = (l: string) => setF((cur: any) => ({ ...cur, levels: cur.levels.includes(l) ? cur.levels.filter((x: string) => x !== l) : [...cur.levels, l] }));
     const grouped = useMemo(() => { const m: Record<string, any[]> = {}; frameworks.forEach(x => (m[x.subject] ||= []).push(x)); return m; }, [frameworks]);
     const refresh = () => qc.invalidateQueries({ queryKey: ["skill_frameworks"] });
 
@@ -68,7 +86,10 @@ function Setup() {
                     <select className={`${inp} w-full`} value={f.scale} onChange={e => setF({ ...f, scale: e.target.value })}>{Object.entries(scales).map(([k, s]: any) => <option key={k} value={k}>{s.label}</option>)}</select></div>
                 <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Skills (one per line)</label><textarea rows={6} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" value={f.skills} onChange={e => setF({ ...f, skills: e.target.value })} /></div>
                 <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Classes it applies to <span className="font-normal text-slate-400">(none ticked = all)</span></label>
-                    <div className="flex flex-wrap gap-1.5">{levels.map(l => { const on = f.levels.includes(l); return <button key={l} type="button" onClick={() => setF({ ...f, levels: on ? f.levels.filter((x: string) => x !== l) : [...f.levels, l] })} className={`px-2.5 h-7 rounded-full text-[11px] font-bold border ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>{l}</button>; })}</div></div>
+                    <div className="space-y-2">{groups.length === 0 && <p className="text-xs text-slate-400">No classes created yet — add them under Classes.</p>}{groups.map(g => {
+                        const chip = (l: string, label = l) => { const on = f.levels.includes(l); return <button key={l} type="button" onClick={() => toggle(l)} className={`px-2.5 h-7 rounded-full text-[11px] font-bold border ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>{label}</button>; };
+                        return <div key={g.name} className="flex flex-wrap items-center gap-1.5">{chip(g.name)}{g.streams.map(st => chip(st, st.toLowerCase().startsWith(g.name.toLowerCase()) ? st.slice(g.name.length).trim() || st : st))}</div>;
+                    })}</div></div>
                 <div className="flex gap-2 pt-1">
                     <button onClick={save} disabled={saving} className="h-10 px-5 rounded-xl bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-sm font-bold flex items-center gap-2 disabled:opacity-50">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editId ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}{editId ? "Save changes" : "Add"}</button>
                     {editId && <button onClick={() => { setEditId(null); setF(blank); }} className="h-10 px-4 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Cancel</button>}
@@ -95,7 +116,7 @@ function Setup() {
 
 // ── 2. Assess: learners × skills for a class, subject and term ────────────────
 function Assess() {
-    const { classes, scales, frameworks } = useLists();
+    const { groups, scales, frameworks } = useLists();
     const [cls, setCls] = useState(""); const [subject, setSubject] = useState(""); const [term, setTerm] = useState(TERMS[0]); const [year, setYear] = useState(String(new Date().getFullYear()));
     const [areaId, setAreaId] = useState(""); const [draft, setDraft] = useState<Record<string, Record<string, string>>>({}); const [saving, setSaving] = useState(false);
     const subjects = useMemo(() => Array.from(new Set(frameworks.map(f => f.subject))) as string[], [frameworks]);
@@ -125,7 +146,7 @@ function Assess() {
     return (
         <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-wrap items-end gap-3">
-                <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Class</label><select className={inp} value={cls} onChange={e => setCls(e.target.value)}><option value="">Select…</option>{classes.map((s: any) => <option key={s._id} value={s.fullName}>{s.fullName}</option>)}</select></div>
+                <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Class</label><select className={inp} value={cls} onChange={e => setCls(e.target.value)}><option value="">Select…</option>{classOptions(groups)}</select></div>
                 <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Subject</label><select className={inp} value={subject} onChange={e => setSubject(e.target.value)}><option value="">Select…</option>{subjects.map(s => <option key={s}>{s}</option>)}</select></div>
                 <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Term</label><select className={inp} value={term} onChange={e => setTerm(e.target.value)}>{TERMS.map(t => <option key={t}>{t}</option>)}</select></div>
                 <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Year</label><input className={`${inp} w-24`} value={year} onChange={e => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} /></div>
@@ -171,7 +192,7 @@ function Assess() {
 
 // ── 3. Print: choose a design and print a class (or one learner) ──────────────
 function PrintTab() {
-    const { classes, subjects: _s, frameworks } = useLists(); const school = useSchoolBrand();
+    const { groups, subjects: _s, frameworks } = useLists(); const school = useSchoolBrand();
     const [cls, setCls] = useState(""); const [studentId, setStudentId] = useState(""); const [template, setTemplate] = useState("checklist"); const [theme, setTheme] = useState("blue");
     const [term, setTerm] = useState(TERMS[0]); const [year, setYear] = useState(String(new Date().getFullYear())); const [pick, setPick] = useState<string[]>([]);
     const [title, setTitle] = useState("Skill Based Report"); const [comment, setComment] = useState(true); const [sigs, setSigs] = useState("Class Teacher, Principal"); const [busy, setBusy] = useState(false);
@@ -207,7 +228,7 @@ function PrintTab() {
                     <div className="grid grid-cols-2 gap-2">{SKILL_TEMPLATES.map(t => <button key={t.key} onClick={() => setTemplate(t.key)} className={`text-left p-3 rounded-xl border-2 ${template === t.key ? "border-[#5C67F2] bg-indigo-50" : "border-gray-100 hover:border-indigo-200"}`}><div className="text-xs font-black text-slate-800">{t.label}</div><div className="text-[10px] text-slate-500 mt-0.5 leading-snug">{t.note}</div></button>)}</div></div>
                 <div><div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Colour</div><div className="flex gap-2">{Object.entries(SKILL_THEMES).map(([k, t]) => <button key={k} onClick={() => setTheme(k)} title={t.label} className={`w-8 h-8 rounded-full border-2 ${theme === k ? "border-slate-800 scale-110" : "border-white shadow"}`} style={{ background: t.head }} />)}</div></div>
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2"><label className="block text-[11px] font-bold text-slate-500 mb-1">Class</label><select className={`${inp} w-full`} value={cls} onChange={e => { setCls(e.target.value); setStudentId(""); }}><option value="">Select…</option>{classes.map((s: any) => <option key={s._id} value={s.fullName}>{s.fullName}</option>)}</select></div>
+                    <div className="col-span-2"><label className="block text-[11px] font-bold text-slate-500 mb-1">Class</label><select className={`${inp} w-full`} value={cls} onChange={e => { setCls(e.target.value); setStudentId(""); }}><option value="">Select…</option>{classOptions(groups)}</select></div>
                     <div className="col-span-2"><label className="block text-[11px] font-bold text-slate-500 mb-1">Learner <span className="font-normal text-slate-400">(blank = the whole class)</span></label><select className={`${inp} w-full`} value={studentId} onChange={e => setStudentId(e.target.value)} disabled={!cls}><option value="">Whole class ({learners.length})</option>{learners.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}</select></div>
                     {tpl.perTerm && <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Term</label><select className={`${inp} w-full`} value={term} onChange={e => setTerm(e.target.value)}>{TERMS.map(t => <option key={t}>{t}</option>)}</select></div>}
                     <div><label className="block text-[11px] font-bold text-slate-500 mb-1">Year</label><input className={`${inp} w-full`} value={year} onChange={e => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} /></div>

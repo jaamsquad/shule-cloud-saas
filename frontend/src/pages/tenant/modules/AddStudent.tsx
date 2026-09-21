@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { downloadStyledTemplate } from "@/lib/excelTemplate";
 import { toast } from "sonner";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -292,33 +293,35 @@ export default function AddStudent() {
         }
     };
 
+    // Styled Excel template: coloured headers, drop-downs (class list = this school's own classes), no demo rows
     const downloadSample = async () => {
         try {
-            const { utils, writeFile } = await import('xlsx');
-            const sampleData = [
-                {
-                    "Student Name": "John Doe", "Registration No": "BS101", "Admission No": "ADM001", "Class": "1 East",
-                    "Gender": "Male", "Date of Birth": "2012-05-10", "Email": "", "Phone": "+254700000000",
-                    "Address": "P.O Box 123, Nairobi", "Blood Group": "O+", "Religion": "Christianity", "Nationality": "Kenyan",
-                    "Previous School": "Sunrise Academy", "Transport Zone": "Zone A", "Admission Date": "2026-01-05",
-                    "Father Name": "Peter Doe", "Father National ID": "12345678", "Father Phone": "+254700000001", "Father Occupation": "Engineer", "Father Email": "peter@example.com",
-                    "Mother Name": "Mary Doe", "Mother National ID": "87654321", "Mother Phone": "+254700000002", "Mother Occupation": "Teacher", "Mother Email": "mary@example.com",
-                    "Balance": 0, "Discount": "0",
-                },
-                {
-                    "Student Name": "Jane Smith", "Registration No": "BS102", "Admission No": "ADM002", "Class": "1 West",
-                    "Gender": "Female", "Date of Birth": "2013-08-15", "Email": "", "Phone": "+254711111111",
-                    "Address": "P.O Box 456, Nakuru", "Blood Group": "A+", "Religion": "Islam", "Nationality": "Kenyan",
-                    "Previous School": "", "Transport Zone": "", "Admission Date": "2026-01-05",
-                    "Father Name": "Ali Smith", "Father National ID": "22334455", "Father Phone": "+254711111112", "Father Occupation": "Trader", "Father Email": "ali@example.com",
-                    "Mother Name": "Fatima Smith", "Mother National ID": "55443322", "Mother Phone": "+254711111113", "Mother Occupation": "Nurse", "Mother Email": "fatima@example.com",
-                    "Balance": 500, "Discount": "10",
-                },
-            ];
-            const ws = utils.json_to_sheet(sampleData);
-            const wb = utils.book_new();
-            utils.book_append_sheet(wb, ws, "Students");
-            writeFile(wb, "ShuleCloud_Student_Import_Template.xlsx");
+            const bloodGroups = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
+            const classChoices: string[] = [];
+            v2Classes.forEach((c: any) => {
+                classChoices.push(c.name);
+                v2AllStreams.filter((s: any) => String(s.classId) === String(c._id)).forEach((s: any) => classChoices.push(s.fullName || `${c.name} ${s.name}`));
+            });
+            await downloadStyledTemplate({
+                fileName: "ShuleCloud_Student_Import_Template.xlsx", sheetName: "Students", title: "Student import — how to fill this sheet",
+                columns: [
+                    { header: "Student Name", required: true, width: 26 },
+                    { header: "Registration No", text: true, hint: autoReg ? "Leave blank — numbers are generated automatically." : "Must be unique." },
+                    { header: "Admission No", text: true },
+                    { header: "Class", required: true, options: classChoices, strict: false, width: 22, hint: "Use the school's class names (with the stream if it has one)." },
+                    { header: "Gender", options: ["Male", "Female"] },
+                    { header: "Date of Birth", text: true, hint: "YYYY-MM-DD" },
+                    { header: "Email" }, { header: "Phone", text: true },
+                    { header: "Address", width: 28 },
+                    { header: "Blood Group", options: bloodGroups },
+                    { header: "Religion", options: ["Christianity", "Islam", "Hinduism", "Other"], strict: false },
+                    { header: "Nationality" }, { header: "Previous School", width: 24 }, { header: "Transport Zone" },
+                    { header: "Admission Date", text: true, hint: "YYYY-MM-DD" },
+                    { header: "Father Name", width: 22 }, { header: "Father National ID", text: true }, { header: "Father Phone", text: true }, { header: "Father Occupation" }, { header: "Father Email" },
+                    { header: "Mother Name", width: 22 }, { header: "Mother National ID", text: true }, { header: "Mother Phone", text: true }, { header: "Mother Occupation" }, { header: "Mother Email" },
+                    { header: "Balance", hint: "Opening fee balance (number)." }, { header: "Discount", hint: "Percentage, e.g. 10." },
+                ],
+            });
             toast.success("Excel template downloaded successfully!");
         } catch (err) {
             toast.error("Failed to generate Excel template");

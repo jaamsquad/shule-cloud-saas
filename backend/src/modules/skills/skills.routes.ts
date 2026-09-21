@@ -86,8 +86,10 @@ async function classLearners(req: Request, className: string) {
     const d = dbOf(req);
     const rx = new RegExp(`^\\s*${esc(className).replace(/\s+/g, '\\s+')}\\s*$`, 'i');
     const stream: any = await d.collection('v2_streams').findOne({ fullName: rx, deletedAt: { $exists: false } }).catch(() => null);
+    // a whole class (all its streams), e.g. "Form 1", as created in the school's classes
+    const level: any = stream ? null : await d.collection('v2_classes').findOne({ name: rx, deletedAt: { $exists: false } }).catch(() => null);
     const scope = await resolveScope(req, d);
-    const filter = mergeFilter({ $or: [...(stream ? [{ streamId: String(stream._id) }] : []), { studentClass: rx }, { currentClass: rx }] }, scopeForCollection('students', scope));
+    const filter = mergeFilter({ $or: [...(stream ? [{ streamId: String(stream._id) }] : []), ...(level ? [{ classId: String(level._id) }] : []), { studentClass: rx }, { currentClass: rx }] }, scopeForCollection('students', scope));
     const rows: any[] = (await d.collection('students').find(filter).toArray()).filter((s: any) => canonicalStatus(s.status) === 'Active');
     return rows.map(s => ({ _id: String(s._id), name: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), regNo: s.registrationNo || s.admNo || '', className: s.studentClass || className, gender: s.gender || '' })).sort((a, b) => a.name.localeCompare(b.name));
 }

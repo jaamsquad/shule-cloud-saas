@@ -528,13 +528,16 @@ export default function Login() {
 
             {/* ── Right: Brand panel ──────────────────────────────────────── */}
             <div className="hidden lg:flex w-[45%] bg-[#0A1B3F] relative flex-col items-center justify-center p-12 text-center text-white overflow-hidden">
-                <div className="absolute top-10 right-10 flex items-center gap-4">
-                    <span className="text-sm font-medium text-blue-100">Don't have an account?</span>
-                    <Link to="/register"
-                        className="px-6 py-2 bg-[#1B5FE3] hover:bg-[#1147B8] rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
-                        <User className="w-4 h-4" /> Sign Up
-                    </Link>
-                </div>
+                {/* Sign-up is only offered on the main domain — a school's own address (kilimo.shulecloud.com …) is for signing in */}
+                {!detectedSubdomain && (
+                    <div className="absolute top-10 right-10 flex items-center gap-4">
+                        <span className="text-sm font-medium text-blue-100">Don't have an account?</span>
+                        <Link to="/register"
+                            className="px-6 py-2 bg-[#1B5FE3] hover:bg-[#1147B8] rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
+                            <User className="w-4 h-4" /> Sign Up
+                        </Link>
+                    </div>
+                )}
 
                 <div className="relative z-10 space-y-6 max-w-sm mt-12">
                     {/* School logo in the right panel when on subdomain */}

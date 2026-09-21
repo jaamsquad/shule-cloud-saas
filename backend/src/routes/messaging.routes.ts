@@ -187,7 +187,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                         await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                     } else {
                         const marks = await database.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
-                        const data = { school: tenant?.name, logo: tenant?.logo, template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading };
+                        const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading };
                         const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.reportCardHtml(data));
                         const intro = `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937">${escHtml(greeting)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;white-space:pre-wrap">${escHtml(body)}</p>` : ''}`;
                         const outro = link ? `<p style="font-family:Arial,sans-serif;font-size:13px">View the full result online: <a href="${escHtml(link)}">${escHtml(link)}</a></p>` : '';

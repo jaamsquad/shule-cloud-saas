@@ -1971,6 +1971,10 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
         // Import PDF generation functions
         const { reportCardHtml, htmlToPdf } = require('../services/report-card-pdf.service');
         const school = (await db.collection('school').findOne({})) as any || {};
+        // the layout the school chose on Report Card Templates
+        const { getMetaDb: metaDbOf } = require('../lib/mongodb');
+        const tidRc = (req as any).tenantContext?.tenantId;
+        const tenantRc: any = tidRc ? await metaDbOf().collection('Tenant').findOne({ _id: new (require('mongodb').ObjectId)(String(tidRc)) }).catch(() => null) : null;
 
         // Generate combined PDF with all student report cards
         let allHtml = `
@@ -1994,7 +1998,7 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
                         school: school.schoolName || 'School',
                         logo: school.logo || null,
                         motto: school.motto || '',
-                        template: mainExam.curriculum || 'CBC',
+                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', curriculum: mainExam.curriculum || '',
                         student: {
                             ...student,
                             className: classDoc.levelName || classDoc.name

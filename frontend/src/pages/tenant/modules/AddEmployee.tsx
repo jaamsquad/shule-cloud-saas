@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import api from "@/lib/api";
+import { downloadStyledTemplate } from "@/lib/excelTemplate";
 import DataAccessSection from "./DataAccessSection";
 import { toast } from "sonner";
 import { SCHOOL_ROLES, SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
@@ -37,19 +38,29 @@ const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
     { header: "Employee No",         field: "staffNo" },   // leave blank to have it generated (when automatic numbering is on)
 ];
 
+// Styled Excel template: coloured headers, drop-downs, no demo rows
+const STAFF_DROPDOWNS: Record<string, { options: string[]; strict?: boolean }> = {
+    "Gender": { options: ["Male", "Female"] },
+    "Role / Designation": { options: SCHOOL_ROLE_GROUPS.flatMap(g => g.roles), strict: false },
+    "Religion": { options: ["Christianity", "Islam", "Hinduism", "Other"], strict: false },
+    "Blood Group": { options: ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"] },
+    "Education": { options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "PhD"], strict: false },
+    "Bank Name": { options: ["Equity Bank", "KCB Bank", "Co-operative Bank", "Absa Bank", "Standard Chartered", "NCBA Bank", "Family Bank", "I&M Bank", "Stanbic Bank", "DTB", "M-Pesa"], strict: false },
+};
+const STAFF_TEXT = new Set(["Mobile No", "National ID", "Date of Birth", "Date of Joining", "KRA PIN", "NSSF Number", "NHIF Number", "Account Number", "Employee No"]);
+const STAFF_HINTS: Record<string, string> = {
+    "Date of Birth": "YYYY-MM-DD", "Date of Joining": "YYYY-MM-DD", "Monthly Salary": "Number, e.g. 45000",
+    "Mobile No": "e.g. +254712345678", "Employee No": "Leave blank to have it generated (when automatic numbering is on).",
+};
 function downloadTemplate() {
-    const headers = EXCEL_COLUMNS.map(c => c.header);
-    const sampleRow = [
-        "Jane Doe", "+254712345678", "jane@school.com", "Teacher",
-        "12345678", "1990-05-15", "Female", "2024-01-10",
-        "45000", "", "Christianity", "O+", "Bachelor of Education", "5 Years",
-        "P.O Box 100, Nairobi", "A012345678B", "", "", "Equity Bank", "Westlands", "0123456789", "",
-    ];
-    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
-    ws["!cols"] = headers.map(() => ({ wch: 22 }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Staff");
-    XLSX.writeFile(wb, "staff_import_template.xlsx");
+    void downloadStyledTemplate({
+        fileName: "staff_import_template.xlsx", sheetName: "Staff", title: "Employee import — how to fill this sheet",
+        columns: EXCEL_COLUMNS.map(c => ({
+            header: c.header, required: c.required, text: STAFF_TEXT.has(c.header), hint: STAFF_HINTS[c.header],
+            options: STAFF_DROPDOWNS[c.header]?.options, strict: STAFF_DROPDOWNS[c.header]?.strict,
+            width: c.header === "Employee Name" || c.header === "Role / Designation" ? 26 : undefined,
+        })),
+    }).catch(() => toast.error("Failed to generate Excel template"));
 }
 
 export default function AddEmployee() {

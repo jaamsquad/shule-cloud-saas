@@ -72,6 +72,7 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
       { label: "All Students", path: "/students", pagePerm: "students.all" },
+      { label: "Find Student", path: "/students/find", pagePerm: "students.all" },
       { label: "Student Wallets", path: "/wallet", pagePerm: "students.wallets" },
       { label: "Add New", path: "/students/new", pagePerm: "students.add" },
       { label: "Admissions", path: "/students/admissions", pagePerm: "students.admissions" },

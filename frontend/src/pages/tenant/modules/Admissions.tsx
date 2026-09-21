@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { normAdmission } from "./admissionShape";
 import {
     Home, Plus, Search, Check, X, Loader2, UserPlus, Eye,
     Calendar, Phone, User, BookOpen, GraduationCap, Users, Pencil, Trash2
@@ -31,10 +33,10 @@ export default function Admissions() {
     const [showModal, setShowModal]     = useState(false);
     const [form, setForm]               = useState(empty);
     const [editId, setEditId]           = useState<string | null>(null);
-    const [viewRecord, setViewRecord]   = useState<any>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [step, setStep]               = useState<1 | 2>(1);
     const qc = useQueryClient();
+    const navigate = useNavigate();
 
     // ── Queries ──────────────────────────────────────────────────────────
     const { data: admissions = [], isLoading } = useQuery({
@@ -49,9 +51,10 @@ export default function Admissions() {
 
     // ── Mutations ─────────────────────────────────────────────────────────
     const saveMut = useMutation({
-        mutationFn: (p: any) => editId
-            ? api.patch(`/admissions/${editId}`, p)
-            : api.post("/admissions", p),
+        mutationFn: (p: any) => {
+            const body = { ...p, applicantName: `${p.firstName || ""} ${p.lastName || ""}`.trim(), contactPhone: p.parentPhone, contactEmail: p.parentEmail };
+            return editId ? api.patch(`/admissions/${editId}`, body) : api.post("/admissions", body);
+        },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["admissions"] });
             toast.success(editId ? "Application updated" : "Application submitted successfully");
@@ -70,30 +73,6 @@ export default function Admissions() {
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["admissions"] }); },
     });
 
-    const enrollMut = useMutation({
-        mutationFn: async (rec: any) => {
-            await api.post("/students", {
-                studentName: `${rec.firstName} ${rec.lastName}`,
-                firstName: rec.firstName, lastName: rec.lastName,
-                gender: rec.gender, dob: rec.dob,
-                registrationNo: rec.admissionNumber || `ADM${Date.now()}`,
-                studentClass: rec.classApplied,
-                fatherName: rec.parentRelation === "Father" ? rec.parentName : "",
-                motherName: rec.parentRelation === "Mother" ? rec.parentName : "",
-                phone: rec.parentPhone, email: rec.parentEmail, address: rec.address,
-                admissionDate: new Date().toISOString().split("T")[0],
-                previousSchool: rec.previousSchool,
-            });
-            return api.patch(`/admissions/${rec._id}`, { status: "Enrolled" });
-        },
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ["admissions"] });
-            toast.success("🎉 Student enrolled and added to All Students!");
-            setViewRecord(null);
-        },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Enrollment failed"),
-    });
-
     // ── Filtering ─────────────────────────────────────────────────────────
     const filtered = admissions.filter((a: any) => {
         const name = (a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`).toLowerCase();
@@ -107,11 +86,12 @@ export default function Admissions() {
 
     const openEdit = (a: any) => {
         setEditId(a._id);
+        const n = normAdmission(a);
         setForm({
-            firstName: a.firstName || "", lastName: a.lastName || "", gender: a.gender || "Male",
-            dob: a.dob || "", admissionNumber: a.admissionNumber || "", classApplied: a.classApplied || "",
-            previousSchool: a.previousSchool || "", parentName: a.parentName || "",
-            parentPhone: a.parentPhone || "", parentEmail: a.parentEmail || "",
+            firstName: n.firstName, lastName: n.lastName, gender: a.gender || "Male",
+            dob: a.dob || "", admissionNumber: a.admissionNumber || a.applicationNo || "", classApplied: a.classApplied || "",
+            previousSchool: a.previousSchool || "", parentName: n.parentName,
+            parentPhone: n.phone, parentEmail: n.email,
             parentRelation: a.parentRelation || "Father", address: a.address || "",
             notes: a.notes || "", status: a.status || "Pending",
             applicationDate: a.applicationDate || new Date().toISOString().split("T")[0],
@@ -130,9 +110,9 @@ export default function Admissions() {
                     <span className="font-bold text-gray-500">Students</span><span className="text-gray-300">/</span>
                     <span className="font-black text-[#5C67F2]">Admissions</span>
                 </div>
-                <button onClick={() => { setEditId(null); setForm(empty); setStep(1); setShowModal(true); }}
+                <button onClick={() => navigate("/students/new")}
                     className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100 transition-all">
-                    <Plus className="w-4 h-4" /> New Application
+                    <Plus className="w-4 h-4" /> New Admission
                 </button>
             </div>
 
@@ -187,7 +167,7 @@ export default function Admissions() {
                         <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-300">
                             <UserPlus className="w-12 h-12" />
                             <p className="text-xs font-black uppercase tracking-widest">
-                                {search || statusFilter !== "All" ? "No applications match your filters" : "No applications yet — click New Application to start"}
+                                {search || statusFilter !== "All" ? "No applications match your filters" : "No applications yet — click New Admission to start"}
                             </p>
                         </div>
                     ) : (
@@ -206,9 +186,11 @@ export default function Admissions() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((a: any) => {
+                                    {filtered.map((raw: any) => {
+                                        const n = normAdmission(raw);
+                                        const a = { ...raw, classApplied: n.classApplied, parentName: n.parentName, parentPhone: n.phone, admissionNumber: n.appNo };
                                         const sc = STATUS[a.status] || STATUS.Pending;
-                                        const displayName = a.applicantName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || "Applicant";
+                                        const displayName = n.name;
                                         const parts = displayName.split(/\s+/);
                                         const initials = `${(parts[0] || "?")[0]}${(parts[1] || "")[0] || ""}`.toUpperCase();
                                         const appDate = a.applicationDate || a.createdAt;
@@ -247,7 +229,7 @@ export default function Admissions() {
                                                 </td>
                                                 <td className="py-3.5 px-5">
                                                     <div className="flex items-center justify-center gap-1.5">
-                                                        <button onClick={() => setViewRecord(a)} title="View details"
+                                                        <button onClick={() => navigate(`/students/admissions/${a._id}`)} title="View application"
                                                             className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-[#5C67F2] flex items-center justify-center border border-slate-100 hover:border-indigo-200 transition-all">
                                                             <Eye className="w-3.5 h-3.5" />
                                                         </button>
@@ -277,77 +259,6 @@ export default function Admissions() {
                     )}
                 </div>
             </div>
-
-            {/* ── View / Enroll modal ──────────────────────────────────── */}
-            {viewRecord && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl relative overflow-hidden">
-                        {/* Color bar based on status */}
-                        <div className={`h-1.5 w-full ${viewRecord.status === "Approved" || viewRecord.status === "Enrolled" ? "bg-gradient-to-r from-emerald-400 to-teal-500" : viewRecord.status === "Rejected" ? "bg-gradient-to-r from-rose-400 to-rose-600" : "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"}`} />
-                        <div className="p-7">
-                            {/* Student header */}
-                            <div className="flex items-center justify-between mb-5">
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${viewRecord.gender === "Female" ? "bg-pink-100 text-pink-600" : "bg-indigo-100 text-[#5C67F2]"}`}>
-                                        {`${(viewRecord.firstName || "?")[0]}${(viewRecord.lastName || "?")[0]}`.toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <p className="text-lg font-black text-slate-900">{viewRecord.firstName} {viewRecord.lastName}</p>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase border ${STATUS[viewRecord.status]?.bg || "bg-slate-50"} ${STATUS[viewRecord.status]?.color || "text-slate-500"}`}>{viewRecord.status}</span>
-                                            {viewRecord.admissionNumber && <span className="text-[9px] text-slate-400 font-black uppercase">{viewRecord.admissionNumber}</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <button onClick={() => setViewRecord(null)} className="text-slate-400 hover:text-rose-500 transition-colors"><X className="w-5 h-5" /></button>
-                            </div>
-
-                            {/* Details grid */}
-                            <div className="grid grid-cols-2 gap-3 mb-5">
-                                {[
-                                    ["Date of Birth", viewRecord.dob],
-                                    ["Gender", viewRecord.gender],
-                                    ["Class Applied", viewRecord.classApplied],
-                                    ["Previous School", viewRecord.previousSchool],
-                                    ["Parent / Guardian", viewRecord.parentName],
-                                    ["Relation", viewRecord.parentRelation],
-                                    ["Phone", viewRecord.parentPhone],
-                                    ["Email", viewRecord.parentEmail],
-                                    ["Application Date", viewRecord.applicationDate],
-                                    ["Address", viewRecord.address],
-                                ].filter(([, v]) => v).map(([label, value]) => (
-                                    <div key={label} className="bg-slate-50 rounded-2xl px-4 py-3">
-                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5 truncate">{value}</p>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {viewRecord.notes && (
-                                <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 mb-5">
-                                    <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest">Notes</p>
-                                    <p className="text-xs text-amber-700 font-medium mt-0.5">{viewRecord.notes}</p>
-                                </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="flex gap-3">
-                                {viewRecord.status === "Approved" && (
-                                    <button onClick={() => enrollMut.mutate(viewRecord)} disabled={enrollMut.isPending}
-                                        className="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-emerald-100 transition-all">
-                                        {enrollMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                        Enroll Student
-                                    </button>
-                                )}
-                                <button onClick={() => { openEdit(viewRecord); setViewRecord(null); }}
-                                    className="flex-1 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-widest rounded-2xl transition-all">
-                                    Edit Application
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ── New / Edit Application modal ─────────────────────────── */}
             {showModal && (

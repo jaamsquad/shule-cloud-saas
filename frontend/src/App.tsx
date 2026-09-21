@@ -146,6 +146,8 @@ import ManageLogin from "./pages/tenant/modules/ManageLogin";
 import PromoteStudents from "./pages/tenant/modules/PromoteStudents";
 import AllStudents from "./pages/tenant/modules/AllStudents";
 import StudentReport from "./pages/tenant/modules/StudentReport";
+import FindStudent from "./pages/tenant/modules/FindStudent";
+import AdmissionView from "./pages/tenant/modules/AdmissionView";
 import EditStudent from "./pages/tenant/modules/EditStudent";
 
 import Employees from "./pages/tenant/modules/Employees";
@@ -563,6 +565,7 @@ const App = () => {
 
               {/* Students */}
               <Route path="/students" element={<AllStudents />} />
+              <Route path="/students/find" element={<FindStudent />} />
               <Route path="/students/new" element={<AddStudent />} />
               <Route path="/students/report/:id" element={<StudentReport />} />
               <Route path="/students/history/:id" element={<StudentHistory />} />
@@ -617,6 +620,7 @@ const App = () => {
               <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
                <Route path="/students/admissions" element={<Admissions />} />
+              <Route path="/students/admissions/:id" element={<AdmissionView />} />
               <Route path="/students/guardians" element={<Guardians />} />
               <Route path="/students/families" element={<ManageFamilies />} />
                <Route path="/students/families/new" element={<NewFamily />} />
