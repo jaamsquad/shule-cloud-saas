@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
 
-export interface SchoolBrand { name: string; logo: string; address: string; phone: string; email: string; }
+export interface SchoolBrand { name: string; logo: string; address: string; phone: string; email: string; signature: string; stamp: string; signerName: string; signerTitle: string; }
 
 /** Real school branding for module prints/report headers (shares the top-header cache). */
 export function useSchoolBrand(): SchoolBrand {
@@ -17,6 +17,8 @@ export function useSchoolBrand(): SchoolBrand {
         address: [s?.address || s?.location, s?.city || s?.county].filter(Boolean).join(", "),
         phone: s?.phone || s?.contactPhone || s?.mobile || "",
         email: s?.email || s?.contactEmail || "",
+        // the principal's / head teacher's signature and the school stamp (Institute Profile) — printed on letters, certificates and report cards
+        signature: s?.principalSignature || "", stamp: s?.schoolStamp || "", signerName: s?.principalName || "", signerTitle: s?.principalTitle || "Principal",
     };
 }
 

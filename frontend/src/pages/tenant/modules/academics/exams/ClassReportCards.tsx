@@ -237,7 +237,7 @@ export default function ClassReportCards() {
             const root = createRoot(div);
             import("react").then(React => {
                 root.render(React.createElement(RenderPrintTemplate, {
-                    templateId: reportTemplate, schoolAddress, classStats,
+                    templateId: reportTemplate, schoolAddress, classStats, signature: tenantProfile?.principalSignature, stamp: tenantProfile?.schoolStamp, signerName: tenantProfile?.principalName,
                     schoolName, schoolTagline, schoolLogo, qrUrl,
                     studentName: row.name, admNo: row.admNo,
                     studentPhoto: row.student?.studentPhoto || row.student?.photo || row.student?.avatar || row.student?.photoUrl || row.student?.profilePhoto || null,
@@ -526,7 +526,7 @@ export default function ClassReportCards() {
                     return (
                         <div key={row.student._id} className={idx < studentSummaries.filter(r => r.scoredSubjects > 0).length - 1 ? "page-break" : ""}>
                             <RenderPrintTemplate
-                                templateId={reportTemplate} schoolAddress={schoolAddress} classStats={classStats}
+                                templateId={reportTemplate} schoolAddress={schoolAddress} classStats={classStats} signature={tenantProfile?.principalSignature} stamp={tenantProfile?.schoolStamp} signerName={tenantProfile?.principalName}
                                 schoolName={schoolName} schoolTagline={schoolTagline} schoolLogo={schoolLogo}
                                 qrUrl={qrMap[String(row.student._id)]}
                                 studentName={row.name} admNo={row.admNo}

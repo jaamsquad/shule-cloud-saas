@@ -52,7 +52,9 @@ export function printTransferLetter(school: SchoolBrand, student: any, transfer:
       td{border:1px solid #64748b;padding:6px 10px;font-size:13px}
       td.k{width:38%;background:#f1f5f9;font-weight:bold}
       .sign{margin-top:46px;display:flex;justify-content:space-between;align-items:flex-end}
-      .line{border-top:1px solid #111;width:230px;padding-top:4px;font-size:12px}
+      .line{border-top:1px solid #111;width:230px;padding-top:4px;font-size:12px;position:relative}
+      .sigimg{position:absolute;left:10px;bottom:100%;max-height:66px;max-width:200px;object-fit:contain;margin-bottom:2px}
+      .stampimg{width:130px;height:130px;object-fit:contain;opacity:.9;transform:rotate(-8deg)}
       .stamp{width:120px;height:120px;border:1px dashed #94a3b8;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;text-align:center}
       .foot{margin-top:28px;border-top:1px solid #cbd5e1;padding-top:6px;font-size:10.5px;color:#64748b;text-align:center}
       .wm{position:fixed;top:38%;left:0;right:0;text-align:center;font-size:120px;font-weight:bold;color:rgba(220,38,38,.12);transform:rotate(-24deg);letter-spacing:12px;pointer-events:none}
@@ -77,8 +79,8 @@ export function printTransferLetter(school: SchoolBrand, student: any, transfer:
 
       <p style="margin-top:22px">Yours faithfully,</p>
       <div class="sign">
-        <div class="line">Principal / Head Teacher<br/>${esc(school.name)}</div>
-        <div class="stamp">School stamp</div>
+        <div class="line">${!draft && school.signature ? `<img class="sigimg" src="${esc(school.signature)}" alt=""/>` : ""}${school.signerName ? `<b>${esc(school.signerName)}</b><br/>` : ""}${esc(school.signerTitle || "Principal")} / Head Teacher<br/>${esc(school.name)}</div>
+        ${!draft && school.stamp ? `<img class="stampimg" src="${esc(school.stamp)}" alt=""/>` : `<div class="stamp">School stamp</div>`}
       </div>
       <div class="foot">${esc(school.name)}${draft ? " — DRAFT: not valid until the transfer is confirmed" : ""}</div>
       <script>window.onload=()=>window.print()</script>

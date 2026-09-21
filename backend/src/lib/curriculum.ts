@@ -108,7 +108,11 @@ export async function loadCurricula(db: Db): Promise<CurriculumConfig[]> {
 export async function getCurriculumConfig(db: Db, curriculumValue: any): Promise<CurriculumConfig> {
     const code = canonicalCode(curriculumValue);
     const all = await loadCurricula(db);
-    return all.find(c => c.code === code) || DEFAULT_CURRICULA[code] || DEFAULT_CURRICULA['844'];
+    const cfg = all.find(c => c.code === code) || DEFAULT_CURRICULA[code] || DEFAULT_CURRICULA['844'];
+    // A curriculum the school has switched off no longer governs anything: its classes follow the one still enabled
+    // (so with 8-4-4 off, Learning Areas / Grade / competency levels apply everywhere).
+    if (cfg.active === false) { const on = all.find(c => c.active); if (on) return on; }
+    return cfg;
 }
 
 /**

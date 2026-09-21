@@ -1,3 +1,4 @@
+import { useTerminology } from "@/hooks/useTerminology";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -495,6 +496,7 @@ export default function AppSidebar() {
   const location = useLocation();
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const perms = usePermissions();
+  const words = useTerminology();   // Subjects / Exams follow the enabled curriculum (e.g. Learning Areas / Assessments)
 
   // A module is "plan-locked" when the school's PLAN doesn't include it.
   // planModules === null means unrestricted (all modules allowed by the plan).
@@ -610,7 +612,7 @@ export default function AppSidebar() {
                     >
                       <span className="flex items-center gap-4 flex-1 text-left">
                         <Icon className="w-[18px] h-[18px] opacity-50" strokeWidth={1.5} />
-                        <span className="text-[13px] font-medium opacity-70">{item.label}</span>
+                        <span className="text-[13px] font-medium opacity-70">{words.label(item.label)}</span>
                       </span>
                       <Lock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                     </button>
@@ -635,7 +637,7 @@ export default function AppSidebar() {
                     >
                       <Icon className={`w-[18px] h-[18px] ${isParentActive ? "text-white" : isDark ? "text-gray-400" : "text-gray-500"}`} strokeWidth={1.5} />
                       <span className={`text-[13px] ${isParentActive ? "font-bold" : "font-medium"}`}>
-                        {item.label}
+                        {words.label(item.label)}
                       </span>
                     </Link>
 
@@ -704,7 +706,7 @@ export default function AppSidebar() {
                                   }`}
                                 >
                                   <div className="w-1.5 h-1.5 rounded-full bg-transparent"></div>
-                                  {child.label}
+                                  {words.label(child.label)}
                                 </a>
                               ) : child.path === "/logout" ? (
                                 <button
@@ -712,7 +714,7 @@ export default function AppSidebar() {
                                   className={`w-full flex items-center gap-3 px-4 py-2 text-[12px] transition-colors text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg`}
                                 >
                                   <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>
-                                  {child.label}
+                                  {words.label(child.label)}
                                 </button>
                               ) : (
                                 <Link
@@ -725,7 +727,7 @@ export default function AppSidebar() {
                                 >
                                   {/* Bullet indicator */}
                                   <div className={`w-1.5 h-1.5 rounded-full ${isChildActive ? activeBg : "bg-transparent"}`}></div>
-                                  {child.label}
+                                  {words.label(child.label)}
                                   {badgeFor(child.path) > 0 && (
                                     <span className="ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white">{badgeFor(child.path)}</span>
                                   )}

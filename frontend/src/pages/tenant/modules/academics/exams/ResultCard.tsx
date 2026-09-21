@@ -918,6 +918,7 @@ export default function ResultCard() {
                         schoolLogo={schoolLogo}
                         qrUrl={qrUrl}
                         schoolAddress={schoolAddress}
+                        signature={tenantProfile?.principalSignature} stamp={tenantProfile?.schoolStamp} signerName={tenantProfile?.principalName}
                         studentName={getStudentName(selectedStudent)}
                         admNo={getAdmNo(selectedStudent)}
                         studentPhoto={studentPhoto}

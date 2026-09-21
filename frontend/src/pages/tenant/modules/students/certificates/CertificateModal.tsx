@@ -44,8 +44,8 @@ export default function CertificateModal({ student, onClose }: { student: any; o
         setTitle(WHOLE_TITLE[key] || "CERTIFICATE"); setSubtitle(WHOLE_TITLE[key] ? "" : t.subtitle);
     };
 
-    const data = (over: Partial<CertData> = {}): CertData => ({ style, title, subtitle, name, body, date, signatories: sig, certNo: "CN‑XXXXXXXXXX", qr: "", school: { name: school.name, logo: school.logo, address: school.address }, ...over });
-    const previewHtml = useMemo(() => certificateHtml(data({ qr: PLACEHOLDER_QR })), [style, title, subtitle, name, body, date, sig, school.name, school.logo]); // eslint-disable-line react-hooks/exhaustive-deps
+    const data = (over: Partial<CertData> = {}): CertData => ({ style, title, subtitle, name, body, date, signatories: sig, certNo: "CN‑XXXXXXXXXX", qr: "", school: { name: school.name, logo: school.logo, address: school.address, signature: school.signature, stamp: school.stamp }, ...over });
+    const previewHtml = useMemo(() => certificateHtml(data({ qr: PLACEHOLDER_QR })), [style, title, subtitle, name, body, date, sig, school.name, school.logo, school.signature, school.stamp]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const issue = async () => {
         if (!body.trim()) { toast.error("Write what the certificate is awarded for."); return; }
@@ -62,7 +62,7 @@ export default function CertificateModal({ student, onClose }: { student: any; o
     const reprint = async (c: any) => {
         try {
             const qr = await qrOf(c.verifyUrl);
-            outputHtmlDoc(`${c.typeLabel} - ${c.studentName}`, withPrint(certificateHtml({ style: c.style, title: c.title, subtitle: c.subtitle, name: c.studentName, body: c.body, date: c.date, signatories: c.signatories || [], certNo: c.certId, qr, school: { name: school.name, logo: school.logo, address: school.address } })), { fileName: `${c.typeLabel}-${c.studentName}` });
+            outputHtmlDoc(`${c.typeLabel} - ${c.studentName}`, withPrint(certificateHtml({ style: c.style, title: c.title, subtitle: c.subtitle, name: c.studentName, body: c.body, date: c.date, signatories: c.signatories || [], certNo: c.certId, qr, school: { name: school.name, logo: school.logo, address: school.address, signature: school.signature, stamp: school.stamp } })), { fileName: `${c.typeLabel}-${c.studentName}` });
         } catch { toast.error("Could not print"); }
     };
     const revoke = async (c: any) => {

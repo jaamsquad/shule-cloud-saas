@@ -24,6 +24,8 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
         staleTime: 10_000,
     });
     const data = preloaded || fetched;
+    // the principal's signature and the school stamp (Institute Profile)
+    const { data: profile } = useQuery<any>({ queryKey: ["tenant_profile_global"], staleTime: 60_000, queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
     // QR (bottom centre) that opens the online verification page for this report card
     const { data: qr } = useQuery({
         queryKey: ["rc_qr", studentId, examId, data?.termYear, data?.summary?.meanScore, data?.summary?.meanGrade],
@@ -260,7 +262,10 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                     <tr><td style={{ height: "11mm", verticalAlign: "top" }}><b>Class Teacher's Comments :</b><div>{d.comments.classTeacher}</div></td>
                         <td style={{ width: "45mm", verticalAlign: "bottom" }}>Signature : ____________</td></tr>
                     <tr><td style={{ height: "11mm", verticalAlign: "top" }}><b>Principal's Comments :</b><div>{d.comments.principal}</div><div style={{ marginTop: 6 }}>{d.comments.principalName}</div></td>
-                        <td style={{ verticalAlign: "bottom" }}>Signature : ____________</td></tr>
+                        <td style={{ verticalAlign: "bottom", position: "relative" }}>
+                            {profile?.principalSignature && <img src={profile.principalSignature} alt="" style={{ position: "absolute", left: "16mm", bottom: "1mm", maxHeight: "10mm", maxWidth: "26mm", objectFit: "contain" }} />}
+                            {profile?.schoolStamp && <img src={profile.schoolStamp} alt="" style={{ position: "absolute", right: "1mm", top: "-7mm", height: "17mm", width: "17mm", objectFit: "contain", opacity: 0.88, transform: "rotate(-8deg)" }} />}
+                            Signature : ____________</td></tr>
                     <tr><td style={{ height: "9mm", verticalAlign: "top" }}><b>Report Seen By Parent/Guardian :</b><div style={{ marginTop: 6 }} className="muted">Date : __________ &nbsp; Signature : __________</div></td>
                         <td style={{ verticalAlign: "top" }}>Next Term Begins On : <b>{d.nextTermBegins || "—"}</b></td></tr>
                 </tbody></table>

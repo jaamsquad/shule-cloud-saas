@@ -58,13 +58,13 @@ export default function ClassesStreamsPage() {
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Academic System</span><span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Classes & Streams</span>
+                    <span className="font-semibold text-[#5C67F2]">Classes & Streams</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => { if (confirm("Permanently clear all old student-enrollment records? Class/stream stays on the students themselves.")) purgeMut.mutate(); }} disabled={purgeMut.isPending} className="h-10 px-4 bg-white border border-slate-200 text-slate-500 hover:text-rose-500 hover:border-rose-200 font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 disabled:opacity-50">
+                    <button onClick={() => { if (confirm("Permanently clear all old student-enrollment records? Class/stream stays on the students themselves.")) purgeMut.mutate(); }} disabled={purgeMut.isPending} className="h-10 px-4 bg-white border border-slate-200 text-slate-500 hover:text-rose-500 hover:border-rose-200 font-medium text-sm rounded-xl flex items-center gap-2 disabled:opacity-50">
                         {purgeMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />} Clear Old Enrollments
                     </button>
-                    <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
+                    <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
                         <Plus className="w-4 h-4" /> New Class
                     </button>
                 </div>
@@ -72,8 +72,8 @@ export default function ClassesStreamsPage() {
 
             <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-8">
                 <div className="mb-6">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3"><Layers className="w-7 h-7 text-[#5C67F2]" />Classes & Streams</h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">
+                    <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-3"><Layers className="w-7 h-7 text-[#5C67F2]" />Classes & Streams</h1>
+                    <p className="text-slate-500 text-sm mt-1">
                         Classes (Grade 1, Form 2) → Streams (East, North, Red). A stream MUST belong to a class.
                     </p>
                 </div>
@@ -81,25 +81,25 @@ export default function ClassesStreamsPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Classes */}
                     <div>
-                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Classes ({classes.length})</h3>
+                        <h3 className="text-sm font-medium text-slate-500 mb-3">Classes ({classes.length})</h3>
                         {loadC ? <div className="flex items-center justify-center h-32 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-4 h-4 animate-spin text-[#5C67F2]" />Loading...</div>
-                        : classes.length === 0 ? <div className="bg-white rounded-[2rem] border-2 border-dashed border-slate-100 h-32 flex flex-col items-center justify-center gap-2 text-slate-300 text-xs font-bold uppercase"><Layers className="w-8 h-8" />No classes yet</div>
+                        : classes.length === 0 ? <div className="bg-white rounded-xl border border-dashed border-slate-200 h-32 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm"><Layers className="w-8 h-8" />No classes yet</div>
                         : [...classes].sort((a: any, b: any) => a.level - b.level).map((c: any) => {
                             const streamCount = classes.reduce((s: number, _: any) => s, 0); // placeholder
                             return (
                                 <div key={c._id} onClick={() => setSelectedClass(c === selectedClass ? null : c)}
-                                    className={`bg-white rounded-[1.5rem] border-2 p-5 mb-3 cursor-pointer transition-all hover:shadow-md ${selectedClass?._id === c._id ? "border-[#5C67F2] bg-indigo-50/20" : "border-slate-100 hover:border-slate-200"}`}>
+                                    className={`bg-white rounded-xl border p-4 mb-3 cursor-pointer transition-all hover:border-slate-300 ${selectedClass?._id === c._id ? "border-indigo-400 bg-indigo-50/40" : "border-slate-100 hover:border-slate-200"}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center font-black text-[#5C67F2] text-sm">{c.level}</div>
+                                            <div className="w-11 h-11 rounded-lg bg-indigo-50 flex items-center justify-center font-semibold text-indigo-600 text-sm">{c.level}</div>
                                             <div>
-                                                <p className="font-black text-slate-800">{c.name}</p>
+                                                <p className="font-semibold text-slate-800">{c.name}</p>
                                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                    {c.code && <span className="text-[8px] font-black text-slate-400 uppercase">{c.code}</span>}
+                                                    {c.code && <span className="text-[11px] text-slate-400">{c.code}</span>}
                                                     {/* Curriculum badge — driven by the backend-resolved config */}
-                                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${c.curriculumCode === "CBC" ? "bg-emerald-100 text-emerald-700" : c.curriculumCode === "Cambridge" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{c.curriculum?.name || c.curriculumType}</span>
-                                                    {c.curriculum?.terminology && <span className="text-[8px] font-bold text-slate-400">{c.curriculum.terminology.subjectPlural}</span>}
-                                                    <span className="text-[8px] font-black text-slate-400 uppercase">Cap: {c.capacity}</span>
+                                                    <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${c.curriculumCode === "CBC" ? "bg-emerald-100 text-emerald-700" : c.curriculumCode === "Cambridge" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{c.curriculum?.name || c.curriculumType}</span>
+                                                    {c.curriculum?.terminology && <span className="text-[11px] text-slate-400">{c.curriculum.terminology.subjectPlural}</span>}
+                                                    <span className="text-[11px] text-slate-400">Cap: {c.capacity}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -120,7 +120,7 @@ export default function ClassesStreamsPage() {
                     {/* Streams */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                            <h3 className="text-sm font-medium text-slate-500">
                                 {selectedClass ? `Streams in ${selectedClass.name} (${classStreams.length})` : "Select a class to see streams"}
                             </h3>
                             {selectedClass && (
@@ -130,17 +130,17 @@ export default function ClassesStreamsPage() {
                             )}
                         </div>
                         {!selectedClass ? (
-                            <div className="bg-white rounded-[2rem] border-2 border-dashed border-slate-100 h-32 flex flex-col items-center justify-center gap-2 text-slate-300 text-xs font-bold uppercase"><Users className="w-8 h-8" />Click a class to see its streams</div>
+                            <div className="bg-white rounded-xl border border-dashed border-slate-200 h-32 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm"><Users className="w-8 h-8" />Click a class to see its streams</div>
                         ) : classStreams.length === 0 ? (
-                            <div className="bg-white rounded-[2rem] border-2 border-dashed border-slate-100 h-32 flex flex-col items-center justify-center gap-2 text-slate-300 text-xs font-bold uppercase"><Users className="w-8 h-8" />No streams — click Add Stream</div>
+                            <div className="bg-white rounded-xl border border-dashed border-slate-200 h-32 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm"><Users className="w-8 h-8" />No streams — click Add Stream</div>
                         ) : classStreams.map((s: any) => (
-                            <div key={s._id} className="bg-white rounded-[1.5rem] border border-slate-100 p-5 mb-3 hover:shadow-sm transition-all">
+                            <div key={s._id} className="bg-white rounded-xl border border-slate-200 p-4 mb-3 transition-all">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center font-black text-emerald-600 text-sm">{s.name[0]}</div>
+                                        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center font-semibold text-emerald-600 text-sm">{s.name[0]}</div>
                                         <div>
-                                            <p className="font-black text-slate-800">{s.fullName || `${selectedClass?.name} ${s.name}`}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase">Capacity: {s.capacity} {s.classTeacherId ? "· Teacher assigned" : "· No class teacher"}</p>
+                                            <p className="font-semibold text-slate-800">{s.fullName || `${selectedClass?.name} ${s.name}`}</p>
+                                            <p className="text-xs text-slate-400">Capacity: {s.capacity} {s.classTeacherId ? "· Teacher assigned" : "· No class teacher"}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -159,21 +159,20 @@ export default function ClassesStreamsPage() {
 
             {/* Class Modal */}
             {showClassModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl relative">
-                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-t-[2.5rem]" />
-                        <div className="p-8">
-                            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-black text-slate-900 uppercase">{editClassId ? "Edit" : "New"} Class</h3><button onClick={() => setShowClassModal(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5" /></button></div>
+                <div className="fixed inset-0 bg-slate-900/40 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-xl relative">
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-6"><h3 className="text-base font-semibold text-slate-900">{editClassId ? "Edit" : "New"} Class</h3><button onClick={() => setShowClassModal(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5" /></button></div>
                             <div className="grid grid-cols-2 gap-5">
                                 {[{ label: "Class Name*", field: "name", col: 2 }, { label: "Code (e.g. GR1)", field: "code" }, { label: "Level (1=lowest)", field: "level", type: "number" }, { label: "Capacity", field: "capacity", type: "number" }].map((f: any) => (
                                     <div key={f.field} className={`relative ${f.col === 2 ? "col-span-2" : ""}`}>
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{f.label}</div>
-                                        <input type={f.type || "text"} value={(classForm as any)[f.field]} onChange={e => setClassForm({ ...classForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                        <label className="block text-xs font-medium text-slate-500 mb-1.5">{f.label}</label>
+                                        <input type={f.type || "text"} value={(classForm as any)[f.field]} onChange={e => setClassForm({ ...classForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                     </div>
                                 ))}
                                 <div className="relative col-span-2">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Curriculum Type</div>
-                                    <select value={classForm.curriculumType} onChange={e => setClassForm({ ...classForm, curriculumType: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Curriculum Type</label>
+                                    <select value={classForm.curriculumType} onChange={e => setClassForm({ ...classForm, curriculumType: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
                                         {curricula.length === 0
                                             ? <><option value="844">8-4-4</option><option value="CBC">CBC (Competency-Based)</option></>
                                             : curricula.map((c: any) => <option key={c.code} value={c.code}>{c.name}</option>)}
@@ -181,8 +180,8 @@ export default function ClassesStreamsPage() {
                                 </div>
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
-                                <button onClick={() => setShowClassModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl">Cancel</button>
-                                <button onClick={() => { if (!classForm.name) { toast.error("Class name required"); return; } classMut.mutate({ ...classForm, level: Number(classForm.level), capacity: Number(classForm.capacity) }); }} disabled={classMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
+                                <button onClick={() => setShowClassModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-sm font-medium rounded-xl">Cancel</button>
+                                <button onClick={() => { if (!classForm.name) { toast.error("Class name required"); return; } classMut.mutate({ ...classForm, level: Number(classForm.level), capacity: Number(classForm.capacity) }); }} disabled={classMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-sm font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
                                     {classMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{editClassId ? "Save" : "Create Class"}
                                 </button>
                             </div>
@@ -193,32 +192,31 @@ export default function ClassesStreamsPage() {
 
             {/* Stream Modal */}
             {showStreamModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl relative">
-                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-500 to-blue-500 rounded-t-[2.5rem]" />
-                        <div className="p-8">
-                            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-black text-slate-900 uppercase">{editStreamId ? "Edit" : "Add"} Stream</h3><button onClick={() => setShowStreamModal(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5" /></button></div>
+                <div className="fixed inset-0 bg-slate-900/40 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-xl relative">
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-6"><h3 className="text-base font-semibold text-slate-900">{editStreamId ? "Edit" : "Add"} Stream</h3><button onClick={() => setShowStreamModal(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5" /></button></div>
                             <div className="space-y-5">
-                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 text-[10px] font-bold text-indigo-600">
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 text-xs text-indigo-600">
                                     Adding stream to: <strong>{selectedClass?.name || "—"}</strong>. Full name will be: <strong>{selectedClass?.name} {streamForm.name || "[Stream Name]"}</strong>
                                 </div>
                                 {[{ label: "Stream Name* (e.g. East, North, Red)", field: "name" }, { label: "Capacity", field: "capacity", type: "number" }].map(f => (
                                     <div key={f.field} className="relative">
-                                        <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">{f.label}</div>
-                                        <input type={f.type || "text"} value={(streamForm as any)[f.field]} onChange={e => setStreamForm({ ...streamForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                                        <label className="block text-xs font-medium text-slate-500 mb-1.5">{f.label}</label>
+                                        <input type={f.type || "text"} value={(streamForm as any)[f.field]} onChange={e => setStreamForm({ ...streamForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                     </div>
                                 ))}
                                 <div className="relative">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class Teacher</div>
-                                    <select value={streamForm.classTeacherId} onChange={e => setStreamForm({ ...streamForm, classTeacherId: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Class Teacher</label>
+                                    <select value={streamForm.classTeacherId} onChange={e => setStreamForm({ ...streamForm, classTeacherId: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
                                         <option value="">— No class teacher —</option>
                                         {staff.map((s: any) => <option key={s._id} value={s._id}>{s.employeeName || s.name}</option>)}
                                     </select>
                                 </div>
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
-                                <button onClick={() => setShowStreamModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl">Cancel</button>
-                                <button onClick={() => { if (!streamForm.name) { toast.error("Stream name required"); return; } streamMut.mutate({ ...streamForm, classId: streamForm.classId || selectedClass?._id, capacity: Number(streamForm.capacity) }); }} disabled={streamMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
+                                <button onClick={() => setShowStreamModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-sm font-medium rounded-xl">Cancel</button>
+                                <button onClick={() => { if (!streamForm.name) { toast.error("Stream name required"); return; } streamMut.mutate({ ...streamForm, classId: streamForm.classId || selectedClass?._id, capacity: Number(streamForm.capacity) }); }} disabled={streamMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-sm font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
                                     {streamMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{editStreamId ? "Save" : "Add Stream"}
                                 </button>
                             </div>

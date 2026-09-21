@@ -77,6 +77,7 @@ export default function AdmissionView() {
           .box{background:#f8fafc;border-left:3px solid #1e3a8a;padding:10px 14px;margin:14px 0}.box div{display:flex;gap:10px;padding:2px 0}.box span{width:150px;color:#64748b}
           .sig{margin-top:56px;display:flex;justify-content:space-between;gap:40px}.sig>div{flex:1}.line{border-top:1px solid #111;padding-top:4px;font-size:12px;color:#475569}
           .stamp{font-size:11px;color:#059669;margin-top:2px}
+          .sigbox{position:relative;height:70px}.sigimg{position:absolute;left:8px;bottom:2px;max-height:64px;max-width:200px;object-fit:contain}.stampimg{position:absolute;left:150px;bottom:-14px;width:96px;height:96px;object-fit:contain;opacity:.88;transform:rotate(-8deg)}
         </style></head><body>
         <div class="top">${school.logo ? `<img src="${esc(school.logo)}" alt=""/>` : ""}<div><h1>${esc(school.name)}</h1>${contacts.map(c => `<p>${esc(c)}</p>`).join("")}</div></div>
         <div class="meta"><div><b>Ref:</b> ${esc(a.appNo || a.id.slice(-6).toUpperCase())}</div><div><b>Date:</b> ${fmt(new Date())}</div></div>
@@ -87,7 +88,7 @@ export default function AdmissionView() {
         <div class="box"><div><span>Learner</span><b>${esc(a.name)}</b></div>${a.dob ? `<div><span>Date of birth</span>${esc(fmt(a.dob))}</div>` : ""}<div><span>Class</span><b>${esc(klass)}</b></div><div><span>Application no.</span>${esc(a.appNo || "—")}</div></div>
         <p>Kindly confirm acceptance of this offer and complete the registration process at the school office, including payment of the fees for the term. Please bring the learner's birth certificate, the previous school's report or transfer documents, and passport-size photographs.</p>
         <p>We look forward to welcoming ${esc(a.firstName || a.name)} to our school community.</p>
-        <div class="sig"><div><div style="height:38px"></div><div class="line"><b>${esc(ap?.by || "")}</b>${ap?.by ? "<br/>" : ""}${esc(ap?.title || "Principal")}, ${esc(school.name)}</div>${ap?.signedAt ? `<div class="stamp">Approved &amp; signed electronically on ${esc(fmt(ap.signedAt))}</div>` : ""}</div>
+        <div class="sig"><div><div class="sigbox">${school.signature ? `<img class="sigimg" src="${esc(school.signature)}" alt=""/>` : ""}${school.stamp ? `<img class="stampimg" src="${esc(school.stamp)}" alt=""/>` : ""}</div><div class="line"><b>${esc(school.signerName || ap?.by || "")}</b>${(school.signerName || ap?.by) ? "<br/>" : ""}${esc(school.signerTitle || ap?.title || "Principal")}, ${esc(school.name)}</div>${ap?.signedAt ? `<div class="stamp">Approved &amp; signed electronically on ${esc(fmt(ap.signedAt))}</div>` : ""}</div>
         <div><div style="height:38px"></div><div class="line">Parent / Guardian acceptance (signature &amp; date)</div></div></div>
         </body></html>`;
         void outputHtmlDoc(`Admission letter — ${a.name}`, html, { fileName: `Admission-letter-${a.name}` });

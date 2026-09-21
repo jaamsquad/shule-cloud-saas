@@ -5,7 +5,7 @@
 export interface CertData {
     style: string; title: string; subtitle?: string; name: string; body: string; date: string;
     signatories: { name: string; title: string }[]; certNo: string; qr: string;
-    school: { name: string; logo?: string; address?: string };
+    school: { name: string; logo?: string; address?: string; signature?: string; stamp?: string };
 }
 
 export const CERT_STYLES: { key: string; label: string; accent: string; note: string }[] = [
@@ -40,7 +40,9 @@ const SCRIPT = `'Brush Script MT','Lucida Handwriting','Segoe Script','Apple Cha
 function parts(d: CertData, o: { align?: "center" | "left"; nameColor: string; titleColor: string; text: string; lineColor: string; titleSize?: number; nameLine?: string }) {
     const align = o.align || "center";
     const sig = d.signatories.filter(s => s.name || s.title);
-    const sigHtml = sig.map(s => `<div class="sig"><div class="sname">${esc(s.name)}</div><div class="sline" style="border-color:${o.lineColor}"></div><div class="stitle">${esc(s.title)}</div></div>`).join("");
+    // the principal's / head teacher's signature and the school stamp go on the line of the first head-of-school signatory
+    const signer = Math.max(0, sig.findIndex(x => /principal|head|director/i.test(x.title)));
+    const sigHtml = sig.map((s, i) => `<div class="sig"><div class="sname">${i === signer && d.school.signature ? `<img class="sigimg" src="${esc(d.school.signature)}" alt=""/>` : ""}${esc(s.name)}</div>${i === signer && d.school.stamp ? `<img class="stampimg" src="${esc(d.school.stamp)}" alt=""/>` : ""}<div class="sline" style="border-color:${o.lineColor}"></div><div class="stitle">${esc(s.title)}</div></div>`).join("");
     return {
         head: `<div class="head" style="text-align:${align}">${d.school.logo ? `<img src="${esc(d.school.logo)}" class="logo" alt=""/>` : ""}<div class="school">${esc(d.school.name)}</div></div>`,
         titleBlock: `<div class="title" style="color:${o.titleColor};font-size:${o.titleSize || 52}px;text-align:${align}">${esc(d.title)}</div>${d.subtitle ? `<div class="subtitle" style="color:${o.titleColor};text-align:${align}">${esc(d.subtitle)}</div>` : ""}`,
@@ -66,7 +68,9 @@ html,body{width:1123px;height:794px;background:#fff;font-family:Arial,Helvetica,
 .body{font-size:20px;line-height:1.7;margin:22px auto 0;max-width:680px}
 .foot{display:flex;justify-content:space-between;align-items:flex-end;position:absolute;left:0;right:0;bottom:0}
 .fdate{width:190px;text-align:center;white-space:nowrap}.dv{font-size:15px;padding-bottom:3px}
-.sigs{display:flex;gap:26px;justify-content:flex-end}.sig{width:190px;text-align:center}
+.sigs{display:flex;gap:26px;justify-content:flex-end}.sig{width:190px;text-align:center;position:relative}
+.sigimg{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);max-height:62px;max-width:170px;object-fit:contain}
+.stampimg{position:absolute;right:-34px;bottom:-14px;width:88px;height:88px;object-fit:contain;opacity:.88;transform:rotate(-8deg)}
 .sname{font-size:15px;min-height:20px;padding-bottom:3px}.sline{border-top:1.5px solid #000}.stitle{font-size:13px;font-weight:700;margin-top:3px}
 .qrbox{text-align:center}.qrbox img{width:96px;height:96px;display:block;margin:0 auto}.cno{font-size:11px;font-weight:700;margin-top:2px;letter-spacing:.5px}
 `;

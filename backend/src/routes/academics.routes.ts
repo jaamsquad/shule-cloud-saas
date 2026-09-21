@@ -224,7 +224,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             if (!email) { skipped++; return; }
             try {
                 const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
-                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
+                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
                     to: [email],
@@ -478,10 +478,7 @@ router.patch('/academics/grading-criteria/:id',  c.updateItem('grading_criteria'
 router.delete('/academics/grading-criteria/:id', c.deleteItem('grading_criteria'));
 
 // ─── Curricula ────────────────────────────────────────────────────────────────
-router.get('/curricula',             c.getItems('curricula'));
-router.post('/curricula',            c.createItem('curricula'));
-router.patch('/curricula/:id',       c.updateItem('curricula'));
-router.delete('/curricula/:id',      c.deleteItem('curricula'));
+// (/curricula and /curricula/:code — the enable/disable registry — live in curriculum.routes.ts)
 
 router.get('/academics/curricula',   c.getItems('curricula'));
 router.post('/academics/curricula',  c.createItem('curricula'));

@@ -261,7 +261,9 @@ export default function StudentReport() {
           .summary-box label { font-size:9px; font-weight:700; text-transform:uppercase; color:#94a3b8; display:block; }
           .summary-box span { font-size:20px; font-weight:900; }
           .signature { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; margin-top:40px; }
-          .sig-box { border-top:1px solid #94a3b8; padding-top:6px; text-align:center; font-size:10px; color:#94a3b8; text-transform:uppercase; }
+          .sig-box { border-top:1px solid #94a3b8; padding-top:6px; text-align:center; font-size:10px; color:#94a3b8; text-transform:uppercase; position:relative; }
+          .sig-img { position:absolute; left:50%; bottom:100%; transform:translateX(-50%); max-height:56px; max-width:150px; object-fit:contain; margin-bottom:2px; }
+          .stamp-img { position:absolute; right:-6px; bottom:-4px; width:78px; height:78px; object-fit:contain; opacity:.88; transform:rotate(-8deg); }
           .footer { text-align:center; margin-top:32px; font-size:9px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:12px; }
           @media print { @page { margin:15mm; } }
         </style></head><body>
@@ -289,7 +291,7 @@ export default function StudentReport() {
         </div>
         <div class="signature">
           <div class="sig-box">Class Teacher</div>
-          <div class="sig-box">Head Teacher / Principal</div>
+          <div class="sig-box">${institute?.principalSignature ? `<img class="sig-img" src="${institute.principalSignature}" />` : ""}${institute?.schoolStamp ? `<img class="stamp-img" src="${institute.schoolStamp}" />` : ""}${institute?.principalName ? `${institute.principalName}<br/>` : ""}${institute?.principalTitle || "Head Teacher / Principal"}</div>
           <div class="sig-box">Parent / Guardian</div>
         </div>
         <div class="footer">This is a computer-generated report card — ${schoolName} · Powered by ShuleCloud ERP</div>

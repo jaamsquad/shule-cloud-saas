@@ -46,6 +46,10 @@ router.patch('/curricula/:code', async (req: Request, res: Response) => {
         const d = db(req);
         const code = req.params.code;
         const { active, name, config } = req.body || {};
+        if (active === false) {   // at least one curriculum has to stay on
+            const others = (await loadCurricula(d)).filter(c => c.active && canonicalCode(c.code) !== canonicalCode(code));
+            if (!others.length) return res.status(400).json({ message: 'At least one curriculum must stay enabled.' });
+        }
         const set: any = { code, updatedAt: new Date() };
         if (active !== undefined) set.active = !!active;
         if (name !== undefined) set.name = name;

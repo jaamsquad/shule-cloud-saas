@@ -186,7 +186,13 @@ router.patch('/v2/classes/:id', async (req, res) => {
         const db = getRequestDb(req);
         const update: any = { updatedAt: now() };
         ['name', 'code', 'level', 'curriculumType', 'capacity', 'isActive'].forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+        const before: any = req.body.name !== undefined ? await db.collection('v2_classes').findOne({ _id: toOid(req.params.id) }) : null;
         await db.collection('v2_classes').updateOne({ _id: toOid(req.params.id) }, { $set: update });
+        // Renamed (Form 1 → Grade 1): its streams, learners and reports follow the new name
+        if (before?.name && update.name && String(before.name).trim() !== String(update.name).trim()) {
+            const { cascadeClassRename } = await import('../lib/classRename');
+            await cascadeClassRename(db, req.params.id, String(before.name), String(update.name));
+        }
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -208,6 +214,8 @@ router.get('/v2/streams', async (req, res) => {
         const db = getRequestDb(req);
         const query: any = { deletedAt: { $exists: false } };
         if (req.query.classId) query.classId = req.query.classId.toString();
+        const { healStreamNames } = await import('../lib/classRename');
+        await healStreamNames(db).catch(() => {});      // a stream whose class was renamed catches up
         const streams = await db.collection('v2_streams').find(query).sort({ name: 1 }).toArray();
         res.json(streams);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -231,11 +239,13 @@ router.patch('/v2/streams/:id', async (req, res) => {
         const db = getRequestDb(req);
         const update: any = { updatedAt: now() };
         ['name', 'capacity', 'classTeacherId', 'isActive'].forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+        let renamed: any = null;
         if (req.body.name) {
             const stream = await db.collection('v2_streams').findOne({ _id: toOid(req.params.id) });
-            if (stream) update.fullName = `${stream.className} ${req.body.name}`;
+            if (stream) { update.fullName = `${stream.className} ${req.body.name}`; if (stream.name !== req.body.name) renamed = stream; }
         }
         await db.collection('v2_streams').updateOne({ _id: toOid(req.params.id) }, { $set: update });
+        if (renamed) { const { cascadeStreamRename } = await import('../lib/classRename'); await cascadeStreamRename(db, renamed, String(req.body.name)); }
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

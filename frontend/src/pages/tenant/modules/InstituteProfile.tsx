@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Home, Save, Loader2, Camera, ImageIcon, Mail, Phone, MapPin, Globe, ChevronDown } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { prepareTransparentImage } from "@/lib/imageClean";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -26,7 +27,8 @@ export default function InstituteProfile() {
         logo: "",
         email: "",
         schoolType: "Day",            // Boarding | Day | Mixed
-        genderComposition: "Mixed"    // Mixed | Boys | Girls
+        genderComposition: "Mixed",   // Mixed | Boys | Girls
+        principalSignature: "", schoolStamp: "", principalName: "", principalTitle: "Principal",
     });
 
     useEffect(() => {
@@ -41,7 +43,9 @@ export default function InstituteProfile() {
                 logo: profileData.logo || "",
                 email: profileData.email || "",
                 schoolType: profileData.schoolType || "Day",
-                genderComposition: profileData.genderComposition || "Mixed"
+                genderComposition: profileData.genderComposition || "Mixed",
+                principalSignature: profileData.principalSignature || "", schoolStamp: profileData.schoolStamp || "",
+                principalName: profileData.principalName || "", principalTitle: profileData.principalTitle || "Principal",
             });
         }
     }, [profileData]);
@@ -55,6 +59,13 @@ export default function InstituteProfile() {
             };
             reader.readAsDataURL(file);
         }
+    };
+
+    const pickImage = (field: "principalSignature" | "schoolStamp") => async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]; e.target.value = "";
+        if (!file) return;
+        try { const url = await prepareTransparentImage(file, field === "schoolStamp" ? 480 : 560); setFormData(prev => ({ ...prev, [field]: url })); }
+        catch (err: any) { toast.error(err?.message || "Could not read that image"); }
     };
 
     const updateMutation = useMutation({
@@ -248,6 +259,31 @@ export default function InstituteProfile() {
                             ]}
                             hint="Used as the default when admitting students."
                         />
+                    </div>
+
+                    {/* Signature & stamp — printed on admission letters, certificates and report cards */}
+                    <div className="mt-10 pt-8 border-t border-slate-100">
+                        <h3 className="text-base font-semibold text-slate-800">Signature &amp; school stamp</h3>
+                        <p className="text-sm text-slate-500 mt-1">Upload the principal's / head teacher's signature and the school stamp. They are placed automatically on admission letters, leaving and transfer certificates, and on report cards (printed, generated and emailed).</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-5">
+                            {([["principalSignature", "Signature", "Best as a PNG with a transparent background. A photo on white paper also works — the paper is removed for you."], ["schoolStamp", "School stamp", "Round or square stamp, ideally on a transparent background."]] as const).map(([field, label, hint]) => (
+                                <div key={field} className="rounded-xl border border-slate-200 p-4">
+                                    <div className="text-sm font-medium text-slate-700 mb-2">{label}</div>
+                                    <div className="h-28 rounded-lg border border-dashed border-slate-300 flex items-center justify-center" style={{ backgroundImage: "linear-gradient(45deg,#f1f5f9 25%,transparent 25%),linear-gradient(-45deg,#f1f5f9 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f1f5f9 75%),linear-gradient(-45deg,transparent 75%,#f1f5f9 75%)", backgroundSize: "16px 16px", backgroundPosition: "0 0,0 8px,8px -8px,-8px 0" }}>
+                                        {formData[field] ? <img src={formData[field]} alt={label} className="max-h-24 max-w-[90%] object-contain" /> : <span className="text-xs text-slate-400">Nothing uploaded</span>}
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-2">{hint}</p>
+                                    <div className="flex gap-2 mt-3">
+                                        <label className="h-9 px-4 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium flex items-center cursor-pointer">Upload<input type="file" accept="image/*" className="hidden" onChange={pickImage(field)} /></label>
+                                        {formData[field] && <button type="button" onClick={() => setFormData(prev => ({ ...prev, [field]: "" }))} className="h-9 px-4 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Remove</button>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Signatory name (printed under the signature)</label><input value={formData.principalName} onChange={e => setFormData({ ...formData, principalName: e.target.value })} placeholder="e.g. Mrs. Jane Wanjiku" className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" /></div>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Title</label><select value={formData.principalTitle} onChange={e => setFormData({ ...formData, principalTitle: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white">{["Principal", "Head Teacher", "Headmaster", "Headmistress", "Director"].map(t => <option key={t}>{t}</option>)}</select></div>
+                        </div>
                     </div>
 
                     <div className="flex justify-center mt-12">

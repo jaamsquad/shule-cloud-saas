@@ -1955,7 +1955,7 @@ async function yearlyDocForGeneration(req: Request, gen: any) {
     const { yearlyDocumentHtml } = require('../services/report-card-pdf.service');
     const address = [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', ');
     const list: any[] = gen.yearly?.students || [];
-    return { html: yearlyDocumentHtml(list.map(y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, ...y, bands }))), count: list.length };
+    return { html: yearlyDocumentHtml(list.map(y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands }))), count: list.length };
 }
 router.get('/report_card_generations/:id/yearly-html', async (req: Request, res: Response) => {
     try {
@@ -2064,7 +2064,7 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
                         school: school.schoolName || 'School',
                         logo: school.logo || null,
                         motto: school.motto || '',
-                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', curriculum: mainExam.curriculum || '',
+                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', signature: tenantRc?.principalSignature || null, stamp: tenantRc?.schoolStamp || null, signerName: tenantRc?.principalName || null, curriculum: mainExam.curriculum || '',
                         student: {
                             ...student,
                             className: classDoc.levelName || classDoc.name
