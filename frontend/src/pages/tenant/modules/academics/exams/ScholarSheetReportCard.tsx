@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Printer } from "lucide-react";
 import api from "@/lib/api";
+import { reportQr } from "@/lib/reportQr";
 
 // ScholarSheet — the classic A4 academic report card.
 // Black & white only (colour permitted solely for the logo + student photo).
@@ -23,6 +24,17 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
         staleTime: 10_000,
     });
     const data = preloaded || fetched;
+    // QR (bottom centre) that opens the online verification page for this report card
+    const { data: qr } = useQuery({
+        queryKey: ["rc_qr", studentId, examId, data?.termYear, data?.summary?.meanScore, data?.summary?.meanGrade],
+        enabled: !!studentId && !!data && !data.notReady,
+        staleTime: 5 * 60_000,
+        queryFn: () => reportQr({
+            studentId, className: data.student?.className || "", term: data.termYear || "",
+            year: String(data.termYear || "").match(/\d{4}/)?.[0] || "", exam: data.termYear || "",
+            average: Number(data.summary?.meanScore) || null, grade: String(data.summary?.meanGrade || ""),
+        }),
+    });
 
     if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
     if (!data) return <div className="p-8 text-center text-slate-400">No report data.</div>;
@@ -253,7 +265,10 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                         <td style={{ verticalAlign: "top" }}>Next Term Begins On : <b>{d.nextTermBegins || "—"}</b></td></tr>
                 </tbody></table>
 
-                <div className="muted" style={{ textAlign: "center", marginTop: 3 }}>ShuleCloud School System | www.shulecloud.com</div>
+                <div className="muted" style={{ textAlign: "center", marginTop: 3 }}>
+                    {qr ? <img src={qr} alt="QR" style={{ width: "14mm", height: "14mm", display: "block", margin: "0 auto 1px" }} /> : null}
+                    {qr ? "Scan to verify this report card · " : ""}ShuleCloud School System | www.shulecloud.com
+                </div>
             </div>
         </div>
     );

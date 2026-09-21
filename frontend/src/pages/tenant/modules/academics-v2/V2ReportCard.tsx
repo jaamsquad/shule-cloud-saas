@@ -90,7 +90,6 @@ export default function V2ReportCard() {
         </style></head><body>
         <div class="header">
             <div><h1>Academic Report Card</h1><p style="font-size:11px;color:#94a3b8">${reportCard.enrollment?.academicYear} · ${reportCard.enrollment?.class} ${reportCard.enrollment?.stream}</p></div>
-            ${qr ? `<div style="text-align:center;font-size:8px;color:#64748b"><img src="${qr}" style="width:78px;height:78px;display:block" alt="QR"/>Scan to verify</div>` : ""}
         </div>
         <div class="info">
             <div class="info-item"><label>Student Name</label><span>${reportCard.student?.name}</span></div>
@@ -113,6 +112,7 @@ export default function V2ReportCard() {
             <div class="sig">Principal Sign</div>
             <div class="sig">Parent Sign</div>
         </div>
+        ${qr ? `<div style="text-align:center;margin-top:22px;font-size:9px;color:#64748b"><img src="${qr}" style="width:84px;height:84px;display:block;margin:0 auto 3px" alt="QR"/>Scan to verify this report card</div>` : ""}
         <script>window.onload=()=>window.print()</script></body></html>`);
         win.document.close();
     };

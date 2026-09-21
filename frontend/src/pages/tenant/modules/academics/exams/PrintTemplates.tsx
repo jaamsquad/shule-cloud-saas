@@ -659,11 +659,11 @@ export function RenderPrintTemplate(props: PrintProps & { templateId: string; cu
         <>
             <PickTemplate {...rest} />
             {qrUrl && (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "6px 12px 0", breakInside: "avoid" }}>
-                    <div style={{ textAlign: "right", fontSize: 8, color: "#64748b", lineHeight: 1.35 }}>
-                        <b style={{ color: "#334155" }}>Scan to verify this report</b><br />Confirms it was issued by {props.schoolName}
-                    </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px 0", breakInside: "avoid" }}>
                     <img src={qrUrl} alt="QR" style={{ width: 54, height: 54 }} />
+                    <div style={{ textAlign: "center", fontSize: 8, color: "#64748b", lineHeight: 1.35 }}>
+                        <b style={{ color: "#334155" }}>Scan to verify this report</b> · Confirms it was issued by {props.schoolName}
+                    </div>
                 </div>
             )}
         </>
