@@ -4,6 +4,7 @@ import {
     Loader2, ChevronDown, BarChart3, BookOpen, Mail
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
@@ -395,7 +396,8 @@ export default function ResultCard() {
     const schoolName = tenantProfile?.name || tenantProfile?.schoolName || tenantProfile?.instituteName || "ShuleCloud School";
     const schoolTagline = tenantProfile?.targetLine || tenantProfile?.tagline || "Excellence in Education";
     const schoolLogo = tenantProfile?.logo || tenantProfile?.logoUrl || "";
-    const reportTemplate = tenantProfile?.reportTemplate || "cherith_termly";
+    const reportTemplate = tenantProfile?.reportTemplate || "annual_exam";
+    const schoolAddress = [tenantProfile?.address || tenantProfile?.location, tenantProfile?.city || tenantProfile?.county, tenantProfile?.phone].filter(Boolean).join(" · ");
     const examDate = selectedExam?.startDate ? new Date(selectedExam.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—";
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -413,7 +415,10 @@ export default function ResultCard() {
         return () => { live = false; };
     }, [selectedStudent?._id, selectedExam?._id, overall, overallGrade, currentPeriod?.label]);
 
+    const navigate = useNavigate();
     const printInNewWindow = () => {
+        // The school's classic A4 format is printed from the ScholarSheet page
+        if (reportTemplate === "scholarsheet") { navigate(`/exams/scholar-sheet?studentId=${selectedStudent?._id || ""}&examId=${selectedExam?._id || ""}`); return; }
         const content = printRef.current;
         if (!content) return;
         const win = openPrintDoc();
@@ -912,6 +917,7 @@ export default function ResultCard() {
                         schoolTagline={schoolTagline}
                         schoolLogo={schoolLogo}
                         qrUrl={qrUrl}
+                        schoolAddress={schoolAddress}
                         studentName={getStudentName(selectedStudent)}
                         admNo={getAdmNo(selectedStudent)}
                         studentPhoto={studentPhoto}
@@ -930,7 +936,6 @@ export default function ResultCard() {
                         getStatusForPct={getStatusForPct}
                         passMark={passMark}
                         gradingScale={gradingScale}
-                        curriculumId={curriculumSettings?.curriculumId}
                     />
                 </div>
             )}

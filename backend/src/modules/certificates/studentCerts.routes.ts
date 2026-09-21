@@ -18,6 +18,7 @@ import { enforceCrud } from '../../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../../lib/dataScope';
 import { canonicalStatus } from '../../lib/studentStatus';
 import { maskName, maskRef, signToken, readToken, schoolFromSlug, schoolBrand, publicAppUrl } from '../../lib/verifyDocs';
+import { findExamByCode, sigMatches, resultSnapshot } from '../../lib/resultLink';
 
 export const CERT_TYPES: Record<string, string> = {
     graduation: 'Graduation Certificate', recommendation: 'Letter of Recommendation', leaving: 'School Leaving Certificate',
@@ -139,4 +140,18 @@ publicVerifyRouter.get('/report/:school/:token', async (req, res) => {
             report: { holder: maskName(p.n), registrationNo: maskRef(p.r), className: p.c, term: p.t, year: p.y, exam: p.e, average: p.a, grade: p.g, issuedAt: new Date(Number(p.at) || Date.now()) },
         });
     } catch (e: any) { res.status(500).json({ valid: false, message: e.message }); }
+});
+
+// A parent's "check the result online" link:  /<school>/result/<exam code>/<result id>/<student id>
+// The result id is a signature over school + exam + student, so only a link the school made will open.
+publicVerifyRouter.get('/result/:school/:examCode/:resultId/:studentId', async (req, res) => {
+    try {
+        const found = await schoolFromSlug(req.params.school);
+        const studentId = str(req.params.studentId, 30);
+        const exam = found ? await findExamByCode(found.db, req.params.examCode) : null;
+        const ok = !!found && !!exam && /^[a-f0-9]{24}$/i.test(studentId) && sigMatches(String(found.tenant.subdomain).toLowerCase(), String(exam._id), studentId, str(req.params.resultId, 40));
+        const snap = ok ? await resultSnapshot(found!.db, String(exam._id), studentId) : null;
+        if (!ok || !snap) return res.status(404).json({ valid: false, message: 'This result link is not valid, or the result is not available yet.' });
+        res.json({ valid: true, school: schoolBrand(found!.tenant), result: snap });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

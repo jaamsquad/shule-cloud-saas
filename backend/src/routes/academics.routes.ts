@@ -196,6 +196,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         const tid = (req as any).tenantContext?.tenantId;
         const tenant = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) || (tid as any) }) : null;
         const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
+        const curriculum = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
 
         // Fail fast with a clear message if email isn't configured at all, instead
         // of reporting "20 failed" with no reason.
@@ -223,7 +224,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             if (!email) { skipped++; return; }
             try {
                 const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
-                const data = { school: tenant?.name, logo: tenant?.logo, template: tenant?.reportTemplate, student: st, exam, className: clsName, marks, grading };
+                const data = { school: tenant?.name, logo: tenant?.logo, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
                     to: [email],

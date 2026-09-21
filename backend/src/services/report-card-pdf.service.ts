@@ -1,11 +1,18 @@
 import puppeteer, { Browser } from 'puppeteer';
 
 export type Family = 'CBC' | 'KCSE' | 'Cambridge' | 'IB';
-export const familyOf = (template?: string): Family => {
+// Older template ids carry the curriculum in their prefix (cbc_*, cam_*, ib_*). The newer layouts are
+// curriculum-neutral, so for those the school's curriculum setting decides the grading family.
+export const familyOf = (template?: string, curriculum?: string): Family => {
     const s = (template || '').toLowerCase();
     if (s.startsWith('cbc')) return 'CBC';
     if (s.startsWith('cam')) return 'Cambridge';
     if (s.startsWith('ib')) return 'IB';
+    if (s.startsWith('kcse')) return 'KCSE';
+    const c = (curriculum || '').toLowerCase();
+    if (c === 'cbc') return 'CBC';
+    if (c === 'cambridge') return 'Cambridge';
+    if (c === 'ib') return 'IB';
     return 'KCSE';
 };
 
@@ -43,13 +50,13 @@ const overallText = (pct: number, family: Family, passMark: number) => {
 };
 
 export interface ReportCardData {
-    school?: string; logo?: string | null; motto?: string; template?: string;
+    school?: string; logo?: string | null; motto?: string; template?: string; curriculum?: string;
     student: any; exam: any; className?: string; marks: any[]; grading?: any;
 }
 
 export function reportCardHtml(d: ReportCardData): string {
     const s = d.student || {};
-    const family = familyOf(d.template);
+    const family = familyOf(d.template, d.curriculum);
     const rows = (d.marks || []).map((m: any) => {
         const obtained = Number(m.marksObtained || 0);
         const outOf = Number(m.totalMarks || 100);
@@ -122,7 +129,7 @@ export function reportCardHtml(d: ReportCardData): string {
 // Inline-styled, email-client-safe HTML report (shown in the email body).
 export function reportCardEmailHtml(d: ReportCardData): string {
     const s = d.student || {};
-    const family = familyOf(d.template);
+    const family = familyOf(d.template, d.curriculum);
     const date = (x: any) => (x ? new Date(x).toLocaleDateString('en-GB') : '');
     const rows = (d.marks || []).map((m: any) => {
         const obtained = Number(m.marksObtained || 0);

@@ -63,6 +63,7 @@ import OwnerBilling from "./pages/owner/Billing";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
 import VerifyDoc from "./pages/public/VerifyDoc";
+import ResultOnline from "./pages/public/ResultOnline";
 import SkillReports from "./pages/tenant/modules/skills/SkillReports";
 import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
 import ClassRoster from "./pages/tenant/modules/ClassRoster";
@@ -481,7 +482,8 @@ const App = () => {
             <Route path="/lnk/doc/:type/:publicId" element={<PublicDoc />} />
             {/* what a certificate / report-card QR code opens */}
             <Route path="/:school/certificate/verify/online/:certId" element={<VerifyDoc kind="certificate" />} />
-            <Route path="/:school/report/verify/online/:token" element={<VerifyDoc kind="report" />} />   {/* shareable invoice / quotation / contract */}
+            <Route path="/:school/report/verify/online/:token" element={<VerifyDoc kind="report" />} />
+            <Route path="/:school/result/:examCode/:resultId/:studentId" element={<ResultOnline />} />   {/* shareable invoice / quotation / contract */}
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<Activate />} />
             <Route path="/onboarding" element={<OnboardingWizard />} />

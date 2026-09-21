@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from "react";
 import { Home, Printer, ChevronDown, Loader2, Users, Award, CheckCircle2, XCircle, BarChart3, FileText, Eye, Mail } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { RenderPrintTemplate } from "./PrintTemplates";
@@ -64,7 +65,8 @@ export default function ClassReportCards() {
     };
     const printAllRef = useRef<HTMLDivElement>(null);
 
-    const { getGrade, getStatus, getColor, passMark, scale, curriculumId } = useGradingFns();
+    const { getGrade, getStatus, getColor, passMark, scale } = useGradingFns();
+    const navigate = useNavigate();
 
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
@@ -184,7 +186,11 @@ export default function ClassReportCards() {
     const schoolName    = tenantProfile?.name || tenantProfile?.instituteName || "School";
     const schoolLogo    = tenantProfile?.logo || tenantProfile?.logoUrl || "";
     const schoolTagline = tenantProfile?.tagline || tenantProfile?.targetLine || "";
-    const reportTemplate = tenantProfile?.reportTemplate || "cherith_termly";
+    const reportTemplate = tenantProfile?.reportTemplate || "annual_exam";
+    const schoolAddress  = [tenantProfile?.address || tenantProfile?.location, tenantProfile?.city || tenantProfile?.county, tenantProfile?.phone].filter(Boolean).join(" · ");
+    // The school's classic A4 format is printed from the ScholarSheet page
+    const useScholar = reportTemplate === "scholarsheet";
+    const openScholar = (studentId?: string) => navigate(`/exams/scholar-sheet?examId=${selectedExam?._id || ""}${studentId ? `&studentId=${studentId}` : ""}`);
     const currentPeriod  = periods.find((p: any) => p.isCurrent) || periods[0];
     const examDate       = selectedExam?.startDate ? new Date(selectedExam.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—";
     const periodLabel    = currentPeriod ? `${currentPeriod.label} · ${currentPeriod.academicYear}` : selectedExam?.academicYear || "—";
@@ -198,8 +204,21 @@ export default function ClassReportCards() {
         exam: selectedExam?.examName || selectedExam?.name || "", average: row.pct, grade: row.grade,
     });
 
+    // Per-subject class average and topper (as %) for the result-analysis chart
+    const classStats = useMemo(() => {
+        const acc: Record<string, number[]> = {};
+        studentSummaries.forEach(r => r.studentMarks.forEach((m: any) => {
+            const t = Number(m.totalMarks) || 0; if (!t || m.marksObtained == null || m.marksObtained === "") return;
+            (acc[(m.subjectName || "").toLowerCase()] ||= []).push((Number(m.marksObtained) / t) * 100);
+        }));
+        const out: Record<string, { avg: number; top: number }> = {};
+        Object.entries(acc).forEach(([k, v]) => { out[k] = { avg: v.reduce((a, b) => a + b, 0) / v.length, top: Math.max(...v) }; });
+        return out;
+    }, [studentSummaries]);
+
     // ── Print single student ───────────────────────────────────────────────────
     const printStudent = async (row: typeof studentSummaries[0]) => {
+        if (useScholar) { openScholar(String(row.student?._id || "")); return; }
         const win = openPrintDoc();
         if (!win) return;
         const qrUrl = await qrFor(row);
@@ -218,7 +237,7 @@ export default function ClassReportCards() {
             const root = createRoot(div);
             import("react").then(React => {
                 root.render(React.createElement(RenderPrintTemplate, {
-                    templateId: reportTemplate, curriculumId,
+                    templateId: reportTemplate, schoolAddress, classStats,
                     schoolName, schoolTagline, schoolLogo, qrUrl,
                     studentName: row.name, admNo: row.admNo,
                     studentPhoto: row.student?.studentPhoto || row.student?.photo || row.student?.avatar || row.student?.photoUrl || row.student?.profilePhoto || null,
@@ -239,6 +258,7 @@ export default function ClassReportCards() {
 
     // ── Print ALL students (batch) ─────────────────────────────────────────────
     const printAll = async () => {
+        if (useScholar) { openScholar(); return; }
         const el = printAllRef.current;
         if (!el) return;
         const win = openPrintDoc();
@@ -506,7 +526,7 @@ export default function ClassReportCards() {
                     return (
                         <div key={row.student._id} className={idx < studentSummaries.filter(r => r.scoredSubjects > 0).length - 1 ? "page-break" : ""}>
                             <RenderPrintTemplate
-                                templateId={reportTemplate} curriculumId={curriculumId}
+                                templateId={reportTemplate} schoolAddress={schoolAddress} classStats={classStats}
                                 schoolName={schoolName} schoolTagline={schoolTagline} schoolLogo={schoolLogo}
                                 qrUrl={qrMap[String(row.student._id)]}
                                 studentName={row.name} admNo={row.admNo}

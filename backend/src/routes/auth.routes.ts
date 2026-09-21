@@ -1271,12 +1271,15 @@ const buildExamResults = async (db: Db, studentId: string) => {
 // ─── Report-card grading by curriculum family ─────────────────────────────────
 type Family = 'CBC' | 'KCSE' | 'Cambridge' | 'IB';
 
-const templateFamily = (id?: string): Family => {
+const templateFamily = (id?: string, curriculum?: string): Family => {
     const s = (id || '').toLowerCase();
     if (s.startsWith('cbc')) return 'CBC';
     if (s.startsWith('cam')) return 'Cambridge';
     if (s.startsWith('ib')) return 'IB';
-    return 'KCSE'; // kcse_* and default
+    if (s.startsWith('kcse')) return 'KCSE';
+    // curriculum-neutral layouts: the school's curriculum setting decides
+    const c = (curriculum || '').toLowerCase();
+    return c === 'cbc' ? 'CBC' : c === 'cambridge' ? 'Cambridge' : c === 'ib' ? 'IB' : 'KCSE';
 };
 
 // Returns { grade, points, level } appropriate to the chosen curriculum.
@@ -1750,7 +1753,8 @@ const tenantMetaRecord = async (req: Request) => {
 const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?: string) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(sid) });
     const tenant = await tenantMetaRecord(req);
-    const family = templateFamily(tenant?.reportTemplate);
+    const curriculumId = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
+    const family = templateFamily(tenant?.reportTemplate, curriculumId);
 
     const all = decorateResults(await buildExamResults(db, sid), family);
     const terms = Array.from(new Set(all.map((r: any) => r.term).filter(Boolean)));
