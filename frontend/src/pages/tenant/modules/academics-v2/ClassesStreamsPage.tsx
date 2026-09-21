@@ -38,11 +38,9 @@ export default function ClassesStreamsPage() {
     });
 
     // Purge leftover student_enrollments records (the old enrollment feature).
-    const purgeMut = useMutation({
-        mutationFn: () => api.delete("/v2/enrollments/purge"),
-        onSuccess: (r: any) => toast.success(`Cleared ${r?.data?.removed ?? 0} old enrollment record(s).`),
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed to clear"),
-    });
+    // who may change classes: administrators, principal / head teacher (the server enforces it too)
+    const { data: access } = useQuery<{ canEdit: boolean }>({ queryKey: ["v2_structure_access"], queryFn: async () => (await api.get("/v2/structure/access")).data });
+    const canEdit = access?.canEdit === true;
 
     const delMut = useMutation({
         mutationFn: ({ id, type }: { id: string; type: "class" | "stream" }) =>
@@ -61,12 +59,11 @@ export default function ClassesStreamsPage() {
                     <span className="font-semibold text-[#5C67F2]">Classes & Streams</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => { if (confirm("Permanently clear all old student-enrollment records? Class/stream stays on the students themselves.")) purgeMut.mutate(); }} disabled={purgeMut.isPending} className="h-10 px-4 bg-white border border-slate-200 text-slate-500 hover:text-rose-500 hover:border-rose-200 font-medium text-sm rounded-xl flex items-center gap-2 disabled:opacity-50">
-                        {purgeMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />} Clear Old Enrollments
-                    </button>
+                    {canEdit && (
                     <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
                         <Plus className="w-4 h-4" /> New Class
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -104,11 +101,13 @@ export default function ClassesStreamsPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            {canEdit && (<>
                                             <button onClick={e => { e.stopPropagation(); setEditClassId(c._id); setClassForm({ name: c.name, code: c.code || "", level: String(c.level), curriculumType: c.curriculumType || "844", capacity: String(c.capacity) }); setShowClassModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
                                             {confirmDelete?.id === c._id ? (
                                                 <><button onClick={e => { e.stopPropagation(); delMut.mutate({ id: c._id, type: "class" }); }} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
                                                 <button onClick={e => { e.stopPropagation(); setConfirmDelete(null); }} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>
                                             ) : <button onClick={e => { e.stopPropagation(); setConfirmDelete({ id: c._id, type: "class" }); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100"><X className="w-3.5 h-3.5" /></button>}
+                                            </>)}
                                             <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${selectedClass?._id === c._id ? "rotate-90" : ""}`} />
                                         </div>
                                     </div>
@@ -123,7 +122,7 @@ export default function ClassesStreamsPage() {
                             <h3 className="text-sm font-medium text-slate-500">
                                 {selectedClass ? `Streams in ${selectedClass.name} (${classStreams.length})` : "Select a class to see streams"}
                             </h3>
-                            {selectedClass && (
+                            {selectedClass && canEdit && (
                                 <button onClick={() => { setEditStreamId(null); setStreamForm({ ...emptyStream, classId: selectedClass._id }); setShowStreamModal(true); }} className="h-8 px-4 bg-indigo-50 hover:bg-indigo-100 text-[#5C67F2] border border-indigo-100 font-black text-[9px] uppercase rounded-xl flex items-center gap-1">
                                     <Plus className="w-3 h-3" /> Add Stream
                                 </button>
@@ -144,11 +143,13 @@ export default function ClassesStreamsPage() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {canEdit && (<>
                                         <button onClick={() => { setEditStreamId(s._id); setStreamForm({ classId: s.classId, name: s.name, capacity: String(s.capacity), classTeacherId: s.classTeacherId || "" }); setShowStreamModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
                                         {confirmDelete?.id === s._id ? (
                                             <><button onClick={() => delMut.mutate({ id: s._id, type: "stream" })} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => setConfirmDelete(null)} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>
                                         ) : <button onClick={() => setConfirmDelete({ id: s._id, type: "stream" })} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100"><X className="w-3.5 h-3.5" /></button>}
+                                        </>)}
                                     </div>
                                 </div>
                             </div>

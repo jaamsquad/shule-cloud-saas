@@ -152,6 +152,29 @@ router.delete('/v2/terms/:id', async (req, res) => {
 // 3. CLASSES (Grade 1, Form 2 — NOT streams)
 // ═══════════════════════════════════════════════════════════════════
 
+// ── who may change the class structure ─────────────────────────────────────
+// Adding, renaming or deleting classes and streams is for school administrators (and the principal / head teacher).
+// Teachers can look at classes but not change them — enforced here, whatever the browser sends.
+async function canEditStructure(req: any): Promise<boolean> {
+    const d = getRequestDb(req);
+    const scope = await resolveScope(req, d);
+    if (scope.isAdmin) return true;
+    let me: any = null; try { me = scope.staffId ? await d.collection('staff').findOne({ _id: new ObjectId(scope.staffId) }) : null; } catch { /* */ }
+    if (!me) return false;
+    const titles = [me.designation, ...(Array.isArray(me.roles) ? me.roles : [])].filter(Boolean).join(' ');
+    return /head\s*-?\s*teacher|head\s*master|head\s*mistress|principal|deputy/i.test(titles);
+}
+router.get('/v2/structure/access', async (req, res) => {
+    try { res.json({ canEdit: await canEditStructure(req) }); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.use(['/v2/classes', '/v2/streams', '/v2/enrollments/purge'], async (req, res, next) => {
+    try {
+        if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+        if (await canEditStructure(req)) return next();
+        res.status(403).json({ message: 'Only an administrator can add, edit or delete classes and streams.' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/v2/classes', async (req, res) => {
     try {
         const db = getRequestDb(req);
