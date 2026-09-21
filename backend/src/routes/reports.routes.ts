@@ -3,6 +3,7 @@ import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { formatExamName } from '../lib/examName';
 import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum } from '../lib/curriculum';
+import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -1813,10 +1814,16 @@ router.patch('/report-card-settings', async (req: Request, res: Response) => {
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
+// Whole-year report: is it allowed yet? (Term 3 of the year, or after the year ends)
+router.get('/reports/yearly/status', async (req: Request, res: Response) => {
+    try { res.json(await yearlyStatus(getRequestDb(req), String(req.query.year || '') || undefined)); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/report_card_generations', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const generations = await db.collection('report_card_generations').find({}).sort({ generatedAt: -1 }).toArray();
+        const generations = await db.collection('report_card_generations').find({}, { projection: { yearly: 0 } }).sort({ generatedAt: -1 }).toArray();
         res.json(generations);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -1827,6 +1834,27 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
         const payload = req.body;
+        if (payload?.kind === 'yearly') {   // ── yearly report: Term 1 | Term 2 | Term 3 | year average ──
+            const st = await yearlyStatus(db, String(payload.academicYear || ''));
+            if (!st.allowed) return res.status(403).json({ message: st.reason });
+            if (!payload.className) return res.status(400).json({ message: 'className is required' });
+            const students = await classStudents(db, { className: String(payload.className), streamId: payload.streamId || null });
+            if (!students.length) return res.status(400).json({ message: 'No active students found in this class.' });
+            const snap = await computeYearly(db, students, st.year);
+            const yg = {
+                kind: 'yearly', classId: String(payload.classId || ''), classV2Id: payload.classV2Id ? String(payload.classV2Id) : null, className: String(payload.className),
+                mainExamId: `YEAR-${st.year}`, mainExamName: `${st.year} ANNUAL REPORT`, additionalExamIds: [] as string[], term: 'Whole Year', academicYear: st.year,
+                streamId: payload.streamId || null, streamName: payload.streamName || null, generatedAt: new Date().toISOString(), frozenAt: new Date().toISOString(),
+                yearly: { students: snap },
+            };
+            const nrmY = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+            const priorY = await db.collection('report_card_generations').find({ kind: 'yearly', academicYear: st.year }).toArray().catch(() => []);
+            const dropY = priorY.filter((p: any) => nrmY(p.className) === nrmY(yg.className) && String(p.streamId || '') === String(yg.streamId || '')).map((p: any) => p._id);
+            if (dropY.length) await db.collection('report_card_generations').deleteMany({ _id: { $in: dropY } }).catch(() => {});
+            const insY = await db.collection('report_card_generations').insertOne(yg);
+            const { yearly: _omit, ...lite } = yg as any;
+            return res.status(201).json({ ...lite, students: snap.length, _id: insY.insertedId });
+        }
         if (!payload?.classId || !payload?.mainExamId) {
             return res.status(400).json({ message: 'classId and mainExamId are required' });
         }
@@ -1909,6 +1937,27 @@ router.post('/report_card_generations/bulk-delete', async (req: Request, res: Re
     } catch (error: any) { res.status(500).json({ message: error.message }); }
 });
 
+// A generated yearly report as ready-to-print HTML (one page per learner)
+async function yearlyDocForGeneration(req: Request, gen: any) {
+    const db = getRequestDb(req);
+    const tid = (req as any).tenantContext?.tenantId;
+    const tenant: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }).catch(() => null) : null;
+    const grading: any = await db.collection('grading_criteria').findOne({}).catch(() => null);
+    const bands = ((grading?.grades || []) as any[]).map(b => ({ grade: String(b.grade || ''), lo: Number(b.from ?? 0), hi: Number(b.upto ?? 100) })).filter(b => b.grade);
+    const { yearlyDocumentHtml } = require('../services/report-card-pdf.service');
+    const address = [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', ');
+    const list: any[] = gen.yearly?.students || [];
+    return { html: yearlyDocumentHtml(list.map(y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, ...y, bands }))), count: list.length };
+}
+router.get('/report_card_generations/:id/yearly-html', async (req: Request, res: Response) => {
+    try {
+        if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid report ID' });
+        const gen: any = await getRequestDb(req).collection('report_card_generations').findOne({ _id: new ObjectId(req.params.id), kind: 'yearly' });
+        if (!gen) return res.status(404).json({ message: 'Yearly report not found' });
+        res.json(await yearlyDocForGeneration(req, gen));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // 8. GET /api/v1/report_card_generations/:id/pdf
 // Download generated report card as PDF
 router.get('/report_card_generations/:id/pdf', async (req: Request, res: Response) => {
@@ -1928,6 +1977,15 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
 
         if (!generation) {
             return res.status(404).json({ message: "Report card generation not found" });
+        }
+        if ((generation as any).kind === 'yearly') {   // yearly report → its own document
+            const { htmlToPdf: toPdf } = require('../services/report-card-pdf.service');
+            const doc = await yearlyDocForGeneration(req, generation);
+            const ypdf = await toPdf(doc.html);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="Annual-Report-${(generation as any).className}-${(generation as any).academicYear}.pdf"`);
+            res.setHeader('Content-Length', ypdf.length);
+            return res.end(ypdf);
         }
 
         const { classId, className, mainExamId, mainExamName, additionalExamIds = [], term, academicYear } = generation;

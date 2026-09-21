@@ -15,7 +15,7 @@ import { formatExamName } from './examName';
 const secret = () => process.env.DOC_VERIFY_SECRET || process.env.JWT_SECRET || 'shulecloud_doc_verify_secret';
 
 /** Short, readable code for an exam: the last 6 characters of its id. */
-export const examCodeOf = (examId: string) => String(examId).slice(-6).toUpperCase();
+export const examCodeOf = (examId: string) => /^Y\d{4}$/.test(String(examId)) ? String(examId) : String(examId).slice(-6).toUpperCase();   // Y2027 = the whole-year report
 
 export const resultSig = (slug: string, examId: string, studentId: string) =>
     crypto.createHmac('sha256', secret()).update(`result|${String(slug).toLowerCase()}|${examId}|${studentId}`).digest('base64url').slice(0, 20);

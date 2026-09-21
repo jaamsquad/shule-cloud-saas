@@ -28,6 +28,7 @@ export default function ParentMessaging() {
     const [sendSms, setSendSms] = useState(true);   // also send an SMS via the gateway
     const [includeLink, setIncludeLink] = useState(true);            // online result link (Results only)
     const [email, setEmail] = useState<"none" | "pdf" | "text">("none");   // Results only
+    const [kind, setKind] = useState<"exam" | "year">("exam");   // Results: one exam, or the whole-year report (Term 3 only)
     const [termKey, setTermKey] = useState("");       // "" = current term · "all" · "<year>|<term>" (admins only)
     const [studentQuery, setStudentQuery] = useState("");
     const [studentOpen, setStudentOpen] = useState(false);
@@ -47,6 +48,7 @@ export default function ParentMessaging() {
     const terms: any[] = examData?.terms || [];
     const canChoose = !!examData?.canChoose;
     const currentTerm = examData?.current;
+    const yearlyInfo = examData?.yearly;   // { allowed, year, reason }
 
     const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const cls = classes.find((c: any) => String(c._id) === String(classId));
@@ -69,7 +71,7 @@ export default function ParentMessaging() {
         mutationFn: async () => (await api.post("/messaging/compose", {
             type, subject, body, sendSms,
             ...(scope === "student" ? { studentId } : { classId, className: cls?.name || "", streamId, streamName: stream?.name || "", classLabel }),
-            ...(type === "Results" ? { examId, includeLink, email, ...(termKey ? { term: tName, year: tYear } : {}) } : {}),
+            ...(type === "Results" ? (kind === "year" ? { yearly: true, year: yearlyInfo?.year, includeLink, email } : { examId, includeLink, email, ...(termKey ? { term: tName, year: tYear } : {}) }) : {}),
         })).data,
         onSuccess: (d: any) => {
             toast.success(`Sent to ${d.sent} parent(s)${d.smsSent ? ` · ${d.smsSent} SMS` : ""}${d.emailSent ? ` · ${d.emailSent} email` : ""}.`);
@@ -80,7 +82,7 @@ export default function ParentMessaging() {
         onError: (e: any) => toast.error(e.response?.data?.message || "Could not send"),
     });
 
-    const ready = subject && (scope === "class" ? classId : studentId) && (type !== "Results" || examId);
+    const ready = subject && (scope === "class" ? classId : studentId) && (type !== "Results" || (kind === "year" ? !!yearlyInfo?.allowed : !!examId));
 
     return (
         <div className="flex-1 bg-[#F8FAFC] min-h-screen p-6">
@@ -151,6 +153,18 @@ export default function ParentMessaging() {
                 {/* Results: term → exam to attach, how it goes out */}
                 {type === "Results" && (
                     <div className="space-y-4">
+                        <div className="flex gap-2">
+                            <button onClick={() => setKind("exam")} className={`h-10 px-4 rounded-xl text-sm font-bold ${kind === "exam" ? "bg-[#5C67F2] text-white" : "bg-slate-50 text-slate-600"}`}>Exam result</button>
+                            <button onClick={() => yearlyInfo?.allowed && setKind("year")} disabled={!yearlyInfo?.allowed} title={yearlyInfo?.allowed ? "" : yearlyInfo?.reason} className={`h-10 px-4 rounded-xl text-sm font-bold ${kind === "year" ? "bg-[#5C67F2] text-white" : "bg-slate-50 text-slate-600"} disabled:opacity-50 disabled:cursor-not-allowed`}>Whole-year report</button>
+                        </div>
+                        {kind === "year" ? (
+                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-3 text-sm text-slate-600">
+                                <b className="text-slate-800">{yearlyInfo?.year} annual report</b> — each parent gets their child's Term 1, Term 2 and Term 3 results side by side, with the year average.
+                            </div>
+                        ) : !yearlyInfo?.allowed && (
+                            <p className="text-[11px] text-slate-400 -mt-2">The whole-year report becomes available in Term 3.</p>
+                        )}
+                        {kind === "exam" && (<>
                         <div>
                             <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Term</label>
                             {canChoose ? (
@@ -173,6 +187,7 @@ export default function ParentMessaging() {
                             </select>
                             <p className="text-[11px] text-slate-400 mt-1">{exams.length ? "Each parent's message will include their child's results for this exam." : "No exams in this term yet."}</p>
                         </div>
+                        </>)}
                         <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 space-y-2.5">
                             <label className="flex items-start gap-2 text-sm font-bold text-slate-600">
                                 <input type="checkbox" className="mt-1" checked={includeLink} onChange={e => setIncludeLink(e.target.checked)} />

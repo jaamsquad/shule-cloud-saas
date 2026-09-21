@@ -5,6 +5,7 @@ import { formatExamName } from '../lib/examName';
 import { resolveScope } from '../lib/dataScope';
 import { loadTerms, pickCurrent, termOption, TermInfo } from '../modules/cbc/cbcTerm';
 import { resultUrl, resultSnapshot, resultText } from '../lib/resultLink';
+import { yearlyStatus, yearlyFor, yearlyText } from '../lib/yearlyReport';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -50,7 +51,8 @@ router.get('/messaging/exams', async (req: Request, res: Response) => {
     try {
         const ts = await termScope(req);
         const exams = (await db(req).collection('exams').find({}).sort({ createdAt: -1 }).limit(1000).toArray().catch(() => [])).filter(ts.inScope);
-        res.json({ terms: ts.terms.map(termOption), current: ts.current ? termOption(ts.current) : null, canChoose: ts.isAdmin, exams });
+        const yearly = await yearlyStatus(db(req), ts.sel?.year);   // whole-year report: Term 3 only
+        res.json({ terms: ts.terms.map(termOption), current: ts.current ? termOption(ts.current) : null, canChoose: ts.isAdmin, exams, yearly });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -86,7 +88,13 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
         if (!TYPES.includes(type)) return res.status(400).json({ message: 'Invalid message type.' });
         if (!subject) return res.status(400).json({ message: 'Subject is required.' });
         let examDoc: any = null;
-        if (type === 'Results') {
+        const yearly = type === 'Results' && req.body?.yearly === true;
+        let yearKey = '';
+        if (yearly) {
+            const st = await yearlyStatus(database, String(req.body?.year || ''));
+            if (!st.allowed) return res.status(403).json({ message: st.reason });
+            yearKey = st.year;
+        } else if (type === 'Results') {
             if (!examId) return res.status(400).json({ message: 'Choose the exam to attach.' });
             examDoc = await database.collection('exams').findOne({ _id: new ObjectId(String(examId)) }).catch(() => null);
             if (!examDoc) return res.status(404).json({ message: 'Exam not found.' });
@@ -116,6 +124,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             recipients = list;
         }
         if (!recipients.length) return res.status(400).json({ message: 'No recipients found.' });
+        const yearlyMap = yearly ? await yearlyFor(database, recipients, yearKey) : null;
 
         const now = new Date();
         const sendSms = req.body?.sendSms !== false;   // also send an SMS by default
@@ -131,8 +140,15 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
         for (const s of recipients) {
             const sid = String(s._id);
             let attachment: any = null;
-            if (type === 'Results' && examId) attachment = await resultsAttachment(database, sid, examId);
-            const link = attachment && includeLink && slug ? resultUrl(slug, String(examId), sid) : '';
+            if (yearly) {
+                const y = yearlyMap!.get(sid);
+                attachment = y && y.subjects.length ? {
+                    studentName: y.name, examTitle: `${yearKey} Annual Report`, meanPct: Math.round(y.yearAvg || 0),
+                    subjects: y.subjects.map(x => ({ name: x.name, marks: Math.round(x.avg || 0), outOf: 100, pct: Math.round(x.avg || 0) })),
+                    yearly: { year: yearKey, termOverall: y.termOverall, yearAvg: y.yearAvg, yearGrade: y.yearGrade },
+                } : null;
+            } else if (type === 'Results' && examId) attachment = await resultsAttachment(database, sid, examId);
+            const link = attachment && includeLink && slug ? resultUrl(slug, yearly ? `Y${yearKey}` : String(examId), sid) : '';
             if (attachment && link) attachment.link = link;
             docs.push({
                 studentId: sid, studentName: s.studentName || s.name, stream: s.stream || s.streamName || '',
@@ -146,7 +162,10 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                     const childName = s.studentName || s.name || 'Your child';
                     let text = `${subject}${body ? ` — ${body}` : ''}`;
                     // Results SMS leads with the student's name so the parent knows whose marks these are.
-                    if (attachment) text = `${childName} — ${attachment.examTitle}: ${attachment.subjects.map((x: any) => `${x.name} ${x.marks}/${x.outOf}`).join(', ')}. Mean ${attachment.meanPct}%.${link ? ` View online: ${link}` : ''}`;
+                    if (attachment && attachment.yearly) {
+                        const yo = attachment.yearly.termOverall as (number | null)[];
+                        text = `${childName} — ${yearKey} annual report: Term 1 ${yo[0] ?? '-'}%, Term 2 ${yo[1] ?? '-'}%, Term 3 ${yo[2] ?? '-'}%. Year average ${attachment.yearly.yearAvg ?? '-'}% (${attachment.yearly.yearGrade}).${link ? ` View online: ${link}` : ''}`;
+                    } else if (attachment) text = `${childName} — ${attachment.examTitle}: ${attachment.subjects.map((x: any) => `${x.name} ${x.marks}/${x.outOf}`).join(', ')}. Mean ${attachment.meanPct}%.${link ? ` View online: ${link}` : ''}`;
                     smsTargets.push({ phone, text });
                 }
             }
@@ -179,6 +198,25 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                 const to = await parentEmailOf(database, st);
                 if (!to) { emailSkipped++; return; }
                 try {
+                    if (yearly) {
+                        const y = yearlyMap!.get(String(st._id));
+                        if (!y || !y.subjects.length) { emailSkipped++; return; }
+                        const greetingY = `Dear Parent/Guardian of ${y.name},`;
+                        if (emailMode === 'text') {
+                            const text = `${greetingY}\n\n${note}${yearlyText(y)}\n${link ? `\nView the full report online:\n${link}\n` : ''}\nRegards,\n${schoolName || 'The School'}`;
+                            await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
+                        } else {
+                            const bands = ((grading?.grades || []) as any[]).map(b => ({ grade: String(b.grade || ''), lo: Number(b.from ?? 0), hi: Number(b.upto ?? 100) })).filter(b => b.grade);
+                            const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.yearlyDocumentHtml([{ school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, ...y, bands }]));
+                            const cell = (v: number | null) => `<td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center;font-size:13px">${v == null ? '—' : v + '%'}</td>`;
+                            const table = `<table style="width:100%;border-collapse:collapse;margin:12px 0"><tr>${['Subject', 'Term 1', 'Term 2', 'Term 3', 'Year'].map(h => `<th style="background:#33357f;color:#fff;padding:7px 8px;font-size:11px;text-transform:uppercase">${h}</th>`).join('')}</tr>${y.subjects.map(x => `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-size:13px">${escHtml(x.name)}</td>${cell(x.t[0])}${cell(x.t[1])}${cell(x.t[2])}${cell(x.avg)}</tr>`).join('')}<tr style="font-weight:700"><td style="padding:6px 8px;border:1px solid #e5e7eb">Overall</td>${cell(y.termOverall[0])}${cell(y.termOverall[1])}${cell(y.termOverall[2])}${cell(y.yearAvg)}</tr></table>`;
+                            const introY = `<p style="font-family:Arial,sans-serif;font-size:14px">${escHtml(greetingY)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${escHtml(body)}</p>` : ''}<p style="font-family:Arial,sans-serif;font-size:14px"><b>${yearKey} annual report</b> — Term 1, Term 2, Term 3 and the year average. The PDF is attached.</p>`;
+                            const outroY = link ? `<p style="font-family:Arial,sans-serif;font-size:13px">View online: <a href="${escHtml(link)}">${escHtml(link)}</a></p>` : '';
+                            await sendEmail(database, { to: [to], subject, html: introY + table + outroY, attachments: [{ filename: `Annual-Report-${yearKey}-${String(y.regNo || y.name).replace(/[^\w-]/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }] });
+                        }
+                        emailSent++;
+                        return;
+                    }
                     const snap = await resultSnapshot(database, String(examId), String(st._id));
                     if (!snap) { emailSkipped++; return; }
                     const greeting = `Dear Parent/Guardian of ${snap.studentName},`;

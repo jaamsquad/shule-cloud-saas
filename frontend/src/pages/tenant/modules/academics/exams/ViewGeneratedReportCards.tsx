@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 interface GeneratedCard {
     _id: string;
@@ -155,7 +156,7 @@ export default function ViewGeneratedReportCards() {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${card.className}-${card.mainExamName}-${card.term}.pdf`);
+            link.setAttribute('download', `${card.className}-${card.mainExamName}-${card.term}.pdf`);   // (yearly reports download the same way)
             document.body.appendChild(link);
             link.click();
             link.parentNode?.removeChild(link);
@@ -169,7 +170,14 @@ export default function ViewGeneratedReportCards() {
         }
     };
 
-    const handleViewCard = (card: GeneratedCard) => {
+    const handleViewCard = async (card: GeneratedCard) => {
+        if ((card as any).kind === "yearly") {   // yearly report: Term 1 | Term 2 | Term 3 | year average
+            try {
+                const r = await api.get(`/report_card_generations/${card._id}/yearly-html`);
+                void outputHtmlDoc(`${card.mainExamName || "Annual report"} — ${card.className}`, r.data.html, { fileName: `Annual-report-${card.className}-${card.academicYear}` });
+            } catch (e: any) { toast.error(e.response?.data?.message || "Could not open the yearly report"); }
+            return;
+        }
         const classIdParam = card.classV2Id || card.classId;
         const params = new URLSearchParams({
             examId: card.mainExamId,

@@ -172,6 +172,46 @@ export function reportCardHtml(d: ReportCardData): string {
     </style></head><body>${body}</body></html>`;
 }
 
+// ── Yearly (annual) report: Term 1 | Term 2 | Term 3 | Year average, in the school's chosen colours ──
+export interface YearlyData {
+    school?: string; logo?: string | null; address?: string; template?: string;
+    year: string; name: string; regNo: string; className: string;
+    subjects: { name: string; t: (number | null)[]; avg: number | null; grade: string }[];
+    termOverall: (number | null)[]; yearAvg: number | null; yearGrade: string;
+    bands?: { grade: string; lo: number; hi: number }[];
+}
+const YEAR_LOOK: Record<string, { head: string; text: string }> = {
+    annual_exam: { head: '#33357f', text: '#fff' }, progress_report: { head: '#4a6fa5', text: '#fff' }, class_test: { head: '#d9d9d9', text: '#000' },
+    term_end: { head: '#17a2b8', text: '#000' }, scholarsheet: { head: '#111827', text: '#fff' },
+};
+export function yearlyPageHtml(d: YearlyData): string {
+    const look = YEAR_LOOK[String(d.template || '')] || YEAR_LOOK.annual_exam;
+    const th = (t: string, left = false) => `<th style="background:${look.head};color:${look.text};padding:8px;border:1px solid #222;font-size:12px;text-align:${left ? 'left' : 'center'}">${t}</th>`;
+    const td = (t: any, o: { left?: boolean; bold?: boolean; bg?: string } = {}) => `<td style="padding:7px 8px;border:1px solid #222;font-size:12px;text-align:${o.left ? 'left' : 'center'};${o.bold ? 'font-weight:700;' : ''}${o.bg ? `background:${o.bg};` : ''}">${t}</td>`;
+    const pc = (v: number | null) => (v == null ? '—' : `${v}%`);
+    const rows = d.subjects.map((x, i) => `<tr style="background:${i % 2 ? '#fff' : '#f8f8ff'}">${td(i + 1)}${td(esc(x.name), { left: true })}${td(pc(x.t[0]))}${td(pc(x.t[1]))}${td(pc(x.t[2]))}${td(pc(x.avg), { bold: true, bg: '#eef2ff' })}${td(esc(x.grade), { bold: true })}</tr>`).join('')
+        || `<tr><td colspan="7" style="padding:14px;text-align:center;border:1px solid #222;color:#9ca3af">No results recorded for this year yet.</td></tr>`;
+    const bounds = (d.bands || []).map(b => `${esc(b.grade)} : ${b.hi} - ${b.lo}`).join(', ');
+    const lines = '<div style="border-bottom:1px solid #94a3b8;height:20px"></div>'.repeat(3);
+    return `<div style="page-break-after:always">
+      <div style="display:flex;align-items:center;gap:16px;padding-bottom:10px;border-bottom:1.5px solid #cbd5e1">${d.logo ? `<img src="${esc(d.logo)}" style="height:70px;width:auto;object-fit:contain"/>` : ''}
+        <div><div style="font-size:25px;font-weight:800;line-height:1.15">${esc(d.school || 'School')}</div>${d.address ? `<div style="font-size:13px;margin-top:5px;color:#222">${esc(d.address)}</div>` : ''}</div></div>
+      <div style="text-align:center;font-size:22px;font-weight:700;text-transform:uppercase;margin:14px 0 6px">${esc(d.year)} Annual Report</div>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0;table-layout:fixed"><tr><td style="padding:4px 10px;font-size:13px"><b>Student Name :</b>&nbsp;&nbsp;${esc(d.name)}</td><td style="padding:4px 10px;font-size:13px"><b>Adm No :</b>&nbsp;&nbsp;${esc(d.regNo || '—')}</td></tr>
+        <tr><td style="padding:4px 10px;font-size:13px"><b>Class :</b>&nbsp;&nbsp;${esc(d.className)}</td><td style="padding:4px 10px;font-size:13px"><b>Academic Year :</b>&nbsp;&nbsp;${esc(d.year)}</td></tr></table>
+      <table style="width:100%;border-collapse:collapse"><thead><tr>${th('#')}${th('Subject', true)}${th('Term 1')}${th('Term 2')}${th('Term 3')}${th('Year Average')}${th('Grade')}</tr></thead><tbody>${rows}
+        <tr style="font-weight:700"><td colspan="2" style="padding:8px;border:1px solid #222;text-align:center;font-size:12px">OVERALL</td>${td(pc(d.termOverall[0]), { bold: true })}${td(pc(d.termOverall[1]), { bold: true })}${td(pc(d.termOverall[2]), { bold: true })}${td(pc(d.yearAvg), { bold: true, bg: '#e0e7ff' })}${td(esc(d.yearGrade), { bold: true })}</tr></tbody></table>
+      <div style="border:1px solid #222;margin-top:14px;page-break-inside:avoid"><div style="background:${look.head};color:${look.text};font-weight:700;font-size:13px;padding:5px 9px">Class Teacher's Comments :</div><div style="padding:2px 8px 6px">${lines}</div></div>
+      ${bounds ? `<div style="border:1px solid #222;margin-top:10px;page-break-inside:avoid"><div style="background:${look.head};color:${look.text};font-weight:700;font-size:13px;padding:5px 9px">Grade Boundaries :</div><div style="font-size:12px;padding:6px 9px">${bounds}</div></div>` : ''}
+      <div style="display:flex;gap:22px;margin-top:38px;page-break-inside:avoid">${['Class Teacher', 'Principal', 'Parent / Guardian'].map(x => `<div style="flex:1;text-align:center;font-size:12px"><div style="height:32px"></div><div style="border-top:1.5px solid #111;padding-top:4px">${x}</div></div>`).join('')}</div>
+    </div>`;
+}
+/** One document with a page per learner. */
+export function yearlyDocumentHtml(pages: YearlyData[]): string {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{color:#111;font-size:13px;padding:6px 10px}@page{size:A4;margin:12mm}</style></head><body>${pages.map(yearlyPageHtml).join('')}</body></html>`;
+}
+
 // Inline-styled, email-client-safe HTML report (shown in the email body).
 const EMAIL_HEAD: Record<string, string> = { annual_exam: '#33357f', progress_report: '#4a6fa5', class_test: '#4b5563', term_end: '#17a2b8', scholarsheet: '#111827' };
 

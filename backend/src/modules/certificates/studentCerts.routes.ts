@@ -19,6 +19,7 @@ import { resolveScope, scopeForCollection, mergeFilter } from '../../lib/dataSco
 import { canonicalStatus } from '../../lib/studentStatus';
 import { maskName, maskRef, signToken, readToken, schoolFromSlug, schoolBrand, publicAppUrl } from '../../lib/verifyDocs';
 import { findExamByCode, sigMatches, resultSnapshot } from '../../lib/resultLink';
+import { yearlyFor, isYearlyKey } from '../../lib/yearlyReport';
 
 export const CERT_TYPES: Record<string, string> = {
     graduation: 'Graduation Certificate', recommendation: 'Letter of Recommendation', leaving: 'School Leaving Certificate',
@@ -148,6 +149,14 @@ publicVerifyRouter.get('/result/:school/:examCode/:resultId/:studentId', async (
     try {
         const found = await schoolFromSlug(req.params.school);
         const studentId = str(req.params.studentId, 30);
+        const code = str(req.params.examCode, 8).toUpperCase();
+        if (isYearlyKey(code)) {   // whole-year report: Y2027
+            const okY = !!found && /^[a-f0-9]{24}$/i.test(studentId) && sigMatches(String(found.tenant.subdomain).toLowerCase(), code, studentId, str(req.params.resultId, 40));
+            const stu: any = okY ? await found!.db.collection('students').findOne({ _id: new ObjectId(studentId) }).catch(() => null) : null;
+            const y = stu ? (await yearlyFor(found!.db, [stu], code.slice(1))).get(studentId) : null;
+            if (!y || !y.subjects.length) return res.status(404).json({ valid: false, message: 'This result link is not valid, or the report is not available yet.' });
+            return res.json({ valid: true, school: schoolBrand(found!.tenant), yearly: y });
+        }
         const exam = found ? await findExamByCode(found.db, req.params.examCode) : null;
         const ok = !!found && !!exam && /^[a-f0-9]{24}$/i.test(studentId) && sigMatches(String(found.tenant.subdomain).toLowerCase(), String(exam._id), studentId, str(req.params.resultId, 40));
         const snap = ok ? await resultSnapshot(found!.db, String(exam._id), studentId) : null;

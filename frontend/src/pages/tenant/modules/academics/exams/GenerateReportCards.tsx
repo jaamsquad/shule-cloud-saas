@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 const INTERNAL_TYPES = new Set(["cat", "assignment", "mid term", "midterm", "opening", "opener", "opening / opener", "mock", "homework", "quiz", "internal"]);
 const isInternal = (e: any) => {
@@ -25,6 +26,8 @@ const isInternal = (e: any) => {
     return INTERNAL_TYPES.has(t) || Array.from(INTERNAL_TYPES).some(it => t.includes(it));
 };
 
+// "Whole Year" in the Term list = the yearly report (Term 1 | Term 2 | Term 3 | year average). Term 3 only.
+const YEAR_TERM = "__YEAR__";
 const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
 export default function GenerateReportCards() {
@@ -52,6 +55,7 @@ export default function GenerateReportCards() {
 
     const [generating, setGenerating] = useState(false);
     const [genSummary, setGenSummary] = useState<{ count: number; className: string } | null>(null);
+    const isYearly = selectedTerm === YEAR_TERM;
 
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: classes = [] } = useQuery<any[]>({
@@ -83,7 +87,13 @@ export default function GenerateReportCards() {
         queryFn: async () => (await api.get("/report_card_generations")).data || [],
     });
 
-    // ── Derived ────────────────────────────────────────────────────────────────
+    // Is the yearly report allowed yet for the chosen year? (server rule: Term 3 of that year, or later)
+    const { data: yearly } = useQuery<any>({
+        queryKey: ["yearly_status", selectedYear],
+        queryFn: async () => (await api.get("/reports/yearly/status", { params: selectedYear ? { year: selectedYear } : {} })).data,
+    });
+
+    // ── Derived ────────────────────────────────────────────────────────────
     const activeTerm = v2Terms.find((t: any) => t.isActive);
     const activeYear = v2Years.find((y: any) => y.isActive);
     const currentTermLabel = activeTerm ? activeTerm.name : "";
@@ -109,7 +119,7 @@ export default function GenerateReportCards() {
         const targetName = v2c ? norm(v2c.name || v2c.levelName || "") : "";
         const selStream = streamId ? allStreams.find((s: any) => String(s._id) === streamId) : null;
         const streamName = selStream ? norm(selStream.name) : "";
-        const termLabel = norm(selectedTerm || endTermExam?.term || currentTermLabel);
+        const termLabel = norm(isYearly ? "Whole Year" : (selectedTerm || endTermExam?.term || currentTermLabel));
         const yearLabel = String(selectedYear || endTermExam?.academicYear || activeYear?.year || "");
         return generations.find((g: any) => {
             const cn = norm(g.className);
@@ -125,7 +135,7 @@ export default function GenerateReportCards() {
             if (yearLabel && String(g.academicYear) !== yearLabel) return false;
             return true;
         }) || null;
-    }, [classId, streamId, selectedTerm, selectedYear, endTermExam, currentTermLabel, activeYear, generations, v2Classes, allStreams]);
+    }, [classId, streamId, selectedTerm, selectedYear, endTermExam, currentTermLabel, activeYear, generations, v2Classes, allStreams, isYearly]);
 
     // Classes shown in step 2 — match the v2 class picker to the legacy /academics/classes rows
     const matchLegacyClasses = (v2ClassId: string) => {
@@ -143,6 +153,10 @@ export default function GenerateReportCards() {
         const className = cls.levelName || cls.name;
         const matchedV2Class = v2Classes.find((c: any) =>
             norm(c.name) === norm(className) || norm(c.levelName) === norm(className) || norm(c.className) === norm(className));
+        if (isYearly) return api.post("/report_card_generations", {
+            kind: "yearly", classId: cls._id, classV2Id: matchedV2Class?._id || null, className,
+            academicYear: selectedYear || yearly?.year || activeYear?.year || "", streamId: streamMeta.id, streamName: streamMeta.name,
+        });
         return api.post("/report_card_generations", {
             classId: cls._id,
             classV2Id: matchedV2Class?._id || null,
@@ -208,7 +222,8 @@ export default function GenerateReportCards() {
     });
 
     const handleGenerate = () => {
-        if (!endTermExamId) { toast.error("Select an End Term exam first"); return; }
+        if (isYearly) { if (!yearly?.allowed) { toast.error(yearly?.reason || "The yearly report is only available in Term 3."); return; } }
+        else if (!endTermExamId) { toast.error("Select an End Term exam first"); return; }
         if (!classId) { toast.error("Choose a class"); return; }
         setGenerating(true);
         generateMut.mutate();
@@ -219,7 +234,14 @@ export default function GenerateReportCards() {
     };
 
     // Open the actual Report Form (scholar sheet) for a generated record
-    const handleViewCard = (g: any) => {
+    const handleViewCard = async (g: any) => {
+        if (g.kind === "yearly") {   // yearly report: Term 1 | Term 2 | Term 3 | year average, one page per learner
+            try {
+                const r = await api.get(`/report_card_generations/${g._id}/yearly-html`);
+                void outputHtmlDoc(`${g.mainExamName || "Annual report"} — ${g.className}`, r.data.html, { fileName: `Annual-report-${g.className}-${g.academicYear}` });
+            } catch (e: any) { toast.error(e.response?.data?.message || "Could not open the yearly report"); }
+            return;
+        }
         const classIdParam = g.classV2Id || g.classId;
         const params = new URLSearchParams({
             examId: g.mainExamId,
@@ -256,12 +278,12 @@ export default function GenerateReportCards() {
         const bs = browseStreamId ? allStreams.find((s: any) => String(s._id) === browseStreamId) : null;
         return generations.filter((g: any) => {
             if (selectedYear && String(g.academicYear) !== selectedYear) return false;
-            if (selectedTerm && norm(g.term) !== norm(selectedTerm)) return false;
+            if (selectedTerm && norm(g.term) !== norm(isYearly ? "Whole Year" : selectedTerm)) return false;
             if (bc && !norm(g.className).includes(bcName) && !bcName.includes(norm(g.className))) return false;
             if (bs && String(g.streamId) !== String(bs._id)) return false;
             return true;
         });
-    }, [browseSubmitted, browseClassId, browseStreamId, generations, v2Classes, allStreams, selectedYear, selectedTerm]);
+    }, [browseSubmitted, browseClassId, browseStreamId, generations, v2Classes, allStreams, selectedYear, selectedTerm, isYearly]);
 
     // ── Step indicator ───────────────────────────────────────────────────────────
     const steps = [
@@ -272,7 +294,7 @@ export default function GenerateReportCards() {
 
     // Continue only when every required field is chosen: Year, Term, and an End Term exam.
     // (CATs / Mid Term stay optional.)
-    const canContinueStep1 = !!selectedYear && !!selectedTerm && !!endTermExamId;
+    const canContinueStep1 = isYearly ? (!!selectedYear && !!yearly?.allowed) : (!!selectedYear && !!selectedTerm && !!endTermExamId);
 
     // ── UI ───────────────────────────────────────────────────────────────────────
     return (
@@ -360,6 +382,7 @@ export default function GenerateReportCards() {
                                     className="mt-1.5 w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#5C67F2]">
                                     <option value="">— Choose Term —</option>
                                     {v2Terms.map((t: any) => <option key={t._id || t.name} value={t.name}>{t.name}</option>)}
+                                    <option value={YEAR_TERM} disabled={!yearly?.allowed}>Whole Year — yearly report{yearly?.allowed ? "" : " (available in Term 3)"}</option>
                                 </select>
                             </div>
                         </div>
@@ -371,7 +394,13 @@ export default function GenerateReportCards() {
                                 <span className="text-[10px] font-bold text-slate-400">in {selectedTerm || "the selected term"}</span>
                             </div>
 
-                            {!selectedYear || !selectedTerm ? (
+                            {isYearly ? (
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-5 text-sm text-slate-700">
+                                    <p className="font-black text-slate-800 mb-1">Yearly report — {selectedYear || yearly?.year}</p>
+                                    <p>Every subject is shown for <b>Term 1</b>, <b>Term 2</b> and <b>Term 3</b> side by side, with the <b>average for the whole year</b>. Each term's result comes from that term's generated report cards (or its exams if none were generated).</p>
+                                    {!yearly?.allowed && <p className="mt-2 text-rose-600 font-bold">{yearly?.reason}</p>}
+                                </div>
+                            ) : !selectedYear || !selectedTerm ? (
                                 <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl py-10 flex flex-col items-center gap-2 text-slate-400">
                                     <AlertCircle className="w-8 h-8" />
                                     <p className="text-xs font-bold">Choose an Academic Year and Term above to list exams.</p>
@@ -446,7 +475,7 @@ export default function GenerateReportCards() {
                             {!canContinueStep1 && (
                                 <p className="text-[11px] font-bold text-rose-500 flex items-center gap-1.5">
                                     <AlertCircle className="w-3.5 h-3.5" />
-                                    Choose {[!selectedYear && "Academic Year", !selectedTerm && "Term", !endTermExamId && "an End Term exam"].filter(Boolean).join(", ")} to continue
+                                    Choose {[!selectedYear && "Academic Year", !selectedTerm && "Term", !isYearly && !endTermExamId && "an End Term exam", isYearly && !yearly?.allowed && "a year that has reached Term 3"].filter(Boolean).join(", ")} to continue
                                 </p>
                             )}
                             <button
@@ -466,8 +495,8 @@ export default function GenerateReportCards() {
                         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-4 py-3 mb-8">
                             <p className="text-[10px] font-black text-[#5C67F2] uppercase tracking-wide mb-1">Selected Exams</p>
                             <p className="text-sm font-bold text-slate-800">
-                                {endTermExam?.examName || endTermExam?.name}
-                                {internalExamIds.length > 0 && (
+                                {isYearly ? `Whole-year report ${selectedYear} — Term 1, Term 2, Term 3 and year average` : (endTermExam?.examName || endTermExam?.name)}
+                                {!isYearly && internalExamIds.length > 0 && (
                                     <span className="text-amber-700"> + {internalExamIds.length} CAT/Mid Term</span>
                                 )}
                             </p>
