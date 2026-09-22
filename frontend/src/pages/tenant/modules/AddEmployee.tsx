@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Home, RefreshCcw, Check, Calendar, Loader2, Upload, Download, X, AlertCircle, CheckCircle2, FileSpreadsheet, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import { Home, RefreshCcw, Check, Calendar, Loader2, Upload, Download, X, AlertCircle, CheckCircle2, FileSpreadsheet, ChevronDown, ChevronUp, ArrowLeft, Search } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -100,7 +100,8 @@ export default function AddEmployee() {
     const toggleRole = (r: string) =>
         setFormData(prev => ({ ...prev, roles: prev.roles.includes(r) ? prev.roles.filter(x => x !== r) : [...prev.roles, r] }));
 
-    // ── KRA PIN lookup (Settings → Integrations → KRA PIN Checker) ─────────
+    // ── KRA PIN lookup modal (Settings → Integrations → KRA PIN Checker) ───
+    const [kraOpen, setKraOpen] = useState(false);
     const [kraQuery, setKraQuery] = useState("");
     const [kraResult, setKraResult] = useState<{ pin: string; name: string; type: string; status: string; mode: string } | null>(null);
     const kraLookup = useMutation({
@@ -110,9 +111,14 @@ export default function AddEmployee() {
     });
     const applyKraResult = () => {
         if (!kraResult) return;
-        setFormData(prev => ({ ...prev, kraPin: kraResult.pin, ...(kraResult.mode === "id" && !prev.nationalId ? { nationalId: kraQuery.trim() } : {}) }));
-        toast.success("KRA PIN filled in below");
-        setKraResult(null); setKraQuery("");
+        setFormData(prev => ({
+            ...prev,
+            kraPin: kraResult.pin,
+            employeeName: kraResult.name || prev.employeeName,
+            ...(kraResult.mode === "id" ? { nationalId: kraQuery.trim() } : {}),
+        }));
+        toast.success("Filled in from KRA — full name, KRA PIN and National ID");
+        setKraOpen(false); setKraResult(null); setKraQuery("");
     };
 
     // ── Import state ──────────────────────────────────────────────────────
@@ -555,28 +561,12 @@ export default function AddEmployee() {
 
                             {/* 2. Statutory & Bank */}
                             <div>
-                                <SectionHeader num="2" title="Statutory & Bank Accounts Details" />
-
-                                {/* Look up the KRA PIN by National ID or PIN, instead of typing it by hand */}
-                                <div className="mb-6 p-4 rounded-xl bg-emerald-50/60 border border-emerald-100 flex flex-col sm:flex-row sm:items-end gap-3">
-                                    <div className="flex-1">
-                                        <label className="block text-xs font-bold text-emerald-800 mb-1.5">Look up from KRA — National ID or KRA PIN</label>
-                                        <input value={kraQuery} onChange={e => { setKraQuery(e.target.value); setKraResult(null); }} placeholder="e.g. 30112233 or A012345678B"
-                                            className="w-full h-10 px-3 rounded-lg border border-emerald-200 bg-white text-sm focus:outline-none focus:border-emerald-500" />
-                                    </div>
-                                    <button type="button" onClick={() => kraLookup.mutate()} disabled={!kraQuery.trim() || kraLookup.isPending}
-                                        className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 disabled:opacity-50">
-                                        {kraLookup.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Check KRA"}
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <SectionHeader num="2" title="Statutory & Bank Accounts Details" />
+                                    <button type="button" onClick={() => { setKraOpen(true); setKraResult(null); setKraQuery(""); }}
+                                        className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wide flex items-center gap-2 mb-2">
+                                        <Search className="w-3.5 h-3.5" /> Look up from KRA
                                     </button>
-                                    {kraResult && (
-                                        <div className="w-full sm:w-auto flex items-center gap-3 bg-white rounded-lg border border-emerald-200 px-3 py-2">
-                                            <div className="text-xs">
-                                                <div className="font-bold text-slate-800">{kraResult.name || "—"}</div>
-                                                <div className="text-slate-500">PIN {kraResult.pin}{kraResult.status ? ` · ${kraResult.status}` : ""}{kraResult.type ? ` · ${kraResult.type}` : ""}</div>
-                                            </div>
-                                            <button type="button" onClick={applyKraResult} className="h-8 px-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold whitespace-nowrap">Use this PIN</button>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
@@ -711,6 +701,45 @@ export default function AddEmployee() {
                     </div>
                 )}
             </div>
+
+            {/* Look up from KRA — National ID or KRA PIN */}
+            {kraOpen && (
+                <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <h3 className="text-base font-semibold text-slate-800">Look up from KRA</h3>
+                            <button onClick={() => setKraOpen(false)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-1.5">National ID or KRA PIN</label>
+                                <div className="flex gap-2">
+                                    <input autoFocus value={kraQuery} onChange={e => { setKraQuery(e.target.value); setKraResult(null); }}
+                                        onKeyDown={e => { if (e.key === "Enter" && kraQuery.trim() && !kraLookup.isPending) kraLookup.mutate(); }}
+                                        placeholder="e.g. 30112233 or A012345678B" className="flex-1 h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-emerald-500" />
+                                    <button type="button" onClick={() => kraLookup.mutate()} disabled={!kraQuery.trim() || kraLookup.isPending}
+                                        className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wide flex items-center gap-2 disabled:opacity-50 whitespace-nowrap">
+                                        {kraLookup.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Check KRA"}
+                                    </button>
+                                </div>
+                            </div>
+                            {kraResult && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-1.5">
+                                    <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Found on KRA</div>
+                                    <div className="text-sm font-bold text-slate-800">{kraResult.name || "—"}</div>
+                                    <div className="text-xs text-slate-500">KRA PIN: <b className="text-slate-700">{kraResult.pin}</b></div>
+                                    {kraResult.mode === "id" && <div className="text-xs text-slate-500">National ID: <b className="text-slate-700">{kraQuery.trim()}</b></div>}
+                                    {(kraResult.status || kraResult.type) && <div className="text-xs text-slate-500">{[kraResult.status, kraResult.type].filter(Boolean).join(" · ")}</div>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+                            <button onClick={() => setKraOpen(false)} className="h-9 px-4 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onClick={applyKraResult} disabled={!kraResult} className="h-9 px-4 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold disabled:opacity-50">Use this info</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
