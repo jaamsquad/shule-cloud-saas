@@ -18,16 +18,17 @@ export default function FeeStructure() {
         queryFn: async () => { const r = await api.get("/academics/classes"); return r.data; },
     });
 
-    const { data: periods = [] } = useQuery({
-        queryKey: ["periods"],
-        queryFn: async () => {
-            const r = await api.get("/academics/periods");
-            return r.data || [];
-        },
+    const { data: academicYears = [] } = useQuery<any[]>({
+        queryKey: ["v2_academic_years_fs"],
+        queryFn: async () => (await api.get("/v2/academic-years")).data || [],
     });
-
-    const currentPeriod = periods.find((p: any) => p.isCurrent);
-    const uniquePeriodLabels = Array.from(new Set(periods.map((p: any) => p.label)));
+    const { data: terms = [] } = useQuery<any[]>({
+        queryKey: ["v2_terms_fs"],
+        queryFn: async () => (await api.get("/v2/terms")).data || [],
+    });
+    const activeYear = academicYears.find((y: any) => y.isActive) || academicYears[0];
+    const termsOfYear = (yearId: string) => terms.filter((t: any) => String(t.academicYearId) === String(yearId));
+    const activeTerm = (yearId: string) => termsOfYear(yearId).find((t: any) => t.isActive) || termsOfYear(yearId)[0];
 
     // Dynamic extraction of unique fee particulars from all category configurations
     const { data: rawParticulars = [], data: particularsData = [] } = useQuery({
@@ -58,9 +59,10 @@ export default function FeeStructure() {
     };
 
     const [formData, setFormData] = useState<any>({
-        className: "",
-        term: "Term 1",
-        year: new Date().getFullYear().toString(),
+        name: "",
+        classIds: [] as string[],
+        academic_year_id: "",
+        semester_id: "",
         amounts: {}
     });
 
@@ -75,31 +77,32 @@ export default function FeeStructure() {
     };
 
     useEffect(() => {
-        if (currentPeriod) {
-            setFormData((prev: any) => ({
-                ...prev,
-                term: currentPeriod.label || prev.term,
-                year: currentPeriod.academicYear || prev.year
-            }));
+        if (activeYear && !formData.academic_year_id) {
+            const t = activeTerm(activeYear._id);
+            setFormData((prev: any) => ({ ...prev, academic_year_id: String(activeYear._id), semester_id: t ? String(t._id) : prev.semester_id }));
         }
-    }, [currentPeriod]);
+    }, [activeYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleOpenCreateModal = () => {
         setEditingId(null);
-        setFormData({
-            className: "",
-            term: currentPeriod?.label || "Term 1",
-            year: currentPeriod?.academicYear || new Date().getFullYear().toString(),
-            amounts: {}
-        });
+        const t = activeYear ? activeTerm(activeYear._id) : null;
+        setFormData({ name: "", classIds: [], academic_year_id: activeYear ? String(activeYear._id) : "", semester_id: t ? String(t._id) : "", amounts: {} });
         setView("form");
     };
 
     const createMutation = useMutation({
         mutationFn: async (newData: any) => {
             const total = Object.values(newData.amounts).reduce((acc: number, curr: any) => acc + (parseFloat(curr as string) || 0), 0);
-            const payload = { ...newData, total, status: "Active" };
-            
+            const items = Object.entries(newData.amounts).map(([label, val]) => ({ category: label, amount: parseFloat(val as string) || 0, is_required: true }));
+            const firstClass = classes.find((c: any) => newData.classIds.includes(c._id));
+            const payload = {
+                name: newData.name, class_ids: newData.classIds, academic_year_id: newData.academic_year_id, semester_id: newData.semester_id,
+                items, total, status: "Active",
+                // legacy fields some older screens still read
+                className: firstClass?.name || firstClass?.levelName || "",
+                term: terms.find((t: any) => t._id === newData.semester_id)?.name || "", year: academicYears.find((y: any) => y._id === newData.academic_year_id)?.year || "",
+                amounts: newData.amounts,
+            };
             if (editingId) {
                 return api.patch(`/fee_structures/${editingId}`, payload);
             } else {
@@ -108,17 +111,13 @@ export default function FeeStructure() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["fee_structures"] });
+            queryClient.invalidateQueries({ queryKey: ["fees_overview"] });
             toast.success(editingId ? "Fee structure updated successfully" : "Fee structure created successfully");
             setView("list");
             setEditingId(null);
-            setFormData({ 
-                className: "", 
-                term: currentPeriod?.label || "Term 1", 
-                year: currentPeriod?.academicYear || new Date().getFullYear().toString(), 
-                amounts: {} 
-            });
+            handleOpenCreateModal();
         },
-        onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to save"),
+        onError: (err: any) => toast.error(err?.response?.data?.errors?.[0]?.message || err?.response?.data?.message || "Failed to save"),
     });
 
     const deleteMutation = useMutation({
@@ -129,27 +128,27 @@ export default function FeeStructure() {
         },
     });
 
-    const handleClassSelect = (selectedClass: string) => {
+    const toggleClass = (selectedClass: string) => {
         setFormData((prev: any) => {
+            const has = prev.classIds.includes(selectedClass);
+            const classIds = has ? prev.classIds.filter((c: string) => c !== selectedClass) : [...prev.classIds, selectedClass];
             const updatedAmounts = { ...prev.amounts };
-            
-            // Auto pre-fill tuition fees if configured class-wise
-            rawParticulars.forEach((p: any) => {
-                if (p.classAmounts && p.classAmounts[selectedClass]) {
-                    updatedAmounts[p.label] = p.classAmounts[selectedClass];
-                } else if (p.amount) {
-                    // Fallback to prefix default amount if not already custom set
-                    if (!updatedAmounts[p.label]) {
-                        updatedAmounts[p.label] = p.amount;
+            if (!has) {
+                const cls = classes.find((c: any) => c._id === selectedClass);
+                const label = cls?.name || cls?.levelName || "";
+                // Auto pre-fill tuition fees if configured class-wise
+                rawParticulars.forEach((p: any) => {
+                    if (p.classAmounts && p.classAmounts[label]) {
+                        updatedAmounts[p.label] = p.classAmounts[label];
+                    } else if (p.amount) {
+                        // Fallback to prefix default amount if not already custom set
+                        if (!updatedAmounts[p.label]) {
+                            updatedAmounts[p.label] = p.amount;
+                        }
                     }
-                }
-            });
-
-            return {
-                ...prev,
-                className: selectedClass,
-                amounts: updatedAmounts
-            };
+                });
+            }
+            return { ...prev, classIds, amounts: updatedAmounts };
         });
     };
 
@@ -161,9 +160,9 @@ export default function FeeStructure() {
         if (!matchesTab) return false;
 
         // Search term filtering
-        return s.className?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-               s.term?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-               s.year?.includes(searchTerm);
+        const q = searchTerm.toLowerCase();
+        return !q || s.name?.toLowerCase().includes(q) || s.className?.toLowerCase().includes(q) ||
+               s.term?.toLowerCase().includes(q) || String(s.year ?? "").includes(searchTerm);
     });
 
     if (view === "form") {
@@ -192,17 +191,12 @@ export default function FeeStructure() {
                                 <Layers className="w-4 h-4 text-[#5C67F2]" /> Define tuition and related fees for a specific class term.
                             </p>
                         </div>
-                        <button 
+                        <button
                             type="button"
                             onClick={() => {
                                 setView("list");
                                 setEditingId(null);
-                                setFormData({ 
-                                    className: "", 
-                                    term: currentPeriod?.label || "Term 1", 
-                                    year: currentPeriod?.academicYear || new Date().getFullYear().toString(), 
-                                    amounts: {} 
-                                });
+                                handleOpenCreateModal();
                             }}
                             className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-2xl transition-all transform active:scale-95 text-xs uppercase tracking-widest"
                         >
@@ -213,46 +207,52 @@ export default function FeeStructure() {
                     <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-10 space-y-8">
                         <div className="grid grid-cols-2 gap-6">
                             <div className="relative col-span-2">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Select Class*</div>
-                                <select 
-                                    className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner appearance-none cursor-pointer"
-                                    value={formData.className}
-                                    onChange={(e) => handleClassSelect(e.target.value)}
-                                >
-                                    <option value="">Select Class...</option>
-                                    {classes.map((c: any) => (
-                                        <option key={c._id} value={c.name || c.levelName}>{c.name || c.levelName}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="relative">
-                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Academic Term*</div>
-                                <select 
-                                    className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner appearance-none cursor-pointer"
-                                    value={formData.term}
-                                    onChange={(e) => setFormData({...formData, term: e.target.value})}
-                                >
-                                    {uniquePeriodLabels.length > 0 ? (
-                                        uniquePeriodLabels.map((lbl: any) => (
-                                            <option key={lbl} value={lbl}>{lbl}</option>
-                                        ))
-                                    ) : (
-                                        <>
-                                            <option>Term 1</option>
-                                            <option>Term 2</option>
-                                            <option>Term 3</option>
-                                        </>
-                                    )}
-                                </select>
-                            </div>
-                            <div className="relative">
-                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Year*</div>
-                                <input 
-                                    type="text" 
+                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Structure Name*</div>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Grade 4 Term 2 Fees"
                                     className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner"
-                                    value={formData.year}
-                                    onChange={(e) => setFormData({...formData, year: e.target.value})}
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 />
+                            </div>
+                            <div className="relative col-span-2">
+                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Classes* (pick one or more)</div>
+                                <div className="w-full min-h-12 px-4 py-3 border border-slate-100 rounded-2xl bg-slate-50/50 shadow-inner flex flex-wrap gap-2">
+                                    {classes.length === 0 && <span className="text-[10px] text-slate-400 font-bold uppercase py-1.5">No classes created yet</span>}
+                                    {classes.map((c: any) => {
+                                        const on = formData.classIds.includes(c._id);
+                                        return (
+                                            <button key={c._id} type="button" onClick={() => toggleClass(c._id)}
+                                                className={`px-3 h-8 rounded-full text-[10px] font-black uppercase tracking-wide border transition-all ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>
+                                                {c.name || c.levelName}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="relative">
+                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Academic Year*</div>
+                                <select
+                                    className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner appearance-none cursor-pointer"
+                                    value={formData.academic_year_id}
+                                    onChange={(e) => { const t = activeTerm(e.target.value); setFormData({ ...formData, academic_year_id: e.target.value, semester_id: t ? String(t._id) : "" }); }}
+                                >
+                                    <option value="">Select year…</option>
+                                    {academicYears.map((y: any) => <option key={y._id} value={y._id}>{y.year}{y.isActive ? " (Current)" : ""}</option>)}
+                                </select>
+                            </div>
+                            <div className="relative">
+                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Term*</div>
+                                <select
+                                    className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner appearance-none cursor-pointer"
+                                    value={formData.semester_id}
+                                    onChange={(e) => setFormData({ ...formData, semester_id: e.target.value })}
+                                    disabled={!formData.academic_year_id}
+                                >
+                                    <option value="">Select term…</option>
+                                    {termsOfYear(formData.academic_year_id).map((t: any) => <option key={t._id} value={t._id}>{t.name}{t.isActive ? " (Current)" : ""}</option>)}
+                                </select>
                             </div>
                         </div>
 
@@ -359,21 +359,16 @@ export default function FeeStructure() {
                                 onClick={() => {
                                     setView("list");
                                     setEditingId(null);
-                                    setFormData({ 
-                                        className: "", 
-                                        term: currentPeriod?.label || "Term 1", 
-                                        year: currentPeriod?.academicYear || new Date().getFullYear().toString(), 
-                                        amounts: {} 
-                                    });
+                                    handleOpenCreateModal();
                                 }}
                                 className="px-8 py-3.5 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-slate-600 transition-colors"
                             >
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 type="button"
                                 onClick={() => createMutation.mutate(formData)}
-                                disabled={createMutation.isPending || !formData.className}
+                                disabled={createMutation.isPending || !formData.name.trim() || formData.classIds.length === 0 || !formData.academic_year_id || !formData.semester_id}
                                 className="flex items-center gap-2 px-8 py-3.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-lg hover:shadow-xl transition-all transform active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -462,7 +457,12 @@ export default function FeeStructure() {
                     ) : filteredStructures && filteredStructures.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredStructures.map((s: any) => {
-                                const amountsList = s.amounts ? Object.entries(s.amounts) : [];
+                                const amountsList: [string, any][] = s.amounts && Object.keys(s.amounts).length
+                                    ? Object.entries(s.amounts)
+                                    : (s.items || []).map((it: any) => [it.category, it.amount]);
+                                const classNames = Array.isArray(s.class_ids) && s.class_ids.length
+                                    ? s.class_ids.map((id: string) => classes.find((c: any) => c._id === id)?.name || classes.find((c: any) => c._id === id)?.levelName).filter(Boolean).join(", ")
+                                    : (s.className || "");
                                 return (
                                     <div 
                                         key={s._id} 
@@ -478,20 +478,24 @@ export default function FeeStructure() {
                                                     <span className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#5C67F2]/10 text-[#5C67F2] mb-2">
                                                         {s.term || "Term 1"}
                                                     </span>
-                                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight group-hover:text-[#5C67F2] transition-colors">
-                                                        {s.className}
+                                                    <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-[#5C67F2] transition-colors">
+                                                        {s.name || classNames || "Untitled structure"}
                                                     </h3>
+                                                    {classNames && s.name && <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{classNames}</p>}
                                                 </div>
 
                                                 <div className="flex gap-1.5">
-                                                    <button 
+                                                    <button
                                                         onClick={() => {
                                                             setEditingId(s._id);
+                                                            const amounts = s.amounts && Object.keys(s.amounts).length ? s.amounts : Object.fromEntries((s.items || []).map((it: any) => [it.category, it.amount]));
+                                                            const classIds = Array.isArray(s.class_ids) && s.class_ids.length ? s.class_ids : classes.filter((c: any) => (c.name || c.levelName) === s.className).map((c: any) => c._id);
                                                             setFormData({
-                                                                className: s.className,
-                                                                term: s.term,
-                                                                year: s.year,
-                                                                amounts: s.amounts || {}
+                                                                name: s.name || "",
+                                                                classIds,
+                                                                academic_year_id: s.academic_year_id || (activeYear ? String(activeYear._id) : ""),
+                                                                semester_id: s.semester_id || "",
+                                                                amounts,
                                                             });
                                                             setView("form");
                                                         }}

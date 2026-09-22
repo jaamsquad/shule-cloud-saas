@@ -609,7 +609,7 @@ export default function AddStudent() {
 
             {/* Import Students Dialog */}
             <Dialog open={showImportModal} onOpenChange={v => v ? setShowImportModal(true) : closeImport()}>
-                <DialogContent className={`p-0 border-none overflow-hidden rounded-[24px] shadow-2xl bg-white ${previewRows ? "max-w-6xl" : "max-w-2xl"}`}>
+                <DialogContent showCloseButton={false} className={`p-0 border-none overflow-hidden rounded-[24px] shadow-2xl bg-white ${previewRows ? "max-w-6xl" : "max-w-2xl"}`}>
                     <DialogHeader className="bg-gradient-to-r from-[#5C67F2] to-[#7A85F7] p-6 text-white flex flex-row items-center justify-between space-y-0">
                         <div className="flex flex-col">
                             <DialogTitle className="text-xl font-bold tracking-tight">{previewRows ? "Review before importing" : "Bulk Student Import"}</DialogTitle>
@@ -843,7 +843,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="p-0 border-none overflow-hidden rounded-[24px] max-w-4xl shadow-2xl bg-white">
+            <DialogContent showCloseButton={false} className="p-0 border-none overflow-hidden rounded-[24px] max-w-4xl shadow-2xl bg-white">
                 <DialogHeader className="bg-gradient-to-r from-[#5C67F2] to-[#7A85F7] p-6 text-white flex flex-row items-center justify-between space-y-0">
                     <div className="flex flex-col">
                         <DialogTitle className="text-xl font-bold tracking-tight">Quick Add Students</DialogTitle>

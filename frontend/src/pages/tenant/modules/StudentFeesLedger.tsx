@@ -40,21 +40,27 @@ export default function StudentFeesLedger() {
 
     const uniqueParticulars = Array.from(new Map(feeParticularsArray?.map((p: any) => [p.label, p])).values()) as any[];
 
+    // Invoice item edits are no longer applied straight away — they are sent to the requester's
+    // reporting officer (Settings → Staff → reportsTo) to Approve or Decline, and are applied
+    // by the server automatically once approved (see requests.routes.ts / applyInvoiceItemsUpdate).
     const updateInvoiceMutation = useMutation({
-        mutationFn: async (payload: { id: string, line_items: any[], fee_structure_id?: string }) => {
-            const body: any = { line_items: payload.line_items };
-            if (payload.fee_structure_id) body.fee_structure_id = payload.fee_structure_id;
-            return api.put(`/schools/default/invoices/${payload.id}`, body);
+        mutationFn: async (payload: { id: string, line_items: any[], fee_structure_id?: string, invoiceNo?: string, studentName?: string }) => {
+            return api.post("/requests", {
+                category: "Fee Invoice Change",
+                title: `Invoice ${payload.invoiceNo || payload.id} items change${payload.studentName ? ` — ${payload.studentName}` : ""}`,
+                description: `Requested change to the fee particulars on invoice ${payload.invoiceNo || payload.id}.`,
+                payload: { invoiceId: payload.id, line_items: payload.line_items, ...(payload.fee_structure_id ? { fee_structure_id: payload.fee_structure_id } : {}) },
+            });
         },
-        onSuccess: () => {
+        onSuccess: (r: any) => {
             queryClient.invalidateQueries({ queryKey: ["student_fee_summary"] });
-            toast.success("Invoice items updated successfully");
+            toast.success(r.data?.currentOwnerName ? `Sent to ${r.data.currentOwnerName} for approval` : "Sent for approval");
             setEditingInvoice(null);
             setSelectedFeeStructure('');
         },
         onError: (err: any) => {
-            const backendError = err?.response?.data?.errors?.[0]?.message || err?.response?.data?.message;
-            toast.error(backendError || "Failed to update invoice");
+            const backendError = err?.response?.data?.message;
+            toast.error(backendError || "Failed to send for approval");
         },
     });
 
@@ -71,7 +77,9 @@ export default function StudentFeesLedger() {
 
         const payload: any = {
             id: editingInvoice._id || editingInvoice.id,
-            line_items: editingInvoice.line_items
+            line_items: editingInvoice.line_items,
+            invoiceNo: editingInvoice.invoice_no,
+            studentName: selectedStudent?.studentName || selectedStudent?.name,
         };
         // Include fee_structure_id if present on the invoice or selected
         if (editingInvoice.fee_structure_id) {
@@ -352,7 +360,7 @@ export default function StudentFeesLedger() {
                                                             >
                                                                 <div>
                                                                     <div className="flex items-center gap-3 mb-1">
-                                                                        <span className="font-semibold text-slate-800">{inv.invoice_no}</span>
+                                                                        <span className="font-semibold text-slate-800">{inv.invoice_no}{(inv.term || inv.period || inv.feeMonth) ? ` - ${inv.term || inv.period || inv.feeMonth}` : ""}</span>
                                                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                                                                             inv.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' :
                                                                             inv.status === 'UNPAID' ? 'bg-amber-100 text-amber-700' :
@@ -460,7 +468,7 @@ export default function StudentFeesLedger() {
                     <div className="flex items-center justify-between p-5 border-b border-slate-100">
                         <div>
                             <h3 className="font-bold text-slate-800">Add/Remove Items</h3>
-                            <p className="text-xs text-slate-500">Invoice: {editingInvoice?.invoice_no || 'New Invoice'}</p>
+                            <p className="text-xs text-slate-500">Invoice: {editingInvoice?.invoice_no || 'New Invoice'} · sent to your reporting officer to approve before it takes effect</p>
                             {/* Fee Structure selector for new invoice */}
                             {!editingInvoice && feeStructures.length > 0 && (
                                 <select
@@ -568,7 +576,7 @@ export default function StudentFeesLedger() {
                                 disabled={updateInvoiceMutation.isPending}
                                 className="px-5 py-2 text-sm font-bold text-white bg-[#5C67F2] hover:bg-[#4a54c4] rounded-lg transition-colors flex items-center gap-2 shadow-sm"
                             >
-                                {updateInvoiceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Save Changes
+                                {updateInvoiceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Send for Approval
                             </button>
                         </div>
                     </div>

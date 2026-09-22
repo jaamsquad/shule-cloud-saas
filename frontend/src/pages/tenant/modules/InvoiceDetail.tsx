@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Home, Printer, ArrowLeft, Check, AlertCircle, Copy, Loader2 } from "lucide-react";
+import { Home, Printer, ArrowLeft, Check, AlertCircle, Copy, Loader2, CreditCard, X } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useSchoolBrand } from "@/lib/printDoc";
@@ -20,10 +20,19 @@ export default function InvoiceDetail() {
         enabled: !!id,
     });
 
-    const markAsPaid = useMutation({
-        mutationFn: async () => api.put(`/schools/default/invoices/${id}`, { status: "Paid" }),
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["invoice", id] }); toast.success("Invoice settled successfully"); },
-        onError: (e: any) => toast.error(e.response?.data?.errors?.[0]?.message || e.response?.data?.message || "Could not update the invoice"),
+    // Manual payments — gated by Settings → Fees → Manual fee payments
+    const { data: finance } = useQuery<{ manualPaymentsEnabled: boolean }>({ queryKey: ["finance_settings"], queryFn: async () => (await api.get("/settings/finance")).data });
+    const manualAllowed = finance?.manualPaymentsEnabled !== false;
+    const [payOpen, setPayOpen] = useState(false);
+    const [pay, setPay] = useState({ amount: "", method: "M-Pesa", reference: "", date: new Date().toISOString().slice(0, 10) });
+    const recordPayment = useMutation({
+        mutationFn: async () => api.post(`/schools/default/payments`, { invoice_id: id, amount: parseFloat(pay.amount), method: pay.method, reference: pay.reference || undefined, payment_date: pay.date }),
+        onSuccess: (r: any) => {
+            queryClient.invalidateQueries({ queryKey: ["invoice", id] });
+            toast.success(`Payment recorded — receipt ${r.data?.data?.receipt_no || ""}`);
+            setPayOpen(false); setPay({ amount: "", method: "M-Pesa", reference: "", date: new Date().toISOString().slice(0, 10) });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.errors?.[0]?.message || e.response?.data?.message || "Could not record the payment"),
     });
 
     // Real invoice shape (total_due / line_items / payments) → what the page shows
@@ -90,14 +99,18 @@ export default function InvoiceDetail() {
                 <div className="flex items-center gap-2 text-sm">
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Fees</span><span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Invoice {view.no}</span>
+                    <span className="font-black text-[#5C67F2]">Invoice {view.no}{view.period ? ` - ${view.period}` : ""}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                     <button onClick={printInvoice} className="h-10 px-5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-xl flex items-center gap-2 text-[11px] uppercase tracking-widest"><Printer className="w-4 h-4" /> Print Invoice</button>
                     <button onClick={printTriple} className="h-10 px-4 bg-white border border-slate-200 text-slate-600 font-black rounded-xl flex items-center gap-2 text-[11px] uppercase tracking-widest hover:bg-slate-50">Triple copy</button>
                     <button onClick={copyLink} className="h-10 px-3 bg-white border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50" title="Copy link"><Copy className="w-4 h-4" /></button>
                     {view.status !== "PAID" && view.status !== "VOIDED" && (
-                        <button onClick={() => markAsPaid.mutate()} disabled={markAsPaid.isPending} className="h-10 px-5 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex items-center gap-2 text-[11px] uppercase tracking-widest disabled:opacity-60"><Check className="w-4 h-4" /> Mark Paid</button>
+                        manualAllowed ? (
+                            <button onClick={() => { setPay(p => ({ ...p, amount: view.balance ? String(view.balance) : "" })); setPayOpen(true); }} className="h-10 px-5 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-xl flex items-center gap-2 text-[11px] uppercase tracking-widest"><Check className="w-4 h-4" /> Mark Paid</button>
+                        ) : (
+                            <span className="h-10 px-4 rounded-xl bg-slate-100 text-slate-400 text-[11px] font-black uppercase tracking-widest flex items-center gap-2" title="Manual payments are switched off — pay via M-Pesa"><CreditCard className="w-4 h-4" /> M-Pesa only</span>
+                        )
                     )}
                     <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest hover:text-[#5C67F2] ml-2"><ArrowLeft className="w-4 h-4" /> Back</button>
                 </div>
@@ -109,6 +122,36 @@ export default function InvoiceDetail() {
                     <iframe ref={frame} title="Invoice" srcDoc={previewHtml} onLoad={fit} style={{ width: 794, height: h, border: 0, display: "block" }} />
                 </div>
             </div>
+
+            {/* Record a manual payment */}
+            {payOpen && (
+                <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <h3 className="text-base font-semibold text-slate-800">Record payment</h3>
+                            <button onClick={() => setPayOpen(false)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <p className="text-xs text-slate-400">Invoice {view.no} · Balance due KES {view.balance.toLocaleString()}</p>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Amount paid</label><input type="number" min={1} value={pay.amount} onChange={e => setPay({ ...pay, amount: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" /></div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-1.5">Mode of payment</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {["M-Pesa", "Bank Transfer", "Cash", "Cheque"].map(m => (
+                                        <button key={m} type="button" onClick={() => setPay({ ...pay, method: m })} className={`h-9 rounded-lg text-xs font-semibold border ${pay.method === m ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white border-slate-200 text-slate-600"}`}>{m}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Reference / receipt no. (optional)</label><input value={pay.reference} onChange={e => setPay({ ...pay, reference: e.target.value })} placeholder="e.g. M-Pesa code, bank slip no." className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" /></div>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Date paid</label><input type="date" value={pay.date} onChange={e => setPay({ ...pay, date: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm" /></div>
+                        </div>
+                        <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+                            <button onClick={() => setPayOpen(false)} className="h-9 px-4 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onClick={() => recordPayment.mutate()} disabled={recordPayment.isPending || !pay.amount || Number(pay.amount) <= 0} className="h-9 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-60">{recordPayment.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Record payment</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -210,6 +210,7 @@ export const navItems: NavItem[] = [
       { label: "Fees Defaulters", path: "/fees/defaulters" },
       { label: "Fees Report", path: "/fees/report", },
       { label: "Delete Fees", path: "/fees/delete", },
+      { label: "Fees Settings", path: "/fees/settings" },
   ] },
   { label: "Salary", icon: CreditCard, moduleKey: "salary", children: [
       { label: "Pay Salary", path: "/salary/pay" },

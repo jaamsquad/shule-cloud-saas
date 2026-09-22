@@ -5,7 +5,9 @@ import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
 import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
+import { nextInvoiceNo, getInvoiceFormat, saveInvoiceFormat, previewInvoiceNo } from '../lib/invoiceNumbering';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
+
 
 // Auto-post a journal so a fee payment shows up in Accounting (ledger, trial
 // balance, P&L, balance sheet). Dr Cash/Bank, Cr Fee Income. Best-effort.
@@ -136,6 +138,40 @@ const requireRole = (minRole: 'STUDENT' | 'TEACHER' | 'ADMIN' | 'SUPERADMIN') =>
 const getSchoolId = (req: Request) => {
     return req.tenantContext?.tenantId || req.params.sid || 'default_school';
 };
+
+
+// ── Finance settings: whether staff may record a payment by hand ─────────────
+// Off  → fee collection is M-Pesa only; the manual "record payment" endpoint refuses.
+// On   → manual Mark Paid works (amount, method, reference, receipt).
+async function financeSettings(db: Db): Promise<{ manualPaymentsEnabled: boolean }> {
+    const s: any = await db.collection('school_settings').findOne({ _id: 'finance' as any }).catch(() => null);
+    return { manualPaymentsEnabled: s?.manualPaymentsEnabled !== false };   // default: on
+}
+async function requireManualPayments(req: Request, res: Response, next: any) {
+    try {
+        const fs = await financeSettings(getRequestDb(req));
+        if (!fs.manualPaymentsEnabled) return res.status(403).json({ data: null, meta: {}, errors: [{ code: 'MANUAL_PAYMENTS_DISABLED', message: 'Manual payments are switched off for this school. Fees must be paid via M-Pesa.' }] });
+        next();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+}
+router.get('/settings/finance', async (req: Request, res: Response) => {
+    try { res.json(await financeSettings(getRequestDb(req))); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/settings/finance', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        await db.collection('school_settings').updateOne({ _id: 'finance' as any }, { $set: { manualPaymentsEnabled: req.body?.manualPaymentsEnabled !== false, updatedAt: new Date() } }, { upsert: true });
+        res.json(await financeSettings(db));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Invoice number format ─────────────────────────────────────────────────────
+router.get('/settings/invoice-numbering', async (req: Request, res: Response) => {
+    try { const fmt = await getInvoiceFormat(getRequestDb(req)); res.json({ ...fmt, preview: previewInvoiceNo(fmt) }); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/settings/invoice-numbering', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    try { const fmt = await saveInvoiceFormat(getRequestDb(req), req.body || {}); res.json({ ...fmt, preview: previewInvoiceNo(fmt) }); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // ── M-PESA Till/Paybill transactions ──────────────────────────────────────────
 // All C2B payments received on THIS school's Till/Paybill (Safaricom confirmation
@@ -969,13 +1005,7 @@ router.post('/schools/:sid/fee-structures/:id/duplicate', requireRole('ADMIN'), 
    2. FEE INVOICES ENDPOINTS
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const getNextInvoiceNo = async (db: any, schoolId: string) => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const count = await db.collection('invoices').countDocuments({ schoolId, invoice_no: new RegExp(`^INV-${year}-`) });
-    const nextNo = String(count + 1).padStart(6, '0');
-    return `INV-${year}-${nextNo}`;
-};
+const getNextInvoiceNo = (db: any, schoolId: string) => nextInvoiceNo(db, schoolId);   // format set in Settings → Fees → Invoice Numbers
 
 const getDaysOverdue = (invoice: any) => {
     if (['PAID', 'VOIDED', 'WAIVED'].includes(invoice.status)) return 0;
@@ -1681,87 +1711,83 @@ router.post('/schools/:sid/invoices/:id/remind', async (req: Request, res: Respo
 });
 
 // PUT /schools/:sid/invoices/:id
+// The actual recompute, shared with the approval workflow (modules/requests) so an approved
+// "change items" request is applied the same way a direct edit would be.
+export async function applyInvoiceItemsUpdate(db: Db, schoolId: string, invoiceId: string, body: { due_date?: string; line_items?: any[]; discount_type?: string; discount_value?: number }): Promise<{ ok: boolean; status: number; message?: string; data?: any }> {
+    if (!ObjectId.isValid(invoiceId)) return { ok: false, status: 400, message: 'This invoice has not been generated yet. Generate it first, then edit.' };
+    const { due_date, line_items, discount_type, discount_value } = body;
+    const invoice = await db.collection('invoices').findOne({ _id: new ObjectId(invoiceId), $or: [{ schoolId }, { schoolId: { $exists: false } }] });
+    if (!invoice) return { ok: false, status: 404, message: 'Invoice not found' };
+    if (['VOIDED', 'WAIVED'].includes(invoice.status)) return { ok: false, status: 422, message: 'Cannot edit VOIDED or WAIVED invoices' };
+
+    const updateData: any = { updatedAt: new Date().toISOString() };
+    if (due_date) updateData.due_date = due_date;
+
+    let subtotal = invoice.subtotal ?? (parseFloat(invoice.total_due ?? invoice.total) || 0);
+    let discount_amount = invoice.discount_amount || 0;
+    let itemsPayload = invoice.line_items || [];
+    const invoiceAmountPaid = parseFloat(invoice.amount_paid) || 0;
+
+    if (line_items) {
+        itemsPayload = line_items.map((i: any) => ({
+            id: i.id || new ObjectId().toString(),
+            category: i.category,
+            description: i.description || '',
+            amount: parseFloat(i.amount) || 0,
+            is_required: !!i.is_required
+        }));
+        subtotal = itemsPayload.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
+        updateData.line_items = itemsPayload;
+        updateData.subtotal = subtotal;
+    }
+
+    const distType = discount_type !== undefined ? discount_type : (invoice.discount_type || 'NONE');
+    const distVal = discount_value !== undefined ? parseFloat(String(discount_value)) : (parseFloat(invoice.discount_value) || 0);
+
+    if (discount_type !== undefined || discount_value !== undefined || line_items) {
+        updateData.discount_type = distType;
+        updateData.discount_value = distVal;
+        if (distType === 'FIXED') {
+            discount_amount = distVal;
+        } else if (distType === 'PERCENTAGE') {
+            discount_amount = (subtotal * distVal) / 100;
+        }
+        updateData.discount_amount = discount_amount;
+    }
+
+    const total_due = Math.max(0, subtotal - discount_amount);
+    updateData.total_due = total_due;
+    updateData.balance = total_due - invoiceAmountPaid;
+
+    // Also update total field for legacy invoice compatibility
+    updateData.total = total_due;
+
+    // Update status
+    if (updateData.balance <= 0) {
+        updateData.status = 'PAID';
+    } else if (invoiceAmountPaid > 0) {
+        updateData.status = 'PARTIAL';
+    } else {
+        const finalDueDate = due_date || invoice.due_date;
+        updateData.status = new Date(finalDueDate) < new Date() ? 'OVERDUE' : 'UNPAID';
+    }
+
+    const result = await db.collection('invoices').findOneAndUpdate(
+        { _id: new ObjectId(invoiceId), $or: [{ schoolId }, { schoolId: { $exists: false } }] },
+        { $set: updateData },
+        { returnDocument: 'after' }
+    );
+
+    return { ok: true, status: 200, data: result };
+}
+
 router.put('/schools/:sid/invoices/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getRequestDb(req);   // invoices live in the tenant DB
+        const db = getRequestDb(req);   // invoices live in the tenant DB
         const schoolId = getSchoolId(req);
-        if (!ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'INVALID_ID', message: 'This invoice has not been generated yet. Generate it first, then edit.' }] });
-        }
-        const { due_date, line_items, discount_type, discount_value } = req.body;
-
-        const invoice = await db.collection('invoices').findOne({ _id: new ObjectId(req.params.id), $or: [{ schoolId }, { schoolId: { $exists: false } }] });
-        if (!invoice) {
-            return res.status(404).json({ data: null, meta: {}, errors: [{ code: 'NOT_FOUND', message: 'Invoice not found' }] });
-        }
-
-        if (['VOIDED', 'WAIVED'].includes(invoice.status)) {
-            return res.status(422).json({
-                data: null,
-                meta: {},
-                errors: [{ code: 'INVOICE_NOT_EDITABLE', message: 'Cannot edit VOIDED or WAIVED invoices' }]
-            });
-        }
-
-        const updateData: any = { updatedAt: new Date().toISOString() };
-        if (due_date) updateData.due_date = due_date;
-
-        let subtotal = invoice.subtotal ?? (parseFloat(invoice.total_due ?? invoice.total) || 0);
-        let discount_amount = invoice.discount_amount || 0;
-        let itemsPayload = invoice.line_items || [];
-        const invoiceAmountPaid = parseFloat(invoice.amount_paid) || 0;
-
-        if (line_items) {
-            itemsPayload = line_items.map((i: any) => ({
-                id: i.id || new ObjectId().toString(),
-                category: i.category,
-                description: i.description || '',
-                amount: parseFloat(i.amount) || 0,
-                is_required: !!i.is_required
-            }));
-            subtotal = itemsPayload.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
-            updateData.line_items = itemsPayload;
-            updateData.subtotal = subtotal;
-        }
-
-        const distType = discount_type !== undefined ? discount_type : (invoice.discount_type || 'NONE');
-        const distVal = discount_value !== undefined ? parseFloat(discount_value) : (parseFloat(invoice.discount_value) || 0);
-
-        if (discount_type !== undefined || discount_value !== undefined || line_items) {
-            updateData.discount_type = distType;
-            updateData.discount_value = distVal;
-            if (distType === 'FIXED') {
-                discount_amount = distVal;
-            } else if (distType === 'PERCENTAGE') {
-                discount_amount = (subtotal * distVal) / 100;
-            }
-            updateData.discount_amount = discount_amount;
-        }
-
-        const total_due = Math.max(0, subtotal - discount_amount);
-        updateData.total_due = total_due;
-        updateData.balance = total_due - invoiceAmountPaid;
-
-        // Also update total field for legacy invoice compatibility
-        updateData.total = total_due;
-
-        // Update status
-        if (updateData.balance <= 0) {
-            updateData.status = 'PAID';
-        } else if (invoiceAmountPaid > 0) {
-            updateData.status = 'PARTIAL';
-        } else {
-            const finalDueDate = due_date || invoice.due_date;
-            updateData.status = new Date(finalDueDate) < new Date() ? 'OVERDUE' : 'UNPAID';
-        }
-
-        const result = await db.collection('invoices').findOneAndUpdate(
-            { _id: new ObjectId(req.params.id), $or: [{ schoolId }, { schoolId: { $exists: false } }] },
-            { $set: updateData },
-            { returnDocument: 'after' }
-        );
-
-        res.json({ data: result, meta: {}, errors: [] });
+        const r = await applyInvoiceItemsUpdate(db, schoolId, req.params.id, req.body || {});
+        if (!r.ok) return res.status(r.status).json({ data: null, meta: {}, errors: [{ code: 'ERROR', message: r.message }] });
+        res.json({ data: r.data, meta: {}, errors: [] });
     } catch (e: any) {
         res.status(500).json({ data: null, meta: {}, errors: [{ code: 'SERVER_ERROR', message: e.message }] });
     }
@@ -2209,7 +2235,7 @@ router.get('/schools/:sid/payments', async (req: Request, res: Response) => {
 });
 
 // POST /schools/:sid/payments
-router.post('/schools/:sid/payments', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.post('/schools/:sid/payments', requireRole('ADMIN'), requireManualPayments, async (req: Request, res: Response) => {
     try {
     const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
@@ -3570,6 +3596,15 @@ router.get('/fee_structures', async (req: Request, res: Response) => {
 });
 router.post('/fee_structures', async (req: Request, res: Response) => {
     req.url = `/schools/default/fee-structures`;
+    (router as any).handle(req, res);
+});
+router.patch('/fee_structures/:id', async (req: Request, res: Response) => {
+    req.url = `/schools/default/fee-structures/${req.params.id}`;
+    req.method = 'PUT';   // the underlying route only has a PUT handler
+    (router as any).handle(req, res);
+});
+router.delete('/fee_structures/:id', async (req: Request, res: Response) => {
+    req.url = `/schools/default/fee-structures/${req.params.id}`;
     (router as any).handle(req, res);
 });
 

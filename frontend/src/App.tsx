@@ -148,6 +148,7 @@ import AllStudents from "./pages/tenant/modules/AllStudents";
 import StudentReport from "./pages/tenant/modules/StudentReport";
 import FindStudent from "./pages/tenant/modules/FindStudent";
 import AdmissionView from "./pages/tenant/modules/AdmissionView";
+import StudentPerformance from "./pages/tenant/modules/students/StudentPerformance";
 import EditStudent from "./pages/tenant/modules/EditStudent";
 
 import Employees from "./pages/tenant/modules/Employees";
@@ -353,6 +354,7 @@ import ThemeLanguage from "./pages/tenant/modules/ThemeLanguage";
 import AccountSettings from "./pages/tenant/modules/AccountSettings";
 import FeeParticulars from "./pages/tenant/modules/FeeParticulars";
 import FeeStructure from "./pages/tenant/modules/FeeStructure";
+import FeesSettings from "./pages/tenant/modules/FeesSettings";
 import DiscountTypes from "./pages/tenant/modules/DiscountTypes";
 
 import Roles from "./pages/tenant/modules/Roles";
@@ -569,6 +571,7 @@ const App = () => {
               <Route path="/students/new" element={<AddStudent />} />
               <Route path="/students/report/:id" element={<StudentReport />} />
               <Route path="/students/history/:id" element={<StudentHistory />} />
+              <Route path="/students/performance/:id" element={<StudentPerformance />} />
               <Route path="/students/edit/:id" element={<EditStudent />} />
               <Route path="/students/admission-letter" element={<AdmissionLetter />} />
               <Route path="/students/id-cards" element={<StudentIdCards />} />
@@ -1032,6 +1035,7 @@ const App = () => {
               <Route path="/settings/profile" element={<InstituteProfile />} />
               <Route path="/settings/fees-particulars" element={<FeeParticulars />} />
               <Route path="/settings/fees-structure" element={<FeeStructure />} />
+              <Route path="/fees/settings" element={<FeesSettings />} />
               <Route path="/settings/discount-type" element={<DiscountTypes />} />
               <Route path="/settings/accounts" element={<AccountsForFees />} />
               <Route path="/settings/rules" element={<RulesRegulations />} />

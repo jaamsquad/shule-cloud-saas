@@ -18,6 +18,7 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { getMetaDb } from '../../lib/mongodb';
 import { sendEmail } from '../../services/communications.service';
+import { applyInvoiceItemsUpdate } from '../../routes/fees.routes';
 
 const router = Router();
 const db = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -187,6 +188,7 @@ router.post('/requests', async (req, res) => {
             quantity: Number(b.quantity) || null, priority: b.priority || 'Medium',
             estimatedCost: Number(b.estimatedCost) || 0, comments: b.comments || '',
             attachments: Array.isArray(b.attachments) ? b.attachments : [],
+            payload: b.payload && typeof b.payload === 'object' ? b.payload : null,   // e.g. a Fee Invoice Change carries { invoiceId, line_items, discount_type, discount_value }
             requesterId: me.staffId, requesterName: me.name, requesterRole: me.role, department: me.department || b.department || '',
             status: submit ? STATUS.SUBMITTED : STATUS.DRAFT,
             currentOwnerId: submit ? (supervisor ? String(supervisor._id) : null) : me.staffId,
@@ -344,11 +346,18 @@ router.post('/requests/:id/approve', async (req, res) => {
             }
         }
         await db(req).collection('requests').updateOne({ _id: r._id }, { $set: set });
-        await pushHistory(req, req.params.id, me, t ? 'approve_forward' : 'approve', from, set.status, t ? `Approved → ${toLabel}` : 'Approved');
+        // A finally-approved Fee Invoice Change is now applied to the invoice — not before.
+        let applyError = '';
+        if (!t && set.status === STATUS.APPROVED && r.category === 'Fee Invoice Change' && r.payload?.invoiceId) {
+            const schoolId = (req as any).tenantContext?.tenantId || 'default_school';
+            const applied = await applyInvoiceItemsUpdate(db(req), schoolId, String(r.payload.invoiceId), r.payload).catch((e: any) => ({ ok: false, status: 500, message: e.message }));
+            if (!applied.ok) applyError = applied.message || 'Could not apply the change';
+        }
+        await pushHistory(req, req.params.id, me, t ? 'approve_forward' : 'approve', from, set.status, t ? `Approved → ${toLabel}` : (applyError ? `Approved, but could not apply: ${applyError}` : 'Approved'));
         await pushAudit(req, req.params.id, me, t ? 'approve_forward' : 'approve', from, set.status, req.body?.comment || '');
         await notify(req, { requestId: req.params.id, number: r.number, toId: r.requesterId, kind: 'approved', title: `Request ${r.number} approved`, body: t ? `Forwarded to ${toLabel}` : 'Approved by ' + me.name });
         await notifyAdmins(req, req.params.id, r.number, `Request ${r.number} ${t ? 'forwarded' : 'approved'}`, `${me.name}${t ? ' → ' + toLabel : ''}`);
-        res.json({ ok: true, status: set.status });
+        res.json({ ok: true, status: set.status, applyError: applyError || undefined });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

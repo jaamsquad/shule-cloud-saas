@@ -1,5 +1,5 @@
-import { useParams, Link } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award } from "lucide-react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award, Phone, BarChart3, Eye, EyeOff } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -31,6 +31,8 @@ export default function StudentReport() {
 
     // Manage Student — lifecycle status (Active / Transferred / Graduated) + transfer letter
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
+    const [parentOpen, setParentOpen] = useState(false);
     const school = useSchoolBrand();
     const { canUpdate } = useModuleCrud("students");
     const { canCreate: canIssueCert } = useModuleCrud("certificates");
@@ -336,6 +338,30 @@ export default function StudentReport() {
                         className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
                         <Book className="w-3.5 h-3.5" /> Class History
                     </Link>
+                    <button onClick={() => navigate(`/students/performance/${student?._id || id}`)}
+                        className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                        <BarChart3 className="w-3.5 h-3.5" /> Performance
+                    </button>
+                    <div className="relative">
+                        <button onClick={() => setParentOpen(o => !o)}
+                            className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
+                            {parentOpen ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />} Parent Contact
+                        </button>
+                        {parentOpen && (() => {
+                            const pName = student.parentName || student.fatherName || student.motherName || student.guardianName || student.parents?.[0]?.name || "";
+                            const pPhone = student.parentPhone || student.fatherPhone || student.motherPhone || student.guardianPhone || student.parents?.[0]?.phone || "";
+                            const pEmail = student.parentEmail || student.fatherEmail || student.motherEmail || student.parents?.[0]?.email || "";
+                            return (
+                                <div className="absolute right-0 top-11 z-20 w-64 bg-white rounded-2xl border border-slate-100 shadow-xl p-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Parent / Guardian</div>
+                                    <div className="text-sm font-bold text-slate-800">{pName || "Not on record"}</div>
+                                    {pPhone && <div className="text-sm text-slate-600 mt-1">{pPhone}</div>}
+                                    {pEmail && <div className="text-xs text-slate-400 mt-0.5">{pEmail}</div>}
+                                    {!pName && !pPhone && <p className="text-xs text-slate-400 mt-1">No parent contact saved for this student.</p>}
+                                </div>
+                            );
+                        })()}
+                    </div>
                     <button onClick={() => printElementToPdf(reportRef.current, `Student Report — ${student?.studentName || student?.firstName || "Student"}`, { fileName: `Student-Report-${student?.registrationNo || student?.admissionNo || ""}`, always: true })}
                         className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
                         <FileText className="w-3.5 h-3.5" /> Get PDF
