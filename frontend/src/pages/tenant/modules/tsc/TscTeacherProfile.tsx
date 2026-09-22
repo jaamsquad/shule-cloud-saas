@@ -10,7 +10,7 @@ import { tsc } from "./tscApi";
 import { KENYA_COUNTIES } from "@/lib/kenyaCounties";
 
 const BLUE = "#1D4ED8";
-const SECTIONS = ["Personal", "Employment", "TSC Records", "Subjects", "Workload", "Qualifications", "Deployment", "Leave", "Performance", "Documents"] as const;
+const SECTIONS = ["Personal", "Employment", "TA Records", "Subjects", "Workload", "Qualifications", "Deployment", "Leave", "Performance", "Documents"] as const;
 type Section = typeof SECTIONS[number];
 
 export default function TscTeacherProfile() {
@@ -53,7 +53,7 @@ export default function TscTeacherProfile() {
 
                 {tab === "Personal" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["nationalId", "National ID"], ["kraPin", "KRA PIN"], ["nhifNo", "NHIF Number"], ["nssfNo", "NSSF Number"], ["phone", "Phone"], ["email", "Email"], ["address", "Physical Address"], ["emergencyContact", "Emergency Contact"]]} readOnly={["phone", "email"]} />}
                 {tab === "Employment" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["employmentType", "Employment Type", settings?.employmentTypes], ["dateOfEmployment", "Date of Employment", undefined, "date"], ["dateConfirmed", "Date Confirmed", undefined, "date"], ["jobGroup", "Job Group", settings?.jobGroups], ["salaryScale", "Salary Scale"], ["payrollNumber", "Payroll Number"], ["department", "Department"], ["position", "Position"], ["reportingOfficer", "Reporting Officer"], ["status", "Current Status", ["Active", "On Leave", "Suspended", "Retired", "Inactive"]]]} />}
-                {tab === "TSC Records" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["tscNumber", "TSC Number"], ["registrationDate", "Registration Date", undefined, "date"], ["registrationStatus", "Registration Status", ["Registered", "Pending", "Deregistered"]], ["currentSchool", "Current School"], ["previousSchool", "Previous School"], ["county", "County"], ["subCounty", "Sub County"], ["ward", "Ward"], ["zone", "Zone"], ["institutionCode", "Institution Code"], ["verificationStatus", "Verification Status", ["Verified", "Unverified", "Pending"]]]} />}
+                {tab === "TA Records" && <EditFields id={id} staff={s} onSaved={refetch} fields={[["tscNumber", "TSC Number"], ["registrationDate", "Registration Date", undefined, "date"], ["registrationStatus", "Registration Status", ["Registered", "Pending", "Deregistered"]], ["currentSchool", "Current School"], ["previousSchool", "Previous School"], ["county", "County"], ["subCounty", "Sub County"], ["ward", "Ward"], ["zone", "Zone"], ["institutionCode", "Institution Code"], ["verificationStatus", "Verification Status", ["Verified", "Unverified", "Pending"]]]} />}
 
                 {tab === "Subjects" && <SubjectsPanel staff={s} />}
                 {tab === "Workload" && <WorkloadPanel workload={data.workload} subjects={data.subjects} />}

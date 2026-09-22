@@ -4,7 +4,7 @@ import { GraduationCap } from "lucide-react";
 const TABS = [
     { to: "/tsc", label: "Dashboard", end: true },
     { to: "/tsc/teachers", label: "Teachers" },
-    { to: "/tsc/records", label: "TSC Records" },
+    { to: "/tsc/records", label: "TA Records" },
     { to: "/tsc/workload", label: "Workload" },
     { to: "/tsc/qualifications", label: "Qualifications" },
     { to: "/tsc/deployment", label: "Deployment" },
@@ -21,8 +21,8 @@ export default function TscLayout() {
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-11 h-11 rounded-2xl bg-[#1D4ED8] flex items-center justify-center text-white"><GraduationCap className="w-5 h-5" /></div>
                     <div>
-                        <h1 className="text-lg font-black text-slate-800">Teacher Service Commission</h1>
-                        <p className="text-xs text-slate-500">Manage TSC & BoM teachers — records, workload, leave, performance</p>
+                        <h1 className="text-lg font-black text-slate-800">Teachers Assistant</h1>
+                        <p className="text-xs text-slate-500">Manage TA & BoM teachers — records, workload, leave, performance</p>
                     </div>
                 </div>
                 <div className="flex gap-1 overflow-x-auto">

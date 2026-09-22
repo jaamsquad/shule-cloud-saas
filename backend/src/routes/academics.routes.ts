@@ -296,6 +296,8 @@ router.patch('/academics/exams/:id',        c.updateItem('exams'));
 router.delete('/academics/exams/:id',       c.deleteItem('exams'));
 
 // ─── Exam Marks ──────────────────────────────────────────────────────────────
+// Bare alias — several pages read a student's marks as GET /exam_marks?studentId=...
+router.get('/exam_marks',                    c.getItems('exam_marks'));
 router.get('/academics/exam-marks',          c.getItems('exam_marks'));
 router.post('/academics/exam-marks',         c.createItem('exam_marks'));
 router.patch('/academics/exam-marks/:id',    c.updateItem('exam_marks'));
@@ -487,6 +489,7 @@ router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 
 // ─── Students ────────────────────────────────────────────────────────────────
 router.get('/students',              c.getItems('students'));
+router.get('/students/:id',          c.getItem('students'));
 router.post('/students',             enforceCrud('students', 'create'), enforcePlanLimit, c.createItem('students'));
 router.patch('/students/:id',        enforceCrud('students', 'update'), c.updateItem('students'));
 router.delete('/students/:id',       enforceCrud('students', 'delete'), c.deleteItem('students'));

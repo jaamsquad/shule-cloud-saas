@@ -33,6 +33,7 @@ import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
 import integrationsRoutes from './routes/integrations.routes';
+import kraRoutes from './routes/kra.routes';
 import departmentsRoutes from './routes/departments.routes';
 import markApprovalsRoutes from './routes/markApprovals.routes';
 import assistantRoutes from './routes/assistant.routes';
@@ -221,6 +222,14 @@ app.post('/api/v1/integrations/test/:type', async (req, res) => {
                 if (r.ok) return res.json({ message: 'PayHero connection successful!' });
                 return res.status(400).json({ message: 'Invalid PayHero credentials.' });
             }
+            case 'kra': {
+                if (!body.consumerKey || !body.consumerSecret) return res.status(400).json({ message: 'Consumer Key and Secret are required' });
+                const { kraAccessToken } = await import('./services/kra.service');
+                try {
+                    await kraAccessToken({ env: body.env === 'production' ? 'production' : 'sandbox', consumerKey: body.consumerKey, consumerSecret: body.consumerSecret });
+                    return res.json({ message: 'KRA connection successful! Access token obtained.' });
+                } catch (e: any) { return res.status(400).json({ message: e.message || 'Invalid KRA credentials.' }); }
+            }
             case 'stripe': {
                 if (!body.secretKey) return res.status(400).json({ message: 'Secret Key is required' });
                 const r = await fetch('https://api.stripe.com/v1/balance', {
@@ -352,6 +361,7 @@ app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)
 app.use('/api', mpesaRoutes);             // also served at /api/mpesa/callback (configured URL)
 app.use('/api/v1', integrationsRoutes);   // tenancy-aware M-PESA settings
+app.use('/api/v1', kraRoutes);              // KRA PIN Checker lookup (Add Employee)
 app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
 app.use('/api/v1', assistantRoutes);      // Smart Assistant (logic-based insights)

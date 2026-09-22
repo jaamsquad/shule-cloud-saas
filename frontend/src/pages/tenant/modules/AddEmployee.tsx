@@ -100,6 +100,21 @@ export default function AddEmployee() {
     const toggleRole = (r: string) =>
         setFormData(prev => ({ ...prev, roles: prev.roles.includes(r) ? prev.roles.filter(x => x !== r) : [...prev.roles, r] }));
 
+    // ── KRA PIN lookup (Settings → Integrations → KRA PIN Checker) ─────────
+    const [kraQuery, setKraQuery] = useState("");
+    const [kraResult, setKraResult] = useState<{ pin: string; name: string; type: string; status: string; mode: string } | null>(null);
+    const kraLookup = useMutation({
+        mutationFn: async () => (await api.post("/kra/lookup", { query: kraQuery.trim() })).data,
+        onSuccess: (r: any) => { setKraResult(r); toast.success(`Found ${r.name || "a matching taxpayer"} on KRA`); },
+        onError: (e: any) => { setKraResult(null); toast.error(e.response?.data?.message || "Could not look that up on KRA"); },
+    });
+    const applyKraResult = () => {
+        if (!kraResult) return;
+        setFormData(prev => ({ ...prev, kraPin: kraResult.pin, ...(kraResult.mode === "id" && !prev.nationalId ? { nationalId: kraQuery.trim() } : {}) }));
+        toast.success("KRA PIN filled in below");
+        setKraResult(null); setKraQuery("");
+    };
+
     // ── Import state ──────────────────────────────────────────────────────
     const [showImport, setShowImport] = useState(false);
     const [parsedRows, setParsedRows] = useState<any[]>([]);
@@ -541,6 +556,29 @@ export default function AddEmployee() {
                             {/* 2. Statutory & Bank */}
                             <div>
                                 <SectionHeader num="2" title="Statutory & Bank Accounts Details" />
+
+                                {/* Look up the KRA PIN by National ID or PIN, instead of typing it by hand */}
+                                <div className="mb-6 p-4 rounded-xl bg-emerald-50/60 border border-emerald-100 flex flex-col sm:flex-row sm:items-end gap-3">
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-emerald-800 mb-1.5">Look up from KRA — National ID or KRA PIN</label>
+                                        <input value={kraQuery} onChange={e => { setKraQuery(e.target.value); setKraResult(null); }} placeholder="e.g. 30112233 or A012345678B"
+                                            className="w-full h-10 px-3 rounded-lg border border-emerald-200 bg-white text-sm focus:outline-none focus:border-emerald-500" />
+                                    </div>
+                                    <button type="button" onClick={() => kraLookup.mutate()} disabled={!kraQuery.trim() || kraLookup.isPending}
+                                        className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-2 disabled:opacity-50">
+                                        {kraLookup.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Check KRA"}
+                                    </button>
+                                    {kraResult && (
+                                        <div className="w-full sm:w-auto flex items-center gap-3 bg-white rounded-lg border border-emerald-200 px-3 py-2">
+                                            <div className="text-xs">
+                                                <div className="font-bold text-slate-800">{kraResult.name || "—"}</div>
+                                                <div className="text-slate-500">PIN {kraResult.pin}{kraResult.status ? ` · ${kraResult.status}` : ""}{kraResult.type ? ` · ${kraResult.type}` : ""}</div>
+                                            </div>
+                                            <button type="button" onClick={applyKraResult} className="h-8 px-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold whitespace-nowrap">Use this PIN</button>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
                                     <InputField name="kraPin" value={formData.kraPin} onChange={handleChange} label="KRA PIN" placeholder="e.g. A012345678B" color="gray" />
                                     <InputField name="nssfNo" value={formData.nssfNo} onChange={handleChange} label="NSSF Number" placeholder="NSSF Number" color="gray" />

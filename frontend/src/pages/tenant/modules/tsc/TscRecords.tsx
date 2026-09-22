@@ -7,7 +7,7 @@ import { tsc } from "./tscApi";
 // School-wide record views. `tab` selects which TSC dataset to list; default
 // (TSC Records) shows the teacher register with their core TSC fields.
 const CONFIG: Record<string, { title: string; col?: string; columns: [string, string][] }> = {
-    records: { title: "TSC Records", columns: [["name", "Teacher"], ["tscNumber", "TSC No"], ["employmentType", "Type"], ["department", "Department"], ["status", "Status"]] },
+    records: { title: "TA Records", columns: [["name", "Teacher"], ["tscNumber", "TSC No"], ["employmentType", "Type"], ["department", "Department"], ["status", "Status"]] },
     qualifications: { title: "Qualifications", col: "tsc_qualifications", columns: [["level", "Level"], ["course", "Course"], ["institution", "Institution"], ["year", "Year"]] },
     deployment: { title: "Deployment History", col: "tsc_deployment", columns: [["schoolName", "School"], ["position", "Position"], ["startDate", "From"], ["endDate", "To"]] },
     leave: { title: "Leave Management", col: "tsc_leave", columns: [["type", "Type"], ["startDate", "From"], ["endDate", "To"], ["totalDays", "Days"], ["status", "Status"]] },
