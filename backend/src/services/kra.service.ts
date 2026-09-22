@@ -9,8 +9,9 @@
  * Both need a bearer token from KRA's OAuth endpoint (Consumer Key + Secret, Basic auth), which this
  * caches in memory until it is close to expiring.
  *
- * Credentials live in the tenant's `integration_settings` collection ({ integration: 'kra', env,
- * consumerKey, consumerSecret }), set on Settings → Integrations → KRA PIN Checker.
+ * Credentials are platform-wide (one KRA app shared by every school), stored in the meta DB's
+ * `integration_settings` collection ({ integration: 'kra', env, consumerKey, consumerSecret }), set by
+ * the platform owner on Owner Portal → Settings → Platform KRA PIN Checker.
  *
  * NOTE on KRA's Sandbox: sbx.kra.go.ke does NOT hold real taxpayer records — it only recognises the
  * sample IDs/PINs KRA publishes in the API docs (e.g. ID 41789723, PIN P318295670X). A real person's

@@ -313,23 +313,8 @@ export const INTEGRATIONS_CONFIG = [
             { label: "SDK License Key", field: "sdkKey",masked: true },
         ],
     },
-    {
-        key: "kra", name: "KRA PIN Checker", category: "Compliance", logo: "🧾", color: "#006633",
-        description: "Look up an employee's KRA PIN and registered name straight from KRA — by National ID or by PIN — when registering staff.",
-        docsUrl: "https://developer.kra.go.ke",
-        testEndpoint: "/integrations/test/kra",
-        guide: [
-            "Sign in at developer.kra.go.ke and create an app (any API — the same app's credentials work for Authorization)",
-            "Copy the app's Consumer Key and Consumer Secret",
-            "Use Sandbox while testing; switch to Production once KRA approves the app for live use",
-            "Paste the key + secret here and Test — Add Employee then gets a \"Look up from KRA\" option",
-        ],
-        fields: [
-            { label: "Consumer Key",    field: "consumerKey",    masked: true, hint: "From your app on developer.kra.go.ke" },
-            { label: "Consumer Secret", field: "consumerSecret", masked: true, hint: "From your app on developer.kra.go.ke" },
-            { label: "Environment",     field: "env",            type: "select", options: ["sandbox", "production"] },
-        ],
-    },
+    // KRA PIN Checker moved to the Owner Portal — configured once by the platform owner and shared by
+    // every school (Owner Portal → Settings → Platform KRA PIN Checker), not per-school here.
 ];
 
 const CATEGORIES = ["All", ...Array.from(new Set(INTEGRATIONS_CONFIG.map(i => i.category)))];

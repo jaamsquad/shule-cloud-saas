@@ -222,14 +222,8 @@ app.post('/api/v1/integrations/test/:type', async (req, res) => {
                 if (r.ok) return res.json({ message: 'PayHero connection successful!' });
                 return res.status(400).json({ message: 'Invalid PayHero credentials.' });
             }
-            case 'kra': {
-                if (!body.consumerKey || !body.consumerSecret) return res.status(400).json({ message: 'Consumer Key and Secret are required' });
-                const { kraAccessToken } = await import('./services/kra.service');
-                try {
-                    await kraAccessToken({ env: body.env === 'production' ? 'production' : 'sandbox', consumerKey: body.consumerKey, consumerSecret: body.consumerSecret });
-                    return res.json({ message: 'KRA connection successful! Access token obtained.' });
-                } catch (e: any) { return res.status(400).json({ message: e.message || 'Invalid KRA credentials.' }); }
-            }
+            // KRA PIN Checker moved to the Owner Portal (platform-wide, shared by every school) —
+            // see owner.controller.ts testPlatformKra / POST /owner/kra-settings/test.
             case 'stripe': {
                 if (!body.secretKey) return res.status(400).json({ message: 'Secret Key is required' });
                 const r = await fetch('https://api.stripe.com/v1/balance', {

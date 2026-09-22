@@ -919,6 +919,50 @@ export const testPlatformMeeting = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
+// ─── Platform KRA PIN Checker — one KRA app shared by every school ────────────
+// Stored in the same shape `resolveKraConfig()` reads (meta DB, integration_settings/{integration:'kra'}),
+// so kra.routes.ts needs no change beyond always resolving against the meta DB instead of a tenant DB.
+export const getPlatformKra = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const s: any = (await getDb().collection('integration_settings').findOne({ integration: 'kra' })) || {};
+        return res.json({
+            env: s.env === 'production' ? 'production' : 'sandbox',
+            consumerKey: s.consumerKey || '',
+            consumerSecret: s.consumerSecret ? '••••••••' : '',
+            configured: !!(s.consumerKey && s.consumerSecret),
+        });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const setPlatformKra = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const b = req.body || {};
+        const set: any = { integration: 'kra', updatedAt: new Date() };
+        if (b.env === 'production' || b.env === 'sandbox') set.env = b.env;
+        if (typeof b.consumerKey === 'string') set.consumerKey = b.consumerKey.trim();
+        // Don't overwrite the stored secret with the masked placeholder.
+        if (typeof b.consumerSecret === 'string' && b.consumerSecret && !b.consumerSecret.startsWith('•')) {
+            set.consumerSecret = b.consumerSecret.trim();
+        }
+        await getDb().collection('integration_settings').updateOne({ integration: 'kra' }, { $set: set }, { upsert: true });
+        return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Diagnose the platform KRA credentials by actually requesting an access token from KRA.
+export const testPlatformKra = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { kraAccessToken, resolveKraConfig } = await import('../services/kra.service');
+        const cfg = await resolveKraConfig(getDb());
+        if (!cfg.consumerKey || !cfg.consumerSecret) return res.status(400).json({ message: 'Save a Consumer Key and Secret first.' });
+        await kraAccessToken(cfg);
+        return res.json({ ok: true, message: `KRA connection successful (${cfg.env}) — access token obtained.` });
+    } catch (e: any) { return res.status(400).json({ ok: false, message: e.message || 'Invalid KRA credentials.' }); }
+};
+
 // ─── Personal reminders (per owner user) ─────────────────────────────────────
 export const listReminders = async (req: Request, res: Response) => {
     const claims = guard(req, res); if (!claims) return;
