@@ -11,6 +11,12 @@
  *
  * Credentials live in the tenant's `integration_settings` collection ({ integration: 'kra', env,
  * consumerKey, consumerSecret }), set on Settings → Integrations → KRA PIN Checker.
+ *
+ * NOTE on KRA's Sandbox: sbx.kra.go.ke does NOT hold real taxpayer records — it only recognises the
+ * sample IDs/PINs KRA publishes in the API docs (e.g. ID 41789723, PIN P318295670X). A real person's
+ * ID or PIN, even though genuine, will come back "Invalid ID" / "Invalid PIN" in Sandbox — that is
+ * expected KRA behaviour, not a bug here. Real lookups need the school's app approved for Production
+ * (Settings → Integrations → KRA PIN Checker → Environment: production) with a Production app's keys.
  */
 import { Db } from 'mongodb';
 
@@ -26,6 +32,16 @@ export async function resolveKraConfig(db: Db): Promise<KraConfig> {
 }
 export const isKraConfigured = (cfg: KraConfig) => !!(cfg.consumerKey && cfg.consumerSecret);
 
+/** A failure at a specific stage, carrying KRA's own code/message so the cause is never guessed at. */
+export class KraError extends Error {
+    stage: 'auth' | 'lookup';
+    httpStatus: number;        // status to answer the school's browser with
+    kraCode?: string;
+    constructor(stage: 'auth' | 'lookup', httpStatus: number, message: string, kraCode?: string) {
+        super(message); this.stage = stage; this.httpStatus = httpStatus; this.kraCode = kraCode;
+    }
+}
+
 // One cached token per (env + key) — KRA tokens last ~3600s; we refresh a little early.
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
@@ -36,7 +52,10 @@ export async function kraAccessToken(cfg: KraConfig): Promise<string> {
     const cred = Buffer.from(`${cfg.consumerKey}:${cfg.consumerSecret}`).toString('base64');
     const r = await fetch(`${BASE[cfg.env]}/v1/token/generate?grant_type=client_credentials`, { headers: { Authorization: `Basic ${cred}` } });
     const body: any = await r.json().catch(() => ({}));
-    if (!r.ok || !body.access_token) throw new Error(body.errorMessage || 'Could not authenticate with KRA — check the Consumer Key and Secret in Settings → Integrations.');
+    if (!r.ok || !body.access_token) {
+        console.error(`[KRA] token generation failed (${cfg.env}):`, r.status, body);
+        throw new KraError('auth', 401, body.errorMessage || `KRA rejected these credentials for the ${cfg.env} environment (HTTP ${r.status}). Check the Consumer Key/Secret in Settings → Integrations → KRA PIN Checker, and that this app was created for ${cfg.env === 'production' ? 'Production' : 'Sandbox'}.`, body.errorCode);
+    }
     const token = String(body.access_token);
     tokenCache.set(cacheKey, { token, expiresAt: Date.now() + (Number(body.expires_in) || 3600) * 1000 });
     return token;
@@ -52,7 +71,13 @@ export async function kraCheckById(cfg: KraConfig, taxpayerId: string, taxpayerT
         body: JSON.stringify({ TaxpayerType: taxpayerType, TaxpayerID: taxpayerId }),
     });
     const body: any = await r.json().catch(() => ({}));
-    if (!r.ok || !body.TaxpayerPIN) throw new Error(body.errorMessage || body.ErrorMessage || 'No taxpayer was found for that ID.');
+    if (!r.ok || !body.TaxpayerPIN) {
+        console.error(`[KRA] PIN Checker by ID failed (${cfg.env}, type ${taxpayerType}):`, r.status, body);
+        const code = body.errorCode || body.ErrorCode;
+        const base = body.errorMessage || body.ErrorMessage || 'No taxpayer was found for that ID.';
+        const hint = cfg.env === 'sandbox' ? ' KRA’s Sandbox only recognises its own sample IDs (e.g. 41789723) — a real ID will not be found there. Switch to Production once your app is approved, to look up real people.' : (taxpayerType !== 'KE' ? '' : ' If this is not a Kenyan resident’s ID, the Taxpayer Type may need to be NKE, NKENR or COMP instead of KE.');
+        throw new KraError('lookup', 404, `${base}.${hint}`, code);
+    }
     return { pin: String(body.TaxpayerPIN), name: String(body.TaxpayerName || ''), type: '', status: '' };
 }
 
@@ -65,7 +90,12 @@ export async function kraCheckByPin(cfg: KraConfig, pin: string): Promise<KraRes
     });
     const body: any = await r.json().catch(() => ({}));
     const data = body.PINDATA;
-    if (!r.ok || body.Status !== 'OK' || !data) throw new Error(body.Message || 'Invalid PIN — that KRA PIN was not found.');
+    if (!r.ok || body.Status !== 'OK' || !data) {
+        console.error(`[KRA] PIN Checker by PIN failed (${cfg.env}):`, r.status, body);
+        const hint = cfg.env === 'sandbox' ? ' KRA’s Sandbox only recognises its own sample PINs (e.g. P318295670X) — a real PIN will not be found there. Switch to Production once your app is approved, to look up real people.' : '';
+        const base = body.Message || 'Invalid PIN — that KRA PIN was not found.';
+        throw new KraError('lookup', 404, `${base}.${hint}`, body.ResponseCode);
+    }
     return { pin: String(data.KRAPIN), name: String(data.Name || ''), type: String(data.TypeOfTaxpayer || ''), status: String(data.StatusOfPIN || '') };
 }
 
