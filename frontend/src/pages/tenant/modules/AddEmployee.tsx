@@ -311,19 +311,27 @@ export default function AddEmployee() {
                     <span className="text-gray-300 mx-1">|</span>
                     <span className="text-gray-500 font-medium">{isEditMode ? `Edit — ${existingStaff?.employeeName || existingStaff?.name || "Staff"}` : "New Staff Profile"}</span>
                 </div>
-                {/* Import button — only shown in create mode */}
-                {!isEditMode && (
-                    <button
-                        onClick={() => { setShowImport(v => !v); setImportDone(null); setParsedRows([]); setImportErrors([]); }}
-                        className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${
-                            showImport
-                                ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                : "bg-[#5C67F2] text-white hover:bg-[#4a54c4]"
-                        }`}>
-                        <FileSpreadsheet className="w-4 h-4" />
-                        {showImport ? "Back to Form" : "Import from Excel"}
-                    </button>
-                )}
+                <div className="flex items-center gap-3">
+                    {!showImport && (
+                        <button type="button" onClick={() => { setKraOpen(true); setKraResult(null); setKraQuery(""); }}
+                            className="flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all">
+                            <Search className="w-4 h-4" /> Look up from KRA
+                        </button>
+                    )}
+                    {/* Import button — only shown in create mode */}
+                    {!isEditMode && (
+                        <button
+                            onClick={() => { setShowImport(v => !v); setImportDone(null); setParsedRows([]); setImportErrors([]); }}
+                            className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${
+                                showImport
+                                    ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                    : "bg-[#5C67F2] text-white hover:bg-[#4a54c4]"
+                            }`}>
+                            <FileSpreadsheet className="w-4 h-4" />
+                            {showImport ? "Back to Form" : "Import from Excel"}
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="w-full max-w-5xl px-6 mt-4 space-y-6">
@@ -561,13 +569,7 @@ export default function AddEmployee() {
 
                             {/* 2. Statutory & Bank */}
                             <div>
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <SectionHeader num="2" title="Statutory & Bank Accounts Details" />
-                                    <button type="button" onClick={() => { setKraOpen(true); setKraResult(null); setKraQuery(""); }}
-                                        className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wide flex items-center gap-2 mb-2">
-                                        <Search className="w-3.5 h-3.5" /> Look up from KRA
-                                    </button>
-                                </div>
+                                <SectionHeader num="2" title="Statutory & Bank Accounts Details" />
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
                                     <InputField name="kraPin" value={formData.kraPin} onChange={handleChange} label="KRA PIN" placeholder="e.g. A012345678B" color="gray" />
