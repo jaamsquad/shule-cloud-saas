@@ -16,10 +16,10 @@ export default function CompanySettings() {
     const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
     const field = (k: string, label: string, ph = "") => <div><label className="block text-[11px] font-bold text-slate-500 mb-1">{label}</label><input className={inp} value={f[k] || ""} onChange={e => set(k, e.target.value)} placeholder={ph} /></div>;
 
-    const logo = (file?: File) => {
+    const pickImage = (field: string, label: string, file?: File) => {
         if (!file) return;
-        if (file.size > 250_000) { toast.error("Use a logo under 250 KB."); return; }
-        const r = new FileReader(); r.onload = () => set("logo", String(r.result)); r.readAsDataURL(file);
+        if (file.size > 250_000) { toast.error(`Use a ${label.toLowerCase()} under 250 KB.`); return; }
+        const r = new FileReader(); r.onload = () => set(field, String(r.result)); r.readAsDataURL(file);
     };
     const save = async () => {
         setSaving(true);
@@ -34,7 +34,7 @@ export default function CompanySettings() {
                 <h3 className="font-black text-slate-800">Company</h3>
                 <div className="flex items-center gap-4">
                     {f.logo ? <img src={f.logo} alt="" className="h-14 w-auto object-contain border border-slate-100 rounded-lg p-1" /> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs">Logo</div>}
-                    <label className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 cursor-pointer"><Upload className="w-3.5 h-3.5" /> Upload logo<input type="file" accept="image/*" className="hidden" onChange={e => logo(e.target.files?.[0])} /></label>
+                    <label className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 cursor-pointer"><Upload className="w-3.5 h-3.5" /> Upload logo<input type="file" accept="image/*" className="hidden" onChange={e => pickImage("logo", "logo", e.target.files?.[0])} /></label>
                     {f.logo && <button onClick={() => set("logo", "")} className="text-xs text-slate-400 hover:text-red-500">Remove</button>}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -43,6 +43,33 @@ export default function CompanySettings() {
                     {field("email", "Email")}{field("website", "Website")}
                     {field("kraPin", "KRA PIN")}{field("quoteValidityDays", "Quotation valid for (days)")}
                 </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+                <h3 className="font-black text-slate-800">Signature &amp; Stamp</h3>
+                <p className="text-xs text-slate-400 -mt-2">Printed as the "Authorised Signature" on every quotation, invoice and contract.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">Signature</label>
+                        <div className="flex items-center gap-4">
+                            {f.signature ? <img src={f.signature} alt="" className="h-14 w-auto object-contain border border-slate-100 rounded-lg p-1 bg-slate-50" /> : <div className="w-28 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs">Signature</div>}
+                            <div className="flex flex-col gap-1">
+                                <label className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 cursor-pointer"><Upload className="w-3.5 h-3.5" /> Upload<input type="file" accept="image/*" className="hidden" onChange={e => pickImage("signature", "signature", e.target.files?.[0])} /></label>
+                                {f.signature && <button onClick={() => set("signature", "")} className="text-xs text-slate-400 hover:text-red-500 text-left">Remove</button>}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1">Stamp</label>
+                        <div className="flex items-center gap-4">
+                            {f.stamp ? <img src={f.stamp} alt="" className="h-14 w-14 object-contain border border-slate-100 rounded-lg p-1 bg-slate-50" /> : <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xs">Stamp</div>}
+                            <div className="flex flex-col gap-1">
+                                <label className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 cursor-pointer"><Upload className="w-3.5 h-3.5" /> Upload<input type="file" accept="image/*" className="hidden" onChange={e => pickImage("stamp", "stamp", e.target.files?.[0])} /></label>
+                                {f.stamp && <button onClick={() => set("stamp", "")} className="text-xs text-slate-400 hover:text-red-500 text-left">Remove</button>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p className="text-[10px] text-slate-400">Use a transparent PNG for best results (a scanned signature / company stamp on a white or transparent background), under 250 KB each.</p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
                 <h3 className="font-black text-slate-800">How customers pay</h3>

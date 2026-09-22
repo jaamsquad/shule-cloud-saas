@@ -26,11 +26,13 @@ const isType = (t: any): t is DocType => DOC_TYPES.includes(t);
 // ─── Company (issuer) details shown on every document ────────────────────────
 const COMPANY_DEFAULTS = {
     companyName: 'ShuleCloud', tagline: 'School management, in the cloud', address: '', phone: '', email: '', website: 'www.shulecloud.com',
-    kraPin: '', logo: '', bankName: '', accountName: '', accountNo: '', bankBranch: '',
+    kraPin: '', logo: '', signature: '', stamp: '', bankName: '', accountName: '', accountNo: '', bankBranch: '',
     paymentInstructions: '', invoiceTerms: 'Payment is due by the due date shown. Services may be suspended on overdue accounts.',
     quoteTerms: 'This quotation is valid until the expiry date shown. Prices exclude any items not listed.',
     footer: 'Thank you for choosing ShuleCloud.', quoteValidityDays: 30,
 };
+// Fields that hold an uploaded image as a data: URI rather than short text.
+const IMAGE_FIELDS = ['logo', 'signature', 'stamp'];
 const getCompany = async () => ({ ...COMPANY_DEFAULTS, ...(((await meta().collection('platform_settings').findOne({ key: 'business' })) as any)?.company || {}) });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -56,7 +58,7 @@ ownerBusinessRouter.get('/settings', async (_req, res) => { res.json(await getCo
 ownerBusinessRouter.put('/settings', async (req, res) => {
     const b = req.body || {};
     const company: any = {};
-    for (const k of Object.keys(COMPANY_DEFAULTS)) if (b[k] !== undefined) company[k] = k === 'logo' ? String(b[k] || '').slice(0, 400_000) : (k === 'quoteValidityDays' ? Math.min(365, Math.max(1, num(b[k]) || 30)) : str(b[k], 1000));
+    for (const k of Object.keys(COMPANY_DEFAULTS)) if (b[k] !== undefined) company[k] = IMAGE_FIELDS.includes(k) ? String(b[k] || '').slice(0, 400_000) : (k === 'quoteValidityDays' ? Math.min(365, Math.max(1, num(b[k]) || 30)) : str(b[k], 1000));
     await meta().collection('platform_settings').updateOne({ key: 'business' }, { $set: { ...Object.fromEntries(Object.entries(company).map(([k, v]) => [`company.${k}`, v])), updatedAt: new Date() } }, { upsert: true });
     res.json(await getCompany());
 });

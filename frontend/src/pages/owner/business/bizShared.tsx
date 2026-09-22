@@ -166,7 +166,14 @@ export function DocumentView({ doc, company, link }: { doc: any; company: any; l
                         {doc.notes && <div className="mb-6 whitespace-pre-line text-slate-600">{doc.notes}</div>}
                         <div className="text-[12px] mb-2">Signed by the authorised representatives of the parties:</div>
                         <div className="grid grid-cols-2 gap-10 pt-8">
-                            <div><div className="h-14" /><div className="border-t border-slate-700 pt-1 font-bold">{doc.contract?.providerSignatory?.name || "____________________"}</div><div className="text-slate-500 text-[11px]">{doc.contract?.providerSignatory?.title || "Authorised signatory"}, {company?.companyName}</div></div>
+                            <div>
+                                <div className="h-14 flex items-end gap-2">
+                                    {company?.stamp && <img src={company.stamp} alt="" className="h-14 w-14 object-contain opacity-90" />}
+                                    {company?.signature && <img src={company.signature} alt="" className="h-12 object-contain" />}
+                                </div>
+                                <div className="border-t border-slate-700 pt-1 font-bold">{doc.contract?.providerSignatory?.name || "____________________"}</div>
+                                <div className="text-slate-500 text-[11px]">{doc.contract?.providerSignatory?.title || "Authorised signatory"}, {company?.companyName}</div>
+                            </div>
                             <div>
                                 <div className="h-14 flex items-end">{status === "signed" && <span className="text-xl italic" style={{ fontFamily: "'Brush Script MT', cursive", color: "#1e3a8a" }}>{doc.contract?.clientSignatory?.name}</span>}</div>
                                 <div className="border-t border-slate-700 pt-1 font-bold">{doc.contract?.clientSignatory?.name || "____________________"}</div>
@@ -219,6 +226,18 @@ export function DocumentView({ doc, company, link }: { doc: any; company: any; l
                                 {company.paymentInstructions && <div className="whitespace-pre-line">{company.paymentInstructions}</div>}
                                 {company.bankName && <div className="mt-1">Bank: <b>{company.bankName}</b>{company.bankBranch ? `, ${company.bankBranch}` : ""}{company.accountName ? ` · Account name: ` : ""}<b>{company.accountName}</b>{company.accountNo ? ` · Account no: ` : ""}<b>{company.accountNo}</b></div>}
                                 {link && <div className="mt-1">Pay online with M-PESA: <b>{link}</b></div>}
+                            </div>
+                        )}
+
+                        {(company?.signature || company?.stamp) && (
+                            <div className="mt-8 flex justify-end">
+                                <div className="flex flex-col items-center">
+                                    <div className="h-16 flex items-end justify-center gap-3">
+                                        {company.stamp && <img src={company.stamp} alt="" className="h-16 w-16 object-contain opacity-90" />}
+                                        {company.signature && <img src={company.signature} alt="" className="h-14 object-contain" />}
+                                    </div>
+                                    <div className="border-t border-slate-700 pt-1 mt-1 text-[11px] font-bold text-slate-600 w-44 text-center">Authorised Signature</div>
+                                </div>
                             </div>
                         )}
                     </>
