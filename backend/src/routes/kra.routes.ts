@@ -4,7 +4,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
-import { resolveKraConfig, isKraConfigured, kraCheckById, kraCheckByPin, looksLikePin, KraError } from '../services/kra.service';
+import { resolveKraConfig, isKraConfigured, kraCheckById, kraCheckByPin, kraStation, looksLikePin, KraError } from '../services/kra.service';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -19,7 +19,9 @@ router.post('/kra/lookup', async (req: Request, res: Response) => {
         const taxpayerType = String(req.body?.taxpayerType || 'KE');
         const mode = req.body?.mode === 'pin' ? 'pin' : req.body?.mode === 'id' ? 'id' : (looksLikePin(query) ? 'pin' : 'id');
         const result = mode === 'pin' ? await kraCheckByPin(cfg, query) : await kraCheckById(cfg, query, taxpayerType);
-        res.json({ ...result, mode, env: cfg.env });
+        // The tax station is a bonus, not the point of the lookup — if KRA can't return one, still send back the PIN/name.
+        const station = await kraStation(cfg, result.pin).catch(() => '');
+        res.json({ ...result, station, mode, env: cfg.env });
     } catch (e: any) {
         if (e instanceof KraError) return res.status(e.httpStatus).json({ message: e.message, kraCode: e.kraCode, stage: e.stage });
         console.error('[KRA] lookup error:', e);

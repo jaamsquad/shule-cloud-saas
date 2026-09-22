@@ -103,7 +103,7 @@ export default function AddEmployee() {
     // ── KRA PIN lookup modal (Settings → Integrations → KRA PIN Checker) ───
     const [kraOpen, setKraOpen] = useState(false);
     const [kraQuery, setKraQuery] = useState("");
-    const [kraResult, setKraResult] = useState<{ pin: string; name: string; type: string; status: string; mode: string } | null>(null);
+    const [kraResult, setKraResult] = useState<{ pin: string; name: string; type: string; status: string; station?: string; mode: string } | null>(null);
     const kraLookup = useMutation({
         mutationFn: async () => (await api.post("/kra/lookup", { query: kraQuery.trim() })).data,
         onSuccess: (r: any) => { setKraResult(r); toast.success(`Found ${r.name || "a matching taxpayer"} on KRA`); },
@@ -732,6 +732,7 @@ export default function AddEmployee() {
                                     <div className="text-xs text-slate-500">KRA PIN: <b className="text-slate-700">{kraResult.pin}</b></div>
                                     {kraResult.mode === "id" && <div className="text-xs text-slate-500">National ID: <b className="text-slate-700">{kraQuery.trim()}</b></div>}
                                     {(kraResult.status || kraResult.type) && <div className="text-xs text-slate-500">{[kraResult.status, kraResult.type].filter(Boolean).join(" · ")}</div>}
+                                    {kraResult.station && <div className="text-xs text-slate-500">Tax Station: <b className="text-slate-700">{kraResult.station}</b></div>}
                                 </div>
                             )}
                         </div>

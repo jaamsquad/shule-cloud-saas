@@ -99,5 +99,22 @@ export async function kraCheckByPin(cfg: KraConfig, pin: string): Promise<KraRes
     return { pin: String(data.KRAPIN), name: String(data.Name || ''), type: String(data.TypeOfTaxpayer || ''), status: String(data.StatusOfPIN || '') };
 }
 
+/** A KRA PIN → the taxpayer's KRA tax station (e.g. "West of Nairobi"). Best-effort — callers may
+ *  ignore a failure here rather than fail the whole lookup, since it's supplementary information. */
+export async function kraStation(cfg: KraConfig, pin: string): Promise<string> {
+    const token = await kraAccessToken(cfg);
+    const r = await fetch(`${BASE[cfg.env]}/dtd/checker/v1/station`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ kraPin: pin.toUpperCase() }),
+    });
+    const body: any = await r.json().catch(() => ({}));
+    const data = body.STATIONDATA;
+    if (!r.ok || body.Status !== 'OK' || !data?.stationName) {
+        console.error(`[KRA] Know Tax Station failed (${cfg.env}):`, r.status, body);
+        throw new KraError('lookup', 404, body.Message || body.ErrorMessage || 'Could not find a tax station for that PIN.', body.ResponseCode || body.ErrorCode);
+    }
+    return String(data.stationName);
+}
+
 /** A KRA PIN looks like A123456789Z / P123456789Z — anything else is treated as a National ID. */
 export const looksLikePin = (v: string) => /^[AP]\d{9}[A-Z]$/i.test(v.trim());
