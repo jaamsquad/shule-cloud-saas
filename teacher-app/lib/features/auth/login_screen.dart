@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/google_auth_service.dart';
+import '../../widgets/google_widgets.dart';
 
 /// Two-tone login card mirroring the web PortalLogin.tsx: gold greeting band
 /// over a teal form panel, crest circle on the seam, navy "Log In" button.
@@ -52,6 +54,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted && ref.read(authControllerProvider).isAuthenticated) context.go('/');
     } catch (e) {
       setState(() => _error = 'Login failed. Check your School ID, Employee Number and Password.');
+    }
+  }
+
+  /// Continue with Google — works once the teacher has linked Google in their profile.
+  Future<void> _google() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _error = null);
+    if (_school.text.trim().isEmpty) {
+      setState(() => _error = 'Enter your School ID first, then tap Continue with Google.');
+      return;
+    }
+    try {
+      await ref.read(authControllerProvider.notifier).loginWithGoogle(schoolCode: _school.text.trim(), rememberMe: _remember);
+      if (mounted && ref.read(authControllerProvider).isAuthenticated) context.go('/');
+    } catch (e) {
+      if (mounted) setState(() => _error = GoogleAuthService.messageOf(e));
     }
   }
 
@@ -174,6 +192,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   const SizedBox(width: 8),
                                 ],
                                 Text(loading ? 'Signing in...' : 'Log In'),
+                              ]),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.35))),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: Text('OR', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                            ),
+                            Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.35))),
+                          ]),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 46,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: AppColors.slate800,
+                                side: BorderSide.none,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radius)),
+                              ),
+                              onPressed: loading ? null : _google,
+                              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                GoogleMark(size: 18),
+                                SizedBox(width: 10),
+                                Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w700)),
                               ]),
                             ),
                           ),

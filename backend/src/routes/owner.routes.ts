@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, getOwnerAuditLogs, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, getPlatformKra, setPlatformKra, testPlatformKra, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
@@ -94,6 +95,35 @@ router.get('/reminders', listReminders);
 router.post('/reminders', createReminder);
 router.patch('/reminders/:id', updateReminder);
 router.delete('/reminders/:id', deleteReminder);
+
+// ─── School sign-in security: 2FA policy + Google sign-in (owner / super_owner) ─
+const ownerOf = (req: any) => { try { return jwt.verify(String(req.headers.authorization || '').split(' ')[1], process.env.OWNER_JWT_SECRET || 'owner_secret') as any; } catch { return null; } };
+router.get('/school-auth', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { getSchoolAuthPolicy } = await import('../lib/schoolLogin');
+        const p = await getSchoolAuthPolicy();
+        const [linkedUsers, enabledUsers] = await Promise.all([
+            getMetaDb().collection('User').countDocuments({ googleSub: { $exists: true } }),
+            getMetaDb().collection('User').countDocuments({ twoFactorEnabled: true }),
+        ]);
+        res.json({ ...p, stats: { linkedUsers, enabledUsers } });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/school-auth', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Only an owner can change sign-in security.' });
+    try {
+        const { saveSchoolAuthPolicy } = await import('../lib/schoolLogin');
+        if (req.body?.twoFactorMode === 'required') {
+            // codes fall back to the company mailbox — without it a school with no mail settings could not sign in
+            const smtp: any = await getMetaDb().collection('platform_email_settings').findOne({ key: 'smtp' });
+            if (!smtp?.host || !smtp?.user || !smtp?.pass) return res.status(400).json({ message: 'Set up Company email (SMTP) first — sign-in codes need a mailbox to come from.' });
+        }
+        await saveSchoolAuthPolicy(req.body || {});
+        res.json({ message: 'Saved' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
 
 // ─── Company email (SMTP) — super_owner only ─────────────────────────────────
 router.get('/company-email', getCompanyEmail);

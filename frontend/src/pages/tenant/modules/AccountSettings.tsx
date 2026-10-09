@@ -2,6 +2,7 @@ import { Settings, RefreshCcw, Eye, Lock, Check, EyeOff, Loader2, X, AlertTriang
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import SignInSecurity from "@/components/auth/SignInSecurity";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -263,6 +264,8 @@ export default function AccountSettings() {
                                 {isUpdating ? "Updating..." : "Update Settings"}
                             </button>
                         </div>
+
+                        <SignInSecurity />
                     </div>
 
                     {/* Right Card */}

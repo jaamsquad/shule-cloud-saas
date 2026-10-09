@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/app_widgets.dart';
+import '../../widgets/google_widgets.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../shell/app_shell.dart';
 
@@ -143,6 +144,8 @@ class ProfileScreen extends ConsumerWidget {
           : ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
               StaffInfoPanel(staff: staff),
               const SizedBox(height: 16),
+              const GoogleLinkPanel(),
+              const SizedBox(height: 16),
               PanelCard(
                 title: 'Account',
                 icon: Icons.manage_accounts_outlined,
@@ -180,6 +183,8 @@ class SettingsScreen extends ConsumerWidget {
             _switch(Icons.fingerprint, 'Biometric Login', 'Use FaceID or Fingerprint', s.biometric, sc.setBiometric),
           ]),
         ),
+        const SizedBox(height: 16),
+        const GoogleLinkPanel(),
         const SizedBox(height: 16),
         PanelCard(
           title: 'Support',

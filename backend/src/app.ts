@@ -5,6 +5,7 @@ import path from 'path';
 import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
+import schoolSecurityRoutes from './routes/schoolSecurity.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
 import { ownerBusinessRouter, publicDocsRouter } from './routes/business.routes';
@@ -384,6 +385,7 @@ app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton
 app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1', driverRoutes);         // ShuleCloud Driver app (transport/GPS)
 app.use('/api/v1/onboard', onboardRoutes);
+app.use('/api/v1/auth', schoolSecurityRoutes);   // 2FA codes + Continue with Google
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/business', ownerBusinessRouter);   // quotations / invoices / contracts (owner portal)
 app.use('/api/v1/public/docs', publicDocsRouter);         // their shareable, printable links (+ pay / accept / sign)

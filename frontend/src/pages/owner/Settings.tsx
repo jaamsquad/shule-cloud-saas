@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ShieldCheck, AlertCircle } from "lucide-react";
+import OwnerSchoolAuthCard from "@/components/auth/OwnerSchoolAuthCard";
 
 export default function OwnerSettings() {
     const queryClient = useQueryClient();
@@ -63,6 +64,8 @@ export default function OwnerSettings() {
                         </CardContent>
                     )}
                 </Card>
+
+                <OwnerSchoolAuthCard />
             </div>
         </div>
     );

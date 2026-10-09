@@ -1,3 +1,4 @@
+import type React from "react";
 import { useState, FormEvent } from "react";
 import { Loader2, Lock, type LucideIcon } from "lucide-react";
 
@@ -19,12 +20,13 @@ interface PortalLoginProps {
     accent?: string;              // panel + button colour
     onSubmit: (username: string, password: string, remember: boolean) => void;
     onForgot?: () => void;
+    extra?: React.ReactNode;       // optional block under the form (e.g. Continue with Google)
 }
 
 // Egerton-style two-tone login card (gold greeting band over a coloured form panel).
 export default function PortalLogin({
     portalName, brandName, brandCrest, usernameLabel = "Username",
-    loading, error, icon: Icon, accent = "#159a52", onSubmit, onForgot,
+    loading, error, icon: Icon, accent = "#159a52", onSubmit, onForgot, extra,
 }: PortalLoginProps) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -121,6 +123,7 @@ export default function PortalLogin({
                             </button>
                         </div>
                     </form>
+                    {extra}
                 </div>
             </div>
         </div>

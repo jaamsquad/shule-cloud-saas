@@ -35,6 +35,16 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> loginWithGoogle({required String schoolCode, bool rememberMe = true}) async {
+    state = state.copyWith(loading: true);
+    try {
+      final res = await _ref.read(authRepoProvider).loginWithGoogle(schoolCode: schoolCode, rememberMe: rememberMe);
+      state = AuthState(staff: res.staff);
+    } finally {
+      state = state.copyWith(loading: false);
+    }
+  }
+
   Future<void> updateContact({required String email, required String phone}) async {
     final repo = _ref.read(authRepoProvider);
     await repo.updateContact(email: email, phone: phone);
