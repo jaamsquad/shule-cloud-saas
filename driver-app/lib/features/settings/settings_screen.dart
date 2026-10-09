@@ -17,10 +17,10 @@ class SettingsScreen extends ConsumerWidget {
     final settings = ref.watch(settingsControllerProvider);
     final sc = ref.read(settingsControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+    return PortalPage(
+      title: 'Settings',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           AppCard(
             child: Row(

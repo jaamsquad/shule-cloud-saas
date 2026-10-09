@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_theme.dart';
+import '../../widgets/app_widgets.dart';
 import '../../providers/providers.dart';
 
 /// Incident report: type, description, photo, auto GPS → upload to backend.
@@ -72,10 +73,10 @@ class _IncidentScreenState extends ConsumerState<IncidentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('New Incident Report')),
+    return PortalPage(
+      title: 'New Incident Report',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           const Text('Please provide accurate details for safety records.', style: TextStyle(color: AppColors.textMuted)),
           const SizedBox(height: 16),

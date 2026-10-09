@@ -78,48 +78,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final online = ref.watch(onlineStatusProvider).valueOrNull ?? true;
     final tc = ref.read(tripControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-              backgroundImage: driver?.photoUrl != null ? NetworkImage(driver!.photoUrl!) : null,
-              child: driver?.photoUrl == null ? const Icon(Icons.person, color: AppColors.primary, size: 20) : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(driver?.name ?? 'Driver', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.primary)),
-                  Text('${driver?.busPlate ?? 'Bus'} • ${driver?.routeName ?? 'Route'}',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                ],
-              ),
-            ),
-            Icon(Icons.sensors, color: online ? AppColors.primary : AppColors.textMuted),
-          ],
+    return PortalPage(
+      title: 'Dashboard',
+      subtitle: '${driver?.busPlate ?? 'Bus'} · ${driver?.routeName ?? 'Route'}',
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: StatusChip(icon: Icons.sensors, label: online ? 'Online' : 'Offline', color: online ? AppColors.green : AppColors.warning),
         ),
-      ),
+      ],
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(onlineStatusProvider),
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           children: [
             // Current route banner
             AppCard(
+              accent: trip.state.isRunning ? AppColors.green : AppColors.gold,
               child: Row(
                 children: [
-                  Container(width: 4, height: 44, color: AppColors.primary),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(driver?.routeName ?? 'Route', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        Text(driver?.routeName ?? 'Route', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: AppColors.slate800)),
                         const Text('Morning Student Pickup', style: TextStyle(color: AppColors.textMuted)),
                       ],
                     ),
@@ -154,8 +136,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
             const SizedBox(height: 20),
 
-            const Text('Safety & Ops', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-            const SizedBox(height: 12),
+            const SectionHeader('Safety & Operations'),
             Row(
               children: [
                 Expanded(child: ActionTile(icon: Icons.emergency, label: 'SOS', color: AppColors.danger, onTap: () => context.push('/sos'))),
@@ -198,9 +179,12 @@ class _PrimaryTripButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final running = trip.state == TripState.started || trip.state == TripState.paused;
     return SizedBox(
-      height: 130,
+      height: 120,
       child: FilledButton(
-        style: FilledButton.styleFrom(backgroundColor: running ? AppColors.danger : AppColors.primary),
+        style: FilledButton.styleFrom(
+          backgroundColor: running ? AppColors.danger : AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+        ),
         onPressed: running ? onEnd : onStart,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

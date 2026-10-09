@@ -41,10 +41,10 @@ class _InspectionScreenState extends ConsumerState<InspectionScreen> {
   @override
   Widget build(BuildContext context) {
     final driver = ref.watch(authControllerProvider).driver;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Vehicle Inspection')),
+    return PortalPage(
+      title: 'Vehicle Inspection',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           Text('${driver?.busPlate ?? 'Bus'} • ${driver?.routeName ?? 'Route'} — pre-trip check', style: const TextStyle(color: AppColors.textMuted)),
           const SizedBox(height: 12),

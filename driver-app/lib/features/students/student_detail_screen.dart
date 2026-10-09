@@ -20,27 +20,23 @@ class StudentDetailScreen extends ConsumerWidget {
     final student = students.where((s) => s.id == studentId).firstOrNull;
 
     if (student == null) {
-      return const Scaffold(body: Center(child: Text('Student not found')));
+      return const PortalPage(title: 'Student', body: ErrorView(message: 'Student not found.', icon: Icons.person_off_outlined));
     }
 
-    return Scaffold(
+    return PortalPage(
+      title: student.name,
+      subtitle: '${student.className} · Adm #${student.admissionNo}',
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 260,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-              background: student.photoUrl != null
-                  ? CachedNetworkImage(imageUrl: student.photoUrl!, fit: BoxFit.cover)
-                  : Container(color: AppColors.primary, child: const Icon(Icons.person, size: 96, color: Colors.white)),
-            ),
-          ),
           SliverPadding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                Text('${student.className} • Admission #${student.admissionNo}', style: const TextStyle(color: AppColors.textMuted)),
+                Center(
+                  child: student.photoUrl != null
+                      ? ClipOval(child: CachedNetworkImage(imageUrl: student.photoUrl!, width: 96, height: 96, fit: BoxFit.cover))
+                      : InitialsAvatar(name: student.name, radius: 48),
+                ),
                 const SizedBox(height: 16),
                 if (student.medicalAlert != null)
                   AppCard(

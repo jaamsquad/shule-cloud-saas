@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/theme/app_theme.dart';
+import '../../widgets/app_widgets.dart';
 import '../../models/student.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/providers.dart';
@@ -79,11 +80,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   Widget build(BuildContext context) {
     final title = _isBoard ? 'Scan to Board' : _isDrop ? 'Scan to Drop' : 'Scan Student';
     final accent = _isDrop ? AppColors.accentBlue : AppColors.primary;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [IconButton(icon: const Icon(Icons.flash_on), onPressed: () => _controller.toggleTorch())],
-      ),
+    return PortalPage(
+      title: title,
+      actions: [
+        IconButton(tooltip: 'Torch', icon: const Icon(Icons.flash_on, color: AppColors.slate600), onPressed: () => _controller.toggleTorch()),
+      ],
       body: Column(
         children: [
           Expanded(

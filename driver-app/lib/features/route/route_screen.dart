@@ -13,8 +13,8 @@ class RouteScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(driverRoutesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text("Today's Route")),
+    return PortalPage(
+      title: "Today's Route",
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(driverRoutesProvider)),
@@ -23,7 +23,7 @@ class RouteScreen extends ConsumerWidget {
             return const Center(child: Text('No route assigned yet.', style: TextStyle(color: AppColors.textMuted)));
           }
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
               if (routes.length > 1)
                 Padding(
