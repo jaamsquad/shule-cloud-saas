@@ -32,30 +32,41 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 96, height: 96,
-              decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, borderRadius: BorderRadius.circular(24)),
-              child: const Icon(Icons.school_rounded, color: AppColors.primary, size: 52),
-            ),
-            const SizedBox(height: 20),
-            const Text.rich(TextSpan(children: [
-              TextSpan(text: 'ShuleCloud', style: TextStyle(color: AppColors.primary, fontSize: 28, fontWeight: FontWeight.w800)),
-              TextSpan(text: ' Teacher', style: TextStyle(color: AppColors.onSurface, fontSize: 28, fontWeight: FontWeight.w800)),
-            ])),
-            const SizedBox(height: 6),
-            const Text('SMART SCHOOL PLATFORM', style: TextStyle(color: AppColors.outline, letterSpacing: 2, fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 36),
-            const SizedBox(width: 160, child: LinearProgressIndicator(color: AppColors.primary, backgroundColor: Color(0xFFE0E2EC))),
-            const SizedBox(height: 16),
-            const Text('Syncing your classes…', style: TextStyle(color: AppColors.onSurfaceVariant)),
-          ],
+      backgroundColor: AppColors.teal,
+      body: Column(children: [
+        Container(height: MediaQuery.paddingOf(context).top + 6, color: AppColors.gold),
+        Expanded(
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 16, offset: Offset(0, 6))],
+                ),
+                child: const Icon(Icons.work_outline, color: AppColors.teal, size: 42),
+              ),
+              const SizedBox(height: 20),
+              const Text('Teacher Portal', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              const Text('SHULECLOUD SCHOOL SYSTEM',
+                  style: TextStyle(color: AppColors.gold, letterSpacing: 2, fontSize: 11, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 36),
+              SizedBox(
+                width: 160,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(color: AppColors.gold, backgroundColor: Colors.white.withValues(alpha: 0.2)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text('Syncing your classes…', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w600)),
+            ]),
+          ),
         ),
-      ),
+      ]),
     );
   }
 }

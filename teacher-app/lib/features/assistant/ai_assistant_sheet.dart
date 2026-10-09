@@ -37,22 +37,23 @@ class _AiAssistantSheet extends StatelessWidget {
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Theme.of(context).cardTheme.color, borderRadius: BorderRadius.circular(24)),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(color: Theme.of(context).cardTheme.color, borderRadius: BorderRadius.circular(12)),
         constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          Container(
+            color: AppColors.gold,
+            padding: const EdgeInsets.fromLTRB(16, 10, 4, 10),
             child: Row(children: [
-              Container(width: 36, height: 36, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18)),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('AI Teaching Assistant', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.onSurface))),
-              IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+              const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('AI Teaching Assistant', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white))),
+              IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close, color: Colors.white)),
             ]),
           ),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Align(alignment: Alignment.centerLeft, child: Text('How can I assist your classroom today?', style: TextStyle(color: AppColors.onSurfaceVariant))),
+            padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: Align(alignment: Alignment.centerLeft, child: Text('How can I assist your classroom today?', style: TextStyle(color: AppColors.slate500, fontWeight: FontWeight.w600))),
           ),
           const SizedBox(height: 12),
           Flexible(
@@ -64,17 +65,20 @@ class _AiAssistantSheet extends StatelessWidget {
               itemBuilder: (_, i) {
                 final (icon, label, route) = actions[i];
                 return Material(
-                  color: AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppColors.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radius),
+                    side: const BorderSide(color: AppColors.slate200),
+                  ),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppTheme.radius),
                     onTap: () { Navigator.of(context).pop(); context.push(route); },
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       child: Row(children: [
                         Icon(icon, size: 20, color: AppColors.primary),
                         const SizedBox(width: 12),
-                        Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
+                        Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.slate700))),
                         const Icon(Icons.chevron_right, size: 18, color: AppColors.outline),
                       ]),
                     ),

@@ -6,9 +6,8 @@ import '../../models/staff.dart';
 import '../../providers/data_providers.dart';
 import '../../widgets/app_widgets.dart';
 
-/// Tabs: Students, Attendance, Assignments, Gradebook, Timetable, Behaviour.
-/// Each tab deep-links into the already-built feature screen, pre-scoped to
-/// this class/subject — avoids duplicating logic per tab.
+/// Class hub. Each action deep-links into the already-built feature screen,
+/// pre-scoped to this class/subject — avoids duplicating logic per tab.
 class ClassDetailScreen extends ConsumerWidget {
   final ClassAssignment classAssignment;
   const ClassDetailScreen({super.key, required this.classAssignment});
@@ -16,42 +15,69 @@ class ClassDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = classAssignment;
-    return Scaffold(
-      appBar: AppBar(title: Text(c.className)),
+    void scoped(String route) {
+      ref.read(selectedClassSubjectProvider.notifier).state = ClassSubjectSelection(className: c.className, subject: c.subject);
+      context.push(route);
+    }
+
+    return PortalPage(
+      title: c.className,
+      subtitle: c.subject.isEmpty ? null : c.subject,
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
-          AppCard(accent: AppColors.primary, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c.className, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppColors.onSurface)),
-            if (c.subject.isNotEmpty) Text(c.subject, style: const TextStyle(color: AppColors.onSurfaceVariant)),
-            const SizedBox(height: 4),
-            Text('${c.studentCount} students', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
-          ])),
-          const SizedBox(height: 16),
-          const SectionHeader('Manage'),
-          _tile(context, ref, Icons.checklist_rtl, 'Take Attendance', () {
-            ref.read(selectedClassSubjectProvider.notifier).state = ClassSubjectSelection(className: c.className, subject: c.subject);
-            context.push('/attendance');
-          }),
-          _tile(context, ref, Icons.grid_on_outlined, 'Enter Marks', () {
-            ref.read(selectedClassSubjectProvider.notifier).state = ClassSubjectSelection(className: c.className, subject: c.subject);
-            context.push('/gradebook');
-          }),
-          _tile(context, ref, Icons.assignment_outlined, 'Assignments', () => context.push('/assignments')),
-          _tile(context, ref, Icons.psychology_alt_outlined, 'Behaviour', () => context.push('/behaviour')),
-          _tile(context, ref, Icons.chat_bubble_outline, 'Message Parents', () => context.push('/messages')),
-          _tile(context, ref, Icons.query_stats_outlined, 'Class Results', () => context.push('/gradebook')),
+          PanelCard(
+            title: 'Class information',
+            icon: Icons.info_outline,
+            child: Column(children: [
+              InfoField(label: 'Class', value: c.className),
+              const Divider(),
+              InfoField(label: 'Subject', value: c.subject),
+              const Divider(),
+              InfoField(label: 'Students', value: '${c.studentCount}'),
+              const Divider(),
+              InfoField(label: 'Role', value: c.isClassTeacher ? 'Class Teacher' : 'Subject Teacher'),
+            ]),
+          ),
+          const SizedBox(height: 20),
+          PanelCard(
+            title: 'Manage',
+            icon: Icons.tune,
+            padding: EdgeInsets.zero,
+            child: Column(children: [
+              _tile(Icons.fact_check_outlined, 'Take Attendance', AppColors.teal, () => scoped('/attendance')),
+              const Divider(),
+              _tile(Icons.edit_note_outlined, 'Enter Marks', AppColors.green, () => scoped('/gradebook')),
+              const Divider(),
+              _tile(Icons.assignment_outlined, 'Assignments', AppColors.tertiary, () => context.push('/assignments')),
+              const Divider(),
+              _tile(Icons.psychology_alt_outlined, 'Behaviour', AppColors.error, () => context.push('/behaviour')),
+              const Divider(),
+              _tile(Icons.chat_bubble_outline, 'Message Parents', AppColors.teal, () => context.push('/messages')),
+              const Divider(),
+              _tile(Icons.query_stats_outlined, 'Class Results', AppColors.tealDark, () => scoped('/gradebook')),
+            ]),
+          ),
         ],
       ),
     );
   }
 
-  Widget _tile(BuildContext context, WidgetRef ref, IconData icon, String label, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AppCard(onTap: onTap, child: Row(children: [
-          Icon(icon, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
-          const Icon(Icons.chevron_right, color: AppColors.outline),
-        ])),
+  Widget _tile(IconData icon, String label, Color color, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppTheme.radius)),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.slate700))),
+            const Icon(Icons.chevron_right, color: AppColors.slate400),
+          ]),
+        ),
       );
 }

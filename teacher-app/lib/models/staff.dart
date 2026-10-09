@@ -7,11 +7,17 @@ class Staff {
   final String phone;
   final String? photoUrl;
   final List<String> permissions;
+  final String staffNo;
+  final String department;
+  final String gender;
+  final String nationalId;
+  final String schoolName;
 
   const Staff({
     required this.id, required this.name, this.designation = 'Teacher',
     this.portalUsername = '', this.email = '', this.phone = '', this.photoUrl,
-    this.permissions = const [],
+    this.permissions = const [], this.staffNo = '', this.department = '',
+    this.gender = '', this.nationalId = '', this.schoolName = '',
   });
 
   factory Staff.fromJson(Map<String, dynamic> j) => Staff(
@@ -21,13 +27,20 @@ class Staff {
         portalUsername: (j['portalUsername'] ?? '').toString(),
         email: (j['email'] ?? '').toString(),
         phone: (j['phone'] ?? '').toString(),
-        photoUrl: (j['photo'] ?? j['photoUrl'] ?? j['avatar'])?.toString(),
+        photoUrl: (j['photo'] ?? j['staffPhoto'] ?? j['photoUrl'] ?? j['avatar'])?.toString(),
         permissions: (j['permissions'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        staffNo: (j['staffNo'] ?? j['employeeId'] ?? '').toString(),
+        department: (j['department'] ?? '').toString(),
+        gender: (j['gender'] ?? '').toString(),
+        nationalId: (j['nationalId'] ?? j['idNo'] ?? '').toString(),
+        schoolName: (j['schoolName'] ?? '').toString(),
       );
 
   Map<String, dynamic> toJson() => {
         'id': id, 'name': name, 'designation': designation, 'portalUsername': portalUsername,
         'email': email, 'phone': phone, 'photo': photoUrl, 'permissions': permissions,
+        'staffNo': staffNo, 'department': department, 'gender': gender,
+        'nationalId': nationalId, 'schoolName': schoolName,
       };
 }
 

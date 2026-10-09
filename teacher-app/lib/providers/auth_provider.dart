@@ -35,6 +35,13 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> updateContact({required String email, required String phone}) async {
+    final repo = _ref.read(authRepoProvider);
+    await repo.updateContact(email: email, phone: phone);
+    final fresh = await repo.fetchMe();
+    if (fresh != null) state = state.copyWith(staff: fresh);
+  }
+
   Future<void> logout() async {
     await _ref.read(authRepoProvider).logout();
     state = const AuthState();

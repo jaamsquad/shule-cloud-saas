@@ -17,7 +17,6 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> with SingleTi
   late final TabController _tabs = TabController(length: 2, vsync: this);
   final _messageCtrl = TextEditingController();
   String? _selectedClass;
-  Set<String> _selectedStudents = {};
   bool _sending = false;
 
   @override
@@ -29,11 +28,10 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Message Parents'),
-        bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Compose'), Tab(text: 'History')]),
-      ),
+    return PortalPage(
+      title: 'Message Parents',
+      subtitle: 'SMS parents of students in your classes',
+      tabs: TabBar(controller: _tabs, tabs: const [Tab(text: 'Compose'), Tab(text: 'History')]),
       body: TabBarView(controller: _tabs, children: [_compose(), _history()]),
     );
   }
@@ -46,24 +44,46 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> with SingleTi
       data: (data) {
         final classes = (data['classes'] as List?) ?? [];
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            const SectionHeader('Send To'),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedClass,
-              decoration: const InputDecoration(labelText: 'Class'),
-              items: [for (final c in classes) DropdownMenuItem(value: c['className']?.toString(), child: Text('${c['className']} (${(c['students'] as List?)?.length ?? 0})'))],
-              onChanged: (v) => setState(() { _selectedClass = v; _selectedStudents = {}; }),
+            PanelCard(
+              title: 'New message',
+              icon: Icons.sms_outlined,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const FieldLabel('Send To'),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedClass,
+                  isExpanded: true,
+                  decoration: const InputDecoration(hintText: 'Select class', prefixIcon: Icon(Icons.groups_outlined)),
+                  items: [
+                    for (final c in classes)
+                      DropdownMenuItem(
+                        value: c['className']?.toString(),
+                        child: Text('${c['className']} (${(c['students'] as List?)?.length ?? 0} students)'),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _selectedClass = v),
+                ),
+                const SizedBox(height: 14),
+                const FieldLabel('Message'),
+                TextField(
+                  controller: _messageCtrl,
+                  maxLines: 6,
+                  maxLength: 480,
+                  decoration: const InputDecoration(hintText: 'Type your message to parents…'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: _sending || _selectedClass == null ? null : _send,
+                  icon: _sending
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.send, size: 18),
+                  label: const Text('Send SMS to Parents'),
+                ),
+              ]),
             ),
             const SizedBox(height: 16),
-            const SectionHeader('Message'),
-            TextField(controller: _messageCtrl, maxLines: 5, decoration: const InputDecoration(hintText: 'Type your message to parents…', alignLabelWithHint: true)),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _sending || _selectedClass == null ? null : _send,
-              icon: _sending ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send),
-              label: const Text('Send SMS to Parents'),
-            ),
+            const InfoBanner(text: 'Messages go to the parent phone numbers on file for the selected class.', icon: Icons.info_outline),
           ],
         );
       },
@@ -78,16 +98,29 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> with SingleTi
       data: (list) => list.isEmpty
           ? const ErrorView(message: 'No messages sent yet.', icon: Icons.forum_outlined)
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: list.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) {
                 final m = Map<String, dynamic>.from(list[i] as Map);
-                return AppCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text((m['message'] ?? '').toString(), style: const TextStyle(color: AppColors.onSurface)),
-                  const SizedBox(height: 4),
-                  Text((m['phone'] ?? '').toString(), style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-                ]));
+                return AppCard(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(color: AppColors.teal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppTheme.radius)),
+                      child: const Icon(Icons.sms_outlined, size: 17, color: AppColors.teal),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text((m['message'] ?? '').toString(), style: const TextStyle(color: AppColors.slate800, fontSize: 13.5)),
+                        const SizedBox(height: 4),
+                        Text((m['phone'] ?? '').toString(), style: const TextStyle(color: AppColors.goldText, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ]),
+                );
               },
             ),
     );
@@ -99,12 +132,12 @@ class _MessagingScreenState extends ConsumerState<MessagingScreen> with SingleTi
     try {
       await ref.read(dataRepoProvider).messageParents(message: _messageCtrl.text.trim(), className: _selectedClass);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message sent.'), backgroundColor: AppColors.secondary));
+        showToast(context, 'Message sent.');
         _messageCtrl.clear();
         ref.invalidate(_historyProvider);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not send: ${e.toString()}'), backgroundColor: AppColors.error));
+      if (mounted) showToast(context, 'Could not send: $e', error: true);
     } finally {
       if (mounted) setState(() => _sending = false);
     }

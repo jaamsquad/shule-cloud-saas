@@ -22,8 +22,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Library'), bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Books'), Tab(text: 'My Issues')])),
+    return PortalPage(
+      title: 'Library',
+      tabs: TabBar(controller: _tabs, tabs: const [Tab(text: 'Books'), Tab(text: 'My Issues')]),
       body: TabBarView(controller: _tabs, children: [_books(), _issues()]),
     );
   }
@@ -36,20 +37,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
       data: (list) => list.isEmpty
           ? const ErrorView(message: 'No books found.', icon: Icons.menu_book_outlined)
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: list.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) {
                 final b = Map<String, dynamic>.from(list[i] as Map);
                 return AppCard(child: Row(children: [
-                  Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
+                  Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
                       child: const Icon(Icons.menu_book, color: AppColors.secondary)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text((b['title'] ?? 'Untitled').toString(), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                     Text((b['author'] ?? '').toString(), style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                   ])),
-                  Text('${b['availableCopies'] ?? b['stock'] ?? 0} left', style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w700, fontSize: 12)),
+                  StatusPill(label: '${b['availableCopies'] ?? b['stock'] ?? 0} left', color: AppColors.secondary),
                 ]));
               },
             ),
@@ -64,7 +65,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
       data: (list) => list.isEmpty
           ? const ErrorView(message: 'No active issues.', icon: Icons.assignment_return_outlined)
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: list.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (_, i) {

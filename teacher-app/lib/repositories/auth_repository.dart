@@ -52,5 +52,9 @@ class AuthRepository {
     }
   }
 
+  /// Same contact-details update the web portal's "Edit Contact" dialog makes.
+  Future<void> updateContact({required String email, required String phone}) =>
+      _dio.patch(ApiConfig.profile, data: {'email': email, 'phone': phone});
+
   Future<void> logout() => _storage.clearAuth();
 }

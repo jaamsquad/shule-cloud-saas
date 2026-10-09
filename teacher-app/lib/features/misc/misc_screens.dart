@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/data_providers.dart';
-import '../../providers/providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/app_widgets.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../shell/app_shell.dart';
 
-// ── Alerts / Notifications ───────────────────────────────────────────────────
+// ── Announcements ────────────────────────────────────────────────────────────
 class AlertsScreen extends ConsumerWidget {
   const AlertsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(announcementsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Alerts & Announcements')),
+    return PortalPage(
+      title: 'Announcements',
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(announcementsProvider),
         child: async.when(
@@ -26,18 +28,24 @@ class AlertsScreen extends ConsumerWidget {
           data: (list) => list.isEmpty
               ? const ErrorView(message: "You're all caught up.", icon: Icons.notifications_none)
               : ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   itemCount: list.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
                     final a = list[i];
-                    return AppCard(child: Row(children: [
-                      const Icon(Icons.campaign_outlined, color: AppColors.primary), const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(a.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                        if (a.body.isNotEmpty) Text(a.body, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13)),
-                      ])),
-                    ]));
+                    return PanelCard(
+                      title: a.title,
+                      icon: Icons.campaign_outlined,
+                      action: a.createdAt == null
+                          ? null
+                          : Text(DateFormat('d MMM y').format(a.createdAt!.toLocal()),
+                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(a.body.isEmpty ? '—' : a.body, style: const TextStyle(color: AppColors.slate700, fontSize: 13.5, height: 1.5)),
+                        const SizedBox(height: 8),
+                        StatusPill(label: 'To: ${a.audience}', color: AppColors.teal),
+                      ]),
+                    );
                   },
                 ),
         ),
@@ -58,36 +66,66 @@ class _ScanScreenState extends State<ScanScreen> {
   String? _lastCode;
 
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Scan'), actions: [
-        IconButton(onPressed: () => _controller.toggleTorch(), icon: const Icon(Icons.flash_on)),
-      ]),
-      body: Stack(children: [
-        MobileScanner(
-          controller: _controller,
-          onDetect: (capture) {
-            final codes = capture.barcodes;
-            if (codes.isEmpty) return;
-            final v = codes.first.rawValue;
-            if (v != null && v != _lastCode) {
-              setState(() => _lastCode = v);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Scanned: $v'), backgroundColor: AppColors.secondary));
-            }
-          },
+    return PortalPage(
+      title: 'Scan Card',
+      subtitle: 'Student QR / barcode',
+      actions: [
+        IconButton(
+          tooltip: 'Torch',
+          onPressed: () => _controller.toggleTorch(),
+          icon: const Icon(Icons.flash_on, color: AppColors.slate600),
         ),
-        Positioned(
-          left: 0, right: 0, bottom: 24,
-          child: Center(child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(999)),
-            child: Text(_lastCode == null ? 'Point at a student QR/barcode' : 'Last: $_lastCode', style: const TextStyle(color: Colors.white)),
-          )),
+      ],
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: Stack(children: [
+            MobileScanner(
+              controller: _controller,
+              onDetect: (capture) {
+                final codes = capture.barcodes;
+                if (codes.isEmpty) return;
+                final v = codes.first.rawValue;
+                if (v != null && v != _lastCode) {
+                  setState(() => _lastCode = v);
+                  showToast(context, 'Scanned: $v');
+                }
+              },
+            ),
+            Center(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.gold, width: 3),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 20,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(AppTheme.radius)),
+                  child: Text(_lastCode == null ? 'Point at a student QR/barcode' : 'Last: $_lastCode',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
+          ]),
         ),
-      ]),
+      ),
     );
   }
 }
@@ -97,46 +135,29 @@ class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-    final staff = auth.staff;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile'), actions: [
-        IconButton(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings)),
-      ]),
+    final staff = ref.watch(authControllerProvider).staff;
+    return PortalPage(
+      title: 'My Profile',
       body: staff == null
           ? const ErrorView(message: 'Not signed in.', icon: Icons.person_off)
-          : ListView(padding: const EdgeInsets.all(16), children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryContainer]), borderRadius: BorderRadius.circular(20)),
+          : ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+              StaffInfoPanel(staff: staff),
+              const SizedBox(height: 16),
+              PanelCard(
+                title: 'Account',
+                icon: Icons.manage_accounts_outlined,
+                padding: EdgeInsets.zero,
                 child: Column(children: [
-                  CircleAvatar(radius: 44, backgroundColor: Colors.white,
-                      backgroundImage: staff.photoUrl != null ? NetworkImage(staff.photoUrl!) : null,
-                      child: staff.photoUrl == null ? const Icon(Icons.person, size: 44, color: AppColors.primary) : null),
-                  const SizedBox(height: 12),
-                  Text(staff.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  Text('ID: ${staff.portalUsername}', style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 4),
-                  Text(staff.designation, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  _LinkTile(icon: Icons.badge_outlined, label: 'Portal Username', trailing: staff.portalUsername.isEmpty ? '—' : staff.portalUsername),
+                  const Divider(),
+                  _LinkTile(icon: Icons.settings_outlined, label: 'Settings', onTap: () => context.push('/settings')),
+                  const Divider(),
+                  _LinkTile(icon: Icons.logout, label: 'Logout', color: AppColors.error, onTap: () => confirmLogout(context, ref)),
                 ]),
               ),
-              const SizedBox(height: 16),
-              _row(Icons.email_outlined, 'Email', staff.email.isEmpty ? '—' : staff.email),
-              _row(Icons.phone_outlined, 'Phone', staff.phone.isEmpty ? '—' : staff.phone),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings), label: const Text('Settings')),
             ]),
     );
   }
-
-  Widget _row(IconData i, String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AppCard(child: Row(children: [
-          Icon(i, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
-          Text(value, style: const TextStyle(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w700)),
-        ])),
-      );
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -146,54 +167,104 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsControllerProvider);
     final sc = ref.read(settingsControllerProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        const SectionHeader('Appearance'),
-        AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          SwitchListTile(
-              secondary: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
-              title: const Text('Dark Mode', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              value: s.themeMode == ThemeMode.dark, onChanged: sc.toggleDark, activeColor: AppColors.primary),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          SwitchListTile(
-              secondary: const Icon(Icons.fingerprint, color: AppColors.primary),
-              title: const Text('Biometric Login', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Use FaceID or Fingerprint', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              value: s.biometric, onChanged: sc.setBiometric, activeColor: AppColors.primary),
-        ])),
-        const SizedBox(height: 16),
-        const SectionHeader('Support'),
-        AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          ListTile(
-              leading: const Icon(Icons.help_outline, color: AppColors.primary),
-              title: const Text('Help Center', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
-              onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          ListTile(
-              leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.primary),
-              title: const Text('Privacy', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
-              onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          ListTile(
-              leading: const Icon(Icons.info_outline, color: AppColors.primary),
-              title: const Text('About', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('ShuleCloud Teacher v1.0.0', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
-              onTap: () => showAboutDialog(context: context, applicationName: 'ShuleCloud Teacher', applicationVersion: '1.0.0',
-                  applicationLegalese: '© 2026 ShuleCloud · Empowering education through technology.')),
-        ])),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error)),
-          onPressed: () async { await ref.read(authControllerProvider.notifier).logout(); if (context.mounted) context.go('/login'); },
-          icon: const Icon(Icons.logout), label: const Text('Logout'),
+    return PortalPage(
+      title: 'Settings',
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+        PanelCard(
+          title: 'Appearance & Security',
+          icon: Icons.tune,
+          padding: EdgeInsets.zero,
+          child: Column(children: [
+            _switch(Icons.dark_mode_outlined, 'Dark Mode', null, s.themeMode == ThemeMode.dark, sc.toggleDark),
+            const Divider(),
+            _switch(Icons.fingerprint, 'Biometric Login', 'Use FaceID or Fingerprint', s.biometric, sc.setBiometric),
+          ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('ShuleCloud Teacher v1.0.0 · Built for Excellence', style: TextStyle(color: AppColors.outline, fontSize: 12))),
+        PanelCard(
+          title: 'Support',
+          icon: Icons.support_agent,
+          padding: EdgeInsets.zero,
+          child: Column(children: [
+            _LinkTile(
+              icon: Icons.help_outline,
+              label: 'Help Center',
+              external: true,
+              onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication),
+            ),
+            const Divider(),
+            _LinkTile(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy',
+              external: true,
+              onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication),
+            ),
+            const Divider(),
+            _LinkTile(
+              icon: Icons.info_outline,
+              label: 'About',
+              trailing: 'v1.0.0',
+              onTap: () => showAboutDialog(
+                context: context,
+                applicationName: 'ShuleCloud Teacher',
+                applicationVersion: '1.0.0',
+                applicationLegalese: '© 2026 ShuleCloud · Empowering education through technology.',
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: Color(0xFFFECDD3))),
+          onPressed: () => confirmLogout(context, ref),
+          icon: const Icon(Icons.logout, size: 18),
+          label: const Text('Logout'),
+        ),
+        const SizedBox(height: 16),
+        const Center(
+          child: Text('POWERED BY SHULECLOUD ERP',
+              style: TextStyle(color: AppColors.slate400, fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.w800)),
+        ),
       ]),
     );
   }
+
+  Widget _switch(IconData icon, String title, String? subtitle, bool value, ValueChanged<bool> onChanged) => SwitchListTile(
+        secondary: Icon(icon, color: AppColors.teal),
+        title: Text(title, style: const TextStyle(color: AppColors.slate800, fontWeight: FontWeight.w700, fontSize: 14)),
+        subtitle: subtitle == null ? null : Text(subtitle, style: const TextStyle(color: AppColors.slate500, fontSize: 12.5)),
+        value: value,
+        onChanged: onChanged,
+      );
+}
+
+class _LinkTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? trailing;
+  final bool external;
+  final Color color;
+  final VoidCallback? onTap;
+  const _LinkTile({required this.icon, required this.label, this.trailing, this.external = false, this.color = AppColors.teal, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(color: color == AppColors.teal ? AppColors.slate800 : color, fontWeight: FontWeight.w700, fontSize: 14)),
+            ),
+            if (trailing != null) Text(trailing!, style: const TextStyle(color: AppColors.goldText, fontWeight: FontWeight.w700, fontSize: 13)),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              Icon(external ? Icons.open_in_new : Icons.chevron_right, color: AppColors.slate400, size: 18),
+            ],
+          ]),
+        ),
+      );
 }
