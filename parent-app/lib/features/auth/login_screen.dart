@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
-/// Parent login — School Code + email/phone + password, Remember Me.
+/// Two-tone login card mirroring the web PortalLogin.tsx: gold greeting band
+/// over a purple form panel, crest circle on the seam, navy "Log In" button.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -15,113 +16,250 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _school = TextEditingController();
   final _id = TextEditingController();
   final _pass = TextEditingController();
-  bool _remember = true;
   bool _obscure = true;
-  bool _busy = false;
+  bool _remember = true;
   String? _error;
 
   @override
   void dispose() {
-    _school.dispose(); _id.dispose(); _pass.dispose();
+    _school.dispose();
+    _id.dispose();
+    _pass.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
+  String get _greeting {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _error = null);
     if (_school.text.trim().isEmpty || _id.text.trim().isEmpty || _pass.text.isEmpty) {
-      setState(() => _error = 'Please fill in all fields.');
+      setState(() => _error = 'Fill in your School Code, Email/Phone and Password.');
       return;
     }
-    setState(() { _busy = true; _error = null; });
     try {
       await ref.read(authControllerProvider.notifier).login(
-            schoolCode: _school.text.trim(), identifier: _id.text.trim(),
-            password: _pass.text, rememberMe: _remember,
+            schoolCode: _school.text.trim(),
+            identifier: _id.text.trim(),
+            password: _pass.text,
+            rememberMe: _remember,
           );
-      if (!mounted) return;
+      if (!mounted || !ref.read(authControllerProvider).isAuthenticated) return;
       final many = ref.read(authControllerProvider).students.length > 1;
       context.go(many ? '/select' : '/');
     } catch (e) {
       setState(() => _error = 'Login failed. Check your School Code and credentials.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _forgot() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Forgot your password?'),
+        content: const Text(
+          'Parent portal credentials are managed by your school admin. '
+          'Contact the school office to reset your password.',
+          style: TextStyle(color: AppColors.slate600),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final loading = ref.watch(authControllerProvider).loading;
     return Scaffold(
-      backgroundColor: AppColors.surfaceContainerLow,
+      backgroundColor: const Color(0xFFF4F6F9),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const SizedBox(height: 24),
-              Container(
-                width: 72, height: 72,
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-                child: const Icon(Icons.school_rounded, color: Colors.white, size: 40),
-              ),
-              const SizedBox(height: 16),
-              const Text('ShuleCloud Parent', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.onSurface)),
-              const SizedBox(height: 6),
-              const Text("Secure access to your child's academic progress and school communication.",
-                  textAlign: TextAlign.center, style: TextStyle(color: AppColors.onSurfaceVariant)),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _label('School Code'),
-                    TextField(controller: _school, textCapitalization: TextCapitalization.none,
-                        decoration: const InputDecoration(hintText: 'e.g. kilimo', prefixIcon: Icon(Icons.apartment))),
-                    const SizedBox(height: 16),
-                    _label('Parent Email or Phone'),
-                    TextField(controller: _id, decoration: const InputDecoration(hintText: 'name@email.com', prefixIcon: Icon(Icons.alternate_email))),
-                    const SizedBox(height: 16),
-                    _label('Password'),
-                    TextField(
-                      controller: _pass, obscureText: _obscure,
-                      decoration: InputDecoration(
-                        hintText: '••••••••', prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _obscure = !_obscure)),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(children: [
+                Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 40, offset: Offset(0, 16))],
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    // Gold greeting band
+                    Container(
+                      color: AppColors.gold,
+                      padding: const EdgeInsets.fromLTRB(28, 28, 28, 40),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('$_greeting !', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.loginInk)),
+                        const SizedBox(height: 4),
+                        const Text('Login to continue to Parent Portal.',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2A4A37))),
+                        const Text('ShuleCloud School System',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xCC2A4A37))),
+                      ]),
+                    ),
+
+                    // Teal form panel with the crest on the seam
+                    Stack(clipBehavior: Clip.none, children: [
+                      Container(
+                        color: AppColors.accent,
+                        padding: const EdgeInsets.fromLTRB(28, 48, 28, 28),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          if (_error != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFE4E6),
+                                border: Border.all(color: const Color(0xFFFDA4AF)),
+                                borderRadius: BorderRadius.circular(AppTheme.radius),
+                              ),
+                              child: Text(_error!, style: const TextStyle(color: Color(0xFFBE123C), fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          _label('School Code'),
+                          _input(_school, hint: 'e.g. kilimo', icon: Icons.apartment_outlined, action: TextInputAction.next),
+                          const SizedBox(height: 16),
+                          _label('Email or Phone'),
+                          _input(_id, hint: 'name@email.com or 07XX…', icon: Icons.alternate_email, action: TextInputAction.next),
+                          const SizedBox(height: 16),
+                          _label('Password'),
+                          _input(
+                            _pass,
+                            hint: 'Enter password',
+                            icon: Icons.lock_outline,
+                            obscure: _obscure,
+                            action: TextInputAction.done,
+                            onSubmitted: (_) => _submit(),
+                            suffix: IconButton(
+                              icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: AppColors.slate400, size: 20),
+                              onPressed: () => setState(() => _obscure = !_obscure),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          InkWell(
+                            onTap: () => setState(() => _remember = !_remember),
+                            child: Row(children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: _remember,
+                                  onChanged: (v) => setState(() => _remember = v ?? true),
+                                  side: const BorderSide(color: Colors.white, width: 1.5),
+                                  fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : Colors.transparent),
+                                  checkColor: AppColors.accent,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text('Remember me', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                            ]),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            height: 46,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.navy,
+                                disabledBackgroundColor: AppColors.navy.withValues(alpha: 0.6),
+                              ),
+                              onPressed: loading ? null : _submit,
+                              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                if (loading) ...[
+                                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(loading ? 'Signing in...' : 'Log In'),
+                              ]),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: InkWell(
+                              onTap: _forgot,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 4),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  Icon(Icons.lock, size: 12, color: AppColors.navy),
+                                  SizedBox(width: 4),
+                                  Text('Forgot your password?', style: TextStyle(color: AppColors.navy, fontSize: 12, fontWeight: FontWeight.w800)),
+                                ]),
+                              ),
+                            ),
+                          ),
+                        ]),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Checkbox(value: _remember, onChanged: (v) => setState(() => _remember = v ?? true)),
-                        const Text('Remember Me'),
-                        const Spacer(),
-                        TextButton(onPressed: () {}, child: const Text('Forgot Password?')),
-                      ],
-                    ),
-                    if (_error != null) Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _login,
-                      icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.login),
-                      label: Text(_busy ? 'Signing in…' : 'Login'),
-                    ),
-                  ],
+                      Positioned(
+                        top: -28,
+                        left: 28,
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
+                          ),
+                          child: const Icon(Icons.groups_2_outlined, color: AppColors.accent, size: 28),
+                        ),
+                      ),
+                    ]),
+                  ]),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text('ShuleCloud © 2024 · Empowering education through technology',
-                  textAlign: TextAlign.center, style: TextStyle(color: AppColors.outline, fontSize: 12)),
-            ],
+                const SizedBox(height: 16),
+                const Text('POWERED BY SHULECLOUD ERP',
+                    style: TextStyle(color: AppColors.slate400, fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.w800)),
+              ]),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _label(String t) => Padding(
+  Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
       );
+
+  Widget _input(
+    TextEditingController c, {
+    required String hint,
+    required IconData icon,
+    bool obscure = false,
+    Widget? suffix,
+    TextInputAction? action,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radius), borderSide: BorderSide.none);
+    return TextField(
+      controller: c,
+      obscureText: obscure,
+      textInputAction: action,
+      onSubmitted: onSubmitted,
+      autocorrect: false,
+      style: const TextStyle(color: AppColors.slate800, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 20),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: Colors.white,
+        border: border,
+        enabledBorder: border,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radius),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 2),
+        ),
+      ),
+    );
+  }
 }

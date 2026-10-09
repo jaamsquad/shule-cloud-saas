@@ -232,10 +232,13 @@ class StatTile extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _ink(context, AppColors.slate800))),
+              // Long values (e.g. "KES 12,500") shrink to fit instead of truncating.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value,
+                    maxLines: 1, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _ink(context, AppColors.slate800))),
+              ),
               Text(label.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

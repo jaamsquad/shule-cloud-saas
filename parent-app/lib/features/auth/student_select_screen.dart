@@ -15,7 +15,7 @@ class StudentSelectScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final students = ref.watch(authControllerProvider).students;
     return Scaffold(
-      appBar: AppBar(title: const Text('ShuleCloud'), actions: const [Icon(Icons.notifications_none), SizedBox(width: 16)]),
+      appBar: AppBar(title: const Text('Select Student')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -43,7 +43,7 @@ class StudentSelectScreen extends ConsumerWidget {
   Widget _enrollCard() => DottedCard(
         child: Column(
           children: [
-            Container(width: 48, height: 48, decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
+            Container(width: 48, height: 48, decoration: const BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
                 child: const Icon(Icons.person_add_alt, color: AppColors.secondary)),
             const SizedBox(height: 8),
             const Text('Enroll New Student', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
@@ -112,7 +112,7 @@ class _StudentCard extends StatelessWidget {
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(999)),
+                  decoration: BoxDecoration(color: AppColors.green, borderRadius: BorderRadius.circular(4)),
                   child: Text(student.status.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
                 ),
               ],
@@ -136,7 +136,7 @@ class _StudentCard extends StatelessWidget {
 
   Widget _mini(String label, String value, Color color, IconData icon) => Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: AppColors.surfaceContainerLow, borderRadius: BorderRadius.circular(AppTheme.radius), border: Border.all(color: AppColors.hairline)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -158,7 +158,7 @@ class DottedCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radius),
           border: Border.all(color: AppColors.outlineVariant, style: BorderStyle.solid, width: 1.5),
         ),
         child: child,

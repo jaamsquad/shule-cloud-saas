@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/fees.dart';
@@ -12,6 +11,8 @@ import '../../providers/data_providers.dart';
 import '../../providers/providers.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/app_widgets.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../shell/app_shell.dart';
 
 // ── Homework ─────────────────────────────────────────────────────────────────
 class HomeworkScreen extends ConsumerWidget {
@@ -19,15 +20,15 @@ class HomeworkScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(homeworkProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Homework')),
+    return PortalPage(
+      title: 'Homework',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(homeworkProvider)),
         data: (list) => list.isEmpty
             ? const ErrorView(message: 'No homework right now. 🎉', icon: Icons.check_circle_outline)
             : ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: list.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (_, i) => _hwCard(list[i]),
@@ -87,11 +88,11 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(timetableProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Timetable')),
+    return PortalPage(
+      title: 'Timetable',
       body: Column(
         children: [
-          Padding(padding: const EdgeInsets.all(16),
+          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             child: FilterChipBar(items: _days, selected: _day, onSelect: (d) => setState(() => _day = d))),
           Expanded(child: async.when(
             loading: () => const SkeletonList(),
@@ -100,7 +101,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
               final lessons = all.where((l) => l.day.toLowerCase() == _day.toLowerCase()).toList();
               if (lessons.isEmpty) return const ErrorView(message: 'No lessons for this day.', icon: Icons.free_breakfast_outlined);
               return ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: lessons.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (_, i) {
@@ -137,20 +138,20 @@ class FeesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(feesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Fees')),
+    return PortalPage(
+      title: 'Fees',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(feesProvider)),
         data: (f) => ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, Color(0xFF00551F)]), borderRadius: BorderRadius.circular(20)),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.accent, AppColors.accentDark]), borderRadius: BorderRadius.circular(AppTheme.radius)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Current Balance', style: TextStyle(color: Colors.white70)),
-                Text(ksh(f.balance), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800)),
+                const Text('CURRENT BALANCE', style: TextStyle(color: Colors.white70, fontSize: 10.5, letterSpacing: 0.8, fontWeight: FontWeight.w800)),
+                Text(ksh(f.balance), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
                 const Divider(color: Colors.white24, height: 24),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Paid', style: TextStyle(color: Colors.white54, fontSize: 12)), Text(ksh(f.paid), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))]),
@@ -165,31 +166,31 @@ class FeesScreen extends ConsumerWidget {
                 icon: const Icon(Icons.phone_android), label: const Text('Pay via M-PESA'))),
               const SizedBox(width: 12),
               Expanded(child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StatementScreen())),
+                onPressed: () => context.push('/academics/receipts'),
                 icon: const Icon(Icons.description), label: const Text('Statement'))),
             ]),
             const SizedBox(height: 16),
             const SectionHeader('Payment History'),
             for (final p in f.history)
-              AppCard(accent: p.status.toUpperCase() == 'CLEARED' ? AppColors.primary : AppColors.secondary, child: Row(children: [
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: AppCard(accent: p.status.toUpperCase() == 'CLEARED' ? AppColors.green : AppColors.accent, child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(p.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text('${p.date}${p.method.isNotEmpty ? ' · ${p.method}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('+${ksh(p.amount)}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
+                  Text('+${ksh(p.amount)}', style: const TextStyle(color: AppColors.green, fontWeight: FontWeight.w800)),
                   Text(p.status, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 10)),
                 ]),
-              ])),
+              ]))),
+            if (f.history.isEmpty) const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('No payments yet.', style: TextStyle(color: AppColors.slate500))),
             if (f.breakdown.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const SectionHeader('Breakdown'),
-              AppCard(child: Column(children: [
+              PanelCard(title: 'Fee Breakdown', icon: Icons.list_alt, child: Column(children: [
                 for (final b in f.breakdown)
                   Padding(padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(b.label, style: const TextStyle(color: AppColors.onSurface)), Text(ksh(b.amount), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface))])),
                 const Divider(),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total Invoiced', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)), Text(ksh(f.totalInvoiced), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800))]),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total Invoiced', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)), Text(ksh(f.totalInvoiced), style: const TextStyle(color: AppColors.goldText, fontWeight: FontWeight.w900))]),
               ])),
             ],
           ],
@@ -281,15 +282,15 @@ class StatementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(receiptsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Statement & Receipts')),
+    return PortalPage(
+      title: 'Statement & Receipts',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(receiptsProvider)),
         data: (list) => list.isEmpty
             ? const ErrorView(message: 'No receipts yet.', icon: Icons.receipt_long_outlined)
             : ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: list.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (_, i) => _receipt(list[i]),
@@ -335,13 +336,13 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(libraryProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Library')),
+    return PortalPage(
+      title: 'Library',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(libraryProvider)),
         data: (l) => ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           children: [
             Row(children: [
               Expanded(child: StatTile(label: 'Borrowed', value: '${l.borrowed}', color: AppColors.primary, icon: Icons.menu_book)),
@@ -356,13 +357,13 @@ class LibraryScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             const SectionHeader('Active Loans'),
             for (final b in l.loans)
-              AppCard(accent: b.overdue ? AppColors.error : AppColors.primary, child: Row(children: [
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: AppCard(accent: b.overdue ? AppColors.error : AppColors.primary, child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(b.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text('Due: ${b.dueDate}${b.overdue ? ' (overdue)' : ''}', style: TextStyle(color: b.overdue ? AppColors.error : AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 if (b.renewable && !b.overdue) FilledButton(onPressed: () {}, style: FilledButton.styleFrom(minimumSize: const Size(90, 36)), child: const Text('Renew')),
-              ])),
+              ]))),
             if (l.loans.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No active loans.', style: TextStyle(color: AppColors.onSurfaceVariant))),
           ],
         ),
@@ -383,13 +384,11 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(messagesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Messages'), actions: [
-        IconButton(onPressed: () {}, icon: const Icon(Icons.search)),
-        IconButton(onPressed: () {}, icon: const Icon(Icons.edit_square)),
-      ]),
+    return PortalPage(
+      title: 'Inbox',
+      subtitle: 'Messages from teachers and the school',
       body: Column(children: [
-        Padding(padding: const EdgeInsets.all(16),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           child: FilterChipBar(items: const ['All','Teachers','Admin','Transport'], selected: _filter, onSelect: (f) => setState(() => _filter = f))),
         Expanded(child: async.when(
           loading: () => const SkeletonList(),
@@ -398,7 +397,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
             final f = _filter == 'All' ? list : list.where((m) => m.category == _filter).toList();
             if (f.isEmpty) return const ErrorView(message: 'No messages yet.', icon: Icons.forum_outlined);
             return ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               itemCount: f.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (_, i) => _thread(f[i]),
@@ -412,12 +411,10 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
   Widget _thread(MessageThread m) => AppCard(
         accent: m.unread ? AppColors.primary : null,
         child: Row(children: [
-          CircleAvatar(radius: 22, backgroundColor: AppColors.surfaceContainer,
-              backgroundImage: m.avatarUrl != null ? CachedNetworkImageProvider(m.avatarUrl!) : null,
-              child: m.avatarUrl == null ? const Icon(Icons.person, color: AppColors.primary) : null),
+          InitialsAvatar(name: m.sender, photoUrl: m.avatarUrl, radius: 20),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Expanded(child: Text(m.sender, style: const TextStyle(fontWeight: FontWeight.w700))), Text(m.time, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11))]),
+            Row(children: [Expanded(child: Text(m.sender, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.slate800))), Text(m.time, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11))]),
             Text(m.preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.onSurfaceVariant)),
           ])),
           if (m.unread) Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
@@ -437,10 +434,10 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(announcementsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Announcements')),
+    return PortalPage(
+      title: 'Announcements',
       body: Column(children: [
-        Padding(padding: const EdgeInsets.all(16),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           child: FilterChipBar(items: const ['All','Academic','Transport','Events','Emergency'], selected: _filter, onSelect: (f) => setState(() => _filter = f))),
         Expanded(child: async.when(
           loading: () => const SkeletonList(),
@@ -449,7 +446,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
             final f = _filter == 'All' ? list : list.where((a) => a.category.toLowerCase() == _filter.toLowerCase()).toList();
             if (f.isEmpty) return const ErrorView(message: 'No announcements.', icon: Icons.campaign_outlined);
             return ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               itemCount: f.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (_, i) {
@@ -480,8 +477,8 @@ class CalendarScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(calendarProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('School Calendar')),
+    return PortalPage(
+      title: 'School Calendar',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(calendarProvider)),
@@ -492,7 +489,7 @@ class CalendarScreen extends ConsumerWidget {
                 'sports' => AppColors.tertiary, _ => AppColors.outline,
               };
           return ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             itemCount: events.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
@@ -523,15 +520,15 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Reuse announcements as the notification feed (grouped visually).
     final async = ref.watch(announcementsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+    return PortalPage(
+      title: 'Notifications',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(announcementsProvider)),
         data: (list) => list.isEmpty
             ? const ErrorView(message: "You're all caught up.", icon: Icons.notifications_none)
             : ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: list.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) => AppCard(child: Row(children: [
@@ -554,70 +551,71 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
     final s = auth.selected;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Student Profile'), actions: [
-        IconButton(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings)),
-      ]),
+    return PortalPage(
+      title: 'Student Profile',
       body: s == null
           ? const ErrorView(message: 'No student selected.', icon: Icons.person_off)
-          : ListView(padding: const EdgeInsets.all(16), children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.primary, Color(0xFF00551F)]), borderRadius: BorderRadius.circular(20)),
-                child: Column(children: [
-                  CircleAvatar(radius: 44, backgroundColor: Colors.white,
-                      backgroundImage: s.photoUrl != null ? CachedNetworkImageProvider(s.photoUrl!) : null,
-                      child: s.photoUrl == null ? const Icon(Icons.person, size: 44, color: AppColors.primary) : null),
-                  const SizedBox(height: 12),
-                  Text(s.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  Text('${s.className}${s.stream.isNotEmpty ? ' ${s.stream}' : ''}', style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 4),
-                  Text('Adm: ${s.admissionNo}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                ]),
-              ),
+          : ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+              StudentInfoPanel(student: s, parent: auth.parent),
               const SizedBox(height: 16),
-              _row(Icons.account_balance_wallet, 'Fee Balance', s.feeBalance <= 0 ? 'Cleared' : ksh(s.feeBalance)),
-              _row(Icons.event_available, 'Attendance', '${s.attendanceRate.toStringAsFixed(1)}%'),
-              if (s.house != null) _row(Icons.home_work, 'House', s.house!),
-              _row(Icons.verified_user, 'Status', s.status),
-              if (auth.students.length > 1) ...[
-                const SizedBox(height: 20),
-                const SectionHeader('My Children'),
-                for (final child in auth.students)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: AppCard(
-                      accent: child.id == s.id ? AppColors.primary : null,
-                      onTap: () => ref.read(authControllerProvider.notifier).selectStudent(child.id),
-                      child: Row(children: [
-                        CircleAvatar(radius: 18, backgroundColor: AppColors.surfaceContainer,
-                            backgroundImage: child.photoUrl != null ? CachedNetworkImageProvider(child.photoUrl!) : null,
-                            child: child.photoUrl == null ? const Icon(Icons.person, size: 18, color: AppColors.primary) : null),
-                        const SizedBox(width: 12),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(child.name, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                          Text('${child.className}${child.stream.isNotEmpty ? ' ${child.stream}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-                        ])),
-                        if (child.id == s.id) const Icon(Icons.check_circle, color: AppColors.primary)
-                        else const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
-                      ]),
-                    ),
+              Row(children: [
+                Expanded(
+                  child: StatTile(
+                    label: 'Fee Balance',
+                    value: s.feeBalance <= 0 ? 'Cleared' : ksh(s.feeBalance),
+                    color: s.feeBalance <= 0 ? AppColors.green : AppColors.tertiary,
+                    icon: Icons.account_balance_wallet_outlined,
                   ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: StatTile(
+                    label: 'Attendance',
+                    value: '${s.attendanceRate.toStringAsFixed(1)}%',
+                    color: AppColors.accent,
+                    icon: Icons.event_available_outlined,
+                  ),
+                ),
+              ]),
+              if (auth.students.length > 1) ...[
+                const SizedBox(height: 16),
+                PanelCard(
+                  title: 'My Children',
+                  icon: Icons.groups_outlined,
+                  padding: EdgeInsets.zero,
+                  child: Column(children: [
+                    for (final (i, child) in auth.students.indexed) ...[
+                      if (i > 0) const Divider(),
+                      InkWell(
+                        onTap: () => ref.read(authControllerProvider.notifier).selectStudent(child.id),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(children: [
+                            InitialsAvatar(name: child.name, photoUrl: child.photoUrl, radius: 18),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(child.name, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.slate800)),
+                                Text('${child.className}${child.stream.isNotEmpty ? ' ${child.stream}' : ''}',
+                                    style: const TextStyle(color: AppColors.goldText, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                              ]),
+                            ),
+                            if (child.id == s.id)
+                              const StatusPill(label: 'Viewing', color: AppColors.accent)
+                            else
+                              const Icon(Icons.chevron_right, color: AppColors.slate400),
+                          ]),
+                        ),
+                      ),
+                    ],
+                  ]),
+                ),
               ],
-              const SizedBox(height: 12),
-              OutlinedButton.icon(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings), label: const Text('Settings')),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(onPressed: () => context.push('/settings'), icon: const Icon(Icons.settings_outlined, size: 18), label: const Text('Settings')),
             ]),
     );
   }
-
-  Widget _row(IconData i, String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AppCard(child: Row(children: [
-          Icon(i, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
-          Text(value, style: const TextStyle(color: AppColors.onSurfaceVariant, fontWeight: FontWeight.w700)),
-        ])),
-      );
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -627,69 +625,108 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsControllerProvider);
     final sc = ref.read(settingsControllerProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        const SectionHeader('Preferences'),
-        AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          SwitchListTile(
-              secondary: const Icon(Icons.dark_mode_outlined, color: AppColors.primary),
-              title: const Text('Dark Mode', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              value: s.themeMode == ThemeMode.dark, onChanged: sc.toggleDark, activeColor: AppColors.primary),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          ListTile(
-              leading: const Icon(Icons.language, color: AppColors.primary),
-              title: const Text('Language', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: Text(s.language == 'sw' ? 'Kiswahili' : 'English (US)', style: const TextStyle(color: AppColors.onSurfaceVariant)),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
-              onTap: () => _lang(context, sc, s.language)),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          SwitchListTile(
-              secondary: const Icon(Icons.fingerprint, color: AppColors.primary),
-              title: const Text('Biometric Login', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Use FaceID or Fingerprint', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              value: s.biometric, onChanged: sc.setBiometric, activeColor: AppColors.primary),
-        ])),
-        const SizedBox(height: 16),
-        const SectionHeader('Support'),
-        AppCard(padding: EdgeInsets.zero, child: Column(children: [
-          ListTile(
-              leading: const Icon(Icons.help_outline, color: AppColors.primary),
-              title: const Text('Help Center', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('FAQs and support articles', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
-              onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          ListTile(
-              leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.primary),
-              title: const Text('Privacy', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Manage data sharing and visibility', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              trailing: const Icon(Icons.open_in_new, color: AppColors.onSurfaceVariant),
-              onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication)),
-          const Divider(height: 1, color: AppColors.outlineVariant),
-          ListTile(
-              leading: const Icon(Icons.info_outline, color: AppColors.primary),
-              title: const Text('About', style: TextStyle(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-              subtitle: const Text('ShuleCloud Parent v1.0.0', style: TextStyle(color: AppColors.onSurfaceVariant)),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
-              onTap: () => showAboutDialog(context: context, applicationName: 'ShuleCloud Parent', applicationVersion: '1.0.0',
-                  applicationLegalese: '© 2024 ShuleCloud · Empowering education through technology.',
-                  children: const [SizedBox(height: 8), Text('Monitor your child\'s academics, attendance, fees, transport and school communication.')])),
-        ])),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error)),
-          onPressed: () async { await ref.read(authControllerProvider.notifier).logout(); if (context.mounted) context.go('/login'); },
-          icon: const Icon(Icons.logout), label: const Text('Logout'),
+    return PortalPage(
+      title: 'Settings',
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+        PanelCard(
+          title: 'Preferences',
+          icon: Icons.tune,
+          padding: EdgeInsets.zero,
+          child: Column(children: [
+            _switch(Icons.dark_mode_outlined, 'Dark Mode', null, s.themeMode == ThemeMode.dark, sc.toggleDark),
+            const Divider(),
+            _LinkTile(icon: Icons.language, label: 'Language', trailing: s.language == 'sw' ? 'Kiswahili' : 'English', onTap: () => _lang(context, sc, s.language)),
+            const Divider(),
+            _switch(Icons.fingerprint, 'Biometric Login', 'Use FaceID or Fingerprint', s.biometric, sc.setBiometric),
+          ]),
         ),
         const SizedBox(height: 16),
-        const Center(child: Text('ShuleCloud Parent v1.0.0 · Built for Excellence', style: TextStyle(color: AppColors.outline, fontSize: 12))),
+        PanelCard(
+          title: 'Support',
+          icon: Icons.support_agent,
+          padding: EdgeInsets.zero,
+          child: Column(children: [
+            _LinkTile(
+              icon: Icons.help_outline,
+              label: 'Help Center',
+              external: true,
+              onTap: () => launchUrl(Uri.parse('https://shulecloud.com'), mode: LaunchMode.externalApplication),
+            ),
+            const Divider(),
+            _LinkTile(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy',
+              external: true,
+              onTap: () => launchUrl(Uri.parse('https://shulecloud.com/privacy'), mode: LaunchMode.externalApplication),
+            ),
+            const Divider(),
+            _LinkTile(
+              icon: Icons.info_outline,
+              label: 'About',
+              trailing: 'v1.0.0',
+              onTap: () => showAboutDialog(
+                context: context,
+                applicationName: 'ShuleCloud Parent',
+                applicationVersion: '1.0.0',
+                applicationLegalese: '© 2026 ShuleCloud · Empowering education through technology.',
+                children: const [SizedBox(height: 8), Text("Monitor your child's academics, attendance, fees, transport and school communication.")],
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: Color(0xFFFECDD3))),
+          onPressed: () => confirmLogout(context, ref),
+          icon: const Icon(Icons.logout, size: 18),
+          label: const Text('Logout'),
+        ),
+        const SizedBox(height: 16),
+        const Center(
+          child: Text('POWERED BY SHULECLOUD ERP',
+              style: TextStyle(color: AppColors.slate400, fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.w800)),
+        ),
       ]),
     );
   }
+
+  Widget _switch(IconData icon, String title, String? subtitle, bool value, ValueChanged<bool> onChanged) => SwitchListTile(
+        secondary: Icon(icon, color: AppColors.accent),
+        title: Text(title, style: const TextStyle(color: AppColors.slate800, fontWeight: FontWeight.w700, fontSize: 14)),
+        subtitle: subtitle == null ? null : Text(subtitle, style: const TextStyle(color: AppColors.slate500, fontSize: 12.5)),
+        value: value,
+        onChanged: onChanged,
+      );
 
   void _lang(BuildContext context, SettingsController sc, String cur) => showModalBottomSheet(context: context, builder: (_) => Column(mainAxisSize: MainAxisSize.min, children: [
         for (final e in {'en': 'English', 'sw': 'Kiswahili'}.entries)
           RadioListTile<String>(value: e.key, groupValue: cur, title: Text(e.value), onChanged: (v) { if (v != null) sc.setLanguage(v); Navigator.pop(context); }),
       ]));
+}
+
+class _LinkTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? trailing;
+  final bool external;
+  final VoidCallback? onTap;
+  const _LinkTile({required this.icon, required this.label, this.trailing, this.external = false, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            Icon(icon, color: AppColors.accent, size: 20),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: const TextStyle(color: AppColors.slate800, fontWeight: FontWeight.w700, fontSize: 14))),
+            if (trailing != null) Text(trailing!, style: const TextStyle(color: AppColors.goldText, fontWeight: FontWeight.w700, fontSize: 13)),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              Icon(external ? Icons.open_in_new : Icons.chevron_right, color: AppColors.slate400, size: 18),
+            ],
+          ]),
+        ),
+      );
 }
