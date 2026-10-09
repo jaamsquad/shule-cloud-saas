@@ -1,5 +1,6 @@
 import { ObjectId, Db } from 'mongodb';
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
+import { generateUniqueSchoolId } from '../lib/schoolId';
 
 // ─── Multi-branch organization layer ──────────────────────────────────────────
 // A Branch IS a tenant (its own isolated DB). An Organization groups branches in
@@ -93,6 +94,7 @@ export async function createBranch(opts: { organizationId: string; name: string;
         } else {
             const t = await meta.collection('Tenant').insertOne({
                 name: opts.name, subdomain, databaseName: databaseNameNew,
+                shulecloudId: await generateUniqueSchoolId(meta),
                 organizationId, status: 'active', emailVerified: true,
                 createdAt: new Date(), updatedAt: new Date(),
             });

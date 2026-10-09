@@ -114,6 +114,7 @@ export const updateTenantProfile = async (req: Request, res: Response) => {
         const data = { ...req.body, updatedAt: new Date() };
         delete data._id;
         delete data.subdomain;
+        delete data.shulecloudId;   // assigned by the platform, never by the school
         const result = await getMetaDb().collection('Tenant').updateOne(
             { _id: new ObjectId(tenantId) },
             { $set: data }

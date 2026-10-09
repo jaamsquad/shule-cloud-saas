@@ -39,7 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _error = null);
     if (_school.text.trim().isEmpty || _id.text.trim().isEmpty || _pass.text.isEmpty) {
-      setState(() => _error = 'Fill in your School Code, Employee Number and Password.');
+      setState(() => _error = 'Fill in your School ID, Employee Number and Password.');
       return;
     }
     try {
@@ -51,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           );
       if (mounted && ref.read(authControllerProvider).isAuthenticated) context.go('/');
     } catch (e) {
-      setState(() => _error = 'Login failed. Check your School Code, Employee Number and Password.');
+      setState(() => _error = 'Login failed. Check your School ID, Employee Number and Password.');
     }
   }
 
@@ -121,8 +121,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             const SizedBox(height: 16),
                           ],
-                          _label('School Code'),
-                          _input(_school, hint: 'e.g. kilimo', icon: Icons.apartment_outlined, action: TextInputAction.next),
+                          _label('School ID'),
+                          _input(_school, hint: 'e.g. A482917M', icon: Icons.apartment_outlined, action: TextInputAction.next, caps: true),
                           const SizedBox(height: 16),
                           _label('Employee Number'),
                           _input(_id, hint: 'Enter employee number', icon: Icons.badge_outlined, action: TextInputAction.next),
@@ -236,6 +236,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     Widget? suffix,
     TextInputAction? action,
     ValueChanged<String>? onSubmitted,
+    bool caps = false,
   }) {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radius), borderSide: BorderSide.none);
     return TextField(
@@ -244,6 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       textInputAction: action,
       onSubmitted: onSubmitted,
       autocorrect: false,
+      textCapitalization: caps ? TextCapitalization.characters : TextCapitalization.none,
       style: const TextStyle(color: AppColors.slate800, fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,

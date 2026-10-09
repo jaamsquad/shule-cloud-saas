@@ -14,7 +14,8 @@ const fetchB64 = async (url: string): Promise<string> => {
 };
 
 const walletUrlFor = (req: Request, regNumber: string) => {
-    const host = String(req.headers['x-tenant-subdomain'] || '').trim();
+    // The resolved subdomain — the header may carry a School ID (A######M) instead.
+    const host = String(req.tenantContext?.tenantSubdomain || req.headers['x-tenant-subdomain'] || '').trim();
     const base = host ? `https://${host}.shulecloud.com` : 'https://shulecloud.com';
     return `${base}/wallet/${encodeURIComponent(regNumber)}`;
 };

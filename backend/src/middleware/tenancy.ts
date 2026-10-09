@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Db } from 'mongodb';
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
+import { isSchoolId, normalizeSchoolId } from '../lib/schoolId';
 
 console.log('[Tenancy] Initializing multi-tenant isolation layer...');
 
@@ -38,6 +39,25 @@ export const tenancyMiddleware = async (req: Request, res: Response, next: NextF
     // Query-param fallback — needed for EventSource/SSE, which cannot set headers.
     if (!subdomain && typeof req.query?.subdomain === 'string') {
         subdomain = String(req.query.subdomain).trim().toLowerCase();
+    }
+
+    // ── ShuleCloud School ID ─────────────────────────────────────────────────
+    // The mobile apps log in with the school's ShuleCloud ID (e.g. A482917M)
+    // in place of the subdomain. Resolve it to the subdomain so everything
+    // below (token guard, tenantContext) works on the real subdomain.
+    const xSchoolId = req.headers['x-school-id'];
+    const idCandidate = typeof xSchoolId === 'string' ? xSchoolId : subdomain;
+    if (idCandidate && isSchoolId(idCandidate)) {
+        try {
+            const t = await getMetaDb().collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(idCandidate) });
+            if (!t?.subdomain) {
+                return res.status(404).json({ message: `School ID "${normalizeSchoolId(idCandidate)}" not found. Check the ID with your school.` });
+            }
+            subdomain = String(t.subdomain).toLowerCase();
+        } catch (e) {
+            console.error('[Tenancy] School ID lookup error:', e);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
     }
 
     // ── Custom domain fast-path ───────────────────────────────────────────────

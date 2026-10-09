@@ -514,7 +514,7 @@ Future<void> confirmLogout(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Log out?'),
-      content: const Text('You will need your School Code and password to sign in again.',
+      content: const Text('You will need your School ID and password to sign in again.',
           style: TextStyle(color: AppColors.slate600)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),

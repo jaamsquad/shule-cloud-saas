@@ -76,7 +76,7 @@ app.use(cors({
     origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-student-id', 'x-device-token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-school-id', 'x-student-id', 'x-device-token'],
 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));

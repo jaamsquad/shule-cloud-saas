@@ -39,7 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _error = null);
     if (_school.text.trim().isEmpty || _id.text.trim().isEmpty || _pass.text.isEmpty) {
-      setState(() => _error = 'Fill in your School Code, Email/Phone and Password.');
+      setState(() => _error = 'Fill in your School ID, Email/Phone and Password.');
       return;
     }
     try {
@@ -53,7 +53,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final many = ref.read(authControllerProvider).students.length > 1;
       context.go(many ? '/select' : '/');
     } catch (e) {
-      setState(() => _error = 'Login failed. Check your School Code and credentials.');
+      setState(() => _error = 'Login failed. Check your School ID and credentials.');
     }
   }
 
@@ -123,8 +123,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             const SizedBox(height: 16),
                           ],
-                          _label('School Code'),
-                          _input(_school, hint: 'e.g. kilimo', icon: Icons.apartment_outlined, action: TextInputAction.next),
+                          _label('School ID'),
+                          _input(_school, hint: 'e.g. A482917M', icon: Icons.apartment_outlined, action: TextInputAction.next, caps: true),
                           const SizedBox(height: 16),
                           _label('Email or Phone'),
                           _input(_id, hint: 'name@email.com or 07XX…', icon: Icons.alternate_email, action: TextInputAction.next),
@@ -238,6 +238,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     Widget? suffix,
     TextInputAction? action,
     ValueChanged<String>? onSubmitted,
+    bool caps = false,
   }) {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(AppTheme.radius), borderSide: BorderSide.none);
     return TextField(
@@ -246,6 +247,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       textInputAction: action,
       onSubmitted: onSubmitted,
       autocorrect: false,
+      textCapitalization: caps ? TextCapitalization.characters : TextCapitalization.none,
       style: const TextStyle(color: AppColors.slate800, fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,

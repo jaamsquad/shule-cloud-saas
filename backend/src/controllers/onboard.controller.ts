@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getMetaDb, subdomainToDbName } from '../lib/mongodb';
+import { generateUniqueSchoolId } from '../lib/schoolId';
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
 import { notifyOwner } from '../services/ownerNotify.service';
@@ -125,9 +126,11 @@ export const registerTenant = async (req: Request, res: Response) => {
         const emailOtp = sixDigit();
         const code = activationCode();
         const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const shulecloudId = await generateUniqueSchoolId(db);
         const tenantResult = await db.collection('Tenant').insertOne({
             name: schoolName,
             subdomain: cleanSubdomain,
+            shulecloudId,
             databaseName,
             contactEmail: adminEmail,
             contactPhone: adminPhone,

@@ -282,6 +282,11 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                                     <p className={`text-sm font-bold ${textPrimary} tracking-tight`}>{instituteName}</p>
                                     <ChevronDown className={`w-4 h-4 ${textSecondary} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                                 </div>
+                                {profileData?.shulecloudId && (
+                                    <p className={`text-[10px] font-bold tracking-wider ${textSecondary}`} title="ShuleCloud School ID — used to sign in to the mobile apps">
+                                        SCHOOL ID: <span className="font-mono">{profileData.shulecloudId}</span>
+                                    </p>
+                                )}
                             </div>
                         </button>
 
