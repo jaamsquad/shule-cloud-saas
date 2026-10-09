@@ -66,6 +66,10 @@ import VerifyDoc from "./pages/public/VerifyDoc";
 import ResultOnline from "./pages/public/ResultOnline";
 import SkillReports from "./pages/tenant/modules/skills/SkillReports";
 import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
+import Scholarships from "./pages/tenant/modules/fees/Scholarships";
+import Sponsors from "./pages/tenant/modules/fees/Sponsors";
+import FeeCredits from "./pages/tenant/modules/fees/FeeCredits";
+import FeeAuditLog from "./pages/tenant/modules/fees/FeeAuditLog";
 import ClassRoster from "./pages/tenant/modules/ClassRoster";
 import InstallPrompt from "./components/InstallPrompt";
 import ManageSchool from "./pages/owner/ManageSchool";
@@ -861,6 +865,10 @@ const App = () => {
               <Route path="/fees/defaulters" element={<FeesDefaulters />} />
               <Route path="/fees/report" element={<FeesReport />} />
               <Route path="/fees/delete" element={<DeleteFees />} />
+              <Route path="/fees/scholarships" element={<Scholarships />} />
+              <Route path="/fees/sponsors" element={<Sponsors />} />
+              <Route path="/fees/credits" element={<FeeCredits />} />
+              <Route path="/fees/audit-log" element={<FeeAuditLog />} />
               
               {/* Transport Module */}
               <Route path="/transport/zones" element={<TransportManagement tab="zones" />} />

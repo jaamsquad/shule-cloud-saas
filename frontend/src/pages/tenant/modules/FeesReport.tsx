@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { printElementToPdf } from "@/lib/pdfDoc";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { BarChart3 as BarChart3PageIcon } from "lucide-react";
 
 // ── Safe value helpers — guarantee no field access ever throws ────────────────
 const num = (v: any): number => {
@@ -106,16 +108,7 @@ export default function FeesReport() {
     const ring = 2 * Math.PI * 22;
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Fees Report</span>
-                </div>
+        <FeesPage title="Fees Report" subtitle="Collections, balances and payment channels across the school and by class." icon={BarChart3PageIcon} actions={<>
                 <button
                     onClick={handleExport}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100 transition-all active:scale-95"
@@ -123,17 +116,9 @@ export default function FeesReport() {
                     <Download className="w-3.5 h-3.5" />
                     Export PDF
                 </button>
-            </div>
+            </>}>
 
-            <div ref={reportRef} className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-
-                {/* Header title */}
-                <div className="mb-10">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                        Financial Audit &amp; Analysis <Sparkles className="w-6 h-6 text-indigo-500" />
-                    </h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Live fee collections, class performance indices, and payment channel audit</p>
-                </div>
+            <div ref={reportRef}>
 
                 {loadingReport && !selectedClassId ? (
                     <div className="flex items-center justify-center py-32 gap-3 text-slate-400 font-black uppercase text-xs tracking-widest">
@@ -143,28 +128,28 @@ export default function FeesReport() {
                     <>
                         {/* KPIs Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                                 <div className="absolute top-0 inset-x-0 h-1.5 bg-[#5C67F2]" />
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Invoiced</p>
                                 <h3 className="text-2xl font-black text-slate-800 mt-2">{ksh(kpis.total_invoiced)}</h3>
                                 <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Active Academic Term</p>
                             </div>
 
-                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                                 <div className="absolute top-0 inset-x-0 h-1.5 bg-emerald-500" />
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Collected</p>
                                 <h3 className="text-2xl font-black text-emerald-600 mt-2">{ksh(kpis.total_collected)}</h3>
                                 <p className="text-[9px] text-emerald-400 font-bold uppercase mt-1">Received &amp; Cleared</p>
                             </div>
 
-                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                                 <div className="absolute top-0 inset-x-0 h-1.5 bg-rose-500" />
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Outstanding Balance</p>
                                 <h3 className="text-2xl font-black text-rose-600 mt-2">{ksh(kpis.outstanding)}</h3>
                                 <p className="text-[9px] text-rose-400 font-bold uppercase mt-1">Pending Invoices</p>
                             </div>
 
-                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between">
                                 <div className="absolute top-0 inset-x-0 h-1.5 bg-indigo-500" />
                                 <div>
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Collection Rate</p>
@@ -187,7 +172,7 @@ export default function FeesReport() {
 
                         {/* Chart & Channel Breakdown */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
-                            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm md:col-span-2 relative">
+                            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm md:col-span-2 relative">
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
                                     Collection Trend Line <TrendingUp className="w-4 h-4 text-indigo-500" />
                                 </h3>
@@ -236,7 +221,7 @@ export default function FeesReport() {
                             </div>
 
                             {/* Payment Method Distribution */}
-                            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
+                            <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
                                     Payment Channels <Landmark className="w-4 h-4 text-indigo-500" />
                                 </h3>
@@ -261,7 +246,7 @@ export default function FeesReport() {
                         </div>
 
                         {/* Class Breakdown List */}
-                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-8">
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-8">
                             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Class Collection Indexes</h3>
                                 <div className="relative max-w-xs w-full">
@@ -315,7 +300,7 @@ export default function FeesReport() {
                     </>
                 ) : (
                     /* Drilldown Class Detail Page */
-                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 animate-in slide-in-from-right-4 duration-300">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 animate-in slide-in-from-right-4 duration-300">
                         <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-6 flex-wrap gap-3">
                             <button
                                 onClick={() => setSelectedClassId(null)}
@@ -390,6 +375,6 @@ export default function FeesReport() {
                     </div>
                 )}
             </div>
-        </div>
+        </FeesPage>
     );
 }

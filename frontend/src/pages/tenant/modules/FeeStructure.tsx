@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Layers as LayersPageIcon } from "lucide-react";
 
 export default function FeeStructure() {
     const queryClient = useQueryClient();
@@ -204,7 +206,7 @@ export default function FeeStructure() {
                         </button>
                     </div>
 
-                    <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-10 space-y-8">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-10 space-y-8">
                         <div className="grid grid-cols-2 gap-6">
                             <div className="relative col-span-2">
                                 <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Structure Name*</div>
@@ -383,28 +385,7 @@ export default function FeeStructure() {
     }
 
     return (
-        <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
-            {/* Breadcrumb Header */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl">
-                <div className="flex items-center text-sm font-medium text-gray-500">
-                    <span className="font-bold text-gray-800 text-base mr-2">Finance</span>
-                    <span className="text-gray-300 mx-2">|</span>
-                    <Home className="w-4 h-4 text-gray-500 mr-2" />
-                    <span className="text-gray-500 font-semibold">- Fee Structures</span>
-                </div>
-            </div>
-
-            <div className="max-w-7xl mx-auto w-full px-6 space-y-8 pb-20 mt-4">
-                {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-2">
-                        <h1 className="text-3xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-3">
-                            Fee Frameworks <Sparkles className="w-5 h-5 text-indigo-500" />
-                        </h1>
-                        <p className="text-slate-400 font-bold text-xs flex items-center gap-2 uppercase tracking-widest">
-                            <Layers className="w-4 h-4 text-[#5C67F2]" /> Define, organize, and manage tuition structures by class and term.
-                        </p>
-                    </div>
+        <FeesPage title="Fee Structure" subtitle="Fee templates per class and term — the items and amounts each invoice is built from." icon={LayersPageIcon} actions={<>
                     <button 
                         onClick={handleOpenCreateModal}
                         className="flex items-center justify-center gap-2 px-8 py-3.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-lg hover:shadow-xl transition-all transform active:scale-95 group text-xs uppercase tracking-widest"
@@ -412,7 +393,9 @@ export default function FeeStructure() {
                         <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" strokeWidth={3} />
                         Create Structure
                     </button>
-                </div>
+            </>}>
+
+            <div className="space-y-8">
 
                 {/* Main Content Layout */}
                 <div className="space-y-6">
@@ -466,7 +449,7 @@ export default function FeeStructure() {
                                 return (
                                     <div 
                                         key={s._id} 
-                                        className="bg-white rounded-[2rem] border border-slate-100 p-6 flex flex-col justify-between hover:shadow-xl hover:border-slate-200 transition-all duration-350 group relative overflow-hidden"
+                                        className="bg-white rounded-2xl border border-slate-100 p-6 flex flex-col justify-between hover:shadow-xl hover:border-slate-200 transition-all duration-350 group relative overflow-hidden"
                                     >
                                         {/* Colored header strip */}
                                         <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#5C67F2] to-indigo-400 opacity-80" />
@@ -551,7 +534,7 @@ export default function FeeStructure() {
                             })}
                         </div>
                     ) : (
-                        <div className="bg-white rounded-[2.5rem] p-20 text-center border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-4">
+                        <div className="bg-white rounded-2xl p-20 text-center border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-4">
                             <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-350">
                                 <Receipt className="w-8 h-8" />
                             </div>
@@ -586,7 +569,7 @@ export default function FeeStructure() {
             {/* Delete Confirmation Modal */}
             {deleteConfirmId && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-350 p-8 text-center space-y-6">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-350 p-8 text-center space-y-6">
                         <div className="mx-auto w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-500">
                             <Trash2 className="w-8 h-8" />
                         </div>
@@ -613,6 +596,6 @@ export default function FeeStructure() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

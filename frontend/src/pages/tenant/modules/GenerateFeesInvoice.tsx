@@ -8,6 +8,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Layers as LayersPageIcon } from "lucide-react";
 
 export default function GenerateFeesInvoice() {
     const [academicYearId, setAcademicYearId] = useState("");
@@ -124,31 +126,14 @@ export default function GenerateFeesInvoice() {
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Generate Fees Invoice</span>
-                </div>
-            </div>
+        <FeesPage title="Generate Invoices" subtitle="Create term invoices for whole classes in one go — they run in the background and parents are notified." icon={LayersPageIcon}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                {/* Title */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                        Bulk Invoice Generator
-                    </h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Deploy background processing jobs to generate term invoices and notify parents</p>
-                </div>
+            <div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Panel: Generation Job configuration */}
                     <div className="lg:col-span-2 space-y-6">
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-[#5C67F2] to-amber-500" />
                             
                             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
@@ -254,7 +239,7 @@ export default function GenerateFeesInvoice() {
 
                     {/* Right Panel: Active/Recent Background jobs status */}
                     <div className="lg:col-span-1 space-y-6">
-                        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-full min-h-[400px]">
+                        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-full min-h-[400px]">
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                                     Background Job Logs
@@ -335,6 +320,6 @@ export default function GenerateFeesInvoice() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

@@ -15,6 +15,7 @@ import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
 import feesRoutes from './routes/fees.routes';
+import feeAidRoutes from './routes/feeAid.routes';
 import feesOverviewRoutes from './routes/feesOverview.routes';
 import questionImportRoutes from './modules/questionImport/questionImport.routes';
 import questionBankRoutes from './modules/questionBank/questionBank.routes';
@@ -336,6 +337,7 @@ app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
 app.use('/api/v1', feesOverviewRoutes);         // Fees dashboard (overview, overdue, records, M-PESA in process…)
 app.use('/api/v1', feesRoutes);
+app.use('/api/v1', feeAidRoutes);
 app.use('/api/v1', questionImportRoutes);
 app.use('/api/v1', questionBankRoutes);
 app.use('/api/v1', onlineExamRoutes);

@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Home, Loader2, Save, Receipt, CreditCard, ShieldCheck, ShieldOff } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Settings2 as Settings2PageIcon } from "lucide-react";
 
 const SEPARATORS = [{ v: "", l: "None" }, { v: "-", l: "Dash ( - )" }, { v: "/", l: "Slash ( / )" }, { v: "_", l: "Underscore ( _ )" }];
 
@@ -29,12 +31,9 @@ export default function FeesSettings() {
     });
 
     return (
-        <div className="flex-1 bg-[#f8fafc] min-h-screen">
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm">
-                <Home className="w-4 h-4 text-gray-400 mr-2" /><span className="text-gray-500 text-sm">Fees /</span><span className="ml-1.5 font-semibold text-slate-800 text-sm">Settings</span>
-            </div>
+        <FeesPage title="Fees Settings" subtitle="Manual payment rules and how invoice numbers are formatted." icon={Settings2PageIcon}>
 
-            <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+            <div className="max-w-2xl space-y-6">
                 {/* Manual payments */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6">
                     <div className="flex items-center gap-2 mb-1">{finance?.manualPaymentsEnabled === false ? <ShieldOff className="w-4 h-4 text-rose-500" /> : <ShieldCheck className="w-4 h-4 text-emerald-500" />}<h2 className="text-base font-semibold text-slate-800">Manual fee payments</h2></div>
@@ -65,6 +64,6 @@ export default function FeesSettings() {
                     )}
                 </div>
             </div>
-        </div>
+        </FeesPage>
     );
 }

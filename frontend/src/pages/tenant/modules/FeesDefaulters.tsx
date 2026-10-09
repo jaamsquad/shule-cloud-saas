@@ -8,6 +8,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { AlertTriangle as AlertTrianglePageIcon } from "lucide-react";
 
 export default function FeesDefaulters() {
     const [minDaysOverdue, setMinDaysOverdue] = useState("0");
@@ -44,11 +46,16 @@ export default function FeesDefaulters() {
         }
         setIsSendingSMS(true);
         try {
-            const invoice_ids = list.map((d: any) => d.student_id); // using student_id as mock trigger
-            await api.post(`/schools/default/fees/defaulters/sms`, { invoice_ids, template: smsTemplate });
-            toast.success(`Bulk SMS reminder sent successfully to ${list.length} parents`);
-        } catch {
-            toast.error("Failed to send reminders");
+            const student_ids = Array.from(new Set(list.map((d: any) => d.student_id)));
+            const r = (await api.post(`/schools/default/fees/defaulters/sms`, { student_ids, template: smsTemplate })).data?.data || {};
+            const parts = [`${r.sent_count || 0} sent`];
+            if (r.failed_count) parts.push(`${r.failed_count} failed`);
+            if (r.skipped_count) parts.push(`${r.skipped_count} skipped (no phone or no balance)`);
+            (r.sent_count ? toast.success : toast.error)(`SMS reminders: ${parts.join(" · ")}`);
+            const firstErr = (r.delivery_report || []).find((x: any) => x.status === "failed")?.error;
+            if (firstErr) toast.error(firstErr);
+        } catch (e: any) {
+            toast.error(e?.response?.data?.errors?.[0]?.message || "Failed to send reminders");
         } finally {
             setIsSendingSMS(false);
         }
@@ -60,16 +67,7 @@ export default function FeesDefaulters() {
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Defaulters Module</span>
-                </div>
+        <FeesPage title="Defaulters" subtitle="Students with overdue balances. Filter by class, amount or days late and send SMS reminders." icon={AlertTrianglePageIcon} actions={<>
                 <button
                     onClick={handleExportDefaulters}
                     className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all"
@@ -77,17 +75,9 @@ export default function FeesDefaulters() {
                     <Printer className="w-3.5 h-3.5" />
                     Landscape PDF Report
                 </button>
-            </div>
+            </>}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                
-                {/* Title */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
-                        Overdue & Defaulter Ledger
-                    </h1>
-                    <p className="text-slate-500 text-sm mt-1">Live tracking of fee balances, aging accounts, and parent reminder broadcasts</p>
-                </div>
+            <div>
 
                 {/* Dashboard Widgets Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
@@ -191,6 +181,7 @@ export default function FeesDefaulters() {
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 text-sm text-slate-700"
                             placeholder="Type template reminder..."
                         />
+                        <p className="text-[11px] text-slate-400 -mt-2">Each parent gets their own child's details: <code>{"{name}"}</code> <code>{"{amount}"}</code> <code>{"{adm}"}</code> <code>{"{class}"}</code> <code>{"{parent}"}</code></p>
                         <button
                             onClick={handleSendBulkSMS}
                             disabled={isSendingSMS || list.length === 0}
@@ -257,6 +248,6 @@ export default function FeesDefaulters() {
                     </div>
                 </div>
             </div>
-        </div>
+        </FeesPage>
     );
 }

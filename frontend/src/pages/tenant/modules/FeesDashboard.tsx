@@ -6,6 +6,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
+import { FeesPage, FButton, FLoading } from "@/components/fees/FeesUI";
+import { LayoutDashboard, Award, HandHeart, PiggyBank } from "lucide-react";
 
 const money = (n: number) => `KSh ${Number(n || 0).toLocaleString("en-KE", { maximumFractionDigits: 0 })}`;
 const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -33,23 +35,24 @@ export default function FeesDashboard() {
     const [tab, setTab] = useState<(typeof TABS)[number]["k"]>("overdue");
     const structure = useMemo(() => (data?.structures || []).find((s: any) => s._id === sel) || data?.structures?.[0], [data, sel]);
 
-    if (isLoading) return <div className="flex-1 bg-[#f4f7f6] min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-[#5C67F2]" /></div>;
+    if (isLoading) return <FeesPage title="Fees Dashboard" icon={LayoutDashboard} wide><FLoading label="Loading fee figures…" /></FeesPage>;
     if (error || !data) return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex items-center justify-center"><div className="bg-white p-10 rounded-2xl shadow text-center border border-gray-100"><p className="font-black text-slate-800">Couldn't open the fees dashboard</p><p className="text-sm text-slate-500 mt-1">{(error as any)?.response?.data?.message || "Please try again."}</p></div></div>
     );
     const c = data.cards; const maxDaily = Math.max(1, ...data.trend.map((t: any) => t.amount)); const maxMethod = Math.max(1, ...data.methods.map((m: any) => m.amount)); const maxClass = Math.max(1, ...data.byClass.map((m: any) => m.balance));
 
     return (
-        <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center">
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl w-[calc(100%-2rem)] flex-wrap gap-3">
-                <div className="flex items-center"><span className="font-bold text-gray-800 text-lg mr-2">Fees</span><span className="text-gray-300 mx-2">|</span><Home className="w-4 h-4 text-gray-500 mr-2" /><span className="text-gray-500 font-medium">- Fees Dashboard</span>{data.term && <span className="ml-3 px-3 py-1 rounded-full bg-orange-100 text-orange-600 text-[11px] font-black">{data.term.label}</span>}</div>
-                <div className="flex gap-2">
-                    <button onClick={() => refetch()} className="h-9 px-4 rounded-full border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-2 bg-white"><RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh</button>
-                    <Link to="/fees/collect" className="h-9 px-4 rounded-full bg-[#5C67F2] text-white text-xs font-bold flex items-center gap-2"><Banknote className="w-3.5 h-3.5" /> Collect Fees</Link>
-                </div>
-            </div>
-
-            <div className="p-6 pt-0 w-full space-y-5">
+        <FeesPage
+            title="Fees Dashboard"
+            subtitle={data.term ? `Collections, balances and fee activity · ${data.term.label}` : "Collections, balances and fee activity"}
+            icon={LayoutDashboard}
+            wide
+            actions={<>
+                <FButton variant="secondary" icon={RefreshCw} onClick={() => refetch()} loading={isFetching}>Refresh</FButton>
+                <Link to="/fees/collect"><FButton icon={Banknote}>Collect Fees</FButton></Link>
+            </>}
+        >
+            <div className="w-full space-y-5">
                 {/* top cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     <StatCard icon={Clock} color="#e11d48" title="Late Collection" big={money(c.overdue.amount)} rows={[["Late invoices", String(c.overdue.invoices)], ["Students", String(c.overdue.students)]]} />
@@ -57,6 +60,8 @@ export default function FeesDashboard() {
                     <StatCard icon={Wallet} color="#8b5cf6" title="Deposit Collection" big={money(c.deposit.held)} rows={[["Held in student wallets", money(c.deposit.held)], ["Students with a balance", String(c.deposit.students)]]} />
                     <StatCard icon={Landmark} color="#16a34a" title="School Collection" big={money(c.school.paid)} rows={[["Total invoiced", money(c.school.invoiced)], ["Outstanding", money(c.school.balance)], ["Students owing", String(c.school.studentsOwing)]]} />
                 </div>
+
+                <FeeAidRow />
 
                 {/* collection progress + today */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -115,7 +120,7 @@ export default function FeesDashboard() {
                     </div>
                 </div>
             </div>
-        </div>
+        </FeesPage>
     );
 }
 
@@ -201,5 +206,31 @@ function Edited() {
             <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><Th>#</Th><Th>When</Th><Th>Action</Th><Th>Item</Th><Th>By</Th><Th>Details</Th></tr></thead>
                 <tbody>{rows.length === 0 ? <Empty cols={6} loading={isLoading} text="No edited, waived or voided fee records." /> : rows.map((r, i) => <tr key={r._id} className="border-t border-slate-50"><td className="px-3 py-2 text-slate-400">{i + 1}</td><td className="px-3 text-slate-500 whitespace-nowrap">{when(r.at)}</td><td className="px-3"><span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-100 text-slate-600">{String(r.action).replace(/_/g, " ")}</span></td><td className="px-3 text-slate-600">{[r.entity, r.reference].filter(Boolean).join(" · ") || "—"}</td><td className="px-3 text-slate-500">{r.by || "—"}</td><td className="px-3 text-slate-500 text-xs">{r.details || "—"}</td></tr>)}</tbody></table></div>
         </>
+    );
+}
+
+/** Scholarships, sponsors and credits at a glance — each links to its page. */
+function FeeAidRow() {
+    const sch = useQuery<any>({ queryKey: ["sch_summary"], queryFn: async () => (await api.get("/fees/scholarships/summary")).data, retry: false });
+    const sp = useQuery<any>({ queryKey: ["sp_summary"], queryFn: async () => (await api.get("/fees/sponsors/summary")).data, retry: false });
+    const cr = useQuery<any>({ queryKey: ["fee_credits"], queryFn: async () => (await api.get("/fees/credits")).data, retry: false });
+    const tiles = [
+        { to: "/fees/scholarships", icon: Award, color: "#5C67F2", title: "Scholarships & bursaries", big: money(sch.data?.totalAwarded || 0), sub: `${sch.data?.activeAwards ?? 0} students on active awards` },
+        { to: "/fees/sponsors", icon: HandHeart, color: "#d97706", title: "Sponsors", big: money(sp.data?.totalReceived || 0), sub: `${sp.data?.sponsoredStudents ?? 0} sponsored students · ${sp.data?.sponsors ?? 0} sponsors` },
+        { to: "/fees/credits", icon: PiggyBank, color: "#059669", title: "Credits held", big: money(cr.data?.total || 0), sub: `${cr.data?.students?.length ?? 0} students with overpayments` },
+    ];
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {tiles.map(t => (
+                <Link key={t.to} to={t.to} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 hover:border-indigo-200 hover:shadow-md transition-all">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0" style={{ background: t.color }}><t.icon className="w-5 h-5" /></div>
+                    <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-500">{t.title}</p>
+                        <p className="text-lg font-extrabold text-slate-900">{t.big}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{t.sub}</p>
+                    </div>
+                </Link>
+            ))}
+        </div>
     );
 }
