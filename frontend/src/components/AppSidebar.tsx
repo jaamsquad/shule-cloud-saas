@@ -79,6 +79,7 @@ export const navItems: NavItem[] = [
       { label: "Admissions", path: "/students/admissions", pagePerm: "students.admissions" },
       { label: "Manage Families", path: "/students/families", pagePerm: "students.families" },
       { label: "Promote Students", path: "/students/promote", pagePerm: "students.promote" },
+      { label: "Auto Promotion", path: "/students/promote/auto", pagePerm: "students.promote" },
       { label: "Transfer Management", path: "/students/transfer", pagePerm: "students.transfer" },
       { label: "Discipline Records", path: "/students/discipline", pagePerm: "students.discipline" },
       { label: "Medical Records", path: "/students/medical", pagePerm: "students.medical" },

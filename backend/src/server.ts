@@ -53,6 +53,11 @@ async function bootstrap() {
         // Release due scheduled SMS jobs every 30s across all tenants.
         setInterval(() => { releaseScheduledSms().catch(() => {}); }, 30_000);
 
+        // ── Scheduled class promotion ─────────────────────────────────────────
+        // Runs any promotion whose date & time has come (Grade 1 East → Grade 2 East).
+        const { runDuePromotionsAllTenants } = require('./services/promotion.service');
+        setInterval(() => { runDuePromotionsAllTenants().catch(() => {}); }, 60_000);
+
         // ── M-PESA auto-sync ──────────────────────────────────────────────────
         // Pull recent Till/Paybill transactions from Safaricom every 5 min for
         // every tenant with the Pull API registered, so payments appear without

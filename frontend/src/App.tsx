@@ -148,6 +148,7 @@ import SecretaryReports from "./pages/tenant/modules/secretary/SecretaryReports"
 import PrintBasicList from "./pages/tenant/modules/PrintBasicList";
 import ManageLogin from "./pages/tenant/modules/ManageLogin";
 import PromoteStudents from "./pages/tenant/modules/PromoteStudents";
+import AutoPromotion from "./pages/tenant/modules/AutoPromotion";
 import AllStudents from "./pages/tenant/modules/AllStudents";
 import StudentReport from "./pages/tenant/modules/StudentReport";
 import FindStudent from "./pages/tenant/modules/FindStudent";
@@ -626,6 +627,7 @@ const App = () => {
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
               <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
+              <Route path="/students/promote/auto" element={<AutoPromotion />} />
                <Route path="/students/admissions" element={<Admissions />} />
               <Route path="/students/admissions/:id" element={<AdmissionView />} />
               <Route path="/students/guardians" element={<Guardians />} />

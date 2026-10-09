@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Home, ArrowRight, ArrowLeft, Loader2, Check, Users, GraduationCap, AlertTriangle } from "lucide-react";
+import { Home, ArrowRight, ArrowLeft, Loader2, Check, Users, GraduationCap, AlertTriangle, CalendarClock } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -102,7 +103,12 @@ export default function PromoteStudents() {
 
             <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
                 <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 mb-1"><GraduationCap className="w-6 h-6 text-[#5C67F2]" /> Promote Students</h1>
-                <p className="text-sm text-slate-400 mb-5">Move a class up. Previous classes & results stay intact and remain viewable on each student's profile.</p>
+                <p className="text-sm text-slate-400 mb-3">Move a class up. Previous classes & results stay intact and remain viewable on each student's profile.</p>
+                <Link to="/students/promote/auto" className="mb-5 flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 hover:bg-indigo-50">
+                    <CalendarClock className="w-5 h-5 text-[#5C67F2] shrink-0" />
+                    <span className="text-sm text-slate-600 flex-1"><b className="text-slate-800">Promote the whole school automatically</b> — set a date & time and every class moves up (Grade 1 East → Grade 2 East).</span>
+                    <ArrowRight className="w-4 h-4 text-[#5C67F2]" />
+                </Link>
                 <Stepper />
 
                 {/* Step 1 — pick source class + stream */}

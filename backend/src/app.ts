@@ -29,6 +29,7 @@ import behaviourRoutes from './modules/behaviour/behaviour.routes';
 import salaryRoutes from './routes/salary.routes';
 import posRoutes from './routes/pos.routes';
 import academicsV2Routes from './routes/academics-v2.routes';
+import promotionScheduleRoutes from './routes/promotionSchedule.routes';
 import communicationsRoutes from './routes/communications.routes';
 import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
@@ -350,6 +351,7 @@ app.use('/api/v1', classTestsRoutes);
 app.use('/api/v1', behaviourRoutes);
 app.use('/api/v1', salaryRoutes);
 app.use('/api/v1', posRoutes);
+app.use('/api/v1', promotionScheduleRoutes);   // scheduled automatic promotion
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
 app.use('/api/v1', walletRoutes);

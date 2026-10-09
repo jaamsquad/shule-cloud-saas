@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
-const emptyClass = { name: "", code: "", level: "1", curriculumType: "844", capacity: "40" };
+const emptyClass = { name: "", code: "", level: "1", curriculumType: "844", capacity: "40", nextClassId: "", isFinal: false };
 const emptyStream = { classId: "", name: "", capacity: "40", classTeacherId: "" };
 
 export default function ClassesStreamsPage() {
@@ -97,12 +97,15 @@ export default function ClassesStreamsPage() {
                                                     <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${c.curriculumCode === "CBC" ? "bg-emerald-100 text-emerald-700" : c.curriculumCode === "Cambridge" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{c.curriculum?.name || c.curriculumType}</span>
                                                     {c.curriculum?.terminology && <span className="text-[11px] text-slate-400">{c.curriculum.terminology.subjectPlural}</span>}
                                                     <span className="text-[11px] text-slate-400">Cap: {c.capacity}</span>
+                                                    {/* Where automatic promotion sends this class */}
+                                                    {c.isFinal ? <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Final class · graduates</span>
+                                                        : c.nextClassId && classes.find((x: any) => x._id === c.nextClassId) ? <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">→ {classes.find((x: any) => x._id === c.nextClassId)?.name}</span> : null}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {canEdit && (<>
-                                            <button onClick={e => { e.stopPropagation(); setEditClassId(c._id); setClassForm({ name: c.name, code: c.code || "", level: String(c.level), curriculumType: c.curriculumType || "844", capacity: String(c.capacity) }); setShowClassModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
+                                            <button onClick={e => { e.stopPropagation(); setEditClassId(c._id); setClassForm({ name: c.name, code: c.code || "", level: String(c.level), curriculumType: c.curriculumType || "844", capacity: String(c.capacity), nextClassId: c.nextClassId || "", isFinal: !!c.isFinal }); setShowClassModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
                                             {confirmDelete?.id === c._id ? (
                                                 <><button onClick={e => { e.stopPropagation(); delMut.mutate({ id: c._id, type: "class" }); }} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
                                                 <button onClick={e => { e.stopPropagation(); setConfirmDelete(null); }} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>
@@ -179,10 +182,22 @@ export default function ClassesStreamsPage() {
                                             : curricula.map((c: any) => <option key={c.code} value={c.code}>{c.name}</option>)}
                                     </select>
                                 </div>
+                                <div className="relative col-span-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Promotes to (automatic promotion)</label>
+                                    <select value={classForm.nextClassId} disabled={classForm.isFinal} onChange={e => setClassForm({ ...classForm, nextClassId: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 disabled:opacity-50">
+                                        <option value="">Automatic — next by name / level</option>
+                                        {classes.filter((x: any) => x._id !== editClassId).sort((a: any, b: any) => a.level - b.level).map((x: any) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                                    </select>
+                                    <label className="flex items-center gap-2 mt-2.5 text-xs font-medium text-slate-600 cursor-pointer">
+                                        <input type="checkbox" checked={classForm.isFinal} onChange={e => setClassForm({ ...classForm, isFinal: e.target.checked, nextClassId: e.target.checked ? "" : classForm.nextClassId })} />
+                                        Final class — learners graduate instead of moving up
+                                    </label>
+                                    <p className="text-[11px] text-slate-400 mt-1.5">Streams keep their name when promoted (East → East). A missing stream is created in the next class.</p>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button onClick={() => setShowClassModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-sm font-medium rounded-xl">Cancel</button>
-                                <button onClick={() => { if (!classForm.name) { toast.error("Class name required"); return; } classMut.mutate({ ...classForm, level: Number(classForm.level), capacity: Number(classForm.capacity) }); }} disabled={classMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-sm font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
+                                <button onClick={() => { if (!classForm.name) { toast.error("Class name required"); return; } classMut.mutate({ ...classForm, level: Number(classForm.level), capacity: Number(classForm.capacity), nextClassId: classForm.isFinal ? null : (classForm.nextClassId || null) }); }} disabled={classMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-sm font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
                                     {classMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{editClassId ? "Save" : "Create Class"}
                                 </button>
                             </div>

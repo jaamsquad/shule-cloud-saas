@@ -155,7 +155,7 @@ router.delete('/v2/terms/:id', async (req, res) => {
 // ── who may change the class structure ─────────────────────────────────────
 // Adding, renaming or deleting classes and streams is for school administrators (and the principal / head teacher).
 // Teachers can look at classes but not change them — enforced here, whatever the browser sends.
-async function canEditStructure(req: any): Promise<boolean> {
+export async function canEditStructure(req: any): Promise<boolean> {
     const d = getRequestDb(req);
     const scope = await resolveScope(req, d);
     if (scope.isAdmin) return true;
@@ -196,9 +196,12 @@ router.get('/v2/classes', async (req, res) => {
 router.post('/v2/classes', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { name, code, level, curriculumType, capacity } = req.body;
+        const { name, code, level, curriculumType, capacity, nextClassId, isFinal } = req.body;
         if (!name) return res.status(400).json({ message: 'Class name is required' });
-        const doc = { name, code: code || '', level: Number(level) || 1, curriculumType: curriculumType || '844', capacity: Number(capacity) || 40, isActive: true, createdAt: now() };
+        const doc: any = { name, code: code || '', level: Number(level) || 1, curriculumType: curriculumType || '844', capacity: Number(capacity) || 40, isActive: true, createdAt: now() };
+        // Automatic promotion: the class its learners move to (optional) / it is the last class
+        if (nextClassId) doc.nextClassId = String(nextClassId);
+        if (isFinal) doc.isFinal = true;
         const result = await db.collection('v2_classes').insertOne(doc);
         res.status(201).json({ id: result.insertedId, ...doc });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -209,6 +212,11 @@ router.patch('/v2/classes/:id', async (req, res) => {
         const db = getRequestDb(req);
         const update: any = { updatedAt: now() };
         ['name', 'code', 'level', 'curriculumType', 'capacity', 'isActive'].forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+        if (req.body.nextClassId !== undefined) {
+            if (req.body.nextClassId && String(req.body.nextClassId) === req.params.id) return res.status(400).json({ message: 'A class cannot promote into itself' });
+            update.nextClassId = req.body.nextClassId ? String(req.body.nextClassId) : null;
+        }
+        if (req.body.isFinal !== undefined) update.isFinal = !!req.body.isFinal;
         const before: any = req.body.name !== undefined ? await db.collection('v2_classes').findOne({ _id: toOid(req.params.id) }) : null;
         await db.collection('v2_classes').updateOne({ _id: toOid(req.params.id) }, { $set: update });
         // Renamed (Form 1 → Grade 1): its streams, learners and reports follow the new name
