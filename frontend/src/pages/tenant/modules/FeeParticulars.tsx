@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { ListChecks as ListChecksPageIcon } from "lucide-react";
 
 export default function FeeParticulars() {
     const navigate = useNavigate();
@@ -134,18 +136,10 @@ export default function FeeParticulars() {
     };
 
     return (
-        <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center shadow-sm z-10 m-4 rounded-xl w-[calc(100%-2rem)]">
-                <span className="font-bold text-gray-800 text-sm mr-2">General Settings</span>
-                <span className="text-gray-300 mx-2">|</span>
-                <Home className="w-3.5 h-3.5 text-gray-500 mr-1.5" />
-                <span className="text-gray-500 font-medium text-sm">- Fee Particulars</span>
-            </div>
+        <FeesPage title="Fee Particulars" subtitle="The fee items (vote heads) used when building fee structures and invoices." icon={ListChecksPageIcon}>
 
-            <div className="w-full max-w-4xl px-6 mt-4">
+            <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-8">
-                    <h2 className="text-2xl font-black text-gray-800 tracking-tight uppercase">Change Fee Particulars</h2>
                     <div className="flex items-center justify-center gap-4 mt-2 text-xs font-bold uppercase tracking-widest">
                         <div className="flex items-center gap-1.5 text-[#5C67F2]">
                             <div className="w-4 h-1.5 bg-[#5C67F2] rounded-full"></div>
@@ -228,7 +222,7 @@ export default function FeeParticulars() {
             {/* Class Setup Modal */}
             {classSetupModalOpen && selectedRowIndex !== null && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
                         <div className="px-8 py-5 bg-gradient-to-r from-[#5C67F2] to-indigo-500 text-white flex justify-between items-center">
                             <div>
                                 <h3 className="text-sm font-black uppercase tracking-wider">Setup Class Tuition Fees</h3>
@@ -276,7 +270,7 @@ export default function FeeParticulars() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }
 

@@ -18,6 +18,13 @@ class ApiConfig {
   static const String profile = '/auth/staff-portal/profile';
   static const String permissions = '/auth/staff-portal/permissions';
 
+  // Continue with Google (the owner sets the Google client id in the owner portal)
+  static const String googleConfig = '/auth/google/config';
+  static const String googleLogin = '/auth/google/login';
+  static const String googleLink = '/auth/google/link';
+  static const String googleUnlink = '/auth/google/unlink';
+  static const String accountSecurity = '/auth/account-security';
+
   // Dashboard
   static const String summary = '/auth/staff-portal/summary';
   static const String announcements = '/auth/staff-portal/announcements';

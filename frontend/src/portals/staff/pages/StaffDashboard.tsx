@@ -5,6 +5,8 @@ import { User as UserIcon, Users, BookOpen, CalendarClock, Pencil, X, Loader2 } 
 import { toast } from "sonner";
 import { PageTitle, PanelCard, Field } from "../../PortalShell";
 import type { StaffCtx } from "../StaffLayout";
+import SignInSecurity from "@/components/auth/SignInSecurity";
+import { staffCalendarApi } from "../staffApi";
 
 export default function StaffDashboard() {
     const { staff, api } = useOutletContext<StaffCtx>();
@@ -82,6 +84,8 @@ export default function StaffDashboard() {
                     </div>
                 </div>
             </PanelCard>
+
+            <SignInSecurity client={staffCalendarApi} accent="#0f7a8a" />
 
             {editing && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4">

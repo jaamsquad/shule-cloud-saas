@@ -8,7 +8,8 @@ if (!(globalThis as any).crypto) (globalThis as any).crypto = webcrypto;
 
 import http from 'http';
 import app from './app';
-import { connectDB } from './lib/mongodb';
+import { connectDB, getMetaDb } from './lib/mongodb';
+import { backfillSchoolIds } from './lib/schoolId';
 import { attachWhatsAppSocket } from './services/whatsapp/socket';
 import { attachSmsSocket } from './services/smsSocket';
 import { whatsAppManager } from './services/whatsapp/SessionManager';
@@ -25,6 +26,11 @@ async function bootstrap() {
     try {
         // Test database connection
         await connectDB();
+
+        // Give every school a ShuleCloud School ID (A######M) if it lacks one.
+        backfillSchoolIds(getMetaDb())
+            .then(n => { if (n) console.log(`[SchoolId] Assigned School IDs to ${n} school(s)`); })
+            .catch(e => console.error('[SchoolId] Backfill failed:', e));
 
         // Wrap Express in an HTTP server so Socket.IO can share the port.
         const server = http.createServer(app);
@@ -46,6 +52,15 @@ async function bootstrap() {
         // ── SMS scheduler ─────────────────────────────────────────────────────
         // Release due scheduled SMS jobs every 30s across all tenants.
         setInterval(() => { releaseScheduledSms().catch(() => {}); }, 30_000);
+
+        // ── Scheduled class promotion ─────────────────────────────────────────
+        // Runs any promotion whose date & time has come (Grade 1 East → Grade 2 East).
+        const { runDuePromotionsAllTenants } = require('./services/promotion.service');
+        setInterval(() => { runDuePromotionsAllTenants().catch(() => {}); }, 60_000);
+
+        // ── Meeting reminders (Communication → Meetings) ─────────────────────
+        const { sendDueMeetingReminders } = require('./routes/meetings.routes');
+        setInterval(() => { sendDueMeetingReminders().catch(() => {}); }, 60_000);
 
         // ── M-PESA auto-sync ──────────────────────────────────────────────────
         // Pull recent Till/Paybill transactions from Safaricom every 5 min for

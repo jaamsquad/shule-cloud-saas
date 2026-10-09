@@ -8,6 +8,7 @@ import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPay
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
+import { finishSchoolLogin } from '../lib/schoolLogin';
 
 const router = Router();
 
@@ -167,6 +168,90 @@ router.get('/check-username', async (req, res) => {
     }
 });
 
+
+// ─── Sign-in responses (shared by password sign-in and Google sign-in) ──────────
+// Each returns the ready response plus who is signing in, so finishSchoolLogin can
+// ask for an emailed code first when the school's 2FA policy needs one.
+export async function userLoginPayload(user: any, username: string, ctx: { tenantId: string | null; tenantSubdomain: string; tenantDb: Db }) {
+    let role = (user.role || 'school_admin').toLowerCase();
+    let staffInfo: any = null;
+    try {
+        staffInfo = await ctx.tenantDb.collection('staff').findOne({ email: username });
+        if (staffInfo) {
+            const d = (staffInfo.designation || '').toLowerCase();
+            if (d.includes('teacher') || staffInfo.isTeachingStaff) role = 'teacher';
+        }
+    } catch (_) {}
+
+    const name = user.name
+        || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)
+        || staffInfo?.employeeName || username.split('@')[0];
+
+    const token = jwt.sign(
+        { sub: user._id.toString(), email: username, tenantId: ctx.tenantId, tenantSubdomain: ctx.tenantSubdomain, role, name },
+        process.env.JWT_SECRET || 'secret',
+        { expiresIn: '7d' }
+    );
+    const payload = {
+        token, access_token: token,
+        tenantSubdomain: ctx.tenantSubdomain,
+        user_type: role.includes('teacher') ? 'teacher' : 'admin',
+        user: { id: user._id.toString(), email: username, name, role, staffId: staffInfo?._id?.toString() || null },
+        redirect: '/dashboard',
+    };
+    return { payload, subject: { kind: 'user' as const, id: user._id.toString(), tenantId: ctx.tenantId, tenantSubdomain: ctx.tenantSubdomain, email: user.email || username, name, adminApp: true, twoFactorEnabled: !!user.twoFactorEnabled } };
+}
+
+export function staffLoginPayload(staffMatch: any, username: string, ctx: { tenantId: string | null; tenantSubdomain: string }) {
+    const rawDesignation = staffMatch.designation || 'staff';
+    const role = rawDesignation.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const userType = role.includes('teacher') ? 'teacher' : 'staff';
+    const name = staffMatch.employeeName || staffMatch.name || username;
+    const token = jwt.sign({ staffId: staffMatch._id.toString(), username, role, name, tenantId: ctx.tenantId, tenantSubdomain: ctx.tenantSubdomain }, process.env.JWT_SECRET || 'shulecloud_student_secret_2024', { expiresIn: '7d' });
+    const portalAccess = (staffMatch.portalAccess || 'both').toLowerCase();
+    const isTeacher = /teacher/i.test(rawDesignation)
+        || (Array.isArray(staffMatch.roles) && staffMatch.roles.some((r: string) => /teacher/i.test(r)))
+        || staffMatch.isTeachingStaff === true
+        || (Array.isArray(staffMatch.subjectAssignments) && staffMatch.subjectAssignments.length > 0)
+        || (Array.isArray(staffMatch.specializedSubjects) && staffMatch.specializedSubjects.length > 0);
+
+    // Portal access resolution:
+    //   admin   → admin app only (blocked from teacher portal)
+    //   teacher → teacher portal only (redirected on login, no admin)
+    //   both    → land on the admin app first; offer a "Teaching Portal" button
+    const isAdminOnly   = portalAccess === 'admin' || portalAccess === 'admin app only';
+    const isTeacherOnly = portalAccess === 'teacher' || portalAccess === 'staff' || portalAccess === 'teacher portal only';
+    const canTeacherPortal = !isAdminOnly && (isTeacher || portalAccess === 'both' || portalAccess === 'both portals' || isTeacherOnly);
+    const goTeacherPortal  = isTeacherOnly && canTeacherPortal;
+    const staffSso = canTeacherPortal
+        ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
+        : null;
+
+    // Resolve the admin-app landing page: the admin's explicit choice, else a
+    // sensible default for cafeteria/store roles, else the dashboard.
+    const ROLE_LANDING: Record<string, string> = {
+        'kitchen': '/cafeteria/meal-service', 'cook': '/cafeteria/meal-service', 'catering supervisor': '/cafeteria/meal-service', 'kitchen staff': '/cafeteria/meal-service',
+        'canteen manager': '/canteen/quick-sale', 'canteen cashier': '/canteen/quick-sale', 'canteen attendant': '/canteen/quick-sale',
+        'storekeeper': '/canteen/transactions', 'store manager': '/canteen/transactions', 'inventory officer': '/canteen/transactions',
+    };
+    const landingRoles = [...(Array.isArray(staffMatch.roles) ? staffMatch.roles : []), staffMatch.designation].filter(Boolean).map((r: string) => String(r).toLowerCase());
+    const landingPage = staffMatch.landingPage || landingRoles.map((r: string) => ROLE_LANDING[r]).find(Boolean) || '/dashboard';
+
+    const payload = {
+        token, access_token: token,
+        tenantSubdomain: ctx.tenantSubdomain,
+        user_type: userType,
+        user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: ctx.tenantId, portalAccess, landingPage },
+        portalAccess,
+        canTeacherPortal,           // admin app shows a "Teaching Portal" button when true
+        redirectPortal: goTeacherPortal ? 'staff' : null,   // only teacher-only is auto-redirected
+        staffSso,                   // present for teacher-only AND both → enables SSO into teacher portal
+        landingPage,
+        redirect: landingPage,
+    };
+    return { payload, subject: { kind: 'staff' as const, id: staffMatch._id.toString(), tenantId: ctx.tenantId, tenantSubdomain: ctx.tenantSubdomain, email: staffMatch.email || '', name, adminApp: !goTeacherPortal, twoFactorEnabled: !!staffMatch.twoFactorEnabled } };
+}
+
 // ─── Universal Smart Login (subdomain-strict) ─────────────────────────────────
 // Rules:
 //   1. A user account created for School A can ONLY log in via School A's subdomain.
@@ -273,33 +358,9 @@ router.post('/smart-login', async (req, res) => {
                 const passwordMatch = await require('bcrypt').compare(password, user.passwordHash).catch(() => false);
                 if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials.' });
 
-                let role = (user.role || 'school_admin').toLowerCase();
                 const effectiveTenantId = resolvedTenantId || user.tenantId?.toString() || null;
-                let staffInfo: any = null;
-                try {
-                    staffInfo = await tenantInstDb.collection('staff').findOne({ email: username });
-                    if (staffInfo) {
-                        const d = (staffInfo.designation || '').toLowerCase();
-                        if (d.includes('teacher') || staffInfo.isTeachingStaff) role = 'teacher';
-                    }
-                } catch (_) {}
-
-                const name = user.name
-                    || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null)
-                    || staffInfo?.employeeName || username.split('@')[0];
-
-                const token = jwt.sign(
-                    { sub: user._id.toString(), email: username, tenantId: effectiveTenantId, tenantSubdomain: resolvedTenantSubdomain, role, name },
-                    adminSecret,
-                    { expiresIn: '7d' }
-                );
-                return res.json({
-                    token, access_token: token,
-                    tenantSubdomain: resolvedTenantSubdomain,
-                    user_type: role.includes('teacher') ? 'teacher' : 'admin',
-                    user: { id: user._id.toString(), email: username, name, role, staffId: staffInfo?._id?.toString() || null },
-                    redirect: '/dashboard',
-                });
+                const { payload, subject } = await userLoginPayload(user, username, { tenantId: effectiveTenantId, tenantSubdomain: resolvedTenantSubdomain, tenantDb: tenantInstDb });
+                return finishSchoolLogin(req, res, payload, subject);
             }
         }
 
@@ -309,52 +370,8 @@ router.post('/smart-login', async (req, res) => {
         // the login simply fails — we do NOT search other schools' databases.
         const staffMatch = await tenantInstDb.collection('staff').findOne({ portalUsername: username });
         if (staffMatch && staffMatch.portalPassword === password) {
-            const rawDesignation = staffMatch.designation || 'staff';
-            const role = rawDesignation.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-            const userType = role.includes('teacher') ? 'teacher' : 'staff';
-            const name = staffMatch.employeeName || staffMatch.name || username;
-            const token = jwt.sign({ staffId: staffMatch._id.toString(), username, role, name, tenantId: resolvedTenantId, tenantSubdomain: resolvedTenantSubdomain }, secret, { expiresIn: '7d' });
-            const portalAccess = (staffMatch.portalAccess || 'both').toLowerCase();
-            const isTeacher = /teacher/i.test(rawDesignation)
-                || (Array.isArray(staffMatch.roles) && staffMatch.roles.some((r: string) => /teacher/i.test(r)))
-                || staffMatch.isTeachingStaff === true
-                || (Array.isArray(staffMatch.subjectAssignments) && staffMatch.subjectAssignments.length > 0)
-                || (Array.isArray(staffMatch.specializedSubjects) && staffMatch.specializedSubjects.length > 0);
-
-            // Portal access resolution:
-            //   admin   → admin app only (blocked from teacher portal)
-            //   teacher → teacher portal only (redirected on login, no admin)
-            //   both    → land on the admin app first; offer a "Teaching Portal" button
-            const isAdminOnly   = portalAccess === 'admin' || portalAccess === 'admin app only';
-            const isTeacherOnly = portalAccess === 'teacher' || portalAccess === 'staff' || portalAccess === 'teacher portal only';
-            const canTeacherPortal = !isAdminOnly && (isTeacher || portalAccess === 'both' || portalAccess === 'both portals' || isTeacherOnly);
-            const goTeacherPortal  = isTeacherOnly && canTeacherPortal;
-            const staffSso = canTeacherPortal
-                ? { token, staff: { _id: staffMatch._id.toString(), name, designation: staffMatch.designation, email: staffMatch.email, phone: staffMatch.phone } }
-                : null;
-
-            // Resolve the admin-app landing page: the admin's explicit choice, else a
-            // sensible default for cafeteria/store roles, else the dashboard.
-            const ROLE_LANDING: Record<string, string> = {
-                'kitchen': '/cafeteria/meal-service', 'cook': '/cafeteria/meal-service', 'catering supervisor': '/cafeteria/meal-service', 'kitchen staff': '/cafeteria/meal-service',
-                'canteen manager': '/canteen/quick-sale', 'canteen cashier': '/canteen/quick-sale', 'canteen attendant': '/canteen/quick-sale',
-                'storekeeper': '/canteen/transactions', 'store manager': '/canteen/transactions', 'inventory officer': '/canteen/transactions',
-            };
-            const landingRoles = [...(Array.isArray(staffMatch.roles) ? staffMatch.roles : []), staffMatch.designation].filter(Boolean).map((r: string) => String(r).toLowerCase());
-            const landingPage = staffMatch.landingPage || landingRoles.map((r: string) => ROLE_LANDING[r]).find(Boolean) || '/dashboard';
-
-            return res.json({
-                token, access_token: token,
-                tenantSubdomain: resolvedTenantSubdomain,
-                user_type: userType,
-                user: { id: staffMatch._id.toString(), name, role, email: staffMatch.email || '', tenantId: resolvedTenantId, portalAccess, landingPage },
-                portalAccess,
-                canTeacherPortal,           // admin app shows a "Teaching Portal" button when true
-                redirectPortal: goTeacherPortal ? 'staff' : null,   // only teacher-only is auto-redirected
-                staffSso,                   // present for teacher-only AND both → enables SSO into teacher portal
-                landingPage,
-                redirect: landingPage,
-            });
+            const { payload, subject } = staffLoginPayload(staffMatch, username, { tenantId: resolvedTenantId, tenantSubdomain: resolvedTenantSubdomain });
+            return finishSchoolLogin(req, res, payload, subject);
         }
 
         // ── 3. Try Student Portal login (in institution's own database) ──

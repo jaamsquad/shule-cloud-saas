@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
 import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
+import { applyScholarshipsToInvoice } from '../services/feeAid.service';
 import { nextInvoiceNo, getInvoiceFormat, saveInvoiceFormat, previewInvoiceNo } from '../lib/invoiceNumbering';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
@@ -1202,6 +1203,10 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
 
         const ins = await db.collection('invoices').insertOne(invoice);
         (invoice as any)._id = ins.insertedId;
+        // Discount any live scholarship/bursary awards the student holds.
+        if (await applyScholarshipsToInvoice(db, invoice, user.sub) > 0) {
+            Object.assign(invoice, await db.collection('invoices').findOne({ _id: ins.insertedId }));
+        }
         // Auto-apply any carry-forward overpayment credit to this new invoice.
         try {
             const { applyCreditToInvoice } = await import('../services/feeCredit.service');
@@ -1336,6 +1341,7 @@ router.post('/schools/:sid/invoices/bulk', requireRole('ADMIN'), async (req: Req
                     };
 
                     await db.collection('invoices').insertOne(invoice);
+                    await applyScholarshipsToInvoice(db, invoice, user.sub);
                     generatedCount++;
 
                     // Update progress
@@ -1597,6 +1603,7 @@ router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req:
                     };
 
                     await tenantDb.collection('invoices').insertOne(invoice);
+                    await applyScholarshipsToInvoice(tenantDb, invoice, user?.sub || 'SYSTEM');
 
                     processed_count++;
                     const progress = Math.round((processed_count / total_count) * 100);
@@ -2043,12 +2050,18 @@ router.get('/schools/:sid/invoices/:id/pdf', async (req: Request, res: Response)
                         <td>Subtotal:</td>
                         <td style="font-weight: bold;">KSh ${doc.subtotal.toLocaleString()}</td>
                     </tr>
-                    ${doc.discount_amount > 0 ? `
+                    ${Number(doc.discount_amount || 0) - Number(doc.scholarship_amount || 0) > 0 ? `
                         <tr>
                             <td>Discount (${doc.discount_type === 'PERCENTAGE' ? `${doc.discount_value}%` : 'Fixed'}):</td>
-                            <td style="font-weight: bold; color: #10b981;">- KSh ${doc.discount_amount.toLocaleString()}</td>
+                            <td style="font-weight: bold; color: #10b981;">- KSh ${(Number(doc.discount_amount || 0) - Number(doc.scholarship_amount || 0)).toLocaleString()}</td>
                         </tr>
                     ` : ''}
+                    ${(doc.scholarships || []).map((sc: any) => `
+                        <tr>
+                            <td>Scholarship — ${sc.name}:</td>
+                            <td style="font-weight: bold; color: #10b981;">- KSh ${Number(sc.amount || 0).toLocaleString()}</td>
+                        </tr>
+                    `).join('')}
                     <tr class="total-due">
                         <td>Total Due:</td>
                         <td>KSh ${doc.total_due.toLocaleString()}</td>
@@ -2896,20 +2909,48 @@ router.get('/schools/:sid/fees/defaulters/export', async (req: Request, res: Res
 
 // POST /schools/:sid/fees/defaulters/sms
 router.post('/schools/:sid/fees/defaulters/sms', requireRole('ADMIN'), async (req: Request, res: Response) => {
+    // Personalised fee-balance SMS to each selected student's parent, sent
+    // through the school's SMS gateway. Placeholders: {name} {amount} {adm}
+    // {class} {parent}. Accepts student_ids (older clients sent them as invoice_ids).
     try {
-    const db = getRequestDb(req);
-        const schoolId = getSchoolId(req);
-        const { invoice_ids, template } = req.body;
+        const db = getRequestDb(req);
+        const schoolId = String((req as any).tenantContext?.tenantId || getSchoolId(req) || 'default');
+        const ids: string[] = (req.body.student_ids || req.body.invoice_ids || []).map(String);
+        const template = String(req.body.template || '').trim();
+        if (!ids.length) return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'VALIDATION_ERROR', message: 'No students selected' }] });
+        if (!template) return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'VALIDATION_ERROR', message: 'Write the reminder message' }] });
 
+        const { queueSms } = await import('../services/smsGateway.service');
+        const { openInvoices, invoiceBalance } = await import('../services/feeAid.service');
+        const report: { student: string; phone: string; status: string; error?: string }[] = [];
+        for (const sid of Array.from(new Set(ids))) {
+            let stu: any = null;
+            try { stu = await db.collection('students').findOne({ _id: new ObjectId(sid) }); } catch { /* not an ObjectId */ }
+            if (!stu) { report.push({ student: sid, phone: '', status: 'skipped', error: 'Student not found' }); continue; }
+            const name = stu.studentName || `${stu.firstName || ''} ${stu.lastName || ''}`.trim();
+            const phone = stu.parentPhone || stu.fatherPhone || stu.motherPhone || stu.guardianPhone || stu.phone || '';
+            if (!phone) { report.push({ student: name, phone: '', status: 'skipped', error: 'No parent phone' }); continue; }
+            const balance = (await openInvoices(db, sid)).reduce((t, i) => t + invoiceBalance(i), 0);
+            if (balance <= 0) { report.push({ student: name, phone, status: 'skipped', error: 'No balance' }); continue; }
+            const text = template
+                .replace(/\{name\}/g, name)
+                .replace(/\{amount\}/g, Math.round(balance).toLocaleString())
+                .replace(/\{adm\}/g, stu.registrationNo || stu.admNo || '')
+                .replace(/\{class\}/g, stu.studentClass || stu.currentClass || '')
+                .replace(/\{parent\}/g, stu.parentName || stu.fatherName || stu.motherName || 'Parent');
+            try {
+                const r: any = await queueSms(db, schoolId, [phone], text, { audience: 'fee_reminder', createdBy: (req as any).user?.sub });
+                const ok = r.provider === 'device' || r.sent > 0;
+                report.push({ student: name, phone, status: r.provider === 'device' ? 'queued' : (ok ? 'sent' : 'failed'), error: ok ? undefined : (r.error || 'Not sent') });
+                await db.collection('sms_logs').insertOne({ to: phone, message: text, status: ok ? 'Sent' : 'Failed', purpose: 'fee_reminder', studentId: sid, createdAt: new Date() }).catch(() => { });
+            } catch (e: any) {
+                report.push({ student: name, phone, status: 'failed', error: e.message });
+            }
+        }
+        const sent_count = report.filter(r => r.status === 'sent' || r.status === 'queued').length;
         res.json({
-            data: {
-                job_id: new ObjectId().toString(),
-                sent_count: (invoice_ids || []).length,
-                failed_count: 0,
-                delivery_report: (invoice_ids || []).map((id: string) => ({ phone: '+254712345678', status: 'DELIVERED' }))
-            },
-            meta: {},
-            errors: []
+            data: { sent_count, failed_count: report.filter(r => r.status === 'failed').length, skipped_count: report.filter(r => r.status === 'skipped').length, delivery_report: report },
+            meta: {}, errors: [],
         });
     } catch (e: any) {
         res.status(500).json({ data: null, meta: {}, errors: [{ code: 'SERVER_ERROR', message: e.message }] });
@@ -3618,3 +3659,5 @@ router.post('/transactions', async (req: Request, res: Response) => {
 });
 
 export default router;
+// Shared with routes/feeAid.routes.ts (scholarships & sponsorships).
+export { requireRole, getSchoolId, getRequestDb, getNextReceiptNo, postFeePaymentJournal };

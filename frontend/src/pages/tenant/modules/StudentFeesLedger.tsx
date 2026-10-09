@@ -7,6 +7,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { BookOpen as BookOpenPageIcon } from "lucide-react";
 
 export default function StudentFeesLedger() {
     const queryClient = useQueryClient();
@@ -191,26 +193,9 @@ export default function StudentFeesLedger() {
     const editingBalance = editingSubtotal - editingPaid;
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-300">/</span>
-                    <span className="font-bold text-slate-600">Fees</span>
-                    <span className="text-slate-300">/</span>
-                    <span className="font-black text-slate-800">Student Ledger</span>
-                </div>
-            </div>
+        <FeesPage title="Student Ledger" subtitle="Look up a student to see every invoice, payment, discount and running balance." icon={BookOpenPageIcon}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                {/* Title */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-                        Student Fee Ledger
-                    </h1>
-                    <p className="text-slate-500 text-sm mt-1">Search for a student to view all invoices, balances, and payment history</p>
-                </div>
+            <div>
 
                 <div className="flex flex-col gap-6">
                     {/* Top bar: Student Search & Metrics (horizontal) */}
@@ -582,6 +567,6 @@ export default function StudentFeesLedger() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

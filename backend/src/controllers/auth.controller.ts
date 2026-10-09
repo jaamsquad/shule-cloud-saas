@@ -85,10 +85,11 @@ export const login = async (req: Request, res: Response) => {
             { expiresIn: '7d' }
         );
 
-        return res.json({
+        const { finishSchoolLogin } = await import('../lib/schoolLogin');
+        return finishSchoolLogin(req, res, {
             access_token: token,
             user: { id: user._id.toString(), email: user.email, name: userName, role, staffId: staffInfo?._id?.toString() || null, portalAccess }
-        });
+        }, { kind: 'user', id: user._id.toString(), tenantId, email: user.email, name: userName, adminApp: true, twoFactorEnabled: !!user.twoFactorEnabled });
     } catch (error) {
         console.error('Login Error:', error);
         return res.status(500).json({ message: 'Login failed' });
@@ -114,6 +115,7 @@ export const updateTenantProfile = async (req: Request, res: Response) => {
         const data = { ...req.body, updatedAt: new Date() };
         delete data._id;
         delete data.subdomain;
+        delete data.shulecloudId;   // assigned by the platform, never by the school
         const result = await getMetaDb().collection('Tenant').updateOne(
             { _id: new ObjectId(tenantId) },
             { $set: data }

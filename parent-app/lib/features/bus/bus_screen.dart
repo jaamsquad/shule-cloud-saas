@@ -15,15 +15,23 @@ class BusScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final busAsync = ref.watch(busProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bus Tracking', style: TextStyle(fontSize: 22, color: AppColors.primary)),
-        actions: [IconButton(onPressed: () => ref.invalidate(busProvider), icon: const Icon(Icons.refresh))],
-      ),
+    return PortalPage(
+      title: 'Bus Tracking',
+      subtitle: busAsync.valueOrNull?.routeName,
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: () => ref.invalidate(busProvider),
+          icon: const Icon(Icons.refresh, color: AppColors.slate600),
+        ),
+      ],
       body: busAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => ErrorView.fromError(_, onRetry: () => ref.invalidate(busProvider)),
-        data: (bus) => _BusView(bus: bus),
+        error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(busProvider)),
+        data: (bus) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: ClipRRect(borderRadius: BorderRadius.circular(AppTheme.radiusLg), child: _BusView(bus: bus)),
+        ),
       ),
     );
   }
@@ -64,7 +72,7 @@ class _BusView extends StatelessWidget {
           child: Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(color: AppColors.primaryContainer, borderRadius: BorderRadius.circular(999)),
+              decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(AppTheme.radius)),
               child: Text('STUDENT ${bus.boardingStatus.toUpperCase()}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 1)),
             ),
           ),
@@ -81,7 +89,7 @@ class _BusView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Estimated Arrival', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-                    Text(bus.etaText ?? (bus.online ? 'Live' : 'Offline'), style: const TextStyle(color: AppColors.primary, fontSize: 26, fontWeight: FontWeight.w800)),
+                    Text(bus.etaText ?? (bus.online ? 'Live' : 'Offline'), style: const TextStyle(color: AppColors.slate800, fontSize: 24, fontWeight: FontWeight.w900)),
                     if (bus.distanceKm != null) Text('${bus.distanceKm!.toStringAsFixed(1)} km away', style: const TextStyle(color: AppColors.onSurface)),
                   ],
                 ),

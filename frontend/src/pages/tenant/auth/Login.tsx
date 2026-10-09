@@ -9,6 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { currentTenantSubdomain } from "@/lib/portal";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import GoogleSignIn, { useGoogleConfig } from "@/components/auth/GoogleSignIn";
+import OtpStep, { OtpChallenge } from "@/components/auth/OtpStep";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // Tenant subdomain for the current host. Correctly treats the apex (manwellstore.com)
@@ -53,6 +55,8 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading]   = useState(false);
     const [hint, setHint]             = useState<string | null>(null);
+    const [otp, setOtp]               = useState<OtpChallenge | null>(null);
+    const { data: googleCfg }         = useGoogleConfig();
 
     const detectedSubdomain = detectSubdomain();
     const activeSubdomain   = detectedSubdomain;
@@ -129,6 +133,99 @@ export default function Login() {
         else setHint("Signing in as student or staff (portal username)");
     }, [username]);
 
+    // ── After a successful sign-in (password, emailed code, or Google) ───────
+    const trustKey = `trust_token_${activeSubdomain || "default"}`;
+    const completeLogin = (data: any) => {
+        const { token, access_token, user_type, user, parent, redirect, tenantSubdomain, redirectPortal, staffSso, canTeacherPortal, trustToken, twoFactorWarning } = data;
+        if (trustToken) { try { localStorage.setItem(trustKey, trustToken); } catch { /* private mode */ } }
+        if (twoFactorWarning) toast.warning(twoFactorWarning, { duration: 8000 });
+        const authToken = access_token || token;
+
+        // Helper: after storing the token, navigate to the right place.
+        // If the user logged in from bare localhost and we know their subdomain,
+        // redirect to subdomain.localhost:8080 so tenant context is correct.
+        const goToDashboard = (dest: string) => {
+            const targetSubdomain = tenantSubdomain || activeSubdomain;
+            if (targetSubdomain && !detectedSubdomain) {
+                // Currently on bare localhost → jump to the school's subdomain
+                window.location.href = buildSubdomainUrl(targetSubdomain, dest || "/dashboard");
+            } else {
+                navigate(dest || "/dashboard", { replace: true });
+            }
+        };
+
+        // Single-subdomain model: store the role's token + mark the active portal,
+        // then reload to "/" so the right portal renders on THIS school subdomain.
+        if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
+        const enterPortal = (role: "student" | "parent" | "staff") => { localStorage.setItem("active_portal", role); window.location.href = "/"; };
+
+        switch (user_type) {
+            case "student":
+                localStorage.setItem("student_token", authToken);
+                localStorage.setItem("student_info", JSON.stringify(user));
+                toast.success(`Welcome back, ${user.name}!`);
+                enterPortal("student");
+                return;
+
+            case "parent":
+                localStorage.setItem("parent_token", authToken);
+                localStorage.setItem("parent_info", JSON.stringify(parent));
+                toast.success(`Welcome, ${parent?.name}!`);
+                enterPortal("parent");
+                return;
+
+            case "teacher":
+            case "staff": {
+                const sso = staffSso || { token: authToken, staff: { _id: user.id, name: user.name, designation: user.role, email: user.email } };
+                // Teacher-only → straight to the teaching portal.
+                if (redirectPortal === "staff") {
+                    localStorage.setItem("staff_token", sso.token);
+                    localStorage.setItem("staff_info", JSON.stringify(sso.staff));
+                    toast.success(`Welcome, ${user.name}!`);
+                    enterPortal("staff");
+                    return;
+                }
+                // "Both" → land on the admin app first; stash SSO so the top bar
+                // can show an "Open Teaching Portal" button.
+                localStorage.setItem("auth_token", authToken);
+                localStorage.setItem("user", JSON.stringify(user));
+                localStorage.removeItem("active_portal");
+                if (canTeacherPortal) {
+                    localStorage.setItem("staff_token", sso.token);
+                    localStorage.setItem("staff_info", JSON.stringify(sso.staff));
+                    localStorage.setItem("can_teacher_portal", "1");
+                } else {
+                    localStorage.removeItem("can_teacher_portal");
+                }
+                refreshPermissions();
+                toast.success(`Welcome back, ${user?.name || username}!`);
+                goToDashboard(user?.landingPage || redirect || "/dashboard");
+                return;
+            }
+
+            default: // admin
+                localStorage.setItem("auth_token", authToken);
+                localStorage.setItem("user", JSON.stringify(user));
+                localStorage.removeItem("active_portal");
+                localStorage.removeItem("can_teacher_portal");
+                refreshPermissions();
+                toast.success(`Welcome back, ${user?.name || username}!`);
+                const dest = searchParams.get("redirect");
+                goToDashboard(dest && dest !== "/login" ? dest : redirect || "/dashboard");
+        }
+    };
+
+    // Continue with Google → the account at this school that linked this Google account
+    const handleGoogle = async (credential: string) => {
+        setIsLoading(true);
+        try {
+            const r = await api.post("/auth/google/login", { credential, subdomain: activeSubdomain || undefined });
+            completeLogin(r.data);
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || "Google sign-in failed", { duration: 9000 });
+        } finally { setIsLoading(false); }
+    };
+
     // ── Login handler ────────────────────────────────────────────────────────
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -141,83 +238,11 @@ export default function Login() {
                 username: username.trim(),
                 password,
                 subdomain: activeSubdomain || undefined,
+                trustToken: (() => { try { return localStorage.getItem(trustKey) || undefined; } catch { return undefined; } })(),
             });
 
-            const { token, access_token, user_type, user, parent, redirect, tenantSubdomain, redirectPortal, staffSso, canTeacherPortal } = res.data;
-            const authToken = access_token || token;
-
-            // Helper: after storing the token, navigate to the right place.
-            // If the user logged in from bare localhost and we know their subdomain,
-            // redirect to subdomain.localhost:8080 so tenant context is correct.
-            const goToDashboard = (dest: string) => {
-                const targetSubdomain = tenantSubdomain || activeSubdomain;
-                if (targetSubdomain && !detectedSubdomain) {
-                    // Currently on bare localhost → jump to the school's subdomain
-                    window.location.href = buildSubdomainUrl(targetSubdomain, dest || "/dashboard");
-                } else {
-                    navigate(dest || "/dashboard", { replace: true });
-                }
-            };
-
-            // Single-subdomain model: store the role's token + mark the active portal,
-            // then reload to "/" so the right portal renders on THIS school subdomain.
-            if (activeSubdomain) localStorage.setItem("tenant", JSON.stringify({ subdomain: activeSubdomain }));
-            const enterPortal = (role: "student" | "parent" | "staff") => { localStorage.setItem("active_portal", role); window.location.href = "/"; };
-
-            switch (user_type) {
-                case "student":
-                    localStorage.setItem("student_token", authToken);
-                    localStorage.setItem("student_info", JSON.stringify(user));
-                    toast.success(`Welcome back, ${user.name}!`);
-                    enterPortal("student");
-                    return;
-
-                case "parent":
-                    localStorage.setItem("parent_token", authToken);
-                    localStorage.setItem("parent_info", JSON.stringify(parent));
-                    toast.success(`Welcome, ${parent?.name}!`);
-                    enterPortal("parent");
-                    return;
-
-                case "teacher":
-                case "staff": {
-                    const sso = staffSso || { token: authToken, staff: { _id: user.id, name: user.name, designation: user.role, email: user.email } };
-                    // Teacher-only → straight to the teaching portal.
-                    if (redirectPortal === "staff") {
-                        localStorage.setItem("staff_token", sso.token);
-                        localStorage.setItem("staff_info", JSON.stringify(sso.staff));
-                        toast.success(`Welcome, ${user.name}!`);
-                        enterPortal("staff");
-                        return;
-                    }
-                    // "Both" → land on the admin app first; stash SSO so the top bar
-                    // can show an "Open Teaching Portal" button.
-                    localStorage.setItem("auth_token", authToken);
-                    localStorage.setItem("user", JSON.stringify(user));
-                    localStorage.removeItem("active_portal");
-                    if (canTeacherPortal) {
-                        localStorage.setItem("staff_token", sso.token);
-                        localStorage.setItem("staff_info", JSON.stringify(sso.staff));
-                        localStorage.setItem("can_teacher_portal", "1");
-                    } else {
-                        localStorage.removeItem("can_teacher_portal");
-                    }
-                    refreshPermissions();
-                    toast.success(`Welcome back, ${user?.name || username}!`);
-                    goToDashboard(user?.landingPage || redirect || "/dashboard");
-                    return;
-                }
-
-                default: // admin
-                    localStorage.setItem("auth_token", authToken);
-                    localStorage.setItem("user", JSON.stringify(user));
-                    localStorage.removeItem("active_portal");
-                    localStorage.removeItem("can_teacher_portal");
-                    refreshPermissions();
-                    toast.success(`Welcome back, ${user?.name || username}!`);
-                    const dest = searchParams.get("redirect");
-                    goToDashboard(dest && dest !== "/login" ? dest : redirect || "/dashboard");
-            }
+            if (res.data?.twoFactorRequired) { setOtp(res.data); return; }
+            completeLogin(res.data);
         } catch (err: any) {
             const code = err.response?.data?.code;
             const msg  = err.response?.data?.message || "Login failed. Check your credentials.";
@@ -384,6 +409,9 @@ export default function Login() {
                         <h2 className="text-base font-bold text-[#1B5FE3]">Welcome Back!</h2>
                     </div>
 
+                    {otp ? (
+                        <OtpStep challenge={otp} onBack={() => { setOtp(null); setPassword(""); }} onDone={data => { setOtp(null); completeLogin(data); }} />
+                    ) : (<>
                     {/* Form */}
                     <form onSubmit={handleLogin} className="space-y-5">
 
@@ -490,6 +518,16 @@ export default function Login() {
                                     {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
                                     {isLoading ? "Signing in..." : "Sign In"}
                                 </button>
+
+                                {googleCfg?.enabled && (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3 text-[10px] font-bold text-gray-300 uppercase tracking-wider">
+                                            <span className="flex-1 h-px bg-gray-200" />or<span className="flex-1 h-px bg-gray-200" />
+                                        </div>
+                                        <GoogleSignIn onCredential={handleGoogle} disabled={isLoading} />
+                                        <p className="text-[10px] text-gray-400 text-center">Admins & staff: link Google once from your profile, then sign in with one click.</p>
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -514,6 +552,7 @@ export default function Login() {
                         </Link>
                     </div>
                     )}
+                    </>)}
 
                     {/* Organization sign-in — only when this school belongs to an org. */}
                     {schoolInfo?.organization && (

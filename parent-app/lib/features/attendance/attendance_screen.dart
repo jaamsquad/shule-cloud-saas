@@ -17,16 +17,16 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(attendanceProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Attendance')),
+    return PortalPage(
+      title: 'Attendance',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(attendanceProvider)),
         data: (a) => ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           children: [
             Row(children: [
-              Expanded(child: StatTile(label: 'Present', value: '${a.present}', color: AppColors.primary, icon: Icons.check_circle_outline)),
+              Expanded(child: StatTile(label: 'Present', value: '${a.present}', color: AppColors.green, icon: Icons.check_circle_outline)),
               const SizedBox(width: 12),
               Expanded(child: StatTile(label: 'Absent', value: '${a.absent}', color: AppColors.error, icon: Icons.cancel_outlined)),
             ]),
@@ -41,14 +41,14 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
             const SizedBox(height: 16),
             const SectionHeader('Activity Log'),
             for (final t in a.timeline)
-              AppCard(child: Row(children: [
-                const Icon(Icons.check_circle, color: AppColors.primary), const SizedBox(width: 12),
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: AppCard(child: Row(children: [
+                const Icon(Icons.check_circle, color: AppColors.green), const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(t.label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
                   Text(t.detail, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
                 ])),
                 Text(t.time, style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-              ])),
+              ]))),
             if (a.timeline.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No activity logged yet.', style: TextStyle(color: AppColors.onSurfaceVariant))),
           ],
         ),
@@ -63,7 +63,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final byDay = {for (final d in a.days) DateTime(d.date.year, d.date.month, d.date.day): d.status};
 
     Color? dot(AttStatus? s) => switch (s) {
-          AttStatus.present => AppColors.primary,
+          AttStatus.present => AppColors.green,
           AttStatus.absent => AppColors.error,
           AttStatus.late => AppColors.tertiary,
           AttStatus.excused => AppColors.secondary,
@@ -95,7 +95,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           ),
           const SizedBox(height: 8),
           Wrap(spacing: 16, children: [
-            _legend('Present', AppColors.primary), _legend('Absent', AppColors.error),
+            _legend('Present', AppColors.green), _legend('Absent', AppColors.error),
             _legend('Late', AppColors.tertiary), _legend('Excused', AppColors.secondary),
           ]),
         ],

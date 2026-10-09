@@ -13,8 +13,8 @@ class NotificationsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(notificationsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
+    return PortalPage(
+      title: 'Notifications',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(notificationsProvider)),
@@ -23,7 +23,7 @@ class NotificationsScreen extends ConsumerWidget {
           child: items.isEmpty
               ? ListView(children: const [SizedBox(height: 200), Center(child: Text('No notifications yet'))])
               : ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (_, i) => _NotifTile(items[i]),

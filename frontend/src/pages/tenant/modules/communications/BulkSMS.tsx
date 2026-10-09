@@ -8,6 +8,7 @@ import SmsDevices from "./SmsDevices";
 import SmsConnection from "./SmsConnection";
 import SmsResults from "./SmsResults";
 import { ContactPicker, type Contact } from "./ContactPicker";
+import TemplatePicker, { openPlaceholders } from "@/components/comm/TemplatePicker";
 
 const MAX_CHARS = 160;
 
@@ -161,18 +162,13 @@ export default function BulkSMS() {
                                 </div>
 
                                 <div className="mt-4 pt-4 border-t border-slate-100">
-                                    <p className="text-xs font-semibold text-slate-500 mb-2">Quick templates</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {[
-                                            "Dear Parent, your child's fees are due. Please clear the balance. Thank you.",
-                                            "School reopens on Monday. Ensure your child has all required materials.",
-                                            "Parent-teacher meeting scheduled for Saturday 10AM. Please attend.",
-                                        ].map((t, i) => (
-                                            <button key={i} onClick={() => setMessage(t)} className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-medium transition-colors">
-                                                Template {i + 1}
-                                            </button>
-                                        ))}
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-xs font-semibold text-slate-500">Saved templates</p>
+                                        <TemplatePicker channel="sms" align="right" onPick={t => setMessage(t.body.slice(0, MAX_CHARS))} />
                                     </div>
+                                    {openPlaceholders(message).length > 0 && (
+                                        <p className="mt-2 text-xs text-amber-600 font-semibold">Replace {openPlaceholders(message).join(", ")} before sending — Bulk SMS sends the same text to everyone.</p>
+                                    )}
                                 </div>
                             </div>
 

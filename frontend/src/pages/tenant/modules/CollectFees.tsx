@@ -7,6 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Banknote as BanknotePageIcon } from "lucide-react";
 
 export default function CollectFees() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -86,8 +88,9 @@ export default function CollectFees() {
             return;
         }
 
-        if (payVal > selectedInvoice.balance) {
-            toast.error(`Amount cannot exceed outstanding balance of KSh ${selectedInvoice.balance.toLocaleString()}`);
+        // Paying more than the balance is allowed: the invoice is cleared and the
+        // extra is kept as credit for the student's next invoice.
+        if (payVal > selectedInvoice.balance && !confirm(`KSh ${payVal.toLocaleString()} is more than the KSh ${selectedInvoice.balance.toLocaleString()} owed on this invoice.\n\nThe extra KSh ${(payVal - selectedInvoice.balance).toLocaleString()} will be kept as credit and used on the student's next invoice. Continue?`)) {
             return;
         }
 
@@ -174,32 +177,15 @@ export default function CollectFees() {
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Collect Fees</span>
-                </div>
-            </div>
+        <FeesPage title="Collect Fees" subtitle="Find a student, pick an invoice and record a payment or send an M-PESA prompt." icon={BanknotePageIcon}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                {/* Title */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                        Collect Fees Ledger <Sparkles className="w-6 h-6 text-indigo-500" />
-                    </h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Record payments, view student balances, print double-stub receipts, and review logs</p>
-                </div>
+            <div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {/* Left Panel: Student Search & Metrics */}
                     <div className="md:col-span-1 space-y-6">
                         {/* Search Input */}
-                        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative group">
+                        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative group">
                             <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[9px] px-3 py-0.5 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Search Student*</div>
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
@@ -252,7 +238,7 @@ export default function CollectFees() {
 
                         {/* Student Metrics Balance cards */}
                         {selectedStudent && (
-                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6">
                                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                                     <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center font-black text-slate-400">
                                         {selectedStudent.studentName ? selectedStudent.studentName[0] : 'S'}
@@ -286,12 +272,13 @@ export default function CollectFees() {
                                 )}
                             </div>
                         )}
+                        {selectedStudent && <StudentAidCard studentId={selectedStudent._id} />}
                     </div>
 
                     {/* Middle Panel: Select Invoices & Form */}
                     <div className="md:col-span-2 space-y-6">
                         {/* Collect Fees Form Card */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
                             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
                                 Invoice Payments Form <CreditCard className="w-4 h-4 text-[#5C67F2]" />
                             </h3>
@@ -445,7 +432,7 @@ export default function CollectFees() {
                         </div>
 
                         {/* Recent Transactions Log */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
                             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-6">Recent Collections Log</h3>
                             <div className="space-y-4">
                                 {recentPayments.map((p: any) => (
@@ -470,6 +457,31 @@ export default function CollectFees() {
                     </div>
                 </div>
             </div>
+        </FeesPage>
+    );
+}
+
+/** Scholarships and sponsors on the selected student (if any). */
+function StudentAidCard({ studentId }: { studentId: string }) {
+    const { data } = useQuery({ queryKey: ["fee_aid_student", studentId], queryFn: async () => (await api.get(`/fees/aid/student/${studentId}`)).data, retry: false });
+    const awards = (data?.awards || []).filter((a: any) => a.status === "active");
+    const ships = (data?.sponsorships || []).filter((s: any) => s.status === "active");
+    if (!awards.length && !ships.length) return null;
+    return (
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fee aid</p>
+            {awards.map((a: any) => (
+                <div key={a._id} className="flex items-center justify-between text-sm">
+                    <span className="font-semibold text-slate-700">{a.schemeName}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold">{a.valueType === "percent" ? `${a.value}% off` : `KSh ${Number(a.value).toLocaleString()} off`}</span>
+                </div>
+            ))}
+            {ships.map((s: any) => (
+                <div key={s._id} className="flex items-center justify-between text-sm">
+                    <span className="font-semibold text-slate-700">Sponsored by {s.sponsorName}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-bold">{s.coverage === "full" ? "Full fees" : s.coverage === "percent" ? `${s.value}%` : `KSh ${Number(s.value).toLocaleString()}`}</span>
+                </div>
+            ))}
         </div>
     );
 }

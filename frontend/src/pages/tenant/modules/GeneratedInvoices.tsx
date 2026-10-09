@@ -8,6 +8,8 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { FileText as FileTextPageIcon } from "lucide-react";
 
 type TabKey = "ALL" | "PAID" | "UNPAID" | "PARTIAL";
 
@@ -77,16 +79,7 @@ export default function GeneratedInvoices() {
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-300">/</span>
-                    <span className="font-bold text-slate-600">Fees</span>
-                    <span className="text-slate-300">/</span>
-                    <span className="font-black text-slate-800">Generated Invoices</span>
-                </div>
+        <FeesPage title="Invoices" subtitle="Every fee invoice issued. Filter by status, open one, or send reminders by SMS, email or WhatsApp." icon={FileTextPageIcon} actions={<>
                 <button
                     onClick={() => refetch()}
                     className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
@@ -94,19 +87,9 @@ export default function GeneratedInvoices() {
                 >
                     <RefreshCw className="w-4 h-4" />
                 </button>
-            </div>
+            </>}>
 
-            <div className="max-w-7xl mx-auto w-full px-6 pt-8">
-                {/* Title */}
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-                        <FileText className="w-6 h-6 text-[#5C67F2]" />
-                        Generated Invoices
-                    </h1>
-                    <p className="text-slate-500 text-sm mt-1">
-                        View all school fee invoices and send payment reminders via SMS, Email or WhatsApp.
-                    </p>
-                </div>
+            <div>
 
                 {/* Summary cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -406,6 +389,6 @@ export default function GeneratedInvoices() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

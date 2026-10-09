@@ -16,26 +16,17 @@ class AcademicsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final student = ref.watch(selectedStudentProvider);
     final res = ref.watch(resultsProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Academic Results')),
+    return PortalPage(
+      title: 'Exam Results',
+      subtitle: student == null ? null : '${student.name} · ${student.className}',
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(resultsProvider),
         child: res.when(
           loading: () => const SkeletonList(),
           error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(resultsProvider)),
           data: (r) => ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              if (student != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(999)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.school, color: Colors.white, size: 16), const SizedBox(width: 6),
-                    Text('${student.name} · ${student.className}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
 
               // Overall mean card
               AppCard(
@@ -44,7 +35,7 @@ class AcademicsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('OVERALL MEAN', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700)),
-                    Text(r.overallGrade, style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                    Text(r.overallGrade, style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: AppColors.slate800)),
                     if (r.classRank > 0) Text('Ranked ${r.classRank} in Class', style: const TextStyle(color: AppColors.onSurface)),
                     if (r.changeVsLastTerm != 0)
                       Padding(padding: const EdgeInsets.only(top: 6), child: Text(
@@ -94,14 +85,26 @@ class AcademicsScreen extends ConsumerWidget {
               if (r.teacherComment != null) Text('Teacher: ${r.teacherComment}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontStyle: FontStyle.italic)),
 
               const SizedBox(height: 20),
-              const SectionHeader('More'),
-              _link(context, Icons.event_available, 'Attendance', '/academics/attendance'),
-              _link(context, Icons.menu_book, 'Homework', '/academics/homework'),
-              _link(context, Icons.schedule, 'Timetable', '/academics/timetable'),
-              _link(context, Icons.payments, 'Fees', '/academics/fees'),
-              _link(context, Icons.local_library, 'Library', '/academics/library'),
-              _link(context, Icons.campaign, 'Announcements', '/academics/announcements'),
-              _link(context, Icons.calendar_month, 'School Calendar', '/academics/calendar'),
+              PanelCard(
+                title: 'More',
+                icon: Icons.apps,
+                padding: EdgeInsets.zero,
+                child: Column(children: [
+                  _link(context, Icons.event_available_outlined, 'Attendance', '/academics/attendance'),
+                  const Divider(),
+                  _link(context, Icons.menu_book_outlined, 'Homework', '/academics/homework'),
+                  const Divider(),
+                  _link(context, Icons.schedule_outlined, 'Timetable', '/academics/timetable'),
+                  const Divider(),
+                  _link(context, Icons.payments_outlined, 'Fees', '/academics/fees'),
+                  const Divider(),
+                  _link(context, Icons.local_library_outlined, 'Library', '/academics/library'),
+                  const Divider(),
+                  _link(context, Icons.campaign_outlined, 'Announcements', '/academics/announcements'),
+                  const Divider(),
+                  _link(context, Icons.calendar_month_outlined, 'School Calendar', '/academics/calendar'),
+                ]),
+              ),
             ],
           ),
         ),
@@ -129,16 +132,20 @@ class AcademicsScreen extends ConsumerWidget {
         ),
         barGroups: [
           for (int i = 0; i < subjects.length; i++)
-            BarChartGroupData(x: i, barRods: [BarChartRodData(toY: (subjects[i].percent as double), color: AppColors.secondary, width: 18, borderRadius: BorderRadius.circular(6))]),
+            BarChartGroupData(x: i, barRods: [BarChartRodData(toY: (subjects[i].percent as double), color: AppColors.accent, width: 18, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))]),
         ],
       ));
 
-  Widget _link(BuildContext context, IconData icon, String label, String route) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AppCard(onTap: () => context.push(route), child: Row(children: [
-          Icon(icon, color: AppColors.primary), const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.onSurface))),
-          const Icon(Icons.chevron_right, color: AppColors.outline),
-        ])),
+  Widget _link(BuildContext context, IconData icon, String label, String route) => InkWell(
+        onTap: () => context.push(route),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Icon(icon, color: AppColors.accent, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.slate700))),
+            const Icon(Icons.chevron_right, color: AppColors.slate400),
+          ]),
+        ),
       );
 }

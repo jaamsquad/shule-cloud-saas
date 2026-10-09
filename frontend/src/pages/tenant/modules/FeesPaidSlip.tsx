@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Receipt as ReceiptPageIcon } from "lucide-react";
 
 export default function FeesPaidSlip() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -58,29 +60,12 @@ export default function FeesPaidSlip() {
     };
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Paid Receipts Slip</span>
-                </div>
-            </div>
+        <FeesPage title="Receipts" subtitle="Every payment received. Reprint a receipt, email it to the parent or export the list." icon={ReceiptPageIcon}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                {/* Header Title */}
-                <div className="mb-10">
-                    <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                        Fees Paid Ledger & Receipts
-                    </h1>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Audit, print double-stub A4 templates, send SMS triggers, and export stubs</p>
-                </div>
+            <div>
 
                 {/* Filter and Search controls */}
-                <div className="flex flex-wrap gap-4 items-center justify-between bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm mb-8">
+                <div className="flex flex-wrap gap-4 items-center justify-between bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mb-8">
                     <div className="flex gap-4 flex-1 max-w-xl">
                         <div className="relative flex-1">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -117,7 +102,7 @@ export default function FeesPaidSlip() {
                 </div>
 
                 {/* Receipts Table */}
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-8">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden p-8">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
@@ -162,17 +147,9 @@ export default function FeesPaidSlip() {
                                                 </button>
                                                 
                                                 <button
-                                                    onClick={() => handleDocxExport(rcpt.receipt_no)}
-                                                    className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-600 transition-colors"
-                                                    title="Download Word Stub"
-                                                >
-                                                    <Download className="w-4 h-4" />
-                                                </button>
-
-                                                <button
                                                     onClick={() => setSelectedReceipt(rcpt)}
                                                     className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-[#5C67F2] transition-colors"
-                                                    title="Email Receipt stub"
+                                                    title="Email receipt"
                                                 >
                                                     <Mail className="w-4 h-4" />
                                                 </button>
@@ -197,7 +174,7 @@ export default function FeesPaidSlip() {
             {/* Email Stub Modal */}
             {selectedReceipt && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+                    <div className="bg-white max-w-md w-full rounded-2xl border border-slate-100 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
                         <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
                         
                         <div className="p-8">
@@ -238,6 +215,6 @@ export default function FeesPaidSlip() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

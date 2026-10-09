@@ -132,6 +132,7 @@ export default function ManageSchool() {
                     <div>
                         <h1 className="text-2xl font-black text-slate-800">{school.name}</h1>
                         <p className="text-xs text-slate-500 font-mono">{school.subdomain}.shulecloud.com · {school.email || "no email"}</p>
+                        {school.shulecloudId && <p className="text-xs font-bold text-slate-700">School ID: <span className="font-mono">{school.shulecloudId}</span></p>}
                     </div>
                     <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${suspended ? "bg-rose-100 text-rose-700" : school.status === "trial" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{school.status}</span>

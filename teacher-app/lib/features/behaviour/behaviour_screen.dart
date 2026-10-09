@@ -29,36 +29,47 @@ class _BehaviourScreenState extends ConsumerState<BehaviourScreen> {
   @override
   Widget build(BuildContext context) {
     final classes = ref.watch(myClassesProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Behaviour')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        const SectionHeader('Record Behaviour'),
-        Row(children: [
-          Expanded(child: _kindChip('Positive', Icons.thumb_up_outlined, AppColors.secondary)),
-          const SizedBox(width: 8),
-          Expanded(child: _kindChip('Negative', Icons.thumb_down_outlined, AppColors.error)),
-        ]),
-        const SizedBox(height: 12),
-        classes.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (list) => DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Class'),
-            items: [for (final c in list) DropdownMenuItem(value: c.className, child: Text(c.className))],
-            onChanged: (_) {},
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(controller: _studentCtrl, decoration: const InputDecoration(labelText: 'Student Name / Admission No.')),
-        const SizedBox(height: 12),
-        TextField(controller: _noteCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Observation Note', alignLabelWithHint: true)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.attach_file), label: const Text('Attach Photo/Document (coming soon)')),
-        const SizedBox(height: 20),
-        FilledButton.icon(
-          onPressed: _saving ? null : _save,
-          icon: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save_outlined),
-          label: const Text('Save & Notify Parent'),
+    return PortalPage(
+      title: 'Behaviour',
+      subtitle: 'Record positive or negative observations',
+      bottomBar: FilledButton.icon(
+        onPressed: _saving ? null : _save,
+        icon: _saving
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.save_outlined, size: 18),
+        label: const Text('Save & Notify Parent'),
+      ),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+        PanelCard(
+          title: 'Record behaviour',
+          icon: Icons.psychology_alt_outlined,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Expanded(child: _kindChip('Positive', Icons.thumb_up_outlined, AppColors.green)),
+              const SizedBox(width: 10),
+              Expanded(child: _kindChip('Negative', Icons.thumb_down_outlined, AppColors.error)),
+            ]),
+            const SizedBox(height: 14),
+            const FieldLabel('Class'),
+            classes.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (list) => DropdownButtonFormField<String>(
+                isExpanded: true,
+                decoration: const InputDecoration(hintText: 'Select class', prefixIcon: Icon(Icons.groups_outlined)),
+                items: [for (final c in {for (final c in list) c.className}) DropdownMenuItem(value: c, child: Text(c))],
+                onChanged: (_) {},
+              ),
+            ),
+            const SizedBox(height: 14),
+            const FieldLabel('Student'),
+            TextField(controller: _studentCtrl, decoration: const InputDecoration(hintText: 'Name or admission no.', prefixIcon: Icon(Icons.person_search_outlined))),
+            const SizedBox(height: 14),
+            const FieldLabel('Observation Note'),
+            TextField(controller: _noteCtrl, maxLines: 4, decoration: const InputDecoration(hintText: 'What happened?')),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(onPressed: null, icon: const Icon(Icons.attach_file), label: const Text('Attach Photo/Document (coming soon)')),
+          ]),
         ),
       ]),
     );
@@ -70,7 +81,11 @@ class _BehaviourScreenState extends ConsumerState<BehaviourScreen> {
       onTap: () => setState(() => _kind = label),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(color: selected ? color.withValues(alpha: 0.16) : AppColors.surfaceContainer, borderRadius: BorderRadius.circular(12), border: Border.all(color: selected ? color : Colors.transparent, width: 1.5)),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.radius),
+          border: Border.all(color: selected ? color : AppColors.slate200, width: 1.5),
+        ),
         child: Column(children: [
           Icon(icon, color: selected ? color : AppColors.onSurfaceVariant),
           const SizedBox(height: 4),
@@ -82,7 +97,7 @@ class _BehaviourScreenState extends ConsumerState<BehaviourScreen> {
 
   Future<void> _save() async {
     if (_studentCtrl.text.trim().isEmpty || _noteCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the student and a note.'), backgroundColor: AppColors.error));
+      showToast(context, 'Enter the student and a note.', error: true);
       return;
     }
     setState(() => _saving = true);
@@ -91,11 +106,11 @@ class _BehaviourScreenState extends ConsumerState<BehaviourScreen> {
         {'studentRef': _studentCtrl.text.trim(), 'type': _kind, 'note': _noteCtrl.text.trim()},
       ]);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Behaviour recorded.'), backgroundColor: AppColors.secondary));
+        showToast(context, 'Behaviour recorded.');
         _studentCtrl.clear(); _noteCtrl.clear();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save: ${e.toString()}'), backgroundColor: AppColors.error));
+      if (mounted) showToast(context, 'Could not save: $e', error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

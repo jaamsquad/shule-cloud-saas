@@ -54,7 +54,7 @@ class AuthRepository {
       return const NetworkFailure();
     }
     final code = e.response?.statusCode;
-    if (code == 401 || code == 403) return const AuthFailure('Invalid credentials. Check your school code, ID and password.');
+    if (code == 401 || code == 403) return const AuthFailure('Invalid credentials. Check your School ID, Driver ID and password.');
     if (code != null && code >= 500) return const ServerFailure();
     final msg = e.response?.data is Map ? (e.response?.data['message']?.toString()) : null;
     return ValidationFailure(msg ?? 'Login failed. Please try again.');

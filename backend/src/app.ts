@@ -5,6 +5,7 @@ import path from 'path';
 import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
+import schoolSecurityRoutes from './routes/schoolSecurity.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
 import { ownerBusinessRouter, publicDocsRouter } from './routes/business.routes';
@@ -15,6 +16,7 @@ import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
 import feesRoutes from './routes/fees.routes';
+import feeAidRoutes from './routes/feeAid.routes';
 import feesOverviewRoutes from './routes/feesOverview.routes';
 import questionImportRoutes from './modules/questionImport/questionImport.routes';
 import questionBankRoutes from './modules/questionBank/questionBank.routes';
@@ -28,7 +30,9 @@ import behaviourRoutes from './modules/behaviour/behaviour.routes';
 import salaryRoutes from './routes/salary.routes';
 import posRoutes from './routes/pos.routes';
 import academicsV2Routes from './routes/academics-v2.routes';
+import promotionScheduleRoutes from './routes/promotionSchedule.routes';
 import communicationsRoutes from './routes/communications.routes';
+import meetingsRoutes from './routes/meetings.routes';
 import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
@@ -76,7 +80,7 @@ app.use(cors({
     origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-student-id', 'x-device-token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-subdomain', 'x-school-id', 'x-student-id', 'x-device-token'],
 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
@@ -336,6 +340,7 @@ app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
 app.use('/api/v1', feesOverviewRoutes);         // Fees dashboard (overview, overdue, records, M-PESA in process…)
 app.use('/api/v1', feesRoutes);
+app.use('/api/v1', feeAidRoutes);
 app.use('/api/v1', questionImportRoutes);
 app.use('/api/v1', questionBankRoutes);
 app.use('/api/v1', onlineExamRoutes);
@@ -348,8 +353,10 @@ app.use('/api/v1', classTestsRoutes);
 app.use('/api/v1', behaviourRoutes);
 app.use('/api/v1', salaryRoutes);
 app.use('/api/v1', posRoutes);
+app.use('/api/v1', promotionScheduleRoutes);   // scheduled automatic promotion
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
+app.use('/api/v1', meetingsRoutes);              // Communication → meetings calendar + SMS/email templates
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)
@@ -380,6 +387,7 @@ app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton
 app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1', driverRoutes);         // ShuleCloud Driver app (transport/GPS)
 app.use('/api/v1/onboard', onboardRoutes);
+app.use('/api/v1/auth', schoolSecurityRoutes);   // 2FA codes + Continue with Google
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/business', ownerBusinessRouter);   // quotations / invoices / contracts (owner portal)
 app.use('/api/v1/public/docs', publicDocsRouter);         // their shareable, printable links (+ pay / accept / sign)

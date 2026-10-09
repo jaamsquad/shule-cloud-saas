@@ -25,8 +25,8 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     final async = ref.watch(studentsControllerProvider);
     final ctrl = ref.read(studentsControllerProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Students')),
+    return PortalPage(
+      title: 'Students',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: ctrl.load),

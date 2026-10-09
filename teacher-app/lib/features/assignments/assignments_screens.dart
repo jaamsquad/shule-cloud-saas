@@ -18,37 +18,56 @@ class ContentListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final provider = _providerFor(type);
     final async = ref.watch(provider);
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ContentEditorScreen(type: type, title: title))),
-        child: const Icon(Icons.add),
-      ),
+    return PortalPage(
+      title: title,
+      subtitle: async.valueOrNull == null ? null : '${async.valueOrNull!.length} item${async.valueOrNull!.length == 1 ? '' : 's'}',
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 14)),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ContentEditorScreen(type: type, title: title))),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('New'),
+          ),
+        ),
+      ],
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(provider),
         child: async.when(
           loading: () => const SkeletonList(),
           error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(provider)),
           data: (list) => list.isEmpty
-              ? ErrorView(message: 'No $title yet. Tap + to create one.', icon: Icons.assignment_outlined)
+              ? ErrorView(message: 'No $title yet. Tap New to create one.', icon: Icons.assignment_outlined)
               : ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   itemCount: list.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
                     final item = list[i];
+                    final overdue = item.dueDate != null && item.dueDate!.isBefore(DateTime.now());
                     return AppCard(
-                      accent: AppColors.primary,
+                      accent: overdue ? AppColors.error : AppColors.teal,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SubmissionsScreen(type: type, item: item))),
                       child: Row(children: [
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                          if (item.className.isNotEmpty || item.subject.isNotEmpty)
-                            Text('${item.className}${item.subject.isNotEmpty ? ' · ${item.subject}' : ''}', style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 12)),
-                          if (item.dueDate != null)
-                            Text('Due ${DateFormat('MMM d, y').format(item.dueDate!)}', style: const TextStyle(color: AppColors.tertiary, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ])),
-                        const Icon(Icons.chevron_right, color: AppColors.outline),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(item.title, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.slate800)),
+                            if (item.className.isNotEmpty || item.subject.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text('${item.className}${item.subject.isNotEmpty ? ' · ${item.subject}' : ''}',
+                                  style: const TextStyle(color: AppColors.goldText, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            ],
+                            if (item.dueDate != null) ...[
+                              const SizedBox(height: 6),
+                              StatusPill(
+                                label: '${overdue ? 'Closed' : 'Due'} ${DateFormat('MMM d, y').format(item.dueDate!)}',
+                                color: overdue ? AppColors.error : AppColors.tertiary,
+                              ),
+                            ],
+                          ]),
+                        ),
+                        const Icon(Icons.chevron_right, color: AppColors.slate400),
                       ]),
                     );
                   },
@@ -102,63 +121,93 @@ class _ContentEditorScreenState extends ConsumerState<ContentEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? 'New ${widget.title}' : 'Edit ${widget.title}')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(controller: _titleCtrl, decoration: InputDecoration(labelText: 'Title', hintText: '${widget.title} Title')),
-          const SizedBox(height: 12),
-          TextField(controller: _descCtrl, maxLines: 5, decoration: const InputDecoration(labelText: 'Description & Instructions', alignLabelWithHint: true)),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: TextField(controller: _classCtrl, decoration: const InputDecoration(labelText: 'Class'))),
-            const SizedBox(width: 12),
-            Expanded(child: TextField(controller: _subjectCtrl, decoration: const InputDecoration(labelText: 'Subject'))),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await showDatePicker(context: context, initialDate: _dueDate ?? DateTime.now().add(const Duration(days: 7)), firstDate: DateTime.now(), lastDate: DateTime(2100));
-                if (picked != null) setState(() => _dueDate = picked);
-              },
-              icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(_dueDate == null ? 'Due Date' : DateFormat('MMM d, y').format(_dueDate!)),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TextField(controller: _pointsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Max Points'))),
-          ]),
-          const SizedBox(height: 20),
-          const SectionHeader('Attachments & Links'),
-          OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.link), label: const Text('Add Link (coming soon)')),
-          const SizedBox(height: 24),
-          AppCard(accent: AppColors.primaryContainer, child: Row(children: [
-            const Icon(Icons.info_outline, color: AppColors.primaryContainer),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Clear instructions and rubrics help students achieve better outcomes.', style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13))),
-          ])),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Expanded(child: OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel'))),
-            const SizedBox(width: 12),
-            Expanded(child: FilledButton(
-              onPressed: _saving ? null : _save,
-              child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(widget.existing == null ? 'Create' : 'Save'),
-            )),
-          ]),
+    return PortalPage(
+      title: widget.existing == null ? 'New ${widget.title}' : 'Edit ${widget.title}',
+      bottomBar: Row(children: [
+        Expanded(child: OutlinedButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Cancel'))),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(widget.existing == null ? 'Create' : 'Save'),
+          ),
         ),
+      ]),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: [
+          PanelCard(
+            title: '${widget.title} details',
+            icon: Icons.edit_document,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const FieldLabel('Title'),
+              TextField(controller: _titleCtrl, decoration: InputDecoration(hintText: '${widget.title} title')),
+              const SizedBox(height: 14),
+              const FieldLabel('Description & Instructions'),
+              TextField(controller: _descCtrl, maxLines: 5, decoration: const InputDecoration(hintText: 'What should students do?')),
+              const SizedBox(height: 14),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const FieldLabel('Class'),
+                    TextField(controller: _classCtrl, decoration: const InputDecoration(hintText: 'e.g. Grade 7')),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const FieldLabel('Subject'),
+                    TextField(controller: _subjectCtrl, decoration: const InputDecoration(hintText: 'e.g. Maths')),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const FieldLabel('Due Date'),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _dueDate ?? DateTime.now().add(const Duration(days: 7)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100));
+                        if (picked != null) setState(() => _dueDate = picked);
+                      },
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text(_dueDate == null ? 'Pick date' : DateFormat('MMM d, y').format(_dueDate!)),
+                    ),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const FieldLabel('Max Points'),
+                    TextField(controller: _pointsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '100')),
+                  ]),
+                ),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          PanelCard(
+            title: 'Attachments & Links',
+            icon: Icons.attach_file,
+            child: OutlinedButton.icon(onPressed: null, icon: const Icon(Icons.link), label: const Text('Add Link (coming soon)')),
+          ),
+          const SizedBox(height: 16),
+          const InfoBanner(text: 'Clear instructions and rubrics help students achieve better outcomes.', icon: Icons.lightbulb_outline),
+        ],
       ),
     );
   }
 
   Future<void> _save() async {
     if (_titleCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a title.'), backgroundColor: AppColors.error));
+      showToast(context, 'Enter a title.', error: true);
       return;
     }
     setState(() => _saving = true);
@@ -180,12 +229,17 @@ class _ContentEditorScreenState extends ConsumerState<ContentEditorScreen> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save: ${e.toString()}'), backgroundColor: AppColors.error));
+        showToast(context, 'Could not save: $e', error: true);
         setState(() => _saving = false);
       }
     }
   }
 }
+
+// Keyed by (type, id) so the provider is stable across rebuilds (one created
+// inside build() would be new every frame and refetch forever).
+final _submissionsProvider = FutureProvider.autoDispose
+    .family<List<Submission>, (String, String)>((ref, key) => ref.read(dataRepoProvider).submissions(key.$1, key.$2));
 
 /// Submissions + grading for one assignment/homework item.
 class SubmissionsScreen extends ConsumerWidget {
@@ -195,33 +249,52 @@ class SubmissionsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subsProvider = FutureProvider.autoDispose((ref) => ref.read(dataRepoProvider).submissions(type, item.id));
+    final subsProvider = _submissionsProvider((type, item.id));
     final async = ref.watch(subsProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(item.title)),
+    return PortalPage(
+      title: item.title,
+      subtitle: 'Submissions',
       body: async.when(
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(subsProvider)),
         data: (list) => list.isEmpty
             ? const ErrorView(message: 'No submissions yet.', icon: Icons.inbox_outlined)
-            : ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final s = list[i];
-                  return AppCard(
-                    accent: s.status == 'Graded' ? AppColors.secondary : AppColors.tertiary,
-                    onTap: () => _gradeDialog(context, ref, s.id, s.studentName),
-                    child: Row(children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.studentName, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                        StatusPill(label: s.status, color: s.status == 'Graded' ? AppColors.secondary : AppColors.tertiary),
-                      ])),
-                      if (s.marks != null) Text('${s.marks!.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary, fontSize: 18)),
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                children: [
+                  PanelCard(
+                    title: '${list.length} submission${list.length == 1 ? '' : 's'} · ${list.where((s) => s.status == 'Graded').length} graded',
+                    icon: Icons.inbox_outlined,
+                    padding: EdgeInsets.zero,
+                    child: Column(children: [
+                      for (final (i, s) in list.indexed) ...[
+                        if (i > 0) const Divider(),
+                        InkWell(
+                          onTap: () => _gradeDialog(context, ref, s.id, s.studentName),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(children: [
+                              InitialsAvatar(name: s.studentName, radius: 16),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(s.studentName, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.slate800)),
+                                  const SizedBox(height: 3),
+                                  StatusPill(label: s.status, color: s.status == 'Graded' ? AppColors.green : AppColors.tertiary),
+                                ]),
+                              ),
+                              if (s.marks != null)
+                                Text(s.marks!.toStringAsFixed(0), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.teal, fontSize: 18))
+                              else
+                                const Text('Grade', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.teal, fontSize: 13)),
+                              const Icon(Icons.chevron_right, color: AppColors.slate400),
+                            ]),
+                          ),
+                        ),
+                      ],
                     ]),
-                  );
-                },
+                  ),
+                ],
               ),
       ),
     );
@@ -247,9 +320,12 @@ class SubmissionsScreen extends ConsumerWidget {
     if (marks == null) return;
     try {
       await ref.read(dataRepoProvider).gradeSubmission(submissionId, marks: marks, feedback: feedbackCtrl.text.trim().isEmpty ? null : feedbackCtrl.text.trim());
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Grade saved.'), backgroundColor: AppColors.secondary));
+      if (context.mounted) {
+        showToast(context, 'Grade saved.');
+        ref.invalidate(_submissionsProvider((type, item.id)));
+      }
     } catch (_) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save grade.'), backgroundColor: AppColors.error));
+      if (context.mounted) showToast(context, 'Could not save grade.', error: true);
     }
   }
 }

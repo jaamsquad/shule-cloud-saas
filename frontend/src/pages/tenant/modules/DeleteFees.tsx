@@ -7,6 +7,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FeesPage } from "@/components/fees/FeesUI";
+import { Trash2 as Trash2PageIcon } from "lucide-react";
 
 type Tab = "invoices" | "transactions" | "audit";
 
@@ -128,32 +130,11 @@ export default function DeleteFees() {
     );
 
     return (
-        <div className="flex-1 bg-[#F8FAFC] min-h-screen flex flex-col pb-20 font-sans">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" />
-                    <span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Fees</span>
-                    <span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Delete & Void Fees</span>
-                </div>
-                <div className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-1.5 rounded-full border border-red-100">
-                    <ShieldAlert className="w-4 h-4 animate-pulse" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Admin Control Only</span>
-                </div>
-            </div>
+        <FeesPage title="Delete & Void" subtitle="Void or waive invoices and reverse payments. Every action is recorded in the audit log." icon={Trash2PageIcon} actions={<>
+<span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-rose-50 text-rose-600 border border-rose-100 text-xs font-bold"><ShieldAlert className="w-3.5 h-3.5" /> Admin only</span>
+            </>}>
 
-            <div className="flex-1 max-w-6xl mx-auto w-full px-6 pt-10">
-                {/* Title */}
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                            Delete & Void Operations <Sparkles className="w-6 h-6 text-indigo-500" />
-                        </h1>
-                        <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Authorized reverse actions, voids, waivers, and full audit ledger</p>
-                    </div>
-                </div>
+            <div>
 
                 {/* Dashboard Tabs */}
                 <div className="flex gap-4 border-b border-slate-200 mb-8">
@@ -185,7 +166,7 @@ export default function DeleteFees() {
                 {activeTab === "invoices" && (
                     <div className="space-y-6">
                         {/* Search and Filters */}
-                        <div className="flex flex-wrap gap-4 items-center justify-between bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                        <div className="flex flex-wrap gap-4 items-center justify-between bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                             <div className="relative max-w-md w-full">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
@@ -218,7 +199,7 @@ export default function DeleteFees() {
                         </div>
 
                         {/* Invoices List */}
-                        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
@@ -325,7 +306,7 @@ export default function DeleteFees() {
                 )}
 
                 {activeTab === "transactions" && (
-                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -398,7 +379,7 @@ export default function DeleteFees() {
                 )}
 
                 {activeTab === "audit" && (
-                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -458,7 +439,7 @@ export default function DeleteFees() {
             {/* Action Modals */}
             {actionModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+                    <div className="bg-white max-w-md w-full rounded-2xl border border-slate-100 shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
                         {/* Overlay Header */}
                         <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
                         
@@ -551,6 +532,6 @@ export default function DeleteFees() {
                     </div>
                 </div>
             )}
-        </div>
+        </FeesPage>
     );
 }

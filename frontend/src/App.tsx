@@ -66,6 +66,10 @@ import VerifyDoc from "./pages/public/VerifyDoc";
 import ResultOnline from "./pages/public/ResultOnline";
 import SkillReports from "./pages/tenant/modules/skills/SkillReports";
 import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
+import Scholarships from "./pages/tenant/modules/fees/Scholarships";
+import Sponsors from "./pages/tenant/modules/fees/Sponsors";
+import FeeCredits from "./pages/tenant/modules/fees/FeeCredits";
+import FeeAuditLog from "./pages/tenant/modules/fees/FeeAuditLog";
 import ClassRoster from "./pages/tenant/modules/ClassRoster";
 import InstallPrompt from "./components/InstallPrompt";
 import ManageSchool from "./pages/owner/ManageSchool";
@@ -144,6 +148,7 @@ import SecretaryReports from "./pages/tenant/modules/secretary/SecretaryReports"
 import PrintBasicList from "./pages/tenant/modules/PrintBasicList";
 import ManageLogin from "./pages/tenant/modules/ManageLogin";
 import PromoteStudents from "./pages/tenant/modules/PromoteStudents";
+import AutoPromotion from "./pages/tenant/modules/AutoPromotion";
 import AllStudents from "./pages/tenant/modules/AllStudents";
 import StudentReport from "./pages/tenant/modules/StudentReport";
 import FindStudent from "./pages/tenant/modules/FindStudent";
@@ -172,6 +177,8 @@ import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
 import ParentMessaging from "./pages/tenant/modules/communications/ParentMessaging";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
+import Meetings from "./pages/tenant/modules/communications/Meetings";
+import MessageTemplates from "./pages/tenant/modules/communications/MessageTemplates";
 import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppIntegration";
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
 import CommunicationPreferences from "./pages/tenant/modules/communications/CommunicationPreferences";
@@ -622,6 +629,7 @@ const App = () => {
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
               <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
+              <Route path="/students/promote/auto" element={<AutoPromotion />} />
                <Route path="/students/admissions" element={<Admissions />} />
               <Route path="/students/admissions/:id" element={<AdmissionView />} />
               <Route path="/students/guardians" element={<Guardians />} />
@@ -796,6 +804,8 @@ const App = () => {
               {/* Communications */}
               <Route path="/communications" element={<Announcements />} />
               <Route path="/communications/announcements" element={<Announcements />} />
+              <Route path="/communications/meetings" element={<Meetings />} />
+              <Route path="/communications/templates" element={<MessageTemplates />} />
               <Route path="/communications/sms" element={<BulkSMS />} />
               <Route path="/communications/parent-messages" element={<ParentMessaging />} />
               <Route path="/communications/email" element={<ChannelComposer channel="email" />} />
@@ -861,6 +871,10 @@ const App = () => {
               <Route path="/fees/defaulters" element={<FeesDefaulters />} />
               <Route path="/fees/report" element={<FeesReport />} />
               <Route path="/fees/delete" element={<DeleteFees />} />
+              <Route path="/fees/scholarships" element={<Scholarships />} />
+              <Route path="/fees/sponsors" element={<Sponsors />} />
+              <Route path="/fees/credits" element={<FeeCredits />} />
+              <Route path="/fees/audit-log" element={<FeeAuditLog />} />
               
               {/* Transport Module */}
               <Route path="/transport/zones" element={<TransportManagement tab="zones" />} />

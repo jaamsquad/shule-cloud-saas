@@ -6,6 +6,7 @@ import { tenantDisplayName } from "../portal";
 import { PORTAL_THEME } from "../theme";
 import { useBranding } from "../useBranding";
 import { staffApi } from "./staffApi";
+import GoogleSignIn, { useGoogleConfig } from "@/components/auth/GoogleSignIn";
 
 export default function StaffLogin() {
     const navigate = useNavigate();
@@ -27,6 +28,21 @@ export default function StaffLogin() {
             }
         } catch { /* ignore malformed SSO */ }
     }, [navigate]);
+
+    const { data: googleCfg } = useGoogleConfig();
+    // Continue with Google — for teachers who linked Google from their profile
+    const handleGoogle = async (credential: string) => {
+        setLoading(true); setError(null);
+        try {
+            const r = await staffApi.post("/google/login", { credential, app: "teacher" });
+            localStorage.setItem("staff_token", r.data.token);
+            localStorage.setItem("staff_info", JSON.stringify(r.data.staff));
+            toast.success(`Welcome, ${r.data.staff?.name || ""}!`);
+            navigate("/");
+        } catch (err: any) {
+            setError(err.response?.data?.message || "Google sign-in failed");
+        } finally { setLoading(false); }
+    };
 
     const handleLogin = async (username: string, password: string) => {
         if (!username || !password) { setError("Enter your username and password"); return; }
@@ -58,6 +74,12 @@ export default function StaffLogin() {
             error={error}
             onSubmit={handleLogin}
             onForgot={() => toast.info("Contact your ICT administrator to reset your password.")}
+            extra={googleCfg?.enabled ? (
+                <div className="mt-5 space-y-3">
+                    <div className="flex items-center gap-3 text-[10px] font-bold text-slate-300 uppercase tracking-wider"><span className="flex-1 h-px bg-slate-200" />or<span className="flex-1 h-px bg-slate-200" /></div>
+                    <GoogleSignIn onCredential={handleGoogle} disabled={loading} width={300} />
+                </div>
+            ) : null}
         />
     );
 }
