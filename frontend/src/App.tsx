@@ -177,6 +177,8 @@ import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
 import ParentMessaging from "./pages/tenant/modules/communications/ParentMessaging";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
+import Meetings from "./pages/tenant/modules/communications/Meetings";
+import MessageTemplates from "./pages/tenant/modules/communications/MessageTemplates";
 import WhatsAppIntegration from "./pages/tenant/modules/communications/WhatsAppIntegration";
 import ReportNotificationSettings from "./pages/tenant/modules/communications/ReportNotificationSettings";
 import CommunicationPreferences from "./pages/tenant/modules/communications/CommunicationPreferences";
@@ -802,6 +804,8 @@ const App = () => {
               {/* Communications */}
               <Route path="/communications" element={<Announcements />} />
               <Route path="/communications/announcements" element={<Announcements />} />
+              <Route path="/communications/meetings" element={<Meetings />} />
+              <Route path="/communications/templates" element={<MessageTemplates />} />
               <Route path="/communications/sms" element={<BulkSMS />} />
               <Route path="/communications/parent-messages" element={<ParentMessaging />} />
               <Route path="/communications/email" element={<ChannelComposer channel="email" />} />

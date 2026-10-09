@@ -9,6 +9,7 @@ import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
 import { FeesPage } from "@/components/fees/FeesUI";
+import TemplatePicker from "@/components/comm/TemplatePicker";
 import { AlertTriangle as AlertTrianglePageIcon } from "lucide-react";
 
 export default function FeesDefaulters() {
@@ -171,9 +172,12 @@ export default function FeesDefaulters() {
 
                     {/* SMS Reminder broadcast block */}
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
-                        <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                            Bulk SMS Reminder <Bell className="w-4 h-4 text-slate-500" />
-                        </h3>
+                        <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                Bulk SMS Reminder <Bell className="w-4 h-4 text-slate-500" />
+                            </h3>
+                            <TemplatePicker channel="sms" align="right" onPick={t => setSmsTemplate(t.body)} />
+                        </div>
                         <textarea
                             value={smsTemplate}
                             onChange={(e) => setSmsTemplate(e.target.value)}

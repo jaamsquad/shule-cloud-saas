@@ -32,6 +32,7 @@ import posRoutes from './routes/pos.routes';
 import academicsV2Routes from './routes/academics-v2.routes';
 import promotionScheduleRoutes from './routes/promotionSchedule.routes';
 import communicationsRoutes from './routes/communications.routes';
+import meetingsRoutes from './routes/meetings.routes';
 import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
@@ -355,6 +356,7 @@ app.use('/api/v1', posRoutes);
 app.use('/api/v1', promotionScheduleRoutes);   // scheduled automatic promotion
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
+app.use('/api/v1', meetingsRoutes);              // Communication → meetings calendar + SMS/email templates
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)

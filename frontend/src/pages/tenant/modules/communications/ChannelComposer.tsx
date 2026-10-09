@@ -5,6 +5,7 @@ import { Loader2, Send, Mail, Phone, AlertTriangle, CheckCircle2, Beaker } from 
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { ContactPicker, type Contact } from "./ContactPicker";
+import TemplatePicker, { openPlaceholders } from "@/components/comm/TemplatePicker";
 
 interface Props {
     channel: "email" | "whatsapp";
@@ -216,7 +217,13 @@ export default function ChannelComposer({ channel }: Props) {
                     )}
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">Message</label>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <label className="block text-xs font-bold text-slate-600">Message</label>
+                            {isEmail && <TemplatePicker channel="email" align="right" onPick={t => { setSubject(t.subject || ""); setMessage(t.body); }} />}
+                        </div>
+                        {openPlaceholders(`${subject} ${message}`).length > 0 && (
+                            <p className="mb-1 text-xs text-amber-600 font-semibold">Replace {openPlaceholders(`${subject} ${message}`).join(", ")} before sending — this broadcast sends the same text to everyone.</p>
+                        )}
                         <textarea value={message} onChange={e => setMessage(e.target.value)} rows={6}
                             placeholder="Type your message…"
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#5C67F2]" />

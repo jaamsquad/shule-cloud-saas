@@ -58,6 +58,10 @@ async function bootstrap() {
         const { runDuePromotionsAllTenants } = require('./services/promotion.service');
         setInterval(() => { runDuePromotionsAllTenants().catch(() => {}); }, 60_000);
 
+        // ── Meeting reminders (Communication → Meetings) ─────────────────────
+        const { sendDueMeetingReminders } = require('./routes/meetings.routes');
+        setInterval(() => { sendDueMeetingReminders().catch(() => {}); }, 60_000);
+
         // ── M-PESA auto-sync ──────────────────────────────────────────────────
         // Pull recent Till/Paybill transactions from Safaricom every 5 min for
         // every tenant with the Pull API registered, so payments appear without
