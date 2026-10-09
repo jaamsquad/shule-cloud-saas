@@ -41,14 +41,72 @@ class AppShell extends ConsumerWidget {
       );
     }
 
+    final tab = bottomTabs.indexWhere((t) => t.path == location);
     return Scaffold(
       drawer: Drawer(child: PortalSidebar(location: location, pinned: false)),
       body: Column(children: [
         const _GoldHeader(showMenu: true),
         Expanded(child: content),
       ]),
+      // Phones only, and only on the main pages; detail pages use the
+      // sidebar/back button like the web portal.
+      bottomNavigationBar: tab < 0 ? null : PortalBottomBar(tabs: bottomTabs, index: tab, onSelect: (i) => context.go(bottomTabs[i].path)),
     );
   }
+}
+
+/// Main pages reachable from the phone bottom bar.
+const bottomTabs = <NavEntry>[
+  NavEntry('/', 'Home', Icons.dashboard_outlined),
+  NavEntry('/classes', 'Classes', Icons.groups_outlined),
+  NavEntry('/attendance', 'Attendance', Icons.fact_check_outlined),
+  NavEntry('/gradebook', 'Marks', Icons.edit_note_outlined),
+  NavEntry('/profile', 'Profile', Icons.person_outline),
+];
+
+/// White bottom bar with a teal top indicator on the active tab.
+class PortalBottomBar extends StatelessWidget {
+  final List<NavEntry> tabs;
+  final int index;
+  final ValueChanged<int> onSelect;
+  const PortalBottomBar({super.key, required this.tabs, required this.index, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          border: const Border(top: BorderSide(color: AppColors.slate200)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 60,
+            child: Row(children: [
+              for (final (i, t) in tabs.indexed)
+                Expanded(
+                  child: InkWell(
+                    onTap: () => onSelect(i),
+                    child: Column(children: [
+                      Container(height: 3, margin: const EdgeInsets.symmetric(horizontal: 18), color: i == index ? AppColors.teal : Colors.transparent),
+                      const Spacer(),
+                      Icon(t.icon, size: 22, color: i == index ? AppColors.teal : AppColors.slate400),
+                      const SizedBox(height: 3),
+                      Text(t.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: i == index ? FontWeight.w800 : FontWeight.w600,
+                            color: i == index ? AppColors.teal : AppColors.slate500,
+                          )),
+                      const Spacer(),
+                    ]),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      );
 }
 
 // ── Navigation model (same groups as the web StaffLayout NAV) ────────────────
