@@ -35,32 +35,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final lists = ref.watch(appListsProvider);
     if (s == null) return const SizedBox.shrink();
     final byKey = {for (final a in apps) a.key: a};
-    final quick = [...lists.starred, ...lists.recent.where((k) => !lists.starred.contains(k))].map((k) => byKey[k]).whereType<AppDef>().take(6).toList();
-    final shown = quick.isNotEmpty ? quick : apps.where((a) => !a.locked).take(4).toList();
+    final quick = [...lists.starred, ...lists.recent.where((k) => !lists.starred.contains(k))].map((k) => byKey[k]).whereType<AppDef>().take(8).toList();
+    final shown = quick.isNotEmpty ? quick : apps.where((a) => !a.locked).take(8).toList();
     final first = s.name.split(RegExp(r'[\s@]')).first;
 
     return RefreshIndicator(
       onRefresh: () async { ref.invalidate(_summaryProvider); await ref.read(sessionProvider.notifier).refreshPermissions(); },
-      child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: [
-        Panel(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$_greet, ${first.toUpperCase()}', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: C.brandDark)),
-            const SizedBox(height: 4),
-            Text('${DateFormat('EEEE, d MMMM y').format(_now)} | ${DateFormat('HH:mm').format(_now)}', style: const TextStyle(color: C.slate500, fontSize: 13)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              Badge2(_kindLabel(s), C.brand),
-              Badge2(s.subdomain.toUpperCase(), C.slate500),
-            ]),
-          ]),
-        ),
-        const SizedBox(height: 14),
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 28), children: [
+        _Hero(greeting: '$_greet,', name: first, when: '${DateFormat('EEEE, d MMMM').format(_now)} · ${DateFormat('HH:mm').format(_now)}',
+            role: _kindLabel(s), school: s.subdomain.toUpperCase()),
+        const SizedBox(height: 16),
         const _Summary(),
-        const SizedBox(height: 4),
-        SectionTitle('Quick Access', subtitle: quick.isNotEmpty ? 'Your starred and recently used apps' : 'Star an app to keep it here',
-            trailing: TextButton(onPressed: () => context.go('/apps'), child: const Text('View all apps →'))),
-        if (shown.isEmpty) const EmptyState(icon: Icons.apps_outlined, title: 'No apps yet', hint: 'Ask the school administrator to give your role access to apps.'),
-        for (final a in shown) Padding(padding: const EdgeInsets.only(bottom: 10), child: AppCard(app: a)),
+        const SizedBox(height: 6),
+        SectionTitle('Quick Access', subtitle: quick.isNotEmpty ? 'Your starred and recent apps' : 'Hold an app to star it',
+            trailing: TextButton(onPressed: () => context.go('/apps'), child: const Text('All apps'))),
+        if (shown.isEmpty)
+          const EmptyState(icon: Icons.apps_rounded, title: 'No apps yet', hint: 'Ask the school administrator to give your role access to apps.')
+        else
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: C.slate200)),
+            child: AppGrid(apps: shown),
+          ),
       ]),
     );
   }
@@ -138,4 +134,50 @@ class _Summary extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Greeting card in the brand gradient.
+class _Hero extends StatelessWidget {
+  final String greeting, name, when, role, school;
+  const _Hero({required this.greeting, required this.name, required this.when, required this.role, required this.school});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF4F46E5), C.brand, Color(0xFF7C3AED)]),
+          boxShadow: [BoxShadow(color: C.brand.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 10))],
+        ),
+        child: Stack(children: [
+          Positioned(right: -30, top: -40, child: Container(width: 150, height: 150, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08)))),
+          Positioned(right: 30, bottom: -60, child: Container(width: 110, height: 110, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.07)))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.wb_sunny_rounded, color: Color(0xFFFCD34D), size: 18),
+                const SizedBox(width: 6),
+                Text(when, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12.5, fontWeight: FontWeight.w600)),
+              ]),
+              const SizedBox(height: 10),
+              Text(greeting, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 15)),
+              Text(name.isEmpty ? 'Welcome' : '${name[0].toUpperCase()}${name.substring(1)}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+              const SizedBox(height: 12),
+              Wrap(spacing: 6, runSpacing: 6, children: [_chip(Icons.verified_user_rounded, role), _chip(Icons.apartment_rounded, school)]),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _chip(IconData i, String t) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withValues(alpha: 0.2))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(i, size: 13, color: Colors.white), const SizedBox(width: 5),
+          Text(t, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+        ]),
+      );
 }

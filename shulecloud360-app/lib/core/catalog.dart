@@ -40,12 +40,12 @@ class AppDef {
 }
 
 const _icons = <String, IconData>{
-  'academics': Icons.school_outlined, 'exams': Icons.assignment_outlined, 'cbc': Icons.menu_book_outlined, 'elearning': Icons.videocam_outlined,
-  'students': Icons.groups_outlined, 'frontdesk': Icons.meeting_room_outlined, 'communication': Icons.forum_outlined,
-  'attendance': Icons.how_to_reg_outlined, 'boarding': Icons.bed_outlined, 'library': Icons.local_library_outlined, 'transport': Icons.directions_bus_outlined,
-  'activities': Icons.emoji_events_outlined, 'fees': Icons.payments_outlined, 'accounting': Icons.balance_outlined, 'payroll': Icons.account_balance_wallet_outlined,
-  'pos': Icons.shopping_cart_outlined, 'overview': Icons.dashboard_outlined, 'hr': Icons.badge_outlined, 'reports': Icons.bar_chart_outlined,
-  'administration': Icons.settings_outlined, 'more': Icons.widgets_outlined,
+  'academics': Icons.school_rounded, 'exams': Icons.assignment_rounded, 'cbc': Icons.menu_book_rounded, 'elearning': Icons.videocam_rounded,
+  'students': Icons.groups_rounded, 'frontdesk': Icons.meeting_room_rounded, 'communication': Icons.forum_rounded,
+  'attendance': Icons.how_to_reg_rounded, 'boarding': Icons.bed_rounded, 'library': Icons.local_library_rounded, 'transport': Icons.directions_bus_rounded,
+  'activities': Icons.emoji_events_rounded, 'fees': Icons.payments_rounded, 'accounting': Icons.balance_rounded, 'payroll': Icons.account_balance_wallet_rounded,
+  'pos': Icons.shopping_cart_rounded, 'overview': Icons.dashboard_rounded, 'hr': Icons.badge_rounded, 'reports': Icons.bar_chart_rounded,
+  'administration': Icons.settings_rounded, 'more': Icons.widgets_rounded,
 };
 
 class Catalog {
@@ -61,7 +61,7 @@ final catalogProvider = FutureProvider<Catalog>((ref) async {
     return AppDef(
       key: a['key'], name: a['name'], description: a['description'], category: a['category'],
       color: Color(int.parse('FF${a['color'].toString().replaceAll('#', '')}', radix: 16)),
-      icon: _icons[a['key']] ?? Icons.apps_outlined, path: a['path'], modules: List<String>.from(a['modules'] ?? const []),
+      icon: _icons[a['key']] ?? Icons.apps_rounded, path: a['path'], modules: List<String>.from(a['modules'] ?? const []),
       sections: (a['sections'] as List).map((s) => SectionDef(s['label'], s['module'],
           (s['pages'] as List).map((p) => PageDef(p['label'], p['path'], perm: p['perm'], create: p['create'] == true)).toList())).toList(),
     );
@@ -72,39 +72,39 @@ final catalogProvider = FutureProvider<Catalog>((ref) async {
 // ── Portal apps for teachers, learners and parents (their web portal pages) ──
 const _teach = Color(0xFF0F7A8A), _stud = Color(0xFF16A34A), _par = Color(0xFF7C3AED);
 const teacherApps = <AppDef>[
-  AppDef(key: 't_classes', name: 'My Classes', category: 'Teaching', color: _teach, icon: Icons.class_outlined, portal: Portal.staff, description: 'Classes, learners and class lists',
+  AppDef(key: 't_classes', name: 'My Classes', category: 'Teaching', color: _teach, icon: Icons.class_rounded, portal: Portal.staff, description: 'Classes, learners and class lists',
       sections: [SectionDef('My Classes', null, [PageDef('My Classes', '/classes'), PageDef('Timetable', '/timetable'), PageDef('Calendar', '/calendar')])]),
-  AppDef(key: 't_attendance', name: 'Attendance', category: 'Teaching', color: _teach, icon: Icons.how_to_reg_outlined, portal: Portal.staff, description: 'Mark class attendance, my attendance',
+  AppDef(key: 't_attendance', name: 'Attendance', category: 'Teaching', color: _teach, icon: Icons.how_to_reg_rounded, portal: Portal.staff, description: 'Mark class attendance, my attendance',
       sections: [SectionDef('Attendance', null, [PageDef('Mark Attendance', '/attendance'), PageDef('My Attendance', '/my-attendance')])]),
-  AppDef(key: 't_assessment', name: 'Assessment', category: 'Teaching', color: _teach, icon: Icons.assignment_outlined, portal: Portal.staff, description: 'Marks entry, CBC, results',
+  AppDef(key: 't_assessment', name: 'Assessment', category: 'Teaching', color: _teach, icon: Icons.assignment_rounded, portal: Portal.staff, description: 'Marks entry, CBC, results',
       sections: [SectionDef('Assessment', null, [PageDef('Marks Entry', '/marks'), PageDef('CBC Assessment', '/cbc'), PageDef('Results', '/results')])]),
-  AppDef(key: 't_content', name: 'Teaching Content', category: 'Teaching', color: _teach, icon: Icons.menu_book_outlined, portal: Portal.staff, description: 'Lesson plans, schemes, resources, homework',
+  AppDef(key: 't_content', name: 'Teaching Content', category: 'Teaching', color: _teach, icon: Icons.menu_book_rounded, portal: Portal.staff, description: 'Lesson plans, schemes, resources, homework',
       sections: [SectionDef('Content', null, [PageDef('Lesson Plans', '/lesson-plans'), PageDef('Schemes of Work', '/schemes'), PageDef('Resources', '/resources'),
         PageDef('Shared Resources', '/shared-resources'), PageDef('Assignments', '/assignments'), PageDef('Homework', '/homework'), PageDef('Live Classes', '/live')])]),
-  AppDef(key: 't_comms', name: 'Messages', category: 'Teaching', color: _teach, icon: Icons.forum_outlined, portal: Portal.staff, description: 'Announcements, message parents',
+  AppDef(key: 't_comms', name: 'Messages', category: 'Teaching', color: _teach, icon: Icons.forum_rounded, portal: Portal.staff, description: 'Announcements, message parents',
       sections: [SectionDef('Messages', null, [PageDef('Announcements', '/announcements'), PageDef('Message Parents', '/message-parents')])]),
-  AppDef(key: 't_me', name: 'My Work', category: 'Teaching', color: _teach, icon: Icons.badge_outlined, portal: Portal.staff, description: 'Profile, leave',
+  AppDef(key: 't_me', name: 'My Work', category: 'Teaching', color: _teach, icon: Icons.badge_rounded, portal: Portal.staff, description: 'Profile, leave',
       sections: [SectionDef('Me', null, [PageDef('My Profile', '/'), PageDef('Leave', '/leave')])]),
 ];
 const studentApps = <AppDef>[
-  AppDef(key: 's_learning', name: 'Learning', category: 'My School', color: _stud, icon: Icons.menu_book_outlined, portal: Portal.student, description: 'Timetable, assignments, homework, resources, live classes',
+  AppDef(key: 's_learning', name: 'Learning', category: 'My School', color: _stud, icon: Icons.menu_book_rounded, portal: Portal.student, description: 'Timetable, assignments, homework, resources, live classes',
       sections: [SectionDef('Learning', null, [PageDef('Timetable', '/timetable'), PageDef('Assignments', '/assignments'), PageDef('Homework', '/homework'),
         PageDef('Resources', '/resources'), PageDef('Live Classes', '/live'), PageDef('Online Exams', '/online-exams')])]),
-  AppDef(key: 's_results', name: 'Results', category: 'My School', color: _stud, icon: Icons.insights_outlined, portal: Portal.student, description: 'Exam results and report cards',
+  AppDef(key: 's_results', name: 'Results', category: 'My School', color: _stud, icon: Icons.insights_rounded, portal: Portal.student, description: 'Exam results and report cards',
       sections: [SectionDef('Results', null, [PageDef('Exam Results', '/exam-results')])]),
-  AppDef(key: 's_fees', name: 'Fees', category: 'My School', color: _stud, icon: Icons.payments_outlined, portal: Portal.student, description: 'Fee structure, pay, wallet, receipts',
+  AppDef(key: 's_fees', name: 'Fees', category: 'My School', color: _stud, icon: Icons.payments_rounded, portal: Portal.student, description: 'Fee structure, pay, wallet, receipts',
       sections: [SectionDef('Fees', null, [PageDef('Fee Structure', '/fees/structure'), PageDef('Pay Fees', '/fees/pay'), PageDef('Wallet', '/wallet'), PageDef('Receipts', '/receipts')])]),
   AppDef(key: 's_me', name: 'My Profile', category: 'My School', color: _stud, icon: Icons.person_outline, portal: Portal.student, description: 'Profile, registration, requests, clearance',
       sections: [SectionDef('Me', null, [PageDef('Profile', '/profile'), PageDef('Registration', '/registration'), PageDef('Requisition', '/requisition'), PageDef('Clearance', '/clearance')])]),
 ];
 const parentApps = <AppDef>[
-  AppDef(key: 'p_progress', name: 'Progress', category: 'My Children', color: _par, icon: Icons.insights_outlined, portal: Portal.parent, description: 'Results, analytics, attendance, timetable',
+  AppDef(key: 'p_progress', name: 'Progress', category: 'My Children', color: _par, icon: Icons.insights_rounded, portal: Portal.parent, description: 'Results, analytics, attendance, timetable',
       sections: [SectionDef('Progress', null, [PageDef('Results', '/results'), PageDef('Analytics', '/analytics'), PageDef('Attendance', '/attendance'), PageDef('Timetable', '/timetable')])]),
-  AppDef(key: 'p_fees', name: 'Fees', category: 'My Children', color: _par, icon: Icons.payments_outlined, portal: Portal.parent, description: 'Balances, pay, wallet, receipts',
+  AppDef(key: 'p_fees', name: 'Fees', category: 'My Children', color: _par, icon: Icons.payments_rounded, portal: Portal.parent, description: 'Balances, pay, wallet, receipts',
       sections: [SectionDef('Fees', null, [PageDef('Fees', '/fees'), PageDef('Wallet', '/wallet'), PageDef('Receipts', '/receipts')])]),
-  AppDef(key: 'p_life', name: 'School Life', category: 'My Children', color: _par, icon: Icons.emoji_events_outlined, portal: Portal.parent, description: 'Trips, sports, announcements, inbox',
+  AppDef(key: 'p_life', name: 'School Life', category: 'My Children', color: _par, icon: Icons.emoji_events_rounded, portal: Portal.parent, description: 'Trips, sports, announcements, inbox',
       sections: [SectionDef('School Life', null, [PageDef('Announcements', '/announcements'), PageDef('Inbox', '/inbox'), PageDef('Trips', '/trips'), PageDef('Sports', '/sports')])]),
-  AppDef(key: 'p_home', name: 'Overview', category: 'My Children', color: _par, icon: Icons.dashboard_outlined, portal: Portal.parent, description: 'Your children at a glance',
+  AppDef(key: 'p_home', name: 'Overview', category: 'My Children', color: _par, icon: Icons.dashboard_rounded, portal: Portal.parent, description: 'Your children at a glance',
       sections: [SectionDef('Overview', null, [PageDef('Dashboard', '/')])]),
 ];
 
