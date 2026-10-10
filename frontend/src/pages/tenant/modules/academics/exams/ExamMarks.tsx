@@ -76,9 +76,14 @@ export default function ExamMarks() {
     const isTeacher = (currentUser.role || "").toLowerCase().includes("teacher");
     const teacherName = currentUser.name || "";
 
+    // Exams this person may enter marks for: admins get every exam, teachers only this term's.
     const { data: examsRaw = [] } = useQuery<any[]>({
-        queryKey: ["exams"],
-        queryFn: async () => (await api.get("/academics/exams")).data,
+        queryKey: ["exams_for_marks"],
+        queryFn: async () => (await api.get("/academics/exams", { params: { for: "marks" } })).data,
+    });
+    const { data: marksWindow } = useQuery<any>({
+        queryKey: ["marks_window"],
+        queryFn: async () => (await api.get("/academics/marks-window")).data,
     });
     const exams = examsRaw;
 
@@ -339,7 +344,13 @@ export default function ExamMarks() {
 
             <div className="flex-1 px-8 py-8 w-full max-w-7xl mx-auto">
                 <h1 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Add / Update Exam Marks</h1>
-                <p className="text-slate-400 text-sm font-medium mb-8">Select exam, class, and subject to enter or update student marks.</p>
+                <p className="text-slate-400 text-sm font-medium mb-4">Select exam, class, and subject to enter or update student marks.</p>
+                {marksWindow?.restricted && (
+                    <div className="mb-8 flex items-start gap-2 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900">
+                        <Lock className="w-4 h-4 mt-0.5 flex-shrink-0 text-indigo-500" />
+                        <span>Marks entry is open for <b>{marksWindow.label}</b> exams only. Earlier exams are managed by the school administrator.</span>
+                    </div>
+                )}
 
                 {/* Filters */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

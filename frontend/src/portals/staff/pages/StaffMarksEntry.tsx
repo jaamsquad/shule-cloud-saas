@@ -16,6 +16,11 @@ export default function StaffMarksEntry() {
     const [pair, setPair] = useState("");
     const [rows, setRows] = useState<any[]>([]);
 
+    // Marks entry is open for this term's exams only (the server lists only those).
+    const { data: win } = useQuery<any>({
+        queryKey: ["staff_marks_window"],
+        queryFn: async () => (await api.get("/staff-portal/marks-window")).data,
+    });
     const { data: exams = [] } = useQuery({
         queryKey: ["staff_exams"],
         queryFn: async () => (await api.get("/staff-portal/exams")).data,
@@ -72,6 +77,12 @@ export default function StaffMarksEntry() {
     return (
         <>
             <PageTitle title="Exam Marks Entry" />
+            {win?.restricted && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>You can record marks for <b>{win.label}</b> exams. Earlier exams are managed by the school administrator.</span>
+                </div>
+            )}
 
             <PanelCard title="Select Exam, Class & Subject">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

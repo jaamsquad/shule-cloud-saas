@@ -8,6 +8,7 @@ import { RenderPrintTemplate } from "./PrintTemplates";
 import { openPrintDoc } from "@/lib/pdfDoc";
 import { reportQr } from "@/lib/reportQr";
 import { flushSync } from "react-dom";
+import { gradingFrom, gradeFor, statusFor, colorFor, summariseStudent, classStatsOf } from "@/lib/reportCardCalc";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function useGradingFns() {
@@ -20,27 +21,11 @@ function useGradingFns() {
         queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
     });
 
-    const scale: any[] = useMemo(() => {
-        if (curriculumSettings?.gradingScale?.length) return curriculumSettings.gradingScale;
-        if (gradingConfig?.grades?.length) return gradingConfig.grades.map((g: any) => ({ grade: g.grade, min: g.from, max: g.upto, label: g.status, color: g.color }));
-        return [];
-    }, [curriculumSettings, gradingConfig]);
-
-    const passMark: number = curriculumSettings?.passMark ?? gradingConfig?.passmark ?? 50;
-
-    const getGrade = (pct: number) => {
-        if (scale.length) { const s = [...scale].sort((a, b) => b.min - a.min).find(g => pct >= g.min && pct <= g.max); if (s) return s.grade; }
-        if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B";
-        if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F";
-    };
-    const getStatus = (pct: number) => {
-        if (scale.length) { const s = [...scale].sort((a, b) => b.min - a.min).find(g => pct >= g.min && pct <= g.max); if (s?.label) return s.label; }
-        return pct >= passMark ? "Pass" : "Fail";
-    };
-    const getColor = (pct: number) => {
-        if (scale.length) { const s = [...scale].sort((a, b) => b.min - a.min).find(g => pct >= g.min && pct <= g.max); if (s?.color) return s.color; }
-        return pct >= passMark ? "#10B981" : "#EF4444";
-    };
+    // shared with the student & parent portals (lib/reportCardCalc)
+    const { scale, passMark } = useMemo(() => gradingFrom(curriculumSettings, gradingConfig), [curriculumSettings, gradingConfig]);
+    const getGrade = (pct: number) => gradeFor(scale, pct);
+    const getStatus = (pct: number) => statusFor(scale, passMark, pct);
+    const getColor = (pct: number) => colorFor(scale, passMark, pct);
 
     return { getGrade, getStatus, getColor, passMark, scale, curriculumId: curriculumSettings?.curriculumId };
 }
@@ -139,38 +124,15 @@ export default function ClassReportCards() {
                 m.studentName === (student.studentName || `${student.firstName} ${student.lastName}`.trim())
             );
 
-            // Use this student's own assigned subjects if available
-            const ownSubjectNames: string[] = Array.isArray(student.subjects) && student.subjects.length > 0
-                ? student.subjects.map((s: any) => (typeof s === "string" ? s : s.name || s.subjectName || "").trim()).filter(Boolean)
-                : subjectNames;
-
+            // Totals, grade and the subject list — the same maths the portals use (lib/reportCardCalc)
+            const sum = summariseStudent({ studentMarks, ownSubjects: student.subjects, classSubjectNames: subjectNames, missingMarkPolicy, scale, passMark });
+            const { ownSubjectNames, obtained, maxScored, maxAll, totalSubjects, pct } = sum;
             const marksMap = new Map(studentMarks.map((m: any) => [(m.subjectName || "").toLowerCase(), m]));
-
-            let obtained = 0;
-            let maxForCalc = 0;
-
-            if (missingMarkPolicy === "count_as_zero" && ownSubjectNames.length > 0) {
-                // Include ALL assigned subjects — missing ones get 0/maxMarks
-                ownSubjectNames.forEach(name => {
-                    const m = marksMap.get(name.toLowerCase());
-                    obtained += m ? Number(m.marksObtained) || 0 : 0;
-                    maxForCalc += m ? Number(m.totalMarks) || 100 : 100;
-                });
-            } else {
-                // Default "skip": only count subjects that have marks
-                obtained = studentMarks.reduce((sum: number, m: any) => sum + (Number(m.marksObtained) || 0), 0);
-                maxForCalc = studentMarks.reduce((sum: number, m: any) => sum + (Number(m.totalMarks) || 100), 0);
-            }
-
-            const maxScored = studentMarks.reduce((sum: number, m: any) => sum + (Number(m.totalMarks) || 100), 0);
-            const totalSubjects = Math.max(ownSubjectNames.length, studentMarks.length);
-            const maxAll = missingMarkPolicy === "count_as_zero" ? maxForCalc : (totalSubjects * 100);
-            const pct = maxForCalc > 0 ? Math.round((obtained / maxForCalc) * 100) : 0;
 
             const name = student.studentName || `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.name || "—";
             const admNo = student.admissionNumber || student.admNo || student.registrationNo || "—";
 
-            return { student, name, admNo, studentMarks, marksMap, ownSubjectNames, obtained, maxScored, maxAll: maxAll || maxScored, totalSubjects, scoredSubjects: studentMarks.length, pct, grade: getGrade(pct), status: getStatus(pct), color: getColor(pct) };
+            return { student, name, admNo, studentMarks, marksMap, ownSubjectNames, obtained, maxScored, maxAll, totalSubjects, scoredSubjects: studentMarks.length, pct, grade: sum.grade, status: sum.status, color: getColor(pct), reportMarks: sum.marks };
         });
     }, [classStudents, allMarks, subjectNames, getGrade, getStatus, getColor]);
 
@@ -205,16 +167,7 @@ export default function ClassReportCards() {
     });
 
     // Per-subject class average and topper (as %) for the result-analysis chart
-    const classStats = useMemo(() => {
-        const acc: Record<string, number[]> = {};
-        studentSummaries.forEach(r => r.studentMarks.forEach((m: any) => {
-            const t = Number(m.totalMarks) || 0; if (!t || m.marksObtained == null || m.marksObtained === "") return;
-            (acc[(m.subjectName || "").toLowerCase()] ||= []).push((Number(m.marksObtained) / t) * 100);
-        }));
-        const out: Record<string, { avg: number; top: number }> = {};
-        Object.entries(acc).forEach(([k, v]) => { out[k] = { avg: v.reduce((a, b) => a + b, 0) / v.length, top: Math.max(...v) }; });
-        return out;
-    }, [studentSummaries]);
+    const classStats = useMemo(() => classStatsOf(studentSummaries.flatMap(r => r.studentMarks)), [studentSummaries]);
 
     // ── Print single student ───────────────────────────────────────────────────
     const printStudent = async (row: typeof studentSummaries[0]) => {
@@ -223,13 +176,8 @@ export default function ClassReportCards() {
         if (!win) return;
         const qrUrl = await qrFor(row);
         const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
-        // Use this student's own assigned subject list
-        const subList = row.ownSubjectNames.length > 0 ? row.ownSubjectNames : subjectNames;
-        const marks = subList.map((name: string) => {
-            const m = row.studentMarks.find((mk: any) => (mk.subjectName || "").toLowerCase() === name.toLowerCase());
-            return m ? { ...m } : { subjectName: name, marksObtained: null, totalMarks: 100, noMarks: true };
-        });
-        if (marks.length === 0) marks.push(...row.studentMarks);
+        // This student's own subject list, with blanks for subjects not marked
+        const marks = row.reportMarks;
 
         const div = document.createElement("div");
         document.body.appendChild(div);

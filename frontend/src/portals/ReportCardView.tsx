@@ -1,8 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
+import QRCode from "qrcode";
 import { Loader2, Printer, Award } from "lucide-react";
 import { PageTitle } from "./PortalShell";
+import { RenderPrintTemplate } from "@/pages/tenant/modules/academics/exams/PrintTemplates";
+import ScholarSheetReportCard from "@/pages/tenant/modules/academics/exams/ScholarSheetReportCard";
+import { gradeFor, statusFor } from "@/lib/reportCardCalc";
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 type Family = "CBC" | "KCSE" | "Cambridge" | "IB";
 
@@ -103,6 +108,80 @@ function ReportCard({ exam, family, school, student, printId, onPrint }:
     );
 }
 
+// ── The report card exactly as the school prints it ───────────────────────────
+// Same template, numbers and "scan to verify" QR as Exams → Class Report Cards; the
+// server builds it (lib/portalReportCard) and signs the QR.
+const A4 = 794;   // px width of an A4 page at 96dpi — the printed layout's width
+
+function FitToWidth({ children }: { children: React.ReactNode }) {
+    const outer = useRef<HTMLDivElement>(null);
+    const inner = useRef<HTMLDivElement>(null);
+    const [k, setK] = useState(1);
+    const [h, setH] = useState<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        const fit = () => {
+            const w = outer.current?.clientWidth || A4;
+            const scale = Math.min(1, w / A4);
+            setK(scale);
+            setH(inner.current ? inner.current.offsetHeight * scale : undefined);
+        };
+        fit();
+        const ro = new ResizeObserver(fit);
+        if (outer.current) ro.observe(outer.current);
+        if (inner.current) ro.observe(inner.current);
+        return () => ro.disconnect();
+    }, []);
+    return (
+        <div ref={outer} style={{ height: h, overflow: "hidden" }}>
+            <div ref={inner} style={{ width: A4, transform: `scale(${k})`, transformOrigin: "top left" }}>{children}</div>
+        </div>
+    );
+}
+
+function PrintableCard({ p, studentId, examId }: { p: any; studentId: string; examId: string }) {
+    const [qr, setQr] = useState("");
+    const card = useRef<HTMLDivElement>(null);
+    useEffect(() => { if (p.verifyUrl) QRCode.toDataURL(p.verifyUrl, { margin: 1, width: 200 }).then(setQr).catch(() => setQr("")); }, [p.verifyUrl]);
+
+    const print = () => {
+        if (!card.current) return;
+        const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(e => e.outerHTML).join("\n");
+        const title = `Report Card – ${p.student?.name || p.scholar?.student?.name || ""}`;
+        outputHtmlDoc(title, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>${styles}<style>@page{size:A4;margin:12mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;padding:16px;background:white}*{box-sizing:border-box}table{border-collapse:collapse;width:100%}th,td{padding:6px 10px;font-size:11px}</style></head><body>${card.current.innerHTML}</body></html>`);
+    };
+
+    const scale = p.gradingScale || [];
+    return (
+        <div className="mb-6">
+            <div className="flex items-center justify-between gap-2 mb-2 print:hidden">
+                <p className="text-sm font-black text-slate-700">{p.examName || p.scholar?.termYear}{p.periodLabel ? <span className="font-semibold text-slate-400"> · {p.periodLabel}</span> : null}</p>
+                <button onClick={print} className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-[#0f2942] text-white"><Printer className="w-3.5 h-3.5" /> Print / PDF</button>
+            </div>
+            <div className="bg-white rounded-md shadow-sm border border-black/5 p-2 sm:p-4 overflow-hidden">
+                <FitToWidth>
+                    <div ref={card}>
+                        {p.scholar ? (
+                            <ScholarSheetReportCard studentId={studentId} examId={examId} preloaded={p.scholar} hideToolbar portal={{ profile: { principalSignature: p.school?.signature, schoolStamp: p.school?.stamp }, qrUrl: qr }} />
+                        ) : (
+                            <RenderPrintTemplate
+                                templateId={p.templateId} qrUrl={qr}
+                                schoolName={p.school?.name} schoolTagline={p.school?.tagline} schoolLogo={p.school?.logo} schoolAddress={p.school?.address}
+                                signature={p.school?.signature} stamp={p.school?.stamp} signerName={p.school?.signerName}
+                                studentName={p.student?.name} admNo={p.student?.admNo} studentPhoto={p.student?.photo}
+                                className={p.className} periodLabel={p.periodLabel} examName={p.examName} examDate={p.examDate}
+                                marks={p.marks} totalMax={p.totalMax} totalObtained={p.totalObtained}
+                                overall={p.overall} overallGrade={p.overallGrade} overallStatus={p.overallStatus}
+                                getGradeForPct={(x: number) => gradeFor(scale, x)} getStatusForPct={(x: number) => statusFor(scale, p.passMark ?? 50, x)}
+                                passMark={p.passMark} gradingScale={scale} classStats={p.classStats}
+                            />
+                        )}
+                    </div>
+                </FitToWidth>
+            </div>
+        </div>
+    );
+}
+
 interface Props { api: AxiosInstance; base: string; title?: string }
 
 // Template-aware exam-results / report-card view shared by the student & parent portals.
@@ -144,7 +223,7 @@ export default function ReportCardView({ api, base, title = "Exam Results" }: Pr
                 </div>
             </div>
 
-            {data?.template && (
+            {data?.template && !data?.printable && (
                 <p className="text-xs text-slate-500 mb-4 print:hidden">
                     Rendered using your school's <strong>{family}</strong> report-card template
                     {data.template.id ? ` (${data.template.id})` : ""}.
@@ -161,10 +240,12 @@ export default function ReportCardView({ api, base, title = "Exam Results" }: Pr
                     <p className="text-sm font-semibold">No exam results published{term ? ` for ${term}` : ""} yet.</p>
                 </div>
             ) : (
-                results.map(exam => (
-                    <ReportCard key={exam.examId} exam={exam} family={family} school={data.school} student={data.student}
-                        printId={printId} onPrint={setPrintId} />
-                ))
+                results.map(exam => {
+                    const p = data?.printable?.exams?.[String(exam.examId)];
+                    return p
+                        ? <PrintableCard key={exam.examId} p={p} studentId={String(data?.student?.id || "")} examId={String(exam.examId)} />
+                        : <ReportCard key={exam.examId} exam={exam} family={family} school={data.school} student={data.student} printId={printId} onPrint={setPrintId} />;
+                })
             )}
         </>
     );

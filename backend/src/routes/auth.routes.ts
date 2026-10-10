@@ -9,6 +9,10 @@ import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../li
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
 import { finishSchoolLogin } from '../lib/schoolLogin';
+import { marksWindow, examInWindow, WINDOW_MESSAGE } from '../lib/examWindow';
+import { printableReports } from '../lib/portalReportCard';
+import { scholarSheetData, reportCardSettings } from './reports.routes';
+import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 const router = Router();
 
@@ -1789,10 +1793,34 @@ const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?:
     const selectedTerm = req.query.term ? String(req.query.term) : (terms[0] || '');
     const results = selectedTerm ? all.filter((r: any) => r.term === selectedTerm) : all;
 
+    // The card exactly as the school prints it (same template, maths and verify QR).
+    let printable: any = null;
+    try {
+        const examIds = results.map((r: any) => String(r.examId)).filter(id => id && id !== 'unknown');
+        printable = await printableReports(db, req, sid, examIds);
+        if (printable?.templateId === 'scholarsheet') {
+            const settings = await reportCardSettings(db);
+            const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
+            for (const id of examIds) {
+                const out = await scholarSheetData(req, sid, id);
+                if (out.status !== 200 || !out.body) continue;
+                const d = out.body;
+                const verifyUrl = d.notReady ? '' : `${publicAppUrl()}/${slug}/report/verify/online/${signToken({
+                    s: sid, n: d.student?.name || '', r: d.student?.adm || '', c: d.student?.className || '',
+                    t: d.termYear || '', y: String(d.termYear || '').match(/\d{4}/)?.[0] || '', e: d.termYear || '',
+                    a: Number(d.summary?.meanScore) || null, g: String(d.summary?.meanGrade || ''), at: Date.now(),
+                })}`;
+                printable.exams[id] = { ...(printable.exams[id] || {}), scholar: { ...d, settings }, verifyUrl: verifyUrl || printable.exams[id]?.verifyUrl };
+            }
+        }
+    } catch (e: any) { console.warn('[report-card] printable failed:', e?.message); }
+
     return {
+        printable,
         template: { id: tenant?.reportTemplate || 'kcse_classic', family },
         school: { name: tenant?.name || '', crest: tenant?.crest || tenant?.logo || null },
         student: {
+            id: sid,
             name: student?.studentName || fallbackName,
             registrationNo: student?.registrationNo || student?.admNo,
             class: student?.studentClass || student?.currentClass,
@@ -1990,14 +2018,32 @@ router.get('/staff-portal/timetable', authed(async (req, res, db, decoded) => {
 const INACTIVE_EXAM_STATUS = new Set(['draft', 'archived', 'completed', 'inactive']);
 
 router.get('/staff-portal/exams', authed(async (req, res, db) => {
+    // Teachers only see this term's exams — earlier ones are for admins (lib/examWindow).
+    const win = await marksWindow(db);
     const exams = (await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray())
-        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()));
+        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()))
+        .filter((e: any) => examInWindow(e, win));
     res.json(exams.map((e: any) => ({
         _id: String(e._id), name: e.examName || e.name || e.type || 'Exam',
         term: e.term, academicYear: e.academicYear,
         totalMarks: Number(e.settings?.totalMarks) || 100,   // "Out Of" from exam settings
     })));
 }));
+
+// Which term marks entry is open for (shown on the Marks page).
+router.get('/staff-portal/marks-window', authed(async (_req, res, db) => {
+    const win = await marksWindow(db);
+    res.json({ restricted: !!win, term: win?.term || '', year: win?.year || '', label: win?.label || '' });
+}));
+
+// Guard: the exam belongs to the current term (teachers can't touch earlier exams).
+const examOpenForTeacher = async (db: Db, examId: string) => {
+    const win = await marksWindow(db);
+    if (!win) return { ok: true, win };
+    const oid = safeObjId(examId);
+    const exam = await db.collection('exams').findOne(oid ? { _id: oid } : ({ _id: examId } as any)).catch(() => null);
+    return { ok: examInWindow(exam, win), win };
+};
 
 // Guard: confirm this teacher is assigned to (className, subject) before mutating.
 const assertAssigned = async (db: Db, decoded: any, className: string, subject?: string) => {
@@ -2014,6 +2060,7 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    if (examId) { const w = await examOpenForTeacher(db, examId); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const students = await studentsInClass(db, className);
     // "Out Of" is determined by the exam's Total Marks setting.
     const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
@@ -2038,6 +2085,7 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     // Respect the exam's active status + "Allow Marks Entry" setting (default allowed).
     try {
         const oid = safeObjId(examId);
@@ -2148,6 +2196,7 @@ router.post('/staff-portal/marks/submit', authed(async (req, res, db, decoded) =
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
     const key = { examId: String(examId), subjectNorm: nrmS };
 

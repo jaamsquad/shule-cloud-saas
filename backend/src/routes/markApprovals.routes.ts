@@ -16,6 +16,7 @@ import { getMetaDb } from '../lib/mongodb';
 import { resolveDeptAccess } from '../lib/departmentAccess';
 import { recordAudit } from '../lib/audit';
 import { sendEmail } from '../services/communications.service';
+import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -175,6 +176,12 @@ router.post('/mark-approvals/submit', async (req: Request, res: Response) => {
         const d = db(req);
         const { examId, examName, subject, className, note } = req.body || {};
         if (!examId || !subject) return res.status(400).json({ message: 'examId and subject are required' });
+        // Non-admins can only submit this term's exams.
+        if (!isAdminRole((req as any).tenantContext?.user?.role)) {
+            const win = await marksWindow(d);
+            const exam = win ? await d.collection('exams').findOne({ _id: (ObjectId.isValid(String(examId)) ? new ObjectId(String(examId)) : examId) as any }).catch(() => null) : null;
+            if (win && exam && !examInWindow(exam, win)) return res.status(403).json({ message: WINDOW_MESSAGE(win), code: 'EXAM_OUTSIDE_TERM' });
+        }
         const a = actor(req);
         const entries = await d.collection('exam_marks').countDocuments({ examId: String(examId), $or: [{ subjectName: subject }, { subject }] }).catch(() => 0);
         const owners = await departmentsForSubject(d, subject);
