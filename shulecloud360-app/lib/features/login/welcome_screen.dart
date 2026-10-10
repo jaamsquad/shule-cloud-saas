@@ -50,10 +50,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     final h = MediaQuery.sizeOf(context).height;
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1B4B),
+      backgroundColor: const Color(0xFF0B2A6B),
       body: Stack(children: [
         const Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1E1B4B), Color(0xFF3730A3), C.brand]),
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF0B2A6B), Color(0xFF1D4ED8), C.sky]),
         ))),
         const Positioned.fill(child: Aurora(vivid: true)),
         SafeArea(

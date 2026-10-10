@@ -137,6 +137,44 @@
   }
 }
 
+/* ─── Phones ─────────────────────────────────────────────────────────────────
+   App content areas carry the "rsp" class (dashboard, portals, owner, org, POS).
+   Below 768px: rows wrap instead of running off the screen, tables scroll
+   sideways inside their card, wide grids drop to two columns, fixed widths
+   give way to the screen, and big paddings/headings shrink. Desktop is untouched. */
+@media (max-width: 767px) {
+  .rsp { overflow-wrap: break-word; }
+
+  /* rows wrap (tab strips and anything marked flex-nowrap keep scrolling) */
+  .rsp .flex:not(.flex-col):not(.flex-col-reverse):not(.flex-nowrap):not(.overflow-x-auto):not(.overflow-x-scroll) { flex-wrap: wrap; }
+  .rsp .flex > :not(svg):not(img):not(select):not(button) { min-width: 0; }
+  .rsp .flex > .shrink-0, .rsp .flex > .flex-shrink-0, .rsp .flex > .flex-none { min-width: auto; }
+
+  /* tables scroll inside their own box */
+  .rsp :where(div, section, article, form, li, main):has(> table) { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .rsp table { min-width: 100%; }
+
+  /* grids */
+  .rsp .grid > * { min-width: 0; }
+  .rsp .grid:is(.grid-cols-4, .grid-cols-5, .grid-cols-6, .grid-cols-8) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rsp .grid:is(.grid-cols-4, .grid-cols-5, .grid-cols-6, .grid-cols-8) > [class*="col-span-"]:not(.col-span-1) { grid-column: 1 / -1; }
+  .rsp .grid.grid-cols-12 { grid-template-columns: minmax(0, 1fr); }
+  .rsp .grid.grid-cols-12 > * { grid-column: 1 / -1; }
+
+  /* fixed widths give way to the screen */
+  .rsp :is(input, select, textarea, img, video, canvas, iframe) { max-width: 100%; }
+  .rsp :is(.w-64, .w-72, .w-80, .w-96, [class*="w-["], [class*="max-w-["]):not(table):not(th):not(td) { max-width: 100%; }
+
+  /* breathing room sized for a phone */
+  .rsp .p-8, .rsp .p-10, .rsp .p-12 { padding: 1rem; }
+  .rsp .px-8, .rsp .px-10, .rsp .px-12 { padding-left: 1rem; padding-right: 1rem; }
+  .rsp .text-4xl { font-size: 1.75rem; line-height: 2.1rem; }
+  .rsp .text-3xl { font-size: 1.5rem; line-height: 1.9rem; }
+
+  /* pop-ups fit the screen */
+  [role="dialog"], [role="alertdialog"] { max-width: calc(100vw - 1rem) !important; max-height: calc(100dvh - 1rem); overflow-y: auto; }
+}
+
 /* ─── Print Styles ─────────────────────────────────────────────────────────── */
 @media print {
   /* Hide everything that's not the main content */

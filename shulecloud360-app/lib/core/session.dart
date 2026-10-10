@@ -24,31 +24,37 @@ class Session {
   final List<String>? planModules;
   final List<String> disabledApps;     // switched off for this school by ShuleCloud
   final List<String> disabledModules;
+  final String portal;                 // 'admin' or 'teacher' — for staff who have both
 
   const Session({
     required this.kind, required this.token, this.staffToken, required this.subdomain, required this.schoolCode,
     required this.name, required this.role, required this.user, this.staffInfo,
     this.modules = const [], this.permissions = const [], this.crud = const {}, this.planModules,
-    this.disabledApps = const [], this.disabledModules = const [],
+    this.disabledApps = const [], this.disabledModules = const [], this.portal = 'admin',
   });
 
   bool get isAdmin => role == 'school_admin' || role == 'super_admin' || modules.contains('*') || permissions.contains('*');
   bool get canTeach => staffToken != null && staffToken!.isNotEmpty;
+  /// Has both the admin portal and the teacher portal, so the app shows a switcher.
+  bool get hasBothPortals => kind == UserKind.admin && canTeach;
+  /// Working in the teacher portal right now (teacher-only staff, or switched).
+  bool get teaching => kind == UserKind.teacher || (hasBothPortals && portal == 'teacher');
 
   Session copyWith({List<String>? modules, List<String>? permissions, Map<String, List<String>>? crud, List<String>? planModules, bool clearPlan = false, String? role,
-          List<String>? disabledApps, List<String>? disabledModules}) => Session(
+          List<String>? disabledApps, List<String>? disabledModules, String? portal}) => Session(
         kind: kind, token: token, staffToken: staffToken, subdomain: subdomain, schoolCode: schoolCode, name: name,
         role: role ?? this.role, user: user, staffInfo: staffInfo,
         modules: modules ?? this.modules, permissions: permissions ?? this.permissions, crud: crud ?? this.crud,
         planModules: clearPlan ? null : (planModules ?? this.planModules),
         disabledApps: disabledApps ?? this.disabledApps, disabledModules: disabledModules ?? this.disabledModules,
+        portal: portal ?? this.portal,
       );
 
   Map<String, dynamic> toJson() => {
         'kind': kind.name, 'token': token, 'staffToken': staffToken, 'subdomain': subdomain, 'schoolCode': schoolCode,
         'name': name, 'role': role, 'user': user, 'staffInfo': staffInfo,
         'modules': modules, 'permissions': permissions, 'crud': crud, 'planModules': planModules,
-        'disabledApps': disabledApps, 'disabledModules': disabledModules,
+        'disabledApps': disabledApps, 'disabledModules': disabledModules, 'portal': portal,
       };
 
   static Session fromJson(Map<String, dynamic> j) => Session(
@@ -60,6 +66,7 @@ class Session {
         crud: (j['crud'] as Map? ?? {}).map((k, v) => MapEntry(k.toString(), List<String>.from(v ?? const []))),
         planModules: j['planModules'] == null ? null : List<String>.from(j['planModules']),
         disabledApps: List<String>.from(j['disabledApps'] ?? const []), disabledModules: List<String>.from(j['disabledModules'] ?? const []),
+        portal: (j['portal'] ?? 'admin').toString(),
       );
 
   /// The token that a request to [path] should carry.
@@ -217,6 +224,13 @@ class SessionController extends StateNotifier<AsyncValue<Session?>> {
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) await logout();
     } catch (_) {/* keep what we had */}
+  }
+
+  /// Staff with both portals: switch between the admin portal and the teacher portal.
+  Future<void> switchPortal(String portal) async {
+    final s = state.valueOrNull;
+    if (s == null || !s.hasBothPortals || s.portal == portal) return;
+    await _save(s.copyWith(portal: portal));
   }
 
   Future<void> logout() async => _save(null);

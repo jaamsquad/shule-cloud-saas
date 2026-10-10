@@ -1,5 +1,2076 @@
 {
  "generatedAt": "2026-10-10",
+ "sidebar": [
+  {
+   "label": "Dashboard",
+   "module": "dashboard",
+   "icon": "Home",
+   "color": "#5C67F2",
+   "path": "/dashboard",
+   "pages": []
+  },
+  {
+   "label": "Classes",
+   "module": "classes",
+   "icon": "LayoutTemplate",
+   "color": "#5C67F2",
+   "path": null,
+   "pages": [
+    {
+     "label": "All Classes",
+     "path": "/classes",
+     "perm": "classes.all_classes",
+     "create": false
+    },
+    {
+     "label": "New Class",
+     "path": "/classes/new",
+     "perm": "classes.new_class",
+     "create": true
+    },
+    {
+     "label": "Classes & Streams",
+     "path": "/academic-system/classes",
+     "perm": "classes.classes_streams",
+     "create": false
+    },
+    {
+     "label": "Curriculum Settings",
+     "path": "/settings/curriculum",
+     "perm": "classes.curriculum_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Subjects",
+   "module": "subjects",
+   "icon": "BookOpen",
+   "color": "#5C67F2",
+   "path": null,
+   "pages": [
+    {
+     "label": "All Subjects",
+     "path": "/subjects/all",
+     "perm": "subjects.all_subjects",
+     "create": false
+    },
+    {
+     "label": "New Subject",
+     "path": "/subjects/new",
+     "perm": "subjects.new_subject",
+     "create": true
+    },
+    {
+     "label": "Classes With Subjects",
+     "path": "/subjects",
+     "perm": "subjects.classes_with_subjects",
+     "create": false
+    },
+    {
+     "label": "Assign Subjects",
+     "path": "/subjects/assign",
+     "perm": "subjects.assign_subjects",
+     "create": false
+    },
+    {
+     "label": "Co-Curricular & Talents",
+     "path": "/subjects/activities",
+     "perm": "subjects.co_curricular_talents",
+     "create": false
+    },
+    {
+     "label": "Teacher ↔ Subjects",
+     "path": "/academic-system/teacher-subjects",
+     "perm": "subjects.teacher_subjects",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Students",
+   "module": "students",
+   "icon": "LucideUser",
+   "color": "#2563EB",
+   "path": null,
+   "pages": [
+    {
+     "label": "All Students",
+     "path": "/students",
+     "perm": "students.all",
+     "create": false
+    },
+    {
+     "label": "Find Student",
+     "path": "/students/find",
+     "perm": "students.all",
+     "create": false
+    },
+    {
+     "label": "Student Wallets",
+     "path": "/wallet",
+     "perm": "students.wallets",
+     "create": false
+    },
+    {
+     "label": "Add New",
+     "path": "/students/new",
+     "perm": "students.add",
+     "create": true
+    },
+    {
+     "label": "Admissions",
+     "path": "/students/admissions",
+     "perm": "students.admissions",
+     "create": false
+    },
+    {
+     "label": "Manage Families",
+     "path": "/students/families",
+     "perm": "students.families",
+     "create": false
+    },
+    {
+     "label": "Promote Students",
+     "path": "/students/promote",
+     "perm": "students.promote",
+     "create": false
+    },
+    {
+     "label": "Auto Promotion",
+     "path": "/students/promote/auto",
+     "perm": "students.promote",
+     "create": false
+    },
+    {
+     "label": "Transfer Management",
+     "path": "/students/transfer",
+     "perm": "students.transfer",
+     "create": false
+    },
+    {
+     "label": "Discipline Records",
+     "path": "/students/discipline",
+     "perm": "students.discipline",
+     "create": false
+    },
+    {
+     "label": "Medical Records",
+     "path": "/students/medical",
+     "perm": "students.medical",
+     "create": false
+    },
+    {
+     "label": "Student Documents",
+     "path": "/students/documents",
+     "perm": "students.documents",
+     "create": false
+    },
+    {
+     "label": "Student ID Cards",
+     "path": "/students/id-cards",
+     "perm": "students.id_cards",
+     "create": false
+    },
+    {
+     "label": "ID Card Studio (Navy)",
+     "path": "/students/id-studio",
+     "perm": "students.id_studio",
+     "create": false
+    },
+    {
+     "label": "Admission Letter",
+     "path": "/students/admission-letter",
+     "perm": "students.admission_letter",
+     "create": false
+    },
+    {
+     "label": "Manage Login",
+     "path": "/students/login",
+     "perm": "students.manage_login",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Parents",
+   "module": "students",
+   "icon": "LucideUserCheck",
+   "color": "#2563EB",
+   "path": null,
+   "pages": [
+    {
+     "label": "All Parents",
+     "path": "/parents",
+     "perm": "students.all_parents",
+     "create": false
+    },
+    {
+     "label": "Add New Parent",
+     "path": "/parents/new",
+     "perm": "students.add_new_parent",
+     "create": true
+    },
+    {
+     "label": "Parent Login",
+     "path": "/students/parent-login",
+     "perm": "students.parent_login",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Portal Requests",
+   "module": "students",
+   "icon": "ClipboardList",
+   "color": "#2563EB",
+   "path": null,
+   "pages": [
+    {
+     "label": "Academic Requisitions",
+     "path": "/admin/requisitions",
+     "perm": "students.academic_requisitions",
+     "create": false
+    },
+    {
+     "label": "Clearance Requests",
+     "path": "/admin/clearance",
+     "perm": "students.clearance_requests",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Departments",
+   "module": "employees",
+   "icon": "Building2",
+   "color": "#4F46E5",
+   "path": null,
+   "pages": [
+    {
+     "label": "Department Management",
+     "path": "/departments",
+     "perm": "employees.department_management",
+     "create": false
+    },
+    {
+     "label": "HOD Dashboard",
+     "path": "/dashboard/hod",
+     "perm": "employees.hod_dashboard",
+     "create": false
+    },
+    {
+     "label": "Overview",
+     "path": "/departments?tab=overview",
+     "perm": "employees.overview",
+     "create": false
+    },
+    {
+     "label": "Members",
+     "path": "/departments?tab=members",
+     "perm": "employees.members",
+     "create": false
+    },
+    {
+     "label": "Marks Approval",
+     "path": "/departments?tab=marks",
+     "perm": "employees.marks_approval",
+     "create": false
+    },
+    {
+     "label": "Analysis",
+     "path": "/departments?tab=analysis",
+     "perm": "employees.analysis",
+     "create": false
+    },
+    {
+     "label": "Supervision",
+     "path": "/departments?tab=supervision",
+     "perm": "employees.supervision",
+     "create": false
+    },
+    {
+     "label": "Exams",
+     "path": "/departments?tab=exams",
+     "perm": "employees.exams",
+     "create": false
+    },
+    {
+     "label": "CBC",
+     "path": "/departments?tab=cbc",
+     "perm": "employees.cbc",
+     "create": false
+    },
+    {
+     "label": "Timetable",
+     "path": "/departments?tab=timetable",
+     "perm": "employees.timetable",
+     "create": false
+    },
+    {
+     "label": "Resources",
+     "path": "/departments?tab=resources",
+     "perm": "employees.resources",
+     "create": false
+    },
+    {
+     "label": "Notices",
+     "path": "/departments?tab=notices",
+     "perm": "employees.notices",
+     "create": false
+    },
+    {
+     "label": "Reports",
+     "path": "/departments?tab=reports",
+     "perm": "employees.reports",
+     "create": false
+    },
+    {
+     "label": "Assets",
+     "path": "/departments?tab=assets",
+     "perm": "employees.assets",
+     "create": false
+    },
+    {
+     "label": "Meetings",
+     "path": "/departments?tab=meetings",
+     "perm": "employees.meetings",
+     "create": false
+    },
+    {
+     "label": "Audit",
+     "path": "/departments?tab=audit",
+     "perm": "employees.audit",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Employees",
+   "module": "employees",
+   "icon": "Briefcase",
+   "color": "#4F46E5",
+   "path": null,
+   "pages": [
+    {
+     "label": "All Employees",
+     "path": "/staff",
+     "perm": "employees.all_employees",
+     "create": false
+    },
+    {
+     "label": "Teachers",
+     "path": "/staff/teachers",
+     "perm": "employees.teachers",
+     "create": false
+    },
+    {
+     "label": "Add New",
+     "path": "/staff/new",
+     "perm": "employees.add_new",
+     "create": true
+    },
+    {
+     "label": "Staff ID Cards",
+     "path": "/staff/id-cards",
+     "perm": "employees.staff_id_cards",
+     "create": false
+    },
+    {
+     "label": "Job Letter",
+     "path": "/staff/job-letter",
+     "perm": "employees.job_letter",
+     "create": false
+    },
+    {
+     "label": "Manage Login",
+     "path": "/staff/login",
+     "perm": "employees.manage_login",
+     "create": false
+    },
+    {
+     "label": "TA Dashboard",
+     "path": "/tsc",
+     "perm": "employees.ta_dashboard",
+     "create": false
+    },
+    {
+     "label": "TA Teachers",
+     "path": "/tsc/teachers",
+     "perm": "employees.ta_teachers",
+     "create": false
+    },
+    {
+     "label": "TA Records",
+     "path": "/tsc/records",
+     "perm": "employees.ta_records",
+     "create": false
+    },
+    {
+     "label": "Teaching Workload",
+     "path": "/tsc/workload",
+     "perm": "employees.teaching_workload",
+     "create": false
+    },
+    {
+     "label": "Qualifications",
+     "path": "/tsc/qualifications",
+     "perm": "employees.qualifications",
+     "create": false
+    },
+    {
+     "label": "Deployment History",
+     "path": "/tsc/deployment",
+     "perm": "employees.deployment_history",
+     "create": false
+    },
+    {
+     "label": "Leave Management",
+     "path": "/tsc/leave",
+     "perm": "employees.leave_management",
+     "create": false
+    },
+    {
+     "label": "Performance",
+     "path": "/tsc/performance",
+     "perm": "employees.performance",
+     "create": false
+    },
+    {
+     "label": "TA Reports",
+     "path": "/tsc/reports",
+     "perm": "employees.ta_reports",
+     "create": false
+    },
+    {
+     "label": "TA Settings",
+     "path": "/tsc/settings",
+     "perm": "employees.ta_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Requests",
+   "module": "employees",
+   "icon": "ClipboardList",
+   "color": "#4F46E5",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/requests",
+     "perm": "employees.dashboard",
+     "create": false
+    },
+    {
+     "label": "Create Request",
+     "path": "/requests/new",
+     "perm": "employees.create_request",
+     "create": false
+    },
+    {
+     "label": "My Requests",
+     "path": "/requests/mine",
+     "perm": "employees.my_requests",
+     "create": false
+    },
+    {
+     "label": "New Requests",
+     "path": "/requests/inbox",
+     "perm": "employees.new_requests",
+     "create": false
+    },
+    {
+     "label": "Pending Approvals",
+     "path": "/requests/pending",
+     "perm": "employees.pending_approvals",
+     "create": false
+    },
+    {
+     "label": "Approved",
+     "path": "/requests/approved",
+     "perm": "employees.approved",
+     "create": false
+    },
+    {
+     "label": "Rejected",
+     "path": "/requests/rejected",
+     "perm": "employees.rejected",
+     "create": false
+    },
+    {
+     "label": "Purchase Requests",
+     "path": "/requests/purchases",
+     "perm": "employees.purchase_requests",
+     "create": false
+    },
+    {
+     "label": "Expense Requests",
+     "path": "/requests/expenses",
+     "perm": "employees.expense_requests",
+     "create": false
+    },
+    {
+     "label": "All Requests",
+     "path": "/requests/all",
+     "perm": "employees.all_requests",
+     "create": false
+    },
+    {
+     "label": "Completed",
+     "path": "/requests/completed",
+     "perm": "employees.completed",
+     "create": false
+    },
+    {
+     "label": "Request Settings",
+     "path": "/requests/settings",
+     "perm": "employees.request_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Expense Management",
+   "module": "expenses",
+   "icon": "LucideWallet",
+   "color": "#0F766E",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/expense",
+     "perm": "expenses.dashboard",
+     "create": false
+    },
+    {
+     "label": "Expenses",
+     "path": "/expense/list",
+     "perm": "expenses.expenses",
+     "create": false
+    },
+    {
+     "label": "Categories",
+     "path": "/expense/categories",
+     "perm": "expenses.categories",
+     "create": false
+    },
+    {
+     "label": "Budget Control",
+     "path": "/expense/budgets",
+     "perm": "expenses.budget_control",
+     "create": false
+    },
+    {
+     "label": "Purchase Requests",
+     "path": "/expense/requests",
+     "perm": "expenses.purchase_requests",
+     "create": false
+    },
+    {
+     "label": "Purchase Orders",
+     "path": "/expense/orders",
+     "perm": "expenses.purchase_orders",
+     "create": false
+    },
+    {
+     "label": "Suppliers",
+     "path": "/expense/suppliers",
+     "perm": "expenses.suppliers",
+     "create": false
+    },
+    {
+     "label": "Payments",
+     "path": "/expense/payments",
+     "perm": "expenses.payments",
+     "create": false
+    },
+    {
+     "label": "Recurring Expenses",
+     "path": "/expense/recurring",
+     "perm": "expenses.recurring_expenses",
+     "create": false
+    },
+    {
+     "label": "Approvals",
+     "path": "/expense/approvals",
+     "perm": "expenses.approvals",
+     "create": false
+    },
+    {
+     "label": "Reports",
+     "path": "/expense/reports",
+     "perm": "expenses.reports",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/expense/settings",
+     "perm": "expenses.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Procurement",
+   "module": "procurement",
+   "icon": "LucideShoppingCart",
+   "color": "#0F766E",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/procurement",
+     "perm": "procurement.dashboard",
+     "create": false
+    },
+    {
+     "label": "Purchase Requests",
+     "path": "/procurement/requests",
+     "perm": "procurement.purchase_requests",
+     "create": false
+    },
+    {
+     "label": "Purchase Orders",
+     "path": "/procurement/orders",
+     "perm": "procurement.purchase_orders",
+     "create": false
+    },
+    {
+     "label": "Suppliers",
+     "path": "/procurement/suppliers",
+     "perm": "procurement.suppliers",
+     "create": false
+    },
+    {
+     "label": "Quotations",
+     "path": "/procurement/quotations",
+     "perm": "procurement.quotations",
+     "create": false
+    },
+    {
+     "label": "Goods Received",
+     "path": "/procurement/grn",
+     "perm": "procurement.goods_received",
+     "create": false
+    },
+    {
+     "label": "Invoice Matching",
+     "path": "/procurement/matching",
+     "perm": "procurement.invoice_matching",
+     "create": false
+    },
+    {
+     "label": "Contracts",
+     "path": "/procurement/contracts",
+     "perm": "procurement.contracts",
+     "create": false
+    },
+    {
+     "label": "Tender Management",
+     "path": "/procurement/tenders",
+     "perm": "procurement.tender_management",
+     "create": false
+    },
+    {
+     "label": "Reports",
+     "path": "/procurement/reports",
+     "perm": "procurement.reports",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/procurement/settings",
+     "perm": "procurement.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Accounting",
+   "module": "accounting",
+   "icon": "LucideWallet",
+   "color": "#0F766E",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/accounting",
+     "perm": "accounting.dashboard",
+     "create": false
+    },
+    {
+     "label": "Chart of Accounts",
+     "path": "/accounting/coa",
+     "perm": "accounting.chart_of_accounts",
+     "create": false
+    },
+    {
+     "label": "Journal Entries",
+     "path": "/accounting/journals",
+     "perm": "accounting.journal_entries",
+     "create": false
+    },
+    {
+     "label": "General Ledger",
+     "path": "/accounting/ledger",
+     "perm": "accounting.general_ledger",
+     "create": false
+    },
+    {
+     "label": "Trial Balance",
+     "path": "/accounting/trial-balance",
+     "perm": "accounting.trial_balance",
+     "create": false
+    },
+    {
+     "label": "Income Statement",
+     "path": "/accounting/income-statement",
+     "perm": "accounting.income_statement",
+     "create": false
+    },
+    {
+     "label": "Balance Sheet",
+     "path": "/accounting/balance-sheet",
+     "perm": "accounting.balance_sheet",
+     "create": false
+    },
+    {
+     "label": "Cash Flow",
+     "path": "/accounting/cash-flow",
+     "perm": "accounting.cash_flow",
+     "create": false
+    },
+    {
+     "label": "Accounts Receivable",
+     "path": "/accounting/receivables",
+     "perm": "accounting.accounts_receivable",
+     "create": false
+    },
+    {
+     "label": "Accounts Payable",
+     "path": "/accounting/payables",
+     "perm": "accounting.accounts_payable",
+     "create": false
+    },
+    {
+     "label": "Budgeting",
+     "path": "/accounting/budgeting",
+     "perm": "accounting.budgeting",
+     "create": false
+    },
+    {
+     "label": "Reconciliation",
+     "path": "/accounting/reconciliation",
+     "perm": "accounting.reconciliation",
+     "create": false
+    },
+    {
+     "label": "Fiscal Periods",
+     "path": "/accounting/periods",
+     "perm": "accounting.fiscal_periods",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/accounting/settings",
+     "perm": "accounting.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Fees",
+   "module": "fees",
+   "icon": "Banknote",
+   "color": "#16A34A",
+   "path": null,
+   "pages": [
+    {
+     "label": "Fees Dashboard",
+     "path": "/fees/dashboard",
+     "perm": "fees.fees_dashboard",
+     "create": false
+    },
+    {
+     "label": "Generate Fees Invoice",
+     "path": "/fees/generate-invoice",
+     "perm": "fees.generate_fees_invoice",
+     "create": true
+    },
+    {
+     "label": "Generate Per Student",
+     "path": "/fees/generate-student-invoice",
+     "perm": "fees.generate_per_student",
+     "create": true
+    },
+    {
+     "label": "Generated Invoices",
+     "path": "/fees/invoices",
+     "perm": "fees.generated_invoices",
+     "create": false
+    },
+    {
+     "label": "Collect Fees",
+     "path": "/fees/collect",
+     "perm": "fees.collect_fees",
+     "create": false
+    },
+    {
+     "label": "Student Ledger",
+     "path": "/fees/ledger",
+     "perm": "fees.student_ledger",
+     "create": false
+    },
+    {
+     "label": "Fees Paid Slip",
+     "path": "/fees/paid-slip",
+     "perm": "fees.fees_paid_slip",
+     "create": false
+    },
+    {
+     "label": "Fees Defaulters",
+     "path": "/fees/defaulters",
+     "perm": "fees.fees_defaulters",
+     "create": false
+    },
+    {
+     "label": "Scholarships & Bursaries",
+     "path": "/fees/scholarships",
+     "perm": "fees.scholarships_bursaries",
+     "create": false
+    },
+    {
+     "label": "Sponsors",
+     "path": "/fees/sponsors",
+     "perm": "fees.sponsors",
+     "create": false
+    },
+    {
+     "label": "Credits & Overpayments",
+     "path": "/fees/credits",
+     "perm": "fees.credits_overpayments",
+     "create": false
+    },
+    {
+     "label": "Fees Report",
+     "path": "/fees/report",
+     "perm": "fees.fees_report",
+     "create": false
+    },
+    {
+     "label": "Fee Audit Log",
+     "path": "/fees/audit-log",
+     "perm": "fees.fee_audit_log",
+     "create": false
+    },
+    {
+     "label": "Delete Fees",
+     "path": "/fees/delete",
+     "perm": "fees.delete_fees",
+     "create": false
+    },
+    {
+     "label": "Fees Settings",
+     "path": "/fees/settings",
+     "perm": "fees.fees_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Salary",
+   "module": "salary",
+   "icon": "CreditCard",
+   "color": "#9333EA",
+   "path": null,
+   "pages": [
+    {
+     "label": "Pay Salary",
+     "path": "/salary/pay",
+     "perm": "salary.pay_salary",
+     "create": false
+    },
+    {
+     "label": "Salary Paid Slip",
+     "path": "/salary/paid-slip",
+     "perm": "salary.salary_paid_slip",
+     "create": false
+    },
+    {
+     "label": "Salary Sheet",
+     "path": "/salary/sheet",
+     "perm": "salary.salary_sheet",
+     "create": false
+    },
+    {
+     "label": "Salary Report",
+     "path": "/salary/report",
+     "perm": "salary.salary_report",
+     "create": false
+    },
+    {
+     "label": "Salary Components",
+     "path": "/salary/components",
+     "perm": "salary.salary_components",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Transport",
+   "module": "transport",
+   "icon": "LucideTruck",
+   "color": "#EA580C",
+   "path": null,
+   "pages": [
+    {
+     "label": "Live Tracking",
+     "path": "/transport/live",
+     "perm": "transport.live_tracking",
+     "create": false
+    },
+    {
+     "label": "Zones",
+     "path": "/transport/zones",
+     "perm": "transport.zones",
+     "create": false
+    },
+    {
+     "label": "New Zone",
+     "path": "/transport/zones/new",
+     "perm": "transport.new_zone",
+     "create": true
+    },
+    {
+     "label": "Buses",
+     "path": "/transport/buses",
+     "perm": "transport.buses",
+     "create": false
+    },
+    {
+     "label": "New Bus",
+     "path": "/transport/buses/new",
+     "perm": "transport.new_bus",
+     "create": true
+    },
+    {
+     "label": "Assign Student",
+     "path": "/transport/assign",
+     "perm": "transport.assign_student",
+     "create": false
+    },
+    {
+     "label": "Bus Pickup & Drop",
+     "path": "/transport/pickup",
+     "perm": "transport.bus_pickup_drop",
+     "create": false
+    },
+    {
+     "label": "Report",
+     "path": "/transport/report",
+     "perm": "transport.report",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/transport/settings",
+     "perm": "transport.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Attendance",
+   "module": "attendance",
+   "icon": "LucideUserCheck",
+   "color": "#10B981",
+   "path": null,
+   "pages": [
+    {
+     "label": "Card Scanner",
+     "path": "/attendance-scanner",
+     "perm": "attendance.card_scanner",
+     "create": false
+    },
+    {
+     "label": "Students Attendance",
+     "path": "/attendance/students",
+     "perm": "attendance.students_attendance",
+     "create": false
+    },
+    {
+     "label": "Employees Attendance",
+     "path": "/attendance/employees",
+     "perm": "attendance.employees_attendance",
+     "create": false
+    },
+    {
+     "label": "Class wise Report",
+     "path": "/attendance/reports/class-wise",
+     "perm": "attendance.class_wise_report",
+     "create": false
+    },
+    {
+     "label": "Students Attendance Report",
+     "path": "/attendance/reports/students",
+     "perm": "attendance.students_attendance_report",
+     "create": false
+    },
+    {
+     "label": "Employees Attendance Report",
+     "path": "/attendance/reports/employees",
+     "perm": "attendance.employees_attendance_report",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Cafeteria",
+   "module": "cafeteria",
+   "icon": "ForkKnife",
+   "color": "#8B5CF6",
+   "path": null,
+   "pages": [
+    {
+     "label": "Meal Service (Kitchen)",
+     "path": "/cafeteria/meal-service",
+     "perm": "cafeteria.meal_service_kitchen",
+     "create": false
+    },
+    {
+     "label": "Weekly Meal Menu",
+     "path": "/cafeteria/menu",
+     "perm": "cafeteria.weekly_meal_menu",
+     "create": false
+    },
+    {
+     "label": "Meal History",
+     "path": "/cafeteria/meal-history",
+     "perm": "cafeteria.meal_history",
+     "create": false
+    },
+    {
+     "label": "Missed Meals",
+     "path": "/cafeteria/missed-meals",
+     "perm": "cafeteria.missed_meals",
+     "create": false
+    },
+    {
+     "label": "Quick Sale (Canteen)",
+     "path": "/canteen/quick-sale",
+     "perm": "cafeteria.quick_sale_canteen",
+     "create": false
+    },
+    {
+     "label": "Canteen Transactions",
+     "path": "/canteen/transactions",
+     "perm": "cafeteria.canteen_transactions",
+     "create": false
+    },
+    {
+     "label": "Canteen Settings",
+     "path": "/canteen/settings",
+     "perm": "cafeteria.canteen_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Sports",
+   "module": "sports",
+   "icon": "LucideTrophy",
+   "color": "#CA8A04",
+   "path": null,
+   "pages": [
+    {
+     "label": "Sports Dashboard",
+     "path": "/sports",
+     "perm": "sports.sports_dashboard",
+     "create": false
+    },
+    {
+     "label": "Sports Setup",
+     "path": "/sports/setup",
+     "perm": "sports.sports_setup",
+     "create": false
+    },
+    {
+     "label": "Participants",
+     "path": "/sports/participants",
+     "perm": "sports.participants",
+     "create": false
+    },
+    {
+     "label": "Sports Attendance",
+     "path": "/sports/attendance",
+     "perm": "sports.sports_attendance",
+     "create": false
+    },
+    {
+     "label": "Performance & Awards",
+     "path": "/sports/performance",
+     "perm": "sports.performance_awards",
+     "create": false
+    },
+    {
+     "label": "Sports Reports",
+     "path": "/sports/reports",
+     "perm": "sports.sports_reports",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Trips & Excursions",
+   "module": "trips",
+   "icon": "LucideMapPin",
+   "color": "#CA8A04",
+   "path": null,
+   "pages": [
+    {
+     "label": "Trips Dashboard",
+     "path": "/trips",
+     "perm": "trips.trips_dashboard",
+     "create": false
+    },
+    {
+     "label": "Create / Manage Trips",
+     "path": "/trips/manage",
+     "perm": "trips.create_manage_trips",
+     "create": false
+    },
+    {
+     "label": "Participants",
+     "path": "/trips/participants",
+     "perm": "trips.participants",
+     "create": false
+    },
+    {
+     "label": "Trip Documents",
+     "path": "/trips/documents",
+     "perm": "trips.trip_documents",
+     "create": false
+    },
+    {
+     "label": "Trip Attendance",
+     "path": "/trips/attendance",
+     "perm": "trips.trip_attendance",
+     "create": false
+    },
+    {
+     "label": "Trip Reports",
+     "path": "/trips/reports",
+     "perm": "trips.trip_reports",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Front Desk",
+   "module": "frontdesk",
+   "icon": "DoorOpen",
+   "color": "#F59E0B",
+   "path": null,
+   "pages": [
+    {
+     "label": "Front Desk Dashboard",
+     "path": "/frontdesk",
+     "perm": "frontdesk.front_desk_dashboard",
+     "create": false
+    },
+    {
+     "label": "Visitor Management",
+     "path": "/frontdesk/visitors",
+     "perm": "frontdesk.visitor_management",
+     "create": false
+    },
+    {
+     "label": "Student Sign Out",
+     "path": "/frontdesk/signout",
+     "perm": "frontdesk.student_sign_out",
+     "create": false
+    },
+    {
+     "label": "Delivery Register",
+     "path": "/frontdesk/deliveries",
+     "perm": "frontdesk.delivery_register",
+     "create": false
+    },
+    {
+     "label": "Appointments",
+     "path": "/frontdesk/appointments",
+     "perm": "frontdesk.appointments",
+     "create": false
+    },
+    {
+     "label": "Reception Reports",
+     "path": "/frontdesk/reports",
+     "perm": "frontdesk.reception_reports",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Secretary",
+   "module": "secretary",
+   "icon": "ClipboardCheck",
+   "color": "#F59E0B",
+   "path": null,
+   "pages": [
+    {
+     "label": "Secretary Dashboard",
+     "path": "/secretary",
+     "perm": "secretary.secretary_dashboard",
+     "create": false
+    },
+    {
+     "label": "Student Records",
+     "path": "/students",
+     "perm": "secretary.student_records",
+     "create": false
+    },
+    {
+     "label": "Communication Center",
+     "path": "/communications/announcements",
+     "perm": "secretary.communication_center",
+     "create": true
+    },
+    {
+     "label": "Meeting Management",
+     "path": "/secretary/meetings",
+     "perm": "secretary.meeting_management",
+     "create": false
+    },
+    {
+     "label": "Secretary Reports",
+     "path": "/secretary/reports",
+     "perm": "secretary.secretary_reports",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "NEMIS Assistant",
+   "module": "nemis",
+   "icon": "Landmark",
+   "color": "#334155",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/nemis",
+     "perm": "nemis.dashboard",
+     "create": false
+    },
+    {
+     "label": "Student Validation",
+     "path": "/nemis/validation",
+     "perm": "nemis.student_validation",
+     "create": false
+    },
+    {
+     "label": "Missing Information",
+     "path": "/nemis/missing",
+     "perm": "nemis.missing_information",
+     "create": false
+    },
+    {
+     "label": "Export Data",
+     "path": "/nemis/export",
+     "perm": "nemis.export_data",
+     "create": false
+    },
+    {
+     "label": "Import Updates",
+     "path": "/nemis/import",
+     "perm": "nemis.import_updates",
+     "create": false
+    },
+    {
+     "label": "Transfer Management",
+     "path": "/nemis/transfers",
+     "perm": "nemis.transfer_management",
+     "create": false
+    },
+    {
+     "label": "Data Entry Assistant",
+     "path": "/nemis/data-entry",
+     "perm": "nemis.data_entry_assistant",
+     "create": false
+    },
+    {
+     "label": "Sync History",
+     "path": "/nemis/history",
+     "perm": "nemis.sync_history",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/nemis/settings",
+     "perm": "nemis.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Calendar",
+   "module": "calendar",
+   "icon": "Calendar",
+   "color": "#5C67F2",
+   "path": null,
+   "pages": [
+    {
+     "label": "School Calendar",
+     "path": "/calendar",
+     "perm": "calendar.school_calendar",
+     "create": false
+    },
+    {
+     "label": "Calendar Events",
+     "path": "/calendar/events",
+     "perm": "calendar.calendar_events",
+     "create": false
+    },
+    {
+     "label": "Upcoming Events",
+     "path": "/calendar/upcoming",
+     "perm": "calendar.upcoming_events",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Timetable",
+   "module": "timetable",
+   "icon": "Calendar",
+   "color": "#5C67F2",
+   "path": null,
+   "pages": [
+    {
+     "label": "Weekdays",
+     "path": "/timetable/weekdays",
+     "perm": "timetable.weekdays",
+     "create": false
+    },
+    {
+     "label": "Time Periods",
+     "path": "/timetable/periods",
+     "perm": "timetable.time_periods",
+     "create": false
+    },
+    {
+     "label": "Class Rooms",
+     "path": "/timetable/rooms",
+     "perm": "timetable.class_rooms",
+     "create": false
+    },
+    {
+     "label": "Create Timetable",
+     "path": "/timetable/create",
+     "perm": "timetable.create_timetable",
+     "create": true
+    },
+    {
+     "label": "Generate For Class",
+     "path": "/timetable/class",
+     "perm": "timetable.generate_for_class",
+     "create": false
+    },
+    {
+     "label": "Generate For Teacher",
+     "path": "/timetable/teacher",
+     "perm": "timetable.generate_for_teacher",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Academic Content",
+   "module": "academics_content",
+   "icon": "GraduationCap",
+   "color": "#5C67F2",
+   "path": null,
+   "pages": [
+    {
+     "label": "Lesson Plans",
+     "path": "/academics/lesson-plans",
+     "perm": "academics_content.lesson_plans",
+     "create": false
+    },
+    {
+     "label": "Schemes of Work",
+     "path": "/academics/schemes-of-work",
+     "perm": "academics_content.schemes_of_work",
+     "create": false
+    },
+    {
+     "label": "Notes & Resources",
+     "path": "/academics/resources",
+     "perm": "academics_content.notes_resources",
+     "create": false
+    },
+    {
+     "label": "Assignments",
+     "path": "/academics/assignments",
+     "perm": "academics_content.assignments",
+     "create": false
+    },
+    {
+     "label": "Homework",
+     "path": "/homework",
+     "perm": "academics_content.homework",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "CBC Assessment",
+   "module": "cbc",
+   "icon": "BookOpen",
+   "color": "#0EA5E9",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/cbc",
+     "perm": "cbc.dashboard",
+     "create": false
+    },
+    {
+     "label": "Learning Areas",
+     "path": "/cbc/learning-areas",
+     "perm": "cbc.learning_areas",
+     "create": false
+    },
+    {
+     "label": "Competencies",
+     "path": "/cbc/competencies",
+     "perm": "cbc.competencies",
+     "create": false
+    },
+    {
+     "label": "Strands & Sub-Strands",
+     "path": "/cbc/strands",
+     "perm": "cbc.strands_sub_strands",
+     "create": false
+    },
+    {
+     "label": "Assessment Activities",
+     "path": "/cbc/activities",
+     "perm": "cbc.assessment_activities",
+     "create": false
+    },
+    {
+     "label": "Record Assessments",
+     "path": "/cbc/record",
+     "perm": "cbc.record_assessments",
+     "create": false
+    },
+    {
+     "label": "Learner Progress",
+     "path": "/cbc/progress",
+     "perm": "cbc.learner_progress",
+     "create": false
+    },
+    {
+     "label": "Report Cards",
+     "path": "/cbc/report-cards",
+     "perm": "cbc.report_cards",
+     "create": false
+    },
+    {
+     "label": "Teacher Comments",
+     "path": "/cbc/comments",
+     "perm": "cbc.teacher_comments",
+     "create": false
+    },
+    {
+     "label": "Analytics",
+     "path": "/cbc/analytics",
+     "perm": "cbc.analytics",
+     "create": false
+    },
+    {
+     "label": "Reports",
+     "path": "/cbc/reports",
+     "perm": "cbc.reports",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/cbc/settings",
+     "perm": "cbc.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Behaviour & Skills",
+   "module": "behaviour",
+   "icon": "Eye",
+   "color": "#10B981",
+   "path": null,
+   "pages": [
+    {
+     "label": "Rate Behaviours",
+     "path": "/behaviour/rate",
+     "perm": "behaviour.rate_behaviours",
+     "create": false
+    },
+    {
+     "label": "Rate Skills",
+     "path": "/skills/rate",
+     "perm": "behaviour.rate_skills",
+     "create": false
+    },
+    {
+     "label": "Observation Diary",
+     "path": "/behaviour/observations",
+     "perm": "behaviour.observation_diary",
+     "create": false
+    },
+    {
+     "label": "Affective Report",
+     "path": "/behaviour/reports/affective",
+     "perm": "behaviour.affective_report",
+     "create": false
+    },
+    {
+     "label": "Psychomotor Report",
+     "path": "/behaviour/reports/psychomotor",
+     "perm": "behaviour.psychomotor_report",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Hostel",
+   "module": "hostel",
+   "icon": "Building2",
+   "color": "#8B5CF6",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/hostel/dashboard",
+     "perm": "hostel.dashboard",
+     "create": false
+    },
+    {
+     "label": "Rooms & Blocks",
+     "path": "/hostel/rooms",
+     "perm": "hostel.rooms_blocks",
+     "create": false
+    },
+    {
+     "label": "Bed Management",
+     "path": "/hostel/beds",
+     "perm": "hostel.bed_management",
+     "create": false
+    },
+    {
+     "label": "Room Allocation",
+     "path": "/hostel/allocation",
+     "perm": "hostel.room_allocation",
+     "create": false
+    },
+    {
+     "label": "Hostel Attendance",
+     "path": "/hostel/attendance",
+     "perm": "hostel.hostel_attendance",
+     "create": false
+    },
+    {
+     "label": "Hostel Fees",
+     "path": "/hostel/fees",
+     "perm": "hostel.hostel_fees",
+     "create": false
+    },
+    {
+     "label": "Settings",
+     "path": "/hostel/settings",
+     "perm": "hostel.settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Library",
+   "module": "library",
+   "icon": "BookOpen",
+   "color": "#0891B2",
+   "path": null,
+   "pages": [
+    {
+     "label": "Dashboard",
+     "path": "/library/dashboard",
+     "perm": "library.dashboard",
+     "create": false
+    },
+    {
+     "label": "Books Catalog",
+     "path": "/library/books",
+     "perm": "library.books_catalog",
+     "create": false
+    },
+    {
+     "label": "Book Categories",
+     "path": "/library/categories",
+     "perm": "library.book_categories",
+     "create": false
+    },
+    {
+     "label": "Issue Book",
+     "path": "/library/issue",
+     "perm": "library.issue_book",
+     "create": false
+    },
+    {
+     "label": "Return Book",
+     "path": "/library/return",
+     "perm": "library.return_book",
+     "create": false
+    },
+    {
+     "label": "Overdue & Fines",
+     "path": "/library/overdue",
+     "perm": "library.overdue_fines",
+     "create": false
+    },
+    {
+     "label": "Members",
+     "path": "/library/members",
+     "perm": "library.members",
+     "create": false
+    },
+    {
+     "label": "Reports",
+     "path": "/library/reports",
+     "perm": "library.reports",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Point of Sale",
+   "module": "pos",
+   "icon": "LucideShoppingCart",
+   "color": "#DB2777",
+   "path": null,
+   "pages": [
+    {
+     "label": "Store Analytics",
+     "path": "/pos-admin/analytics",
+     "perm": "pos.store_analytics",
+     "create": false
+    },
+    {
+     "label": "Product Categories",
+     "path": "/pos-admin/categories",
+     "perm": "pos.product_categories",
+     "create": false
+    },
+    {
+     "label": "Product Tax",
+     "path": "/pos-admin/tax",
+     "perm": "pos.product_tax",
+     "create": false
+    },
+    {
+     "label": "Products",
+     "path": "/pos-admin/products",
+     "perm": "pos.products",
+     "create": false
+    },
+    {
+     "label": "New Order",
+     "path": "/pos-admin/new-order",
+     "perm": "pos.new_order",
+     "create": false
+    },
+    {
+     "label": "All Orders",
+     "path": "/pos-admin/orders",
+     "perm": "pos.all_orders",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Live Class & LMS",
+   "module": "live_class",
+   "icon": "LucideVideo",
+   "color": "#14B8A6",
+   "path": null,
+   "pages": [
+    {
+     "label": "Live Classes",
+     "path": "/live-classes",
+     "perm": "live_class.live_classes",
+     "create": false
+    },
+    {
+     "label": "Live Class Settings",
+     "path": "/live-classes/settings",
+     "perm": "live_class.live_class_settings",
+     "create": false
+    },
+    {
+     "label": "Quick Meet (Jitsi)",
+     "path": "/live",
+     "perm": "live_class.quick_meet_jitsi",
+     "create": false
+    },
+    {
+     "label": "Courses",
+     "path": "/lms/courses",
+     "perm": "live_class.courses",
+     "create": false
+    },
+    {
+     "label": "Quizzes & Exams",
+     "path": "/lms/quizzes",
+     "perm": "live_class.quizzes_exams",
+     "create": false
+    },
+    {
+     "label": "Learning Materials",
+     "path": "/lms/lessons",
+     "perm": "live_class.learning_materials",
+     "create": false
+    },
+    {
+     "label": "LMS Dashboard",
+     "path": "/lms",
+     "perm": "live_class.lms_dashboard",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Question Paper",
+   "module": "question_paper",
+   "icon": "Copy",
+   "color": "#7C3AED",
+   "path": null,
+   "pages": [
+    {
+     "label": "AI Past Paper Importer",
+     "path": "/papers/import",
+     "perm": "question_paper.ai_past_paper_importer",
+     "create": false
+    },
+    {
+     "label": "Subject Chapters",
+     "path": "/papers/chapters",
+     "perm": "question_paper.subject_chapters",
+     "create": false
+    },
+    {
+     "label": "Question Bank",
+     "path": "/papers/questions",
+     "perm": "question_paper.question_bank",
+     "create": false
+    },
+    {
+     "label": "Create Question Paper",
+     "path": "/papers/create",
+     "perm": "question_paper.create_question_paper",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Exams",
+   "module": "exams",
+   "icon": "ClipboardList",
+   "color": "#7C3AED",
+   "path": null,
+   "pages": [
+    {
+     "label": "Create New Exam",
+     "path": "/exams/create",
+     "perm": "exams.create_new_exam",
+     "create": true
+    },
+    {
+     "label": "Online Examinations",
+     "path": "/exams/online",
+     "perm": "exams.online_examinations",
+     "create": false
+    },
+    {
+     "label": "Add / Update Exam Marks",
+     "path": "/exams/marks",
+     "perm": "exams.add_update_exam_marks",
+     "create": false
+    },
+    {
+     "label": "Skill-Based Reports",
+     "path": "/exams/skills",
+     "perm": "exams.skill_based_reports",
+     "create": false
+    },
+    {
+     "label": "Analytics",
+     "path": "/exams/analytics",
+     "perm": "exams.analytics",
+     "create": false
+    },
+    {
+     "label": "Generate Report Cards",
+     "path": "/exams/generate-reports",
+     "perm": "exams.generate_report_cards",
+     "create": false
+    },
+    {
+     "label": "Generated Report Cards",
+     "path": "/exams/generated-reports",
+     "perm": "exams.generated_report_cards",
+     "create": false
+    },
+    {
+     "label": "Result Card",
+     "path": "/exams/scholar-sheet",
+     "perm": "exams.result_card",
+     "create": false
+    },
+    {
+     "label": "Report Card Settings",
+     "path": "/exams/report-card-settings",
+     "perm": "exams.report_card_settings",
+     "create": false
+    },
+    {
+     "label": "Blank Award List",
+     "path": "/exams/blank-award-list",
+     "perm": "exams.blank_award_list",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Reports",
+   "module": "reports",
+   "icon": "ClipboardList",
+   "color": "#0284C7",
+   "path": null,
+   "pages": [
+    {
+     "label": "Reports Center",
+     "path": "/reports",
+     "perm": "reports.reports_center",
+     "create": false
+    },
+    {
+     "label": "Customised Reports",
+     "path": "/reports/custom",
+     "perm": "reports.customised_reports",
+     "create": false
+    },
+    {
+     "label": "Blank Forms",
+     "path": "/blank-forms",
+     "perm": "reports.blank_forms",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Communications",
+   "module": "communications",
+   "icon": "LucideMessageSquare",
+   "color": "#EC4899",
+   "path": null,
+   "pages": [
+    {
+     "label": "Portal Announcements",
+     "path": "/communications/announcements",
+     "perm": "communications.portal_announcements",
+     "create": true
+    },
+    {
+     "label": "Meetings Calendar",
+     "path": "/communications/meetings",
+     "perm": "communications.meetings_calendar",
+     "create": false
+    },
+    {
+     "label": "SMS & Email Templates",
+     "path": "/communications/templates",
+     "perm": "communications.sms_email_templates",
+     "create": false
+    },
+    {
+     "label": "Message Parents",
+     "path": "/communications/parent-messages",
+     "perm": "communications.message_parents",
+     "create": false
+    },
+    {
+     "label": "Bulk SMS",
+     "path": "/communications/sms",
+     "perm": "communications.bulk_sms",
+     "create": false
+    },
+    {
+     "label": "Email Broadcast",
+     "path": "/communications/email",
+     "perm": "communications.email_broadcast",
+     "create": false
+    },
+    {
+     "label": "WhatsApp Broadcast",
+     "path": "/communications/whatsapp",
+     "perm": "communications.whatsapp_broadcast",
+     "create": false
+    },
+    {
+     "label": "WhatsApp Integration",
+     "path": "/communications/whatsapp-integration",
+     "perm": "communications.whatsapp_integration",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Certificates",
+   "module": "certificates",
+   "icon": "Award",
+   "color": "#7C3AED",
+   "path": null,
+   "pages": [
+    {
+     "label": "Generate Certificate",
+     "path": "/certificates/generate",
+     "perm": "certificates.generate_certificate",
+     "create": true
+    },
+    {
+     "label": "Saved Certificates",
+     "path": "/certificates/saved",
+     "perm": "certificates.saved_certificates",
+     "create": false
+    },
+    {
+     "label": "Certificate Templates",
+     "path": "/certificates/templates",
+     "perm": "certificates.certificate_templates",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "General Settings",
+   "module": "settings",
+   "icon": "LucideSettings",
+   "color": "#334155",
+   "path": null,
+   "pages": [
+    {
+     "label": "Institute Profile",
+     "path": "/settings/profile",
+     "perm": "settings.institute_profile",
+     "create": false
+    },
+    {
+     "label": "Learning Periods",
+     "path": "/academics/periods",
+     "perm": "settings.learning_periods",
+     "create": false
+    },
+    {
+     "label": "Academic Term Settings",
+     "path": "/settings/term-settings",
+     "perm": "settings.academic_term_settings",
+     "create": false
+    },
+    {
+     "label": "Fees Particulars",
+     "path": "/settings/fees-particulars",
+     "perm": "settings.fees_particulars",
+     "create": false
+    },
+    {
+     "label": "Fees Structure",
+     "path": "/settings/fees-structure",
+     "perm": "settings.fees_structure",
+     "create": false
+    },
+    {
+     "label": "Discount Type",
+     "path": "/settings/discount-type",
+     "perm": "settings.discount_type",
+     "create": false
+    },
+    {
+     "label": "Rules & Regulations",
+     "path": "/settings/rules",
+     "perm": "settings.rules_regulations",
+     "create": false
+    },
+    {
+     "label": "Registration Numbers",
+     "path": "/settings/numbering",
+     "perm": "settings.registration_numbers",
+     "create": false
+    },
+    {
+     "label": "Grading Templates",
+     "path": "/settings/grading-templates",
+     "perm": "settings.grading_templates",
+     "create": false
+    },
+    {
+     "label": "Curriculum Settings",
+     "path": "/settings/curriculum",
+     "perm": "settings.curriculum_settings",
+     "create": false
+    },
+    {
+     "label": "Report Card Templates",
+     "path": "/settings/report-templates",
+     "perm": "settings.report_card_templates",
+     "create": false
+    },
+    {
+     "label": "Theme & Language",
+     "path": "/settings/theme",
+     "perm": "settings.theme_language",
+     "create": false
+    },
+    {
+     "label": "Account Settings",
+     "path": "/settings/account",
+     "perm": "settings.account_settings",
+     "create": false
+    }
+   ]
+  },
+  {
+   "label": "Settings",
+   "module": "settings",
+   "icon": "Building2",
+   "color": "#334155",
+   "path": null,
+   "pages": [
+    {
+     "label": "Integrations",
+     "path": "/integrations",
+     "perm": "settings.integrations",
+     "create": false
+    },
+    {
+     "label": "Roles & Permissions",
+     "path": "/roles",
+     "perm": "settings.roles_permissions",
+     "create": false
+    }
+   ]
+  }
+ ],
  "categories": [
   {
    "key": "Academics",

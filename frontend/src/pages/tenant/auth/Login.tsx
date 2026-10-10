@@ -111,7 +111,7 @@ export default function Login() {
             try {
                 const payload = JSON.parse(atob(token.split(".")[1]));
                 if (payload.exp && Date.now() / 1000 < payload.exp) {
-                    navigate(searchParams.get("redirect") || "/home", { replace: true });
+                    navigate(searchParams.get("redirect") || "/dashboard", { replace: true });
                     return;
                 }
             } catch (_) {}
@@ -144,9 +144,7 @@ export default function Login() {
         // Helper: after storing the token, navigate to the right place.
         // If the user logged in from bare localhost and we know their subdomain,
         // redirect to subdomain.localhost:8080 so tenant context is correct.
-        const goToDashboard = (destIn: string) => {
-            // Everyone lands on Home (their apps) unless a specific page was chosen for them.
-            const dest = !destIn || destIn === "/dashboard" ? "/home" : destIn;
+        const goToDashboard = (dest: string) => {
             const targetSubdomain = tenantSubdomain || activeSubdomain;
             if (targetSubdomain && !detectedSubdomain) {
                 // Currently on bare localhost → jump to the school's subdomain

@@ -44,7 +44,9 @@ export default function OwnerGuard() {
                     <ArrowLeft className="w-5 h-5" />
                 </button>
             )}
-            <Outlet />
+            <div className="rsp">
+                <Outlet />
+            </div>
         </>
     );
 }

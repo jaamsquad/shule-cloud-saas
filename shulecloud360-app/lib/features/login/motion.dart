@@ -139,7 +139,7 @@ class _BrandButtonState extends State<BrandButton> {
             child: Container(
               height: 54, width: double.infinity,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [C.brand, Color(0xFF7C3AED)]),
+                gradient: const LinearGradient(colors: [C.brand, C.blue]),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [BoxShadow(color: C.brand.withValues(alpha: 0.4), blurRadius: 18, offset: const Offset(0, 8))],
               ),

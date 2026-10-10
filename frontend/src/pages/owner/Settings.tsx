@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ShieldCheck, AlertCircle } from "lucide-react";
 import OwnerSchoolAuthCard from "@/components/auth/OwnerSchoolAuthCard";
+import OwnerAiCard from "@/components/owner/OwnerAiCard";
 
 export default function OwnerSettings() {
     const queryClient = useQueryClient();
@@ -66,6 +67,7 @@ export default function OwnerSettings() {
                 </Card>
 
                 <OwnerSchoolAuthCard />
+                <OwnerAiCard />
             </div>
         </div>
     );

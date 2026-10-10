@@ -104,7 +104,7 @@ export default function DashboardLayout() {
 
                 {/* ── Main content ─────────────────────────────────────────── */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-slate-50/10">
+                    <div className="rsp flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-slate-50/10">
                         <PermissionGuard>
                             <Outlet />
                         </PermissionGuard>

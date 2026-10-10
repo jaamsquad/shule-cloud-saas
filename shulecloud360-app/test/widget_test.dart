@@ -36,4 +36,38 @@ void main() {
   test('learners get the student portal apps', () {
     expect(visibleApps(s(const [], const [], kind: UserKind.student), cat).first.portal, Portal.student);
   });
+
+  group('menu follows the web sidebar', () {
+    const side = Catalog(['Academics'], [], [
+      AppDef(key: 'g_classes', name: 'Classes', description: '', category: menuCategory, color: Color(0xFF2F7BF5), icon: Icons.class_outlined, modules: ['classes'],
+          sections: [SectionDef('Classes', 'classes', [PageDef('All Classes', '/classes')])]),
+      AppDef(key: 'g_fees', name: 'Fees', description: '', category: menuCategory, color: Color(0xFF2F7BF5), icon: Icons.payments_outlined, modules: ['fees'],
+          sections: [SectionDef('Fees', 'fees', [PageDef('Invoices', '/fees/invoices')])]),
+    ]);
+    Session admin({String? staffToken, String portal = 'admin', List<String> mods = const ['*']}) => Session(
+        kind: UserKind.admin, token: 't', staffToken: staffToken, subdomain: 'x', schoolCode: 'A1M', name: 'N', role: 'bursar', user: const {},
+        modules: mods, permissions: mods, portal: portal);
+
+    test('groups come in sidebar order and follow the role', () {
+      expect(visibleApps(admin(), side).map((a) => a.name), ['Classes', 'Fees']);
+      expect(visibleApps(admin(mods: const ['dashboard', 'fees']), side).map((a) => a.name), ['Fees']);
+    });
+    test('staff with both portals can switch to the teacher portal', () {
+      final both = admin(staffToken: 'st');
+      expect(both.hasBothPortals, isTrue);
+      expect(visibleApps(both, side).map((a) => a.name), ['Classes', 'Fees']);
+      final teaching = both.copyWith(portal: 'teacher');
+      expect(teaching.teaching, isTrue);
+      expect(visibleApps(teaching, side).first.portal, Portal.staff);
+    });
+    test('admin without a teacher login has no switcher', () {
+      expect(admin().hasBothPortals, isFalse);
+      expect(admin(portal: 'teacher').teaching, isFalse);
+    });
+    test('teacher-only staff stay in the teacher portal', () {
+      const t = Session(kind: UserKind.teacher, token: 't', staffToken: 't', subdomain: 'x', schoolCode: 'A1M', name: 'N', role: 'teacher', user: {});
+      expect(t.hasBothPortals, isFalse);
+      expect(visibleApps(t, side).every((a) => a.portal == Portal.staff), isTrue);
+    });
+  });
 }

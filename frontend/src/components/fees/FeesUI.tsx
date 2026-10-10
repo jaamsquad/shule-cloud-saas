@@ -55,10 +55,14 @@ export const FEES_NAV: { group: string; items: { label: string; path: string }[]
 export function FeesNav() {
     const { pathname } = useLocation();
     const ref = useRef<HTMLDivElement>(null);
-    // Keep the active tab in view on narrow screens.
-    useEffect(() => { ref.current?.querySelector("[data-active=true]")?.scrollIntoView({ block: "nearest", inline: "center" }); }, [pathname]);
+    // Keep the active tab in view on narrow screens: centre it by scrolling the strip only (scrollIntoView would also slide the page sideways)
+    useEffect(() => {
+        const strip = ref.current;
+        const tab = strip?.querySelector<HTMLElement>("[data-active=true]");
+        if (strip && tab) strip.scrollLeft = tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2;
+    }, [pathname]);
     return (
-        <div ref={ref} className="flex items-stretch gap-1 overflow-x-auto pb-1 -mx-1 px-1 print:hidden" style={{ scrollbarWidth: "thin" }}>
+        <div ref={ref} className="relative flex items-stretch gap-1 overflow-x-auto pb-1 -mx-1 px-1 print:hidden" style={{ scrollbarWidth: "thin" }}>
             {FEES_NAV.map((g, gi) => (
                 <div key={g.group} className="flex items-center gap-1 shrink-0">
                     {gi > 0 && <span className="w-px h-5 bg-slate-200 mx-1.5" />}
