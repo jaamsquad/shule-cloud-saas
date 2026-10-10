@@ -10,6 +10,7 @@ import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import SchoolAppsCard from "@/components/owner/SchoolAppsCard";
 import SchoolPricingCard from "@/components/owner/SchoolPricingCard";
+import SchoolEmailCard from "@/components/owner/SchoolEmailCard";
 
 const PRIMARY = "#534AB7";
 const ksh = (n: any) => `KES ${Number(n || 0).toLocaleString()}`;
@@ -203,6 +204,9 @@ export default function ManageSchool() {
 
                 {/* This school's own prices + discount */}
                 <SchoolPricingCard schoolId={String(id)} plans={school.allPlans || []} pricing={school.pricing} currentPlanId={school.plan?._id} />
+
+                {/* Which email account the school's emails go out through */}
+                <SchoolEmailCard schoolId={String(id)} info={school.emailSending} />
 
                 {/* Message the school directly */}
                 <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>

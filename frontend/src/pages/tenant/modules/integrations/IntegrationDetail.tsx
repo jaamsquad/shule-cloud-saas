@@ -194,6 +194,8 @@ export default function IntegrationDetail() {
                 </div>
             </div>
 
+            {needsEmail && <EmailRouteNotice />}
+
             {/* ── Integration hero ───────────────────────────────────── */}
             <div className="px-4 sm:px-8 py-6" style={{ background: `linear-gradient(135deg, ${intg.color}08 0%, transparent 70%)` }}>
                 <div className="max-w-4xl mx-auto flex items-start gap-4">
@@ -553,5 +555,23 @@ export default function IntegrationDetail() {
                 </div>
             )}
         </div>
+    );
+}
+
+/** Which email account the school's emails actually use — ShuleCloud decides this per school. */
+function EmailRouteNotice() {
+    const { data } = useQuery<any>({ queryKey: ["email_route"], queryFn: async () => (await api.get("/communications/email-route")).data, staleTime: 30_000 });
+    if (!data) return null;
+    const text = data.mode === "platform"
+        ? "ShuleCloud sends your school's emails from its own email account (in your school's name, with replies coming back to you). The settings on this page are not used."
+        : data.mode === "custom"
+            ? (data.via === "school" ? "Your school's emails go out from your own email account set here." : "ShuleCloud has set your school to use its own email account, but it isn't set up yet — no emails are sent until you add it here.")
+            : data.via === "school" ? "Your school's emails go out from your own email account set here."
+                : data.via === "platform" ? "You haven't set up your own email yet, so emails go out through ShuleCloud's email in your school's name. Add yours here to use it instead." : (data.reason || "Email is not set up yet.");
+    const warn = data.via === "none";
+    return (
+        <div className="px-4 sm:px-8 pt-4"><div className={`max-w-4xl mx-auto rounded-xl border px-4 py-3 text-sm font-semibold ${warn ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-indigo-800"}`}>
+            {text}{data.from && !warn ? <span className="block text-xs font-bold opacity-70 mt-0.5">Sending as: {data.from}</span> : null}
+        </div></div>
     );
 }

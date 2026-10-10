@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { getDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { schoolPrice, cleanSchoolPricing, CYCLES, cycleOf } from '../lib/planPricing';
+import { EMAIL_MODES, platformSmtp, schoolSmtp, forgetTenantEmailCache } from '../lib/emailRouting';
 
 // ─── Owner roles & permissions ───────────────────────────────────────────────
 // Roles available to owner-portal users and what each can do.
@@ -450,6 +451,11 @@ export const getSchoolDetail = async (req: Request, res: Response) => {
             allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, ...schoolPrice(t, p) })),
             // this school's own prices + discount (Pricing & discount card)
             pricing: { planPricing: t.planPricing || {}, discount: t.discount || null },
+            emailSending: await (async () => {
+                let own = false;
+                try { const { getCommSettings } = await import('../services/communications.service'); own = !!schoolSmtp(await getCommSettings(getTenantDb(tenantDbOf(t)))); } catch { /* ignore */ }
+                return { mode: EMAIL_MODES.includes(t.emailMode) ? t.emailMode : 'auto', schoolConfigured: own, platformConfigured: !!(await platformSmtp()) };
+            })(),
             // Per-school module overrides (falls back to plan modules if unset).
             enabledModules: Array.isArray(t.enabledModules) ? t.enabledModules : (plan?.modules || []),
             disabledApps: Array.isArray(t.disabledApps) ? t.disabledApps : [],
@@ -477,6 +483,20 @@ export const assignSchoolPlan = async (req: Request, res: Response) => {
         await meta.collection('Tenant').updateOne({ _id: tid }, { $set: { planId: plan?._id || null, plan: plan?.name || null, enabledModules: plan?.modules || [], updatedAt: new Date() } });
         await ownerAudit(req, 'school.assign_plan', `school:${req.params.id}`, { plan: plan?.name });
         return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// Which email account the school's emails go out through (lib/emailRouting).
+export const setSchoolEmailMode = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.manage')) return;
+    try {
+        const mode = String(req.body?.mode || '');
+        if (!EMAIL_MODES.includes(mode as any)) return res.status(400).json({ message: 'Choose auto, platform or custom' });
+        const r = await getDb().collection('Tenant').updateOne({ _id: new ObjectId(req.params.id) }, { $set: { emailMode: mode, updatedAt: new Date() } });
+        if (!r.matchedCount) return res.status(404).json({ message: 'School not found' });
+        forgetTenantEmailCache();
+        await ownerAudit(req, 'school.email_mode', `school:${req.params.id}`, { mode });
+        return res.json({ ok: true, mode });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
