@@ -1,0 +1,87 @@
+{
+  "siteUrl": "https://shulecloud.com",
+  "siteName": "ShuleCloud",
+  "locale": "en_KE",
+  "twitter": "@shulecloud",
+  "logo": "/icons/icon-512.png",
+  "image": "/icons/icon-512.png",
+  "organization": {
+    "email": "hello@shulecloud.com",
+    "telephone": "+254726151104",
+    "locality": "Nairobi",
+    "country": "KE"
+  },
+  "pages": [
+    {
+      "path": "/",
+      "title": "ShuleCloud — School Management System for Kenyan Schools",
+      "description": "ShuleCloud is cloud school management software for Kenyan schools: fees and M-PESA payments, exams and CBC report cards, attendance, timetables and parent communication.",
+      "sitemap": true
+    },
+    {
+      "path": "/features",
+      "title": "Features — ShuleCloud School Management System",
+      "description": "Everything ShuleCloud does for your school: admissions, fees and M-PESA, exams and report cards, attendance, timetables, transport, library, communication and more.",
+      "breadcrumb": "Features",
+      "sitemap": true
+    },
+    {
+      "path": "/about",
+      "title": "About ShuleCloud",
+      "description": "Who we are, why we built ShuleCloud and the values behind our school management platform.",
+      "breadcrumb": "About",
+      "sitemap": true
+    },
+    {
+      "path": "/faq",
+      "title": "Frequently Asked Questions — ShuleCloud",
+      "description": "Answers to common questions about ShuleCloud: getting started, pricing and plans, and data security and privacy.",
+      "breadcrumb": "FAQs",
+      "sitemap": true
+    },
+    {
+      "path": "/blogs",
+      "title": "The ShuleCloud Blog",
+      "description": "News, guides and ideas on running schools better with ShuleCloud.",
+      "breadcrumb": "Blog",
+      "sitemap": true
+    },
+    {
+      "path": "/contact",
+      "title": "Contact ShuleCloud",
+      "description": "Talk to the ShuleCloud team about school management software for your institution — by email, phone, WhatsApp or the contact form.",
+      "breadcrumb": "Contact",
+      "sitemap": true
+    },
+    {
+      "path": "/terms",
+      "title": "Terms of Service — ShuleCloud",
+      "description": "The terms that govern your use of ShuleCloud school management software.",
+      "breadcrumb": "Terms of Service",
+      "lastmod": "2026-02-28",
+      "sitemap": true
+    },
+    {
+      "path": "/privacy",
+      "title": "Privacy Policy — ShuleCloud",
+      "description": "How ShuleCloud collects, protects and manages the data of schools, students, parents and staff.",
+      "breadcrumb": "Privacy Policy",
+      "lastmod": "2026-02-28",
+      "sitemap": true
+    },
+    {
+      "path": "/status",
+      "title": "System Status — ShuleCloud",
+      "description": "Status of ShuleCloud services.",
+      "robots": "noindex, follow",
+      "sitemap": false
+    },
+    {
+      "path": "/register",
+      "title": "Register your school — ShuleCloud",
+      "description": "Create a ShuleCloud account for your school.",
+      "robots": "noindex, follow",
+      "sitemap": false
+    }
+  ]
+}
