@@ -168,6 +168,14 @@ function stripes(d: CertData) {
 const RENDER: Record<string, (d: CertData) => string> = { gold, arcs, frame, ornate, waves, stripes };
 export const certificateHtml = (d: CertData) => (RENDER[d.style] || gold)(d);
 
+/** Several certificates (same design) as one document, one per landscape A4 page — for printing a batch. */
+export function combineCertificates(docs: string[]): string {
+    if (docs.length <= 1) return docs[0] || "";
+    const head = docs[0].slice(0, docs[0].indexOf("<body>"));
+    const bodies = docs.map(h => h.slice(h.indexOf("<body>") + 6, h.lastIndexOf("</body>")));
+    return `${head.replace("</style>", ".page{page-break-after:always;break-after:page}.page:last-child{page-break-after:auto;break-after:auto}</style>")}<body>${bodies.join("")}</body></html>`;
+}
+
 /** Default wording for each type. {school}, {class}, {he}, {his}, {year} … are filled from the student. */
 export function defaultBody(type: string, ctx: { school: string; className: string; gender?: string; admission?: string; year: string; transferTo?: string; transferDate?: string; date?: string }): string {
     const g = String(ctx.gender || "").toLowerCase();

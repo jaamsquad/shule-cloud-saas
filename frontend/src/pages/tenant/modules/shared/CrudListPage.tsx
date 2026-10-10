@@ -31,7 +31,7 @@ export type Column = { key: string; label: string; render?: (row: any) => React.
  * DELETE /sports/:id.
  */
 export default function CrudListPage({
-    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New", moduleKey,
+    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New", moduleKey, rowActions,
 }: {
     title: string;
     subtitle?: string;
@@ -42,6 +42,7 @@ export default function CrudListPage({
     columns: Column[];
     addLabel?: string;
     moduleKey?: string;   // gates create/delete buttons by the user's CRUD matrix
+    rowActions?: (row: any) => React.ReactNode;   // extra buttons before Edit / Delete
 }) {
     const qc = useQueryClient();
     const moduleCrud = useModuleCrud(moduleKey || "__none__");
@@ -190,6 +191,7 @@ export default function CrudListPage({
                                         ))}
                                         <td className="py-3 px-4">
                                             <div className="flex items-center gap-1.5 justify-end">
+                                                {rowActions?.(row)}
                                                 {canUpdate && (
                                                     <button onClick={() => openEdit(row)} title="Edit" className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-[#5C67F2]/10 text-slate-400 hover:text-[#5C67F2] flex items-center justify-center">
                                                         <Pencil className="w-3.5 h-3.5" />

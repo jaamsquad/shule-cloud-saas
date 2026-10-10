@@ -34,6 +34,36 @@ const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O/1/I/L — easy t
 const newCertId = () => 'CN' + Array.from(crypto.randomBytes(8)).map(b => ALPHABET[b % ALPHABET.length]).join('');
 const db = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
+/**
+ * Issue one certificate to a student (stored in issued_certificates with its own number for the
+ * QR check). Used by the student profile and by bulk issuing (e.g. sports participation).
+ */
+export async function issueStudentCertificate(req: Request, s: any, b: any, extra: Record<string, any> = {}): Promise<any> {
+    const d = db(req);
+    const type = String(b.type || '');
+    if (!CERT_TYPES[type]) return { error: 'Choose a certificate type.' };
+    const style = STYLES.includes(b.style) ? b.style : 'gold';
+    const title = str(b.title, 120) || CERT_TYPES[type];
+    const body = str(b.body, 1200);
+    if (!body) return { error: 'Write what the certificate is awarded for.' };
+
+    let certId = newCertId();
+    for (let i = 0; i < 5 && await d.collection('issued_certificates').findOne({ certId }); i++) certId = newCertId();
+    const actor = (req as any).tenantContext?.user || {};
+    const doc = {
+        certId, type, typeLabel: CERT_TYPES[type], style, title, subtitle: str(b.subtitle, 120), body,
+        date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : new Date().toISOString().slice(0, 10),
+        signatories: (Array.isArray(b.signatories) ? b.signatories : []).slice(0, 3).map((x: any) => ({ name: str(x?.name, 100), title: str(x?.title, 100) })),
+        studentId: String(s._id), studentName: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+        registrationNo: s.registrationNo || s.admNo || '', className: s.studentClass || s.currentClass || s.statusPrevClass?.studentClass || '', gender: s.gender || '',
+        status: 'valid', issuedAt: new Date(), issuedBy: actor.name || actor.staffId || 'admin',
+        ...extra,
+    };
+    await d.collection('issued_certificates').insertOne(doc as any);
+    const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
+    return { ...doc, verifyUrl: `${publicAppUrl()}/${slug}/certificate/verify/online/${certId}` };
+}
+
 // ═════════════════════════ tenant API ═════════════════════════
 export const studentCertRouter = Router();
 
@@ -54,32 +84,15 @@ studentCertRouter.get('/students/:id/certificates', async (req, res) => {
 
 studentCertRouter.post('/students/:id/certificates', enforceCrud('certificates', 'create'), async (req, res) => {
     try {
-        const d = db(req);
         const s = await loadStudent(req); if (!s) return res.status(404).json({ message: 'Student not found' });
         const b = req.body || {};
         const type = String(b.type || '');
         if (!CERT_TYPES[type]) return res.status(400).json({ message: 'Choose a certificate type.' });
         // A transfer certificate exists only for a student who has been transferred.
         if (type === 'transfer' && canonicalStatus(s.status) !== 'Transferred') return res.status(409).json({ message: 'A transfer certificate can only be issued to a student who has been transferred.' });
-        const style = STYLES.includes(b.style) ? b.style : 'gold';
-        const title = str(b.title, 120) || CERT_TYPES[type];
-        const body = str(b.body, 1200);
-        if (!body) return res.status(400).json({ message: 'Write what the certificate is awarded for.' });
-
-        let certId = newCertId();
-        for (let i = 0; i < 5 && await d.collection('issued_certificates').findOne({ certId }); i++) certId = newCertId();
-        const actor = (req as any).tenantContext?.user || {};
-        const doc = {
-            certId, type, typeLabel: CERT_TYPES[type], style, title, subtitle: str(b.subtitle, 120), body,
-            date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : new Date().toISOString().slice(0, 10),
-            signatories: (Array.isArray(b.signatories) ? b.signatories : []).slice(0, 3).map((x: any) => ({ name: str(x?.name, 100), title: str(x?.title, 100) })),
-            studentId: String(s._id), studentName: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
-            registrationNo: s.registrationNo || s.admNo || '', className: s.studentClass || s.currentClass || s.statusPrevClass?.studentClass || '', gender: s.gender || '',
-            status: 'valid', issuedAt: new Date(), issuedBy: actor.name || actor.staffId || 'admin',
-        };
-        await d.collection('issued_certificates').insertOne(doc as any);
-        const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
-        res.status(201).json({ ...doc, verifyUrl: `${publicAppUrl()}/${slug}/certificate/verify/online/${certId}` });
+        const doc = await issueStudentCertificate(req, s, b);
+        if (doc.error) return res.status(400).json({ message: doc.error });
+        res.status(201).json(doc);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

@@ -3,6 +3,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import * as c from '../controllers/academics.controller';
 import { enforceCrud } from '../lib/permissions';
+import { issueStudentCertificate, CERT_TYPES } from '../modules/certificates/studentCerts.routes';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extra MIS modules: Sports, Trips & Excursions, Front Desk, Secretary.
@@ -106,6 +107,89 @@ router.post('/sports/:id/enroll', async (req: Request, res: Response) => {
         };
         const r = await database.collection('sports_enrollments').insertOne(enrollment);
         res.json({ ...enrollment, _id: r.insertedId });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Sports: staff add students by hand (searched by class or admission no.) ──
+// Already-enrolled students are skipped, and so is anyone past the sport's capacity.
+// The sport fee is invoiced when billFee is on (the default when the sport has a fee).
+const oidOf = (v: any) => { try { return new ObjectId(String(v)); } catch { return null; } };
+const nameOf = (st: any) => st?.studentName || `${st?.firstName || ''} ${st?.lastName || ''}`.trim() || st?.name || 'Student';
+router.post('/sports/:id/participants', enforceCrud('sports', 'create'), async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const sid = oidOf(req.params.id);
+        const sport: any = sid ? await database.collection('sports').findOne({ _id: sid }) : null;
+        if (!sport) return res.status(404).json({ message: 'Sport not found' });
+        const ids: string[] = [...new Set((Array.isArray(req.body?.studentIds) ? req.body.studentIds : []).map(String))].slice(0, 500) as string[];
+        if (!ids.length) return res.status(400).json({ message: 'Pick at least one student' });
+        const fee = num(sport.fee);
+        const billFee = req.body?.billFee === undefined ? fee > 0 : !!req.body.billFee;
+
+        const existing: any[] = await database.collection('sports_enrollments').find({ sportId: String(sport._id) }).toArray();
+        const enrolled = new Set(existing.filter(e => e.status !== 'declined').map(e => String(e.studentId)));
+        const capacity = num(sport.capacity);
+        let taken = existing.filter(e => e.status !== 'declined').length;
+        const students: any[] = await database.collection('students').find({ _id: { $in: ids.map(oidOf).filter(Boolean) as ObjectId[] } }).toArray();
+        const byId = new Map(students.map(st => [String(st._id), st]));
+        const actor = (req as any).tenantContext?.user || {};
+
+        const added: any[] = [], skipped: any[] = [];
+        for (const id of ids) {
+            const st = byId.get(id);
+            if (!st) { skipped.push({ studentId: id, studentName: '', reason: 'Student not found' }); continue; }
+            if (enrolled.has(id)) { skipped.push({ studentId: id, studentName: nameOf(st), reason: 'Already in this sport' }); continue; }
+            if (capacity > 0 && taken >= capacity) { skipped.push({ studentId: id, studentName: nameOf(st), reason: `${sport.name} is full (${capacity})` }); continue; }
+            const studentClass = st.studentClass || st.currentClass || '';
+            const admNo = st.registrationNo || st.admissionNumber || st.admNo || '';
+            let invoice: any = null;
+            if (billFee && fee > 0) {
+                invoice = await createInvoice(database, { studentId: id, studentName: nameOf(st), studentClass, amount: fee, description: `${sport.name} (Sports) — ${sport.term || 'Term'}`, category: 'Sports' });
+            }
+            const enrollment = {
+                sportId: String(sport._id), sportName: sport.name, studentId: id, studentName: nameOf(st), studentClass,
+                admNo, registrationNo: admNo, fee: billFee ? fee : 0,
+                invoiceId: invoice?._id?.toString() || null, invoiceNo: invoice?.invoice_no || null,
+                status: invoice ? 'awaiting_payment' : 'confirmed', approvalStatus: 'approved',
+                source: 'staff', addedBy: actor.name || actor.staffId || 'admin', createdAt: new Date(),
+            };
+            const r = await database.collection('sports_enrollments').insertOne(enrollment);
+            added.push({ ...enrollment, _id: r.insertedId });
+            enrolled.add(id); taken++;
+        }
+        res.json({ added, skipped });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Sports: certificates for participants (same designs as the student profile) ──
+// One certificate per chosen participant, each with its own number + QR; "{name}" and
+// "{class}" in the wording are filled in per student. Recorded on the enrolment too.
+router.post('/sports/:id/certificates', enforceCrud('certificates', 'create'), async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const sid = oidOf(req.params.id);
+        const sport: any = sid ? await database.collection('sports').findOne({ _id: sid }) : null;
+        if (!sport) return res.status(404).json({ message: 'Sport not found' });
+        const b = req.body || {};
+        const type = CERT_TYPES[String(b.type)] && !['transfer', 'leaving', 'graduation', 'recommendation'].includes(String(b.type)) ? String(b.type) : 'participation';
+        const ids: string[] = [...new Set((Array.isArray(b.enrollmentIds) ? b.enrollmentIds : []).map(String))].slice(0, 300) as string[];
+        if (!ids.length) return res.status(400).json({ message: 'Pick at least one participant' });
+        if (!String(b.body || '').trim()) return res.status(400).json({ message: 'Write what the certificate is awarded for.' });
+        const rows: any[] = await database.collection('sports_enrollments').find({ _id: { $in: ids.map(oidOf).filter(Boolean) as ObjectId[] }, sportId: String(sport._id) }).toArray();
+        const students: any[] = await database.collection('students').find({ _id: { $in: rows.map(r => oidOf(r.studentId)).filter(Boolean) as ObjectId[] } }).toArray();
+        const byId = new Map(students.map(st => [String(st._id), st]));
+
+        const issued: any[] = [], failed: any[] = [];
+        for (const r of rows) {
+            const st = byId.get(String(r.studentId));
+            if (!st) { failed.push({ studentName: r.studentName || '', reason: 'No student record linked to this enrolment' }); continue; }
+            const fill = (t: any) => String(t || '').replace(/\{name\}/gi, nameOf(st)).replace(/\{class\}/gi, st.studentClass || st.currentClass || '').replace(/\{sport\}/gi, sport.name || '');
+            const doc = await issueStudentCertificate(req, st, { ...b, type, body: fill(b.body), title: fill(b.title), subtitle: fill(b.subtitle) }, { sportId: String(sport._id), sportName: sport.name, source: 'sports' });
+            if (doc.error) { failed.push({ studentName: nameOf(st), reason: doc.error }); continue; }
+            await database.collection('sports_enrollments').updateOne({ _id: r._id }, { $push: { certificates: { certId: doc.certId, type, issuedAt: new Date() } } } as any);
+            issued.push(doc);
+        }
+        res.json({ issued, failed });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
