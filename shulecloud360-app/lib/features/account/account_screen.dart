@@ -6,7 +6,9 @@ import '../../core/catalog.dart';
 import '../../core/config.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
+import '../../core/ui.dart';
 import '../../core/widgets.dart';
+import '../notifications/notifications_screen.dart';
 import '../shell/app_shell.dart';
 
 /// Account & settings: who you are, your school, security, help and log out.
@@ -21,10 +23,13 @@ class AccountScreen extends ConsumerWidget {
           leading: Icon(i, color: color ?? C.slate600), title: Text(t, style: TextStyle(fontWeight: FontWeight.w600, color: color ?? C.slate800)),
           subtitle: sub == null ? null : Text(sub, style: const TextStyle(color: C.slate500, fontSize: 12.5)), trailing: const Icon(Icons.chevron_right, color: C.slate400), onTap: onTap);
     final securityPortal = s.kind == UserKind.admin ? Portal.admin : s.kind == UserKind.teacher ? Portal.staff : null;
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: [
+    final unread = ref.watch(unreadProvider).valueOrNull ?? 0;
+    return ListView(padding: EdgeInsets.zero, children: [
+      CurvedHeader(title: 'My Account', unread: unread, onBell: () => context.push('/notifications')),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Panel(
         child: Row(children: [
-          CircleAvatar(radius: 28, backgroundColor: C.brand.withValues(alpha: 0.12), child: Text(s.name.isEmpty ? '?' : s.name[0].toUpperCase(), style: const TextStyle(color: C.brandDark, fontWeight: FontWeight.w800, fontSize: 22))),
+          Avatar(name: s.name, size: 58),
           const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: C.ink)),
@@ -51,6 +56,7 @@ class AccountScreen extends ConsumerWidget {
       Panel(padding: EdgeInsets.zero, child: tile(Icons.logout, 'Log out', null, () => confirmLogout(context, ref), color: C.red)),
       const SizedBox(height: 18),
       const Center(child: Text('ShuleCloud 360 · v1.0.0', style: TextStyle(color: C.slate400, fontSize: 12))),
+      ])),
     ]);
   }
 }
@@ -64,7 +70,7 @@ class HelpScreen extends StatelessWidget {
           const Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Finding your way', style: TextStyle(fontWeight: FontWeight.w700, color: C.ink)),
             SizedBox(height: 4),
-            Text('Apps lists everything your account can use. Star an app to keep it on Home. The menu (top left) shows the pages of the app you are in.', style: TextStyle(color: C.slate600)),
+            Text('Dashboard lists every app your account can use. Star an app to keep it on Home. The menu (top left) shows the pages of the app you are in.', style: TextStyle(color: C.slate600)),
           ])),
           const SizedBox(height: 10),
           const Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

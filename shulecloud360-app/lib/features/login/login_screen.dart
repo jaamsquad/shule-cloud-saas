@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,6 +27,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _pass = TextEditingController();
   final _userFocus = FocusNode(), _passFocus = FocusNode();
   _Step _step = _Step.school;
+  _Role _role = _Role.staff;
   bool _forward = true, _busy = false, _obscure = true, _picked = true;
   String? _error;
   int _shake = 0;
@@ -234,38 +236,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // 2 ── who
   Widget _userStep() {
-    final kind = _userKind(_user.text);
+    final r = _role;
     return _stagger([
-      _SchoolChip(school: _found!, onChange: () => _go(_Step.school)),
-      const SizedBox(height: 22),
-      const _Heading(icon: Icons.person_rounded, title: "Who's signing in?", subtitle: 'Use your email, portal username or phone number.'),
-      Shake(
-        trigger: _shake,
-        child: TextField(
-          controller: _user, focusNode: _userFocus, autocorrect: false, enableSuggestions: false,
-          keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.go,
-          autofillHints: const [AutofillHints.username, AutofillHints.email],
-          onChanged: (_) => setState(() => _error = null), onSubmitted: (_) => _confirmUser(),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: C.ink),
-          decoration: _field('Email, username or phone', kind?.$1 ?? Icons.alternate_email_rounded),
-        ),
+      _CrestCard(school: _found!, onChange: () => _go(_Step.school)),
+      const SizedBox(height: 18),
+      Container(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+        decoration: BoxDecoration(color: const Color(0xFFEFF5FF), borderRadius: BorderRadius.circular(24)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Login to your Account', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: C.slate700)),
+          const SizedBox(height: 12),
+          _RoleToggle(value: r, onChanged: (v) => setState(() { _role = v; _error = null; })),
+          const SizedBox(height: 14),
+          Shake(
+            trigger: _shake,
+            child: TextField(
+              controller: _user, focusNode: _userFocus, autocorrect: false, enableSuggestions: false,
+              keyboardType: r.keyboard, textInputAction: TextInputAction.go,
+              autofillHints: const [AutofillHints.username, AutofillHints.email],
+              onChanged: (_) => setState(() => _error = null), onSubmitted: (_) => _confirmUser(),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: C.ink),
+              decoration: _field(r.hint, r.icon).copyWith(fillColor: Colors.white),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8, left: 4),
+            child: Text(r.help, style: const TextStyle(fontSize: 12, color: C.slate500)),
+          ),
+          _errorBox(),
+          const SizedBox(height: 16),
+          BrandButton(label: 'Continue', onTap: _confirmUser),
+        ]),
       ),
-      AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: kind == null
-            ? const SizedBox(key: ValueKey('none'), height: 0, width: double.infinity)
-            : Padding(
-                key: ValueKey(kind.$2),
-                padding: const EdgeInsets.only(top: 10, left: 2),
-                child: Row(children: [
-                  Icon(kind.$1, size: 15, color: C.brandDark), const SizedBox(width: 6),
-                  Text(kind.$2, style: const TextStyle(fontSize: 12.5, color: C.brandDark, fontWeight: FontWeight.w700)),
-                ]),
-              ),
-      ),
-      _errorBox(),
-      const SizedBox(height: 22),
-      BrandButton(label: 'Continue', onTap: _confirmUser),
     ]);
   }
 
@@ -307,14 +309,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         BrandButton(label: 'Sign in', icon: Icons.login_rounded, busy: _busy, onTap: _signIn),
       ]);
 
-  static (IconData, String)? _userKind(String raw) {
-    final u = raw.trim();
-    if (u.isEmpty) return null;
-    if (u.contains('@')) return (Icons.mail_outline_rounded, 'School admin or staff email');
-    if (RegExp(r'^\+?[\d\s]{7,}$').hasMatch(u)) return (Icons.phone_iphone_rounded, 'Parent — phone number');
-    return (Icons.badge_outlined, 'Learner or staff portal username');
-  }
-
   InputDecoration _field(String hint, IconData icon) => InputDecoration(
         hintText: hint,
         prefixIcon: AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Icon(icon, key: ValueKey(icon), color: C.slate400)),
@@ -351,7 +345,7 @@ class _TopBar extends StatelessWidget {
                     AnimatedFractionallySizedBox(
                       duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic,
                       widthFactor: i <= n ? 1 : 0,
-                      child: Container(height: 6, decoration: const BoxDecoration(gradient: LinearGradient(colors: [C.brand, Color(0xFF7C3AED)]))),
+                      child: Container(height: 6, decoration: const BoxDecoration(gradient: LinearGradient(colors: [C.brand, C.blue]))),
                     ),
                   ]),
                 ),
@@ -378,7 +372,7 @@ class _Heading extends StatelessWidget {
           Container(
             width: 54, height: 54,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [C.brand, Color(0xFF7C3AED)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              gradient: const LinearGradient(colors: [C.brand, C.blue], begin: Alignment.topLeft, end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(17),
               boxShadow: [BoxShadow(color: C.brand.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 7))],
             ),
@@ -554,4 +548,122 @@ class _OtpPanelState extends ConsumerState<_OtpPanel> {
           }, child: const Text('Resend code')),
         ),
       ]);
+}
+
+/// Who is signing in. Only changes the field's wording and keyboard — the server
+/// works out the account from what is typed.
+enum _Role {
+  staff('Staff', 'Email or username', Icons.mail_outline_rounded, TextInputType.emailAddress, 'Admins, bursars and teachers: your school email or username.'),
+  student('Student', 'Admission no. or username', Icons.badge_outlined, TextInputType.text, 'Use the portal username the school gave you.'),
+  parent('Parent', 'Phone number', Icons.phone_iphone_rounded, TextInputType.phone, 'The phone number the school has for you.');
+
+  final String label, hint, help;
+  final IconData icon;
+  final TextInputType keyboard;
+  const _Role(this.label, this.hint, this.icon, this.keyboard, this.help);
+}
+
+/// Segmented Staff | Student | Parent switch with a sliding pill.
+class _RoleToggle extends StatelessWidget {
+  final _Role value;
+  final ValueChanged<_Role> onChanged;
+  const _RoleToggle({required this.value, required this.onChanged});
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 46, padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFDCE6F5))),
+        child: LayoutBuilder(builder: (_, box) {
+          final w = box.maxWidth / _Role.values.length;
+          return Stack(children: [
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic,
+              left: w * value.index, top: 0, bottom: 0, width: w,
+              child: Container(decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [C.sky, C.blue]), borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: C.blue.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3))],
+              )),
+            ),
+            Row(children: [
+              for (final r in _Role.values)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque, onTap: () => onChanged(r),
+                    child: Center(child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: r == value ? Colors.white : C.slate600),
+                      child: Text(r.label),
+                    )),
+                  ),
+                ),
+            ]),
+          ]);
+        }),
+      );
+}
+
+/// The school's crest inside a gold laurel, with its name — the top of the sign-in card.
+class _CrestCard extends StatelessWidget {
+  final SchoolInfo school;
+  final VoidCallback onChange;
+  const _CrestCard({required this.school, required this.onChange});
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(color: const Color(0xFFF7F1EA), borderRadius: BorderRadius.circular(22)),
+          child: Column(children: [
+            Image.asset('assets/images/logo.png', height: 46, fit: BoxFit.contain),
+            const SizedBox(height: 4),
+            const Text('Staff, Student & Parent App', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: C.slate700)),
+          ]),
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: 170, height: 150,
+          child: CustomPaint(
+            painter: const _Laurel(),
+            child: Center(child: Padding(padding: const EdgeInsets.only(bottom: 6), child: ClipOval(child: SchoolLogo(school: school, size: 92)))),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(school.name.toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: C.ink, letterSpacing: 0.5)),
+        if (school.schoolId != null) Text('School ID ${school.schoolId}', style: const TextStyle(fontSize: 12, color: C.slate500, fontWeight: FontWeight.w600)),
+        TextButton(onPressed: onChange, child: const Text('Not your school? Change')),
+      ]);
+}
+
+/// Two golden laurel branches curving up around the crest.
+class _Laurel extends CustomPainter {
+  const _Laurel();
+  @override
+  void paint(Canvas c, Size s) {
+    final gold = Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Color(0xFFF5C451), Color(0xFFC8901A)]).createShader(Offset.zero & s);
+    final stem = Paint()..color = const Color(0xFFC8901A)..style = PaintingStyle.stroke..strokeWidth = 2.4..strokeCap = StrokeCap.round;
+    final cx = s.width / 2, cy = s.height * 0.5, r = s.height * 0.46;
+    for (final side in [-1.0, 1.0]) {
+      final path = Path();
+      for (var i = 0; i <= 20; i++) {
+        final a = math.pi / 2 + side * (0.25 + i / 20 * 2.0);
+        final p = Offset(cx + r * math.cos(a), cy + r * math.sin(a));
+        i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+      }
+      c.drawPath(path, stem);
+      for (var i = 0; i < 8; i++) {
+        final a = math.pi / 2 + side * (0.4 + i * 0.24);
+        final p = Offset(cx + r * math.cos(a), cy + r * math.sin(a));
+        for (final out in [1.0, -1.0]) {
+          c.save();
+          c.translate(p.dx, p.dy);
+          c.rotate(a + math.pi / 2 * side + out * 0.55 * side + (out < 0 ? math.pi : 0));
+          c.drawOval(Rect.fromCenter(center: const Offset(0, -8), width: 7.5, height: 17), gold);
+          c.restore();
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Laurel o) => false;
 }

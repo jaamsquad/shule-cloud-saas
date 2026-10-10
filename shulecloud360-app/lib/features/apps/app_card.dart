@@ -5,6 +5,7 @@ import '../../core/app_icon.dart';
 import '../../core/catalog.dart';
 import '../../core/prefs.dart';
 import '../../core/theme.dart';
+import '../../core/ui.dart';
 
 void openApp(BuildContext context, AppDef app) {
   if (app.locked) {
@@ -14,93 +15,16 @@ void openApp(BuildContext context, AppDef app) {
   context.go('/apps/${app.key}');
 }
 
-/// Apps four (or more on wide screens) to a row, each row as tall as its tallest name.
-class AppGrid extends StatelessWidget {
-  final List<AppDef> apps;
-  const AppGrid({super.key, required this.apps});
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (_, box) {
-        final cols = (box.maxWidth / 84).floor().clamp(4, 8);
-        final w = box.maxWidth / cols;
-        return Wrap(children: [for (final a in apps) SizedBox(width: w, child: AppTile(app: a))]);
-      });
-}
-
-/// Launcher tile: the app icon with its name underneath, like a phone home screen.
-/// Long-press to star it for Quick Access.
-class AppTile extends ConsumerWidget {
+/// Reference-style tile for an app: white card, illustrated icon, name. Hold for options.
+class AppFeatureTile extends StatelessWidget {
   final AppDef app;
-  const AppTile({super.key, required this.app});
-  static const _label = TextStyle(fontSize: 11.5, height: 1.2, fontWeight: FontWeight.w600, color: C.slate700);
-
+  final bool starred;
+  const AppFeatureTile({super.key, required this.app, this.starred = false});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final starred = ref.watch(appListsProvider).starred.contains(app.key);
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => openApp(context, app),
-      onLongPress: () => _AppSheet.show(context, app),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Stack(clipBehavior: Clip.none, children: [
-            AppIcon(icon: app.icon, color: app.color, size: 54, locked: app.locked),
-            if (starred && !app.locked)
-              Positioned(
-                right: -5, top: -5,
-                child: Container(
-                  padding: const EdgeInsets.all(2.5),
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: const Icon(Icons.star_rounded, size: 15, color: Color(0xFFF59E0B)),
-                ),
-              ),
-          ]),
-          const SizedBox(height: 8),
-          // one long word ("Communication") shrinks to fit rather than breaking mid-word
-          app.name.trim().contains(' ')
-              ? Text(app.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: _label)
-              : FittedBox(fit: BoxFit.scaleDown, child: Text(app.name, maxLines: 1, style: _label)),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Row card: icon, name, what's inside, and a star for Quick Access (search results).
-class AppCard extends ConsumerWidget {
-  final AppDef app;
-  const AppCard({super.key, required this.app});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final starred = ref.watch(appListsProvider).starred.contains(app.key);
-    return Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: C.slate200)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => openApp(context, app),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
-          child: Row(children: [
-            AppIcon(icon: app.icon, color: app.color, size: 46, locked: app.locked),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(app.name, style: const TextStyle(fontWeight: FontWeight.w700, color: C.ink, fontSize: 15)),
-                const SizedBox(height: 3),
-                Text(app.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: C.slate500, fontSize: 12.5, height: 1.3)),
-              ]),
-            ),
-            IconButton(
-              tooltip: starred ? 'Remove from Quick Access' : 'Add to Quick Access',
-              icon: Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded, color: starred ? const Color(0xFFF59E0B) : C.slate400, size: 22),
-              onPressed: () => ref.read(appListsProvider.notifier).toggleStar(app.key),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FeatureTile(
+        icon: app.icon, color: app.color, label: app.name, locked: app.locked, starred: starred,
+        onTap: () => openApp(context, app), onLongPress: () => _AppSheet.show(context, app),
+      );
 }
 
 /// Long-press sheet: what's in the app, open it, star it.

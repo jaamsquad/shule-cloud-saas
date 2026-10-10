@@ -37,7 +37,11 @@ void main() {
     expect(find.text('Continue'), findsOneWidget);
     await t.tap(find.text('Continue'));
     await t.pump(const Duration(seconds: 1));
-    expect(find.text("Who's signing in?"), findsOneWidget);
+    expect(find.text('Login to your Account'), findsOneWidget);
+    expect(find.text('KILIMO ACADEMY'), findsOneWidget);
+    await t.tap(find.text('Parent'));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Phone number'), findsOneWidget);
     expect(find.text('Step 2 of 3'), findsOneWidget);
   });
 }

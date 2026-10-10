@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Same palette as the ShuleCloud web app (indigo brand, slate text, white cards).
+/// ShuleCloud 360 palette: school blue headers and actions, slate text, white cards.
 class C {
   C._();
-  static const brand = Color(0xFF5C67F2);
-  static const brandDark = Color(0xFF3F48C9);
+  static const brand = Color(0xFF2F7BF5);
+  static const brandDark = Color(0xFF1D5FD0);
+  static const sky = Color(0xFF5AB0FF);      // header gradient, light end
+  static const blue = Color(0xFF2563EB);     // header gradient, deep end
   static const ink = Color(0xFF0F172A);
   static const slate800 = Color(0xFF1E293B);
   static const slate700 = Color(0xFF334155);
@@ -28,13 +31,15 @@ ThemeData buildTheme() {
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(seedColor: C.brand, primary: C.brand, surface: Colors.white),
-    scaffoldBackgroundColor: C.bg,
+    scaffoldBackgroundColor: const Color(0xFFF3F6FB),
   );
   final border = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: C.slate200));
   return base.copyWith(
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white, foregroundColor: C.slate800, elevation: 0, scrolledUnderElevation: 0.5,
-      titleTextStyle: TextStyle(color: C.slate800, fontSize: 17, fontWeight: FontWeight.w700),
+      backgroundColor: C.blue, foregroundColor: Colors.white, elevation: 0, scrolledUnderElevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.light, statusBarBrightness: Brightness.dark),
+      titleTextStyle: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true, fillColor: Colors.white, isDense: true,
