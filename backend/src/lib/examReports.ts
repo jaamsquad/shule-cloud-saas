@@ -10,6 +10,7 @@ import { Db, ObjectId } from 'mongodb';
 import { buildExamResults } from '../routes/analytics.routes';
 import { levelKey, publishedView } from './examPublish';
 import { formatExamName } from './examName';
+import { catalogMatch } from './subjectCatalog';
 
 const num = (v: any) => Number(v) || 0;
 const r2 = (n: number, d = 2) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
@@ -102,7 +103,9 @@ export async function examClassReport(db: Db, examId: string, level: string, opt
     // subjects present (ordered by how many sat them, then name)
     const subjCount = new Map<string, { name: string; short: string; n: number }>();
     rows.forEach((r: any) => r.subjects.forEach((s: any) => { const k = norm(s.name); const e = subjCount.get(k) || { name: s.name, short: s.shortCode, n: 0 }; e.n++; subjCount.set(k, e); }));
-    const subjects = [...subjCount.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)).map(({ name, short }) => ({ name, short }));
+    // KNEC order (ENG, KIS, MAT, BIO, CHE, …) where the subject is in the catalogue, then by name
+    const codeOf = (name: string) => Number(catalogMatch(name)?.code) || 9999;
+    const subjects = [...subjCount.values()].sort((a, b) => codeOf(a.name) - codeOf(b.name) || a.name.localeCompare(b.name)).map(({ name, short }) => ({ name, short }));
 
     const key = (r: any) => (rankBy === 'marks' ? [r.totalMarks, r.meanPoints] : [r.meanPoints, r.totalMarks]);
     const overall = rankMap(rows, key, (r: any) => r.studentId);

@@ -379,6 +379,7 @@ export const navItems: NavItem[] = [
       { label: "Add / Update Exam Marks", path: "/exams/marks" },
       { label: "Skill-Based Reports", path: "/exams/skills" },
       { label: "Analytics", path: "/exams/analytics" },
+      { label: "Printouts", path: "/exams/printouts" },
       // { label: "Generate Report Cards", path: "/exams/generate-reports" },
       // { label: "ScholarSheet (A4 Card)", path: "/exams/scholar-sheet" },
       { label: "Generate Report Cards", path: "/exams/generate-reports" },

@@ -322,6 +322,7 @@ import ReportCardSettings from "./pages/tenant/modules/academics/exams/ReportCar
 import ScholarSheetPage from "./pages/tenant/modules/academics/exams/ScholarSheetPage";
 import OnlineExamBuilder from "./pages/tenant/modules/academics/exams/OnlineExamBuilder";
 import ManageExams from "./pages/tenant/modules/academics/exams/ManageExams";
+import ExamPrintouts from "./pages/tenant/modules/academics/exams/printouts/Printouts";
 import ExamAnalytics from "./pages/tenant/modules/academics/exams/Analytics";
 import ExamDetail from "./pages/tenant/modules/academics/exams/ExamDetail";
 import ExamRankings from "./pages/tenant/modules/academics/exams/ExamRankings";
@@ -798,6 +799,7 @@ const App = () => {
               <Route path="/exams" element={<Exams />} />
               <Route path="/exams/create" element={<CreateExam />} />
               <Route path="/exams/manage" element={<ManageExams />} />
+              <Route path="/exams/printouts" element={<ExamPrintouts />} />
               <Route path="/exams/skills" element={<SkillReports />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
