@@ -9,10 +9,10 @@ import { toast } from "sonner";
 import { Route, ChevronDown, ChevronRight, Loader2, Save, Users, Info } from "lucide-react";
 import api from "@/lib/api";
 
-const INK = "#1e1b4b";
+const INK = "#1f2937";
 const ACC = "#0f766e";
 const border = { border: "0.5px solid #e5e7eb" };
-const PATH_TINT: Record<string, string> = { stem: "#e0f2fe", "social-sciences": "#fef3c7", "arts-sports": "#fce7f3" };
+const PATH_TINT: Record<string, string> = { stem: "#f1f5f9", "social-sciences": "#f1f5f9", "arts-sports": "#f1f5f9" };
 
 type Subj = { name: string; key: string | null; offered: boolean };
 type Track = { key: string; name: string; offered: boolean; students: number; subjects: Subj[] };
@@ -53,8 +53,8 @@ export default function Pathways() {
                 </div>
 
                 {data && (
-                    <div className="rounded-2xl p-4 flex gap-3 text-sm" style={{ background: "#ecfdf5", border: "0.5px solid #a7f3d0" }}>
-                        <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: ACC }} />
+                    <div className="rounded-2xl p-4 flex gap-3 text-sm" style={{ background: "#ffffff", border: "0.5px solid #e5e7eb" }}>
+                        <Info className="w-4 h-4 mt-0.5 shrink-0 text-slate-500" />
                         <div className="text-slate-700">
                             Every learner takes <b>4 core subjects</b> — {data.core.subjects.slice(0, 2).join(", ")} (or Kenyan Sign Language), Mathematics (<b>{data.core.math.stem}</b> in STEM, <b>{data.core.math.other}</b> in the other pathways) and {data.core.subjects[2]} — plus <b>{data.core.electivesPerLearner} electives</b> from their track, and {data.core.support.join(" and ")}.
                         </div>
@@ -80,10 +80,10 @@ export default function Pathways() {
                                             <div key={t.key} className={`rounded-xl p-3 ${t.offered ? "bg-white" : "bg-slate-50 opacity-70"}`} style={border}>
                                                 <div className="flex items-start justify-between gap-2 mb-2">
                                                     <div><div className="font-black text-sm" style={{ color: INK }}>{t.name}</div><div className="text-[11px] text-slate-500">{t.students} learner{t.students === 1 ? "" : "s"}</div></div>
-                                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={t.offered} onChange={() => toggleTrack(t.key)} disabled={tracksMut.isPending} className="w-4 h-4 accent-[#0f766e]" /> Offered</label>
+                                                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer"><input type="checkbox" checked={t.offered} onChange={() => toggleTrack(t.key)} disabled={tracksMut.isPending} className="w-4 h-4 accent-slate-700" /> Offered</label>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5">
-                                                    {t.subjects.map(s => <span key={s.name} title={s.offered ? "Your school offers this subject" : "Not ticked under Subjects we offer"} className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${s.offered ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{s.name}</span>)}
+                                                    {t.subjects.map(s => <span key={s.name} title={s.offered ? "Your school offers this subject" : "Not ticked under Subjects we offer"} className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${s.offered ? "bg-slate-100 text-slate-700" : "bg-white text-slate-400 border border-dashed border-slate-200"}`}>{s.name}</span>)}
                                                 </div>
                                             </div>
                                         ))}
@@ -143,7 +143,7 @@ function AssignLearners({ data }: { data: PathwaysData }) {
                 <label><span className="block text-[11px] font-bold text-slate-500 mb-1">Stream</span>
                     <select className={`${sel} min-w-[120px]`} style={border} value={stream} onChange={e => setStream(e.target.value)}><option value="">All</option>{streams.filter(s => String(s.classId) === String(clsObj?._id)).map(s => <option key={s._id} value={s.name}>{s.name}</option>)}</select></label>
                 {picked.size > 0 && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-xl px-3 py-2 w-full md:w-auto" style={{ background: "#eef0fb" }}>
+                    <div className="flex flex-wrap items-end gap-2 rounded-xl px-3 py-2 w-full md:w-auto" style={{ background: "#f8fafc" }}>
                         <span className="text-xs font-bold self-center" style={{ color: INK }}>{picked.size} selected →</span>
                         <select className={sel} style={border} value={bp} onChange={e => { setBp(e.target.value); setBt(""); }}><option value="">Pathway…</option>{data.pathways.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}</select>
                         <select className={sel} style={border} value={bt} onChange={e => setBt(e.target.value)} disabled={!bp}><option value="">Track…</option>{tracksOf(bp).map(t => <option key={t.key} value={t.key}>{t.name}</option>)}</select>

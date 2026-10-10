@@ -11,7 +11,7 @@ import api from "@/lib/api";
 import SubjectPicker from "@/components/subjects/SubjectPicker";
 import { useSubjectCatalog } from "@/lib/subjectCatalog";
 
-const INK = "#1e1b4b";
+const INK = "#1f2937";
 const border = { border: "0.5px solid #e5e7eb" };
 
 export default function SubjectsOffered() {

@@ -17,21 +17,21 @@ import { reportQr } from "@/lib/reportQr";
 import { prepareTransparentImage } from "@/lib/imageClean";
 import { meritHtml, analysisHtml, transcriptsHtml, filteredStudents, type MeritOpts, type TranscriptOpts } from "./docs";
 
-const INK = "#1e1b4b";
+const INK = "#1f2937";
 const ACC = "#0f766e";
 const border = { border: "0.5px solid #e5e7eb" };
 const sel = "h-10 px-3 rounded-xl text-sm bg-white w-full outline-none";
 type View = "merit" | "analysis" | "transcripts";
 
 const CARDS: { key: string; title: string; desc: string; icon: typeof ListOrdered; view?: View; to?: string; tint: string }[] = [
-    { key: "merit", title: "Merit List", desc: "Student ranking, grade breakdown and class grade summary", icon: ListOrdered, view: "merit", tint: "#e0e7ff" },
-    { key: "analysis", title: "Analysis Report", desc: "Full exam analysis: subjects, streams, gender, top students", icon: LineChart, view: "analysis", tint: "#ccfbf1" },
-    { key: "transcripts", title: "Transcripts", desc: "Each learner's results across past exams, with QR, signature and stamp", icon: ScrollText, view: "transcripts", tint: "#fef3c7" },
-    { key: "reports", title: "Report Forms", desc: "Student or whole-class report cards", icon: FileText, to: "/exams/generate-reports", tint: "#fce7f3" },
-    { key: "score", title: "Score Sheet", desc: "Blank marks sheet for teachers to fill", icon: Sheet, to: "/exams/blank-award-list", tint: "#e0f2fe" },
-    { key: "class", title: "Class List", desc: "Print the list of students in a class", icon: Users, to: "/students/print", tint: "#ede9fe" },
-    { key: "attendance", title: "Attendance Reports", desc: "Class-wise attendance report", icon: CalendarCheck, to: "/attendance/reports/class-wise", tint: "#dcfce7" },
-    { key: "certificates", title: "Certificates", desc: "Leaving and other student certificates", icon: Award, to: "/certificates/generate", tint: "#ffedd5" },
+    { key: "merit", title: "Merit List", desc: "Student ranking, grade breakdown and class grade summary", icon: ListOrdered, view: "merit", tint: "#f1f5f9" },
+    { key: "analysis", title: "Analysis Report", desc: "Full exam analysis: subjects, streams, gender, top students", icon: LineChart, view: "analysis", tint: "#f1f5f9" },
+    { key: "transcripts", title: "Transcripts", desc: "Each learner's results across past exams, with QR, signature and stamp", icon: ScrollText, view: "transcripts", tint: "#f1f5f9" },
+    { key: "reports", title: "Report Forms", desc: "Student or whole-class report cards", icon: FileText, to: "/exams/generate-reports", tint: "#f1f5f9" },
+    { key: "score", title: "Score Sheet", desc: "Blank marks sheet for teachers to fill", icon: Sheet, to: "/exams/blank-award-list", tint: "#f1f5f9" },
+    { key: "class", title: "Class List", desc: "Print the list of students in a class", icon: Users, to: "/students/print", tint: "#f1f5f9" },
+    { key: "attendance", title: "Attendance Reports", desc: "Class-wise attendance report", icon: CalendarCheck, to: "/attendance/reports/class-wise", tint: "#f1f5f9" },
+    { key: "certificates", title: "Certificates", desc: "Leaving and other student certificates", icon: Award, to: "/certificates/generate", tint: "#f1f5f9" },
 ];
 
 export default function Printouts() {
@@ -49,7 +49,7 @@ export default function Printouts() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
                         {CARDS.map(c => (
                             <button key={c.key} onClick={() => (c.view ? setParams({ view: c.view }) : nav(c.to!))} className="text-left bg-white rounded-2xl p-3 sm:p-4 hover:-translate-y-0.5 hover:shadow-md transition-all" style={border}>
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: c.tint }}><c.icon className="w-5 h-5" style={{ color: INK }} /></div>
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: c.tint }}><c.icon className="w-5 h-5 text-slate-600" /></div>
                                 <div className="font-black text-sm" style={{ color: INK }}>{c.title}</div>
                                 <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{c.desc}</div>
                             </button>
@@ -151,7 +151,7 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     };
 
     const Check = ({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) => (
-        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer"><input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)} className="accent-[#0f766e] w-4 h-4" />{label}</label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer"><input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)} className="accent-slate-700 w-4 h-4" />{label}</label>
     );
     const head = { merit: "Merit List", analysis: "Analysis Report", transcripts: "Transcripts" }[view];
     const meritCount = view === "merit" && report.data ? filteredStudents(report.data, { ...merit, stream }).length : 0;

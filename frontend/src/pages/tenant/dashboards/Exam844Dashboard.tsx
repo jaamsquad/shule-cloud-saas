@@ -10,8 +10,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cart
 import { Users, GraduationCap, Briefcase, Layers, ArrowUpRight, ArrowDownRight, Minus, BarChart3, Printer, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 
-const INK = "#1e1b4b";
-const ACC = "#b45309";                    // 8-4-4 view accent (amber)
+const INK = "#1f2937";
+const ACC = "#1f2937";
 const S1 = "#2a78d6", S2 = "#eb6834";      // validated categorical slots 1–2
 const GRID = "#e5e7eb", MUTED = "#6b7280";
 const border = { border: "0.5px solid #e5e7eb" };
@@ -70,7 +70,7 @@ export default function Exam844Dashboard() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {tiles.map(t => (
                     <button key={t.label} onClick={() => nav(t.to)} className={`${card} text-left hover:shadow-sm transition-shadow`} style={border}>
-                        <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-500">{t.label}</span><t.icon className="w-4 h-4" style={{ color: ACC }} /></div>
+                        <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-500">{t.label}</span><t.icon className="w-4 h-4 text-slate-400" /></div>
                         <div className="text-3xl font-black mt-1 tabular-nums" style={{ color: INK }}>{t.value.toLocaleString()}</div>
                     </button>
                 ))}
@@ -80,12 +80,12 @@ export default function Exam844Dashboard() {
             <div className={card} style={border}>
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-black" style={{ color: INK }}>Class performance · latest published exam</h3>
-                    <button onClick={() => nav("/exams/manage")} className="text-xs font-bold" style={{ color: ACC }}>Manage exams →</button>
+                    <button onClick={() => nav("/exams/manage")} className="text-xs font-bold text-slate-600">Manage exams →</button>
                 </div>
                 {!withExam.length ? <p className="text-sm text-slate-500">No published results yet. Publish an exam's results under Exams → Manage Exams and they'll show here.</p> : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                         {withExam.map(l => (
-                            <div key={l.level} className="rounded-xl p-4" style={{ ...border, background: "#fffbeb" }}>
+                            <div key={l.level} className="rounded-xl p-4" style={{ ...border, background: "#ffffff" }}>
                                 <div className="flex items-start justify-between gap-2">
                                     <div><div className="font-black" style={{ color: INK }}>{l.level}</div><div className="text-[11px] text-slate-500">{l.exam?.title}</div></div>
                                     <span className="text-xl font-black px-2 rounded-lg bg-white" style={{ color: INK, ...border }}>{l.grade}</span>

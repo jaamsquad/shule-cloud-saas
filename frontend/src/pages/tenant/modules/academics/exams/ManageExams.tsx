@@ -13,7 +13,7 @@ import {
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
 
-const INK = "#1e1b4b";          // deep indigo headings
+const INK = "#1f2937";          // deep indigo headings
 const ACCENT = "#534AB7";       // ShuleCloud brand
 const border = { border: "0.5px solid #e5e7eb" };
 const fmtDate = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -83,7 +83,7 @@ export default function ManageExams() {
                 {/* header */}
                 <div className="flex flex-wrap items-end justify-between gap-3">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white" style={{ background: ACCENT }}><ClipboardCheck className="w-5 h-5" /></div>
+                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white" style={{ background: INK }}><ClipboardCheck className="w-5 h-5" /></div>
                         <div>
                             <h1 className="text-xl font-black" style={{ color: INK }}>Manage Exams</h1>
                             <p className="text-xs text-slate-500">Publish results per class. Unpublished results don't appear on merit lists, analytics, report cards or parent portals.</p>
@@ -98,7 +98,7 @@ export default function ManageExams() {
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                         </label>
-                        <button onClick={() => nav("/exams/printouts")} className="h-10 px-3 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-white" style={{ ...border, color: ACCENT }}><Printer className="w-4 h-4" /> Printouts</button>
+                        <button onClick={() => nav("/exams/printouts")} className="h-10 px-3 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-white" style={{ ...border, color: INK }}><Printer className="w-4 h-4" /> Printouts</button>
                     </div>
                 </div>
 
@@ -110,8 +110,8 @@ export default function ManageExams() {
                     </div>
                 ) : terms.map(t => (
                     <section key={t.term} className="bg-white rounded-2xl overflow-hidden" style={border}>
-                        <div className="px-4 sm:px-5 py-3 flex items-center gap-2" style={{ background: "#eef0fb" }}>
-                            <CircleDot className="w-4 h-4" style={{ color: ACCENT }} />
+                        <div className="px-4 sm:px-5 py-3 flex items-center gap-2" style={{ background: "#f8fafc" }}>
+                            <CircleDot className="w-4 h-4 text-slate-500" />
                             <h2 className="text-sm font-black" style={{ color: INK }}>{t.term} · {year}</h2>
                             <span className="text-[11px] text-slate-500">{t.exams.length} exam{t.exams.length === 1 ? "" : "s"}</span>
                         </div>

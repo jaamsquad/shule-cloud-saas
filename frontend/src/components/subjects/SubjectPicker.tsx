@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type { Catalog } from "@/lib/subjectCatalog";
 
-const ACC = "#0f766e";
+const ACC = "#475569";
 
 export default function SubjectPicker({ catalog, value, onChange, only, columns = 4 }: {
     catalog: Catalog | undefined;
@@ -45,7 +45,7 @@ export default function SubjectPicker({ catalog, value, onChange, only, columns 
                             <div className="space-y-1">
                                 {items.map(s => (
                                     <label key={s.key} className="grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 text-sm text-slate-700 cursor-pointer py-0.5">
-                                        <input type="checkbox" checked={value.has(s.key)} onChange={() => toggle(s.key)} className="mt-0.5 w-4 h-4 m-0 accent-[#0f766e]" />
+                                        <input type="checkbox" checked={value.has(s.key)} onChange={() => toggle(s.key)} className="mt-0.5 w-4 h-4 m-0 accent-slate-700" />
                                         <span className="leading-tight">{s.name}{s.code ? <span className="text-[10px] text-slate-400"> · {s.code}</span> : null}</span>
                                     </label>
                                 ))}

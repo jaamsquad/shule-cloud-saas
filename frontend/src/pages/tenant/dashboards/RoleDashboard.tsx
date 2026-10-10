@@ -21,10 +21,10 @@ import { CbcTermProvider } from "@/pages/tenant/modules/cbc/cbcTerm";
  */
 type ViewKey = "admin" | "teacher" | "cbc" | "844";
 const VIEWS: Record<ViewKey, { label: string; color: string; soft: string; icon: typeof ShieldCheck }> = {
-    admin: { label: "Admin", color: "#534AB7", soft: "#eef0fb", icon: ShieldCheck },
-    teacher: { label: "Teacher", color: "#0f766e", soft: "#e6f4f1", icon: Presentation },
-    cbc: { label: "CBC", color: "#7C3AED", soft: "#f3effe", icon: Sprout },
-    "844": { label: "8-4-4", color: "#b45309", soft: "#fef6e7", icon: BookMarked },
+    admin: { label: "Admin", color: "#1f2937", soft: "#f1f5f9", icon: ShieldCheck },
+    teacher: { label: "Teacher", color: "#1f2937", soft: "#f1f5f9", icon: Presentation },
+    cbc: { label: "CBC", color: "#1f2937", soft: "#f1f5f9", icon: Sprout },
+    "844": { label: "8-4-4", color: "#1f2937", soft: "#f1f5f9", icon: BookMarked },
 };
 const STORE = "dashboard_view";
 
@@ -82,7 +82,7 @@ export default function RoleDashboard() {
                         return (
                             <button key={v} onClick={() => pick(v)} aria-pressed={on} title={`${m.label} dashboard`}
                                 className="h-10 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors"
-                                style={on ? { background: m.color, color: "#fff" } : { color: m.color }}>
+                                style={on ? { background: m.color, color: "#fff" } : { color: "#64748b" }}>
                                 <I className="w-4 h-4" /><span className={on ? "" : "hidden sm:inline"}>{m.label}</span>
                             </button>
                         );
@@ -103,8 +103,8 @@ function TeacherSubjectsCard() {
     return (
         <div className="bg-white rounded-2xl p-4 sm:p-5" style={{ border: "0.5px solid #e5e7eb" }}>
             <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-black text-[#1e1b4b]">My subject classes · latest published results</h3>
-                <button onClick={() => nav("/exams/marks")} className="text-xs font-bold text-[#0f766e]">Enter marks →</button>
+                <h3 className="text-sm font-black text-[#1f2937]">My subject classes · latest published results</h3>
+                <button onClick={() => nav("/exams/marks")} className="text-xs font-bold text-slate-600">Enter marks →</button>
             </div>
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : !rows.length ? (
                 <p className="text-sm text-slate-500">No subject classes assigned to you yet (Subjects → Teacher ↔ Subjects).</p>
@@ -114,15 +114,15 @@ function TeacherSubjectsCard() {
                         const ch = r.result?.change;
                         const Icon = ch === null || ch === undefined || ch === 0 ? Minus : ch > 0 ? ArrowUpRight : ArrowDownRight;
                         return (
-                            <div key={i} className="rounded-xl p-3" style={{ border: "0.5px solid #e5e7eb", background: "#f7fbfa" }}>
+                            <div key={i} className="rounded-xl p-3" style={{ border: "0.5px solid #e5e7eb", background: "#ffffff" }}>
                                 <div className="flex items-start justify-between gap-2">
-                                    <div><div className="font-black text-[#1e1b4b]">{r.subject}</div><div className="text-[11px] text-slate-500">{r.className}{r.stream ? ` ${r.stream}` : ""}</div></div>
-                                    {r.result && <span className="text-lg font-black px-2 rounded-lg bg-white text-[#1e1b4b]" style={{ border: "0.5px solid #e5e7eb" }}>{r.result.grade}</span>}
+                                    <div><div className="font-black text-[#1f2937]">{r.subject}</div><div className="text-[11px] text-slate-500">{r.className}{r.stream ? ` ${r.stream}` : ""}</div></div>
+                                    {r.result && <span className="text-lg font-black px-2 rounded-lg bg-white text-[#1f2937]" style={{ border: "0.5px solid #e5e7eb" }}>{r.result.grade}</span>}
                                 </div>
                                 {r.result ? (
                                     <div className="mt-2 text-xs text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                        <span><b className="tabular-nums text-[#1e1b4b]">{r.result.meanPoints}</b> pts</span>
-                                        <span><b className="tabular-nums text-[#1e1b4b]">{r.result.meanMarks}%</b></span>
+                                        <span><b className="tabular-nums text-[#1f2937]">{r.result.meanPoints}</b> pts</span>
+                                        <span><b className="tabular-nums text-[#1f2937]">{r.result.meanMarks}%</b></span>
                                         <span>{r.result.entries} students</span>
                                         <span className={`inline-flex items-center gap-0.5 font-bold ${!ch ? "text-slate-500" : ch > 0 ? "text-emerald-700" : "text-rose-700"}`}><Icon className="w-3.5 h-3.5" />{ch === null || ch === undefined ? "first" : `${ch > 0 ? "+" : ""}${ch}`}</span>
                                         <span className="w-full text-[10px] text-slate-400">{r.result.exam}</span>
