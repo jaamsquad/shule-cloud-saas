@@ -6,6 +6,7 @@ import { resolveScope } from '../lib/dataScope';
 import { loadTerms, pickCurrent, termOption, TermInfo } from '../modules/cbc/cbcTerm';
 import { resultUrl, resultSnapshot, resultText } from '../lib/resultLink';
 import { yearlyStatus, yearlyFor, yearlyText } from '../lib/yearlyReport';
+import { onlyPublished } from '../lib/examPublish';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -66,7 +67,8 @@ const escHtml = (v: any) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&am
 
 // Build the per-student results snapshot for a Results message.
 async function resultsAttachment(database: Db, studentId: string, examId: string) {
-    const marks = await database.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []);
+    // Only published results are sent (Exams → Manage Exams).
+    const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []));
     if (!marks.length) return null;
     const exam = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
     const student = await database.collection('students').findOne({ _id: new ObjectId(studentId) }).catch(() => null) as any;
@@ -224,7 +226,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                         const text = `${greeting}\n\n${note}${resultText(snap)}\n${link ? `\nView the full result online:\n${link}\n` : ''}\nRegards,\n${schoolName || 'The School'}`;
                         await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                     } else {
-                        const marks = await database.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
+                        const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
                         const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading };
                         const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.reportCardHtml(data));
                         const intro = `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937">${escHtml(greeting)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;white-space:pre-wrap">${escHtml(body)}</p>` : ''}`;

@@ -6,6 +6,7 @@ import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
 import { marksWindow, examInWindow } from '../lib/examWindow';
 import { enforceCrud } from '../lib/permissions';
+import { publishedView, onlyPublished } from '../lib/examPublish';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -92,8 +93,10 @@ const meanGradeFromPoints = (scale: any[], meanPoints: number) => {
 // meanPct, totalPoints, meanPoints, meanGrade }.
 // Exported so the Department Analysis (departments.routes) can reuse the exact same
 // results-building + grading logic instead of duplicating it.
-export async function buildExamResults(database: Db, examId: string) {
-    const marks = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
+export async function buildExamResults(database: Db, examId: string, opts: { includeUnpublished?: boolean } = {}) {
+    // Only published results (Exams → Manage Exams) unless the caller is a moderation view.
+    const raw = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
+    const marks = opts.includeUnpublished ? raw : await onlyPublished(database, raw);
     // Grade PER CLASS using the class's assigned template (grading cache avoids
     // re-querying). The overall `scale` (for grade-list axes) is the global one.
     const gradingFor = makeGradingCache(database);
@@ -219,9 +222,9 @@ router.get('/analytics/exams', async (req: Request, res: Response) => {
             const filtered = exams.filter((e: any) => satSet.has(String(e._id)));
             if (filtered.length) exams = filtered;   // fall back to all if none matched (legacy ids)
         }
-        if (String(req.query.onlyPublished || '') === '1') {
-            exams = exams.filter((e: any) => /publish/i.test(String(e.publishStatus || '')) || e.publishStatus === undefined);
-        }
+        // Exams with no published results yet are not offered (Exams → Manage Exams → Publish).
+        const pubView = await publishedView(database);
+        exams = exams.filter((e: any) => pubView.examListed(String(e._id)));
         const data = exams.map((e: any) => ({
             id: String(e._id), examName: e.examName, examType: e.type || e.examType,
             term: e.term, academicYear: e.academicYear ?? e.year,
@@ -696,7 +699,7 @@ router.get('/analytics/student/:studentId/over-time', async (req: Request, res: 
         const exams = await examsChrono(database);
         const series: any[] = [];
         for (const e of exams) {
-            const marks = await database.collection('exam_marks').find({ examId: String(e._id), studentId: sid }).toArray().catch(() => []);
+            const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId: String(e._id), studentId: sid }).toArray().catch(() => []));
             if (!marks.length) continue;
             const mean = marks.reduce((a: number, m: any) => { const max = num(m.totalMarks) || 100; return a + (max > 0 ? (num(m.marksObtained) / max) * 100 : 0); }, 0) / marks.length;
             series.push({ exam: formatExamName(e), mean: round(mean, 1) });

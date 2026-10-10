@@ -615,7 +615,7 @@ router.get('/departments/:id/analysis', requireDeptAccess('param', 'id'), async 
         const inDept = (name: string) => subjectSet.size === 0 || subjectSet.has(NORM(name));
 
         // Reuse the canonical results builder, then keep only department subjects.
-        const { rows } = await buildExamResults(d, examId);
+        const { rows } = await buildExamResults(d, examId, { includeUnpublished: true });
         const scoped = rows
             .map((r: any) => ({ ...r, subjects: (r.subjects || []).filter((s: any) => inDept(s.name)) }))
             .filter((r: any) => r.subjects.length > 0);
@@ -693,7 +693,7 @@ router.get('/departments/:id/analysis', requireDeptAccess('param', 'id'), async 
         // ── Comparison (term or year — any other exam) ──
         let comparison: any = null;
         if (compareExamId && compareExamId !== examId) {
-            const { rows: prevRows } = await buildExamResults(d, compareExamId);
+            const { rows: prevRows } = await buildExamResults(d, compareExamId, { includeUnpublished: true });
             const prevScoped = prevRows
                 .map((r: any) => ({ ...r, subjects: (r.subjects || []).filter((s: any) => inDept(s.name)) }))
                 .filter((r: any) => r.subjects.length > 0)
