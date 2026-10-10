@@ -3,6 +3,7 @@ import StaffLogin from "./StaffLogin";
 import StaffLayout from "./StaffLayout";
 import StaffDashboard from "./pages/StaffDashboard";
 import MyClasses from "./pages/MyClasses";
+import ClassStudents from "./pages/ClassStudents";
 import StaffTimetable from "./pages/StaffTimetable";
 import StaffMarksEntry from "./pages/StaffMarksEntry";
 import StaffCbc from "./pages/StaffCbc";
@@ -28,6 +29,7 @@ export default function StaffApp() {
                 <Route path="/" element={<StaffDashboard />} />
                 <Route path="/my-attendance" element={<StaffMyAttendance />} />
                 <Route path="/classes" element={<MyClasses />} />
+                <Route path="/classes/:className" element={<ClassStudents />} />
                 <Route path="/timetable" element={<StaffTimetable />} />
                 <Route path="/marks" element={<StaffMarksEntry />} />
                 <Route path="/cbc" element={<StaffCbc />} />

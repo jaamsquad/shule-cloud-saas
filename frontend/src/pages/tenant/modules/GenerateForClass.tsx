@@ -29,8 +29,9 @@ function printTimetable(opts: {
     subjects: any[];
     staff: any[];
     rooms: any[];
+    classes?: any[];
 }) {
-    const { className, timetableName, schoolName = "School Name", schoolLogo = "", academicYear = "2024/2025", semester = "Term 1", days, periods, getSlot, subjects, staff, rooms } = opts;
+    const { className, timetableName, schoolName = "School Name", schoolLogo = "", academicYear = "", semester = "", days, periods, getSlot, subjects, staff, rooms, classes = [] } = opts;
 
     const logoHtml = schoolLogo
         ? `<img src="${schoolLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />`
@@ -452,11 +453,11 @@ function printTimetable(opts: {
   <div class="header-center">
     <span class="school-name">${schoolName}</span>
     <span class="tt-title">${className} — Weekly Timetable</span>
-    <span class="tt-sub">${timetableName} &nbsp;·&nbsp; ${semester} &nbsp;·&nbsp; ${academicYear}</span>
+    <span class="tt-sub">${[timetableName, semester, academicYear].filter(Boolean).join(" &nbsp;·&nbsp; ")}</span>
   </div>
   <div class="header-meta">
-    <span class="meta-pill">${semester}</span>
-    <span class="meta-pill" style="background:#F0FDF4;color:#166534;">${academicYear}</span>
+    ${semester ? `<span class="meta-pill">${semester}</span>` : ""}
+    ${academicYear ? `<span class="meta-pill" style="background:#F0FDF4;color:#166534;">${academicYear}</span>` : ""}
     <span class="meta-date">Printed: ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
   </div>
 </div>
@@ -772,14 +773,15 @@ export default function GenerateForClass() {
             timetableName: tt?.name || "Timetable",
             schoolName: profileData?.name || "School Name",
             schoolLogo: profileData?.logo || "",
-            academicYear: tt?.academicYear || "2024/2025",
-            semester: tt?.semester || "Term 1",
+            academicYear: tt?.academicYear || tt?.year || "",
+            semester: tt?.semester || tt?.term || "",
             days: activeWeekdays,
             periods: sortedPeriods,
             getSlot: getSlotFor,
             subjects: subjects || [],
             staff: staff || [],
             rooms: rooms || [],
+            classes: classes || [],
         });
     };
 
