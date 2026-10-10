@@ -121,7 +121,8 @@ List<AppDef> visibleApps(Session s, Catalog cat) {
   final appGrants = granted.where((c) => c.startsWith('app.')).map((c) => c.substring(4)).toSet();
   final byApp = cat.adminApps.where((a) => appGrants.contains(a.key)).expand((a) => a.modules).toSet();
   bool planLocked(String? m) => m != null && s.planModules != null && !s.planModules!.contains(m);
-  bool canModule(String? m) => m == null ? all : (all || m == 'dashboard' || s.modules.contains(m) || byApp.contains(m));
+  bool switchedOff(String? m) => m != null && s.disabledModules.contains(m);
+  bool canModule(String? m) => switchedOff(m) ? false : m == null ? all : (all || m == 'dashboard' || s.modules.contains(m) || byApp.contains(m));
 
   List<PageDef> pagesOf(SectionDef sec) {
     if (all) return sec.pages;
@@ -136,6 +137,7 @@ List<AppDef> visibleApps(Session s, Catalog cat) {
 
   final out = <AppDef>[];
   for (final a in cat.adminApps) {
+    if (s.disabledApps.contains(a.key)) continue;   // switched off for this school by ShuleCloud
     final secs = a.sections.where((sec) => canModule(sec.module) && !planLocked(sec.module)).map((sec) => SectionDef(sec.label, sec.module, pagesOf(sec))).where((sec) => sec.pages.isNotEmpty).toList();
     final pathOk = a.path != null && a.modules.any(canModule);
     final lockedOnly = secs.isEmpty && a.sections.any((sec) => planLocked(sec.module) && (all || canModule(sec.module)));

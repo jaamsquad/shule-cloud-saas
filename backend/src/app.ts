@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
+import { appGate } from './middleware/appGate';
 import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
@@ -331,6 +332,7 @@ app.use('/api/v1', organizationRoutes);
 
 // Global Tenancy Middleware
 app.use(tenancyMiddleware);
+app.use('/api/v1', appGate);   // apps the owner switched off for a school
 
 // API Routes
 app.use('/api/v1', academicsRoutes);

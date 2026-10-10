@@ -11,8 +11,9 @@ void main() {
     AppDef(key: 'fees', name: 'Fees', description: '', category: 'Financial', color: Color(0xFF5C67F2), icon: Icons.school, modules: ['fees'],
         sections: [SectionDef('Fees', 'fees', [PageDef('Invoices', '/fees/invoices', perm: 'fees.invoices')])]),
   ]);
-  Session s(List<String> mods, List<String> perms, {String role = 'teacher', UserKind kind = UserKind.admin}) =>
-      Session(kind: kind, token: 't', subdomain: 'x', schoolCode: 'A1M', name: 'N', role: role, user: const {}, modules: mods, permissions: perms);
+  Session s(List<String> mods, List<String> perms, {String role = 'teacher', UserKind kind = UserKind.admin, List<String> off = const []}) =>
+      Session(kind: kind, token: 't', subdomain: 'x', schoolCode: 'A1M', name: 'N', role: role, user: const {}, modules: mods, permissions: perms,
+          disabledApps: off, disabledModules: off.isEmpty ? const [] : const ['fees']);
 
   test('admin sees all apps and pages', () {
     final apps = visibleApps(s(['*'], ['*'], role: 'school_admin'), cat);
@@ -27,6 +28,10 @@ void main() {
   test('app.<key> grants the whole app', () {
     final apps = visibleApps(s(['dashboard'], ['app.fees']), cat);
     expect(apps.map((a) => a.key), ['fees']);
+  });
+  test('an app switched off for the school is hidden, even for admins', () {
+    final apps = visibleApps(s(['*'], ['*'], role: 'school_admin', off: ['fees']), cat);
+    expect(apps.map((a) => a.key), ['exams']);
   });
   test('learners get the student portal apps', () {
     expect(visibleApps(s(const [], const [], kind: UserKind.student), cat).first.portal, Portal.student);

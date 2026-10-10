@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
+import SchoolAppsCard from "@/components/owner/SchoolAppsCard";
 
 const PRIMARY = "#534AB7";
 const ksh = (n: any) => `KES ${Number(n || 0).toLocaleString()}`;
@@ -230,10 +231,13 @@ export default function ManageSchool() {
                     </button>
                 </div>
 
+                {/* Apps switched off for this school */}
+                <SchoolAppsCard schoolId={String(id)} disabledApps={school.disabledApps || []} color={PRIMARY} />
+
                 {/* Module access toggles */}
                 <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
                     <div className="flex items-center justify-between mb-3">
-                        <div><h3 className="text-sm font-black text-slate-800">Module Access</h3><p className="text-[11px] text-slate-400">Restrict which modules this school can use</p></div>
+                        <div><h3 className="text-sm font-black text-slate-800">Plan modules</h3><p className="text-[11px] text-slate-400">Modules in this school’s plan — the rest show locked with an upgrade message</p></div>
                         <button onClick={() => saveModules.mutate()} disabled={saveModules.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveModules.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
                     </div>
                     <div className="flex flex-wrap gap-2">

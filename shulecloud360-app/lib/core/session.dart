@@ -22,27 +22,33 @@ class Session {
   final List<String> permissions;
   final Map<String, List<String>> crud;
   final List<String>? planModules;
+  final List<String> disabledApps;     // switched off for this school by ShuleCloud
+  final List<String> disabledModules;
 
   const Session({
     required this.kind, required this.token, this.staffToken, required this.subdomain, required this.schoolCode,
     required this.name, required this.role, required this.user, this.staffInfo,
     this.modules = const [], this.permissions = const [], this.crud = const {}, this.planModules,
+    this.disabledApps = const [], this.disabledModules = const [],
   });
 
   bool get isAdmin => role == 'school_admin' || role == 'super_admin' || modules.contains('*') || permissions.contains('*');
   bool get canTeach => staffToken != null && staffToken!.isNotEmpty;
 
-  Session copyWith({List<String>? modules, List<String>? permissions, Map<String, List<String>>? crud, List<String>? planModules, bool clearPlan = false, String? role}) => Session(
+  Session copyWith({List<String>? modules, List<String>? permissions, Map<String, List<String>>? crud, List<String>? planModules, bool clearPlan = false, String? role,
+          List<String>? disabledApps, List<String>? disabledModules}) => Session(
         kind: kind, token: token, staffToken: staffToken, subdomain: subdomain, schoolCode: schoolCode, name: name,
         role: role ?? this.role, user: user, staffInfo: staffInfo,
         modules: modules ?? this.modules, permissions: permissions ?? this.permissions, crud: crud ?? this.crud,
         planModules: clearPlan ? null : (planModules ?? this.planModules),
+        disabledApps: disabledApps ?? this.disabledApps, disabledModules: disabledModules ?? this.disabledModules,
       );
 
   Map<String, dynamic> toJson() => {
         'kind': kind.name, 'token': token, 'staffToken': staffToken, 'subdomain': subdomain, 'schoolCode': schoolCode,
         'name': name, 'role': role, 'user': user, 'staffInfo': staffInfo,
         'modules': modules, 'permissions': permissions, 'crud': crud, 'planModules': planModules,
+        'disabledApps': disabledApps, 'disabledModules': disabledModules,
       };
 
   static Session fromJson(Map<String, dynamic> j) => Session(
@@ -53,6 +59,7 @@ class Session {
         modules: List<String>.from(j['modules'] ?? const []), permissions: List<String>.from(j['permissions'] ?? const []),
         crud: (j['crud'] as Map? ?? {}).map((k, v) => MapEntry(k.toString(), List<String>.from(v ?? const []))),
         planModules: j['planModules'] == null ? null : List<String>.from(j['planModules']),
+        disabledApps: List<String>.from(j['disabledApps'] ?? const []), disabledModules: List<String>.from(j['disabledModules'] ?? const []),
       );
 
   /// The token that a request to [path] should carry.
@@ -204,6 +211,8 @@ class SessionController extends StateNotifier<AsyncValue<Session?>> {
         crud: (d['crud'] as Map? ?? {}).map((k, v) => MapEntry(k.toString(), List<String>.from(v ?? const []))),
         planModules: d['planModules'] == null ? null : List<String>.from(d['planModules']),
         clearPlan: d['planModules'] == null,
+        disabledApps: List<String>.from(d['disabledApps'] ?? const []),
+        disabledModules: List<String>.from(d['disabledModules'] ?? const []),
       ));
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) await logout();

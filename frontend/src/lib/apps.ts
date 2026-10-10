@@ -9,6 +9,7 @@ import {
     Bus, Trophy, Banknote, Scale, Wallet, ShoppingCart, Briefcase, BarChart3, Settings, LayoutDashboard, Boxes,
 } from "lucide-react";
 import { navItems, type NavItem } from "@/components/navItems";
+import { CAPABILITIES } from "@/lib/permissions";
 
 export type AppCategory = "Academics" | "Front Office" | "Student Life" | "Financial" | "Back Office";
 export const APP_CATEGORIES: { key: AppCategory; hint: string }[] = [
@@ -102,19 +103,16 @@ export const starredApps = () => read("sc_starred_apps");
 export const touchApp = (key: string) => { const r = recentApps(); if (r[0] === key) return; write("sc_recent_apps", [key, ...r.filter(k => k !== key)].slice(0, 6)); };
 export const toggleStar = (key: string) => { const s = starredApps(); write("sc_starred_apps", s.includes(key) ? s.filter(k => k !== key) : [...s, key]); };
 
-// Which app a capability permission code belongs to (Roles & Permissions editor).
-const CODE_PREFIX_APP: [RegExp, string][] = [
-    [/^finance\./, "fees"], [/^accounting\.payroll$/, "payroll"], [/^accounting\./, "accounting"],
-    [/^(classes|subjects|timetable|academics|content)\./, "academics"], [/^(exams|results)\./, "exams"],
-    [/^attendance\./, "attendance"], [/^(students|admissions)\./, "students"], [/^(staff|hr|departments)\./, "hr"],
-    [/^library\./, "library"], [/^transport\./, "transport"], [/^(boarding|health|cafeteria|canteen)\./, "boarding"],
-    [/^(sports|trips)\./, "activities"], [/^(frontdesk|secretary)\./, "frontdesk"], [/^communications\./, "communication"],
-    [/^reports\./, "reports"], [/^(audit|settings|roles)\./, "administration"],
-];
+// Which app a permission code belongs to: "app.<key>", a capability (lib/permissions
+// CAPABILITIES) or a page permission "<moduleKey>.<page>".
 export const appForCode = (code: string): string | null => {
     if (code.startsWith("app.")) return code.slice(4);
-    for (const [rx, key] of CODE_PREFIX_APP) if (rx.test(code)) return key;
+    const cap = CAPABILITIES.find(c => c.code === code);
+    if (cap) return cap.app;
     const prefix = code.split(".")[0];
     const app = APPS.find(a => appModuleKeys(a).includes(prefix));
     return app ? app.key : null;
 };
+
+/** Apps every school keeps; the platform owner cannot switch these off. */
+export const CORE_APPS = ["overview", "administration"];

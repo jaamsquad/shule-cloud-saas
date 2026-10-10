@@ -2,7 +2,8 @@ import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Loader2 } from "lucide-react";
-import { navItems } from "@/components/AppSidebar";
+import { navItems } from "@/components/navItems";
+import { useAppAccess } from "@/lib/useAppAccess";
 
 // Resolve the current path to its sidebar group + child page-perm (longest path match).
 function resolvePagePerm(pathname: string): { moduleKey?: string; pagePerm?: string; groupChildren: { pagePerm?: string }[] } {
@@ -134,8 +135,18 @@ interface Props {
  * Admin roles bypass all checks.
  */
 export default function PermissionGuard({ children, moduleKey }: Props) {
-    const { modules, permissions, isAdmin, loaded } = usePermissions();
+    const { modules, permissions, isAdmin, loaded, disabledModules } = usePermissions();
+    const access = useAppAccess();
     const location = useLocation();
+
+    // A page reachable from any section this person can see (e.g. the learner list
+    // linked from the Secretary section) is allowed, whatever module it lives in.
+    const reachable = access.pageReachable(location.pathname);
+    const ownKey = moduleKey || resolveModuleKey(location.pathname);
+    // An app the platform owner switched off for this school: closed for everyone.
+    if (ownKey && (disabledModules || []).includes(ownKey) && !reachable) {
+        return <Navigate to="/access-denied" replace state={{ from: location.pathname, module: ownKey, disabled: true }} />;
+    }
 
     // Admins always have access — no check needed
     if (isAdmin) return <>{children}</>;
@@ -149,7 +160,7 @@ export default function PermissionGuard({ children, moduleKey }: Props) {
     // If permissions haven't loaded from DB yet, use the JWT-derived defaults
     // (already populated synchronously). Only block if clearly not allowed.
     const isAllowed =
-        modules.includes("*") || modules.includes(resolvedKey);
+        modules.includes("*") || modules.includes(resolvedKey) || access.canModule(resolvedKey) || reachable;
 
     if (!isAllowed && loaded) {
         // Permissions fully loaded and this module is NOT in the list → deny
@@ -163,7 +174,7 @@ export default function PermissionGuard({ children, moduleKey }: Props) {
         const granted = permissions || [];
         if (!granted.includes("*")) {
             const { pagePerm, groupChildren } = resolvePagePerm(location.pathname);
-            if (pagePerm) {
+            if (pagePerm && !reachable) {
                 const groupPagePerms = (groupChildren || []).map((c) => c.pagePerm).filter(Boolean) as string[];
                 const fineGrained = groupPagePerms.some((p) => granted.includes(p));
                 if (fineGrained && !granted.includes(pagePerm)) {
