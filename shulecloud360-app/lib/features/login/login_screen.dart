@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
+import 'motion.dart';
+import 'school_lookup.dart';
 
-/// One sign-in for everyone: admins, finance, teachers, learners and parents.
+/// One sign-in for everyone, one step at a time:
+///   1. School ID → the school is fetched and shown to pick
+///   2. email, username or phone
+///   3. password (then the emailed code if the school asks for one)
 /// The server decides who you are; the app then shows only your apps.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -13,121 +18,469 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
+enum _Step { school, user, password, otp }
+
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _school = TextEditingController();
+  final _schoolId = TextEditingController();
   final _user = TextEditingController();
   final _pass = TextEditingController();
-  bool _obscure = true, _busy = false;
+  final _userFocus = FocusNode(), _passFocus = FocusNode();
+  _Step _step = _Step.school;
+  bool _forward = true, _busy = false, _obscure = true, _picked = true;
   String? _error;
+  int _shake = 0;
+  SchoolInfo? _found;
+  List<SchoolInfo> _recent = const [];
   OtpChallenge? _otp;
 
   @override
   void initState() {
     super.initState();
-    SharedPreferences.getInstance().then((p) { final v = p.getString('sc360_school'); if (v != null && mounted) _school.text = v; });
+    RecentSchools.load().then((r) { if (mounted) setState(() => _recent = r); });
   }
 
   @override
-  void dispose() { _school.dispose(); _user.dispose(); _pass.dispose(); super.dispose(); }
+  void dispose() { _schoolId.dispose(); _user.dispose(); _pass.dispose(); _userFocus.dispose(); _passFocus.dispose(); super.dispose(); }
 
-  String? get _hint {
-    final u = _user.text.trim();
-    if (u.isEmpty) return null;
-    if (u.contains('@')) return 'Signing in as school admin or staff';
-    if (RegExp(r'^\+?[\d\s]{7,}$').hasMatch(u)) return 'Signing in as a parent (phone number)';
-    return 'Signing in as a learner or staff (portal username)';
+  void _go(_Step s) {
+    FocusScope.of(context).unfocus();
+    setState(() { _forward = s.index > _step.index; _step = s; _error = null; });
+    // put the cursor in the new step's field once it is on screen
+    final node = s == _Step.user ? _userFocus : s == _Step.password ? _passFocus : null;
+    if (node != null) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _step == s) node.requestFocus(); });
   }
 
-  Future<void> _submit() async {
-    FocusScope.of(context).unfocus();
-    if (_school.text.trim().isEmpty || _user.text.trim().isEmpty || _pass.text.isEmpty) {
-      setState(() => _error = 'Enter your School ID, username and password.');
-      return;
+  void _fail(String msg) => setState(() { _error = msg; _shake++; });
+
+  void _back() {
+    switch (_step) {
+      case _Step.school: context.go('/welcome');
+      case _Step.user: _go(_Step.school);
+      case _Step.password: _go(_Step.user);
+      case _Step.otp: _pass.clear(); _go(_Step.password);
     }
+  }
+
+  // ── step actions ───────────────────────────────────────────────────────────
+  Future<void> _findSchool() async {
+    FocusScope.of(context).unfocus();
+    if (_schoolId.text.trim().isEmpty) return _fail('Enter your School ID.');
     setState(() { _busy = true; _error = null; });
     try {
-      (await SharedPreferences.getInstance()).setString('sc360_school', _school.text.trim());
-      final otp = await ref.read(sessionProvider.notifier).login(schoolCode: _school.text, username: _user.text, password: _pass.text);
-      if (otp != null && mounted) setState(() => _otp = otp);
+      final s = await findSchool(_schoolId.text);
+      if (mounted) setState(() { _found = s; _picked = true; });
     } catch (e) {
-      if (mounted) setState(() => _error = errorText(e));
+      if (mounted) _fail(errorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  void _pickRecent(SchoolInfo s) => setState(() { _found = s; _picked = true; _schoolId.text = s.code; _error = null; });
+
+  Future<void> _confirmSchool() async {
+    if (_found == null || !_picked) return;
+    await RecentSchools.remember(_found!);
+    _go(_Step.user);
+  }
+
+  void _confirmUser() {
+    if (_user.text.trim().isEmpty) return _fail('Enter your email, username or phone number.');
+    _go(_Step.password);
+  }
+
+  Future<void> _signIn() async {
+    FocusScope.of(context).unfocus();
+    if (_pass.text.isEmpty) return _fail('Enter your password.');
+    setState(() { _busy = true; _error = null; });
+    try {
+      final otp = await ref.read(sessionProvider.notifier).login(schoolCode: _found!.code, username: _user.text, password: _pass.text);
+      if (otp != null && mounted) setState(() { _otp = otp; _forward = true; _step = _Step.otp; });
+    } catch (e) {
+      if (mounted) _fail(errorText(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ── layout ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: _otp != null
-                  ? _OtpPanel(challenge: _otp!, onBack: () => setState(() { _otp = null; _pass.clear(); }))
-                  : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Image.asset('assets/images/logo.png', height: 96, fit: BoxFit.contain),
-                      const SizedBox(height: 6),
-                      const Text('360', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, letterSpacing: 6, fontWeight: FontWeight.w800, color: C.brand)),
-                      const SizedBox(height: 22),
-                      const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: C.ink)),
-                      const SizedBox(height: 4),
-                      const Text('One sign-in for admins, staff, teachers, learners and parents.', style: TextStyle(color: C.slate500)),
-                      const SizedBox(height: 22),
-                      if (_error != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFECDD3))),
-                          child: Row(children: [
-                            const Icon(Icons.error_outline, color: C.red, size: 18), const SizedBox(width: 8),
-                            Expanded(child: Text(_error!, style: const TextStyle(color: Color(0xFFBE123C), fontWeight: FontWeight.w600, fontSize: 13))),
-                          ]),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-                      _label('School ID'),
-                      TextField(controller: _school, textCapitalization: TextCapitalization.characters, autocorrect: false, textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(hintText: 'e.g. A482917M', prefixIcon: Icon(Icons.apartment_outlined))),
-                      const SizedBox(height: 14),
-                      _label('Email, username or phone'),
-                      TextField(controller: _user, autocorrect: false, keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.next,
-                          onChanged: (_) => setState(() {}), decoration: const InputDecoration(hintText: 'Your sign-in name', prefixIcon: Icon(Icons.person_outline))),
-                      if (_hint != null) Padding(padding: const EdgeInsets.only(top: 6, left: 4), child: Text(_hint!, style: const TextStyle(fontSize: 12, color: C.brandDark, fontWeight: FontWeight.w600))),
-                      const SizedBox(height: 14),
-                      _label('Password'),
-                      TextField(
-                        controller: _pass, obscureText: _obscure, textInputAction: TextInputAction.done, onSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(hintText: 'Your password', prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined), onPressed: () => setState(() => _obscure = !_obscure))),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop) _back(); },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Stack(children: [
+          const Positioned(left: 0, right: 0, top: 0, height: 360, child: Aurora()),
+          SafeArea(
+            child: Column(children: [
+              _TopBar(step: _step, onBack: _back),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 420),
+                        switchInCurve: Curves.easeOutCubic, switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (cur, prev) => Stack(alignment: Alignment.topCenter, children: [...prev, if (cur != null) cur]),
+                        transitionBuilder: (child, anim) {
+                          final incoming = child.key == ValueKey(_step);
+                          final dx = (incoming ? 1 : -1) * (_forward ? 1 : -1) * 0.18;
+                          return FadeTransition(opacity: anim, child: SlideTransition(position: Tween(begin: Offset(dx, 0), end: Offset.zero).animate(anim), child: child));
+                        },
+                        child: KeyedSubtree(key: ValueKey(_step), child: _body()),
                       ),
-                      const SizedBox(height: 22),
-                      FilledButton(
-                        onPressed: _busy ? null : _submit,
-                        child: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white)) : const Text('Sign in'),
-                      ),
-                      const SizedBox(height: 14),
-                      TextButton(
-                        onPressed: () => showDialog<void>(context: context, builder: (c) => AlertDialog(
-                          title: const Text('Forgot your password?'),
-                          content: const Text('Staff and admins can reset it from the school website sign-in page. Learners and parents: ask the school office to reset your portal password.', style: TextStyle(color: C.slate600)),
-                          actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
-                        )),
-                        child: const Text('Forgot your password?'),
-                      ),
-                      const SizedBox(height: 18),
-                      const Text('Your School ID is on the school website and your fee statements.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: C.slate400)),
-                    ]),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _body() => switch (_step) {
+        _Step.school => _schoolStep(),
+        _Step.user => _userStep(),
+        _Step.password => _passwordStep(),
+        _Step.otp => _OtpPanel(challenge: _otp!, onBack: _back),
+      };
+
+  Widget _stagger(List<Widget> items) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var i = 0; i < items.length; i++) Rise(delay: Duration(milliseconds: 60 * i), child: items[i]),
+      ]);
+
+  Widget _errorBox() => AnimatedSize(
+        duration: const Duration(milliseconds: 250), curve: Curves.easeOut,
+        child: _error == null
+            ? const SizedBox(width: double.infinity)
+            : Shake(
+                trigger: _shake,
+                child: Container(
+                  margin: const EdgeInsets.only(top: 14),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFFFF1F2), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFECDD3))),
+                  child: Row(children: [
+                    const Icon(Icons.error_outline_rounded, color: C.red, size: 19), const SizedBox(width: 8),
+                    Expanded(child: Text(_error!, style: const TextStyle(color: Color(0xFFBE123C), fontWeight: FontWeight.w600, fontSize: 13))),
+                  ]),
+                ),
+              ),
+      );
+
+  // 1 ── School ID
+  Widget _schoolStep() {
+    final found = _found;
+    return _stagger([
+      const _Heading(icon: Icons.apartment_rounded, title: 'Find your school', subtitle: 'Enter the School ID your school gave you.'),
+      Shake(
+        trigger: _shake,
+        child: TextField(
+          controller: _schoolId, autofocus: _recent.isEmpty, autocorrect: false, enableSuggestions: false,
+          textCapitalization: TextCapitalization.characters, textInputAction: TextInputAction.search,
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9.\-]')), LengthLimitingTextInputFormatter(40)],
+          onChanged: (_) { if (_found != null || _error != null) setState(() { _found = null; _error = null; }); },
+          onSubmitted: (_) => found == null ? _findSchool() : _confirmSchool(),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 3, color: C.ink),
+          decoration: _field('A482917M', Icons.tag_rounded),
+        ),
+      ),
+      _errorBox(),
+      AnimatedSize(
+        duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic,
+        child: found == null
+            ? const SizedBox(width: double.infinity)
+            : Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(found.code), tween: Tween(begin: 0, end: 1), duration: const Duration(milliseconds: 520), curve: Curves.easeOutBack,
+                  builder: (_, v, child) => Opacity(opacity: v.clamp(0, 1), child: Transform.scale(scale: 0.9 + 0.1 * v, child: child)),
+                  child: _SchoolCard(school: found, selected: _picked, onTap: () => setState(() => _picked = !_picked)),
+                ),
+              ),
+      ),
+      const SizedBox(height: 20),
+      BrandButton(
+        label: found == null ? 'Find school' : 'Continue',
+        icon: found == null ? Icons.search_rounded : Icons.arrow_forward_rounded,
+        busy: _busy,
+        onTap: found == null ? _findSchool : (_picked ? _confirmSchool : null),
+      ),
+      if (found == null && _recent.isNotEmpty) ...[
+        const SizedBox(height: 26),
+        const Text('RECENT SCHOOLS', style: TextStyle(fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w800, color: C.slate400)),
+        const SizedBox(height: 8),
+        for (final s in _recent)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _SchoolCard(school: s, compact: true, onTap: () => _pickRecent(s), onRemove: () async {
+              await RecentSchools.forget(s);
+              setState(() => _recent = _recent.where((x) => x.code != s.code).toList());
+            }),
+          ),
+      ],
+      const SizedBox(height: 18),
+      const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.info_outline_rounded, size: 16, color: C.slate400), SizedBox(width: 6),
+        Expanded(child: Text('Your School ID looks like A482917M. Find it on the school website or your fee statement.', style: TextStyle(fontSize: 12.5, color: C.slate500, height: 1.35))),
+      ]),
+    ]);
+  }
+
+  // 2 ── who
+  Widget _userStep() {
+    final kind = _userKind(_user.text);
+    return _stagger([
+      _SchoolChip(school: _found!, onChange: () => _go(_Step.school)),
+      const SizedBox(height: 22),
+      const _Heading(icon: Icons.person_rounded, title: "Who's signing in?", subtitle: 'Use your email, portal username or phone number.'),
+      Shake(
+        trigger: _shake,
+        child: TextField(
+          controller: _user, focusNode: _userFocus, autocorrect: false, enableSuggestions: false,
+          keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.go,
+          autofillHints: const [AutofillHints.username, AutofillHints.email],
+          onChanged: (_) => setState(() => _error = null), onSubmitted: (_) => _confirmUser(),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: C.ink),
+          decoration: _field('Email, username or phone', kind?.$1 ?? Icons.alternate_email_rounded),
+        ),
+      ),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: kind == null
+            ? const SizedBox(key: ValueKey('none'), height: 0, width: double.infinity)
+            : Padding(
+                key: ValueKey(kind.$2),
+                padding: const EdgeInsets.only(top: 10, left: 2),
+                child: Row(children: [
+                  Icon(kind.$1, size: 15, color: C.brandDark), const SizedBox(width: 6),
+                  Text(kind.$2, style: const TextStyle(fontSize: 12.5, color: C.brandDark, fontWeight: FontWeight.w700)),
+                ]),
+              ),
+      ),
+      _errorBox(),
+      const SizedBox(height: 22),
+      BrandButton(label: 'Continue', onTap: _confirmUser),
+    ]);
+  }
+
+  // 3 ── password
+  Widget _passwordStep() => _stagger([
+        _SchoolChip(school: _found!, onChange: () => _go(_Step.school)),
+        const SizedBox(height: 14),
+        _UserChip(name: _user.text.trim(), onChange: () => _go(_Step.user)),
+        const SizedBox(height: 22),
+        const _Heading(icon: Icons.lock_rounded, title: 'Enter your password', subtitle: 'Keep it private — the school will never ask for it.'),
+        Shake(
+          trigger: _shake,
+          child: TextField(
+            controller: _pass, focusNode: _passFocus, obscureText: _obscure, textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onChanged: (_) { if (_error != null) setState(() => _error = null); }, onSubmitted: (_) => _signIn(),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: C.ink),
+            decoration: _field('Password', Icons.key_rounded).copyWith(
+              suffixIcon: IconButton(
+                icon: AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, key: ValueKey(_obscure))),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
             ),
+          ),
+        ),
+        _errorBox(),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => showDialog<void>(context: context, builder: (c) => AlertDialog(
+              title: const Text('Forgot your password?'),
+              content: const Text('Staff and admins can reset it from the school website sign-in page. Learners and parents: ask the school office to reset your portal password.', style: TextStyle(color: C.slate600)),
+              actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+            )),
+            child: const Text('Forgot password?'),
+          ),
+        ),
+        const SizedBox(height: 6),
+        BrandButton(label: 'Sign in', icon: Icons.login_rounded, busy: _busy, onTap: _signIn),
+      ]);
+
+  static (IconData, String)? _userKind(String raw) {
+    final u = raw.trim();
+    if (u.isEmpty) return null;
+    if (u.contains('@')) return (Icons.mail_outline_rounded, 'School admin or staff email');
+    if (RegExp(r'^\+?[\d\s]{7,}$').hasMatch(u)) return (Icons.phone_iphone_rounded, 'Parent — phone number');
+    return (Icons.badge_outlined, 'Learner or staff portal username');
+  }
+
+  InputDecoration _field(String hint, IconData icon) => InputDecoration(
+        hintText: hint,
+        prefixIcon: AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: Icon(icon, key: ValueKey(icon), color: C.slate400)),
+        filled: true, fillColor: C.bg,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.slate200)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.slate200)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.brand, width: 2)),
+      );
+}
+
+// ── pieces ───────────────────────────────────────────────────────────────────
+class _TopBar extends StatelessWidget {
+  final _Step step;
+  final VoidCallback onBack;
+  const _TopBar({required this.step, required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final n = step == _Step.otp ? 3 : step.index + 1;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 20, 4),
+      child: Row(children: [
+        IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded), color: C.slate700, tooltip: 'Back'),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Row(children: [
+            for (var i = 1; i <= 3; i++) ...[
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Stack(children: [
+                    Container(height: 6, color: C.slate200),
+                    AnimatedFractionallySizedBox(
+                      duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic,
+                      widthFactor: i <= n ? 1 : 0,
+                      child: Container(height: 6, decoration: const BoxDecoration(gradient: LinearGradient(colors: [C.brand, Color(0xFF7C3AED)]))),
+                    ),
+                  ]),
+                ),
+              ),
+              if (i < 3) const SizedBox(width: 6),
+            ],
+          ]),
+        ),
+        const SizedBox(width: 12),
+        Text(step == _Step.otp ? 'Verify' : 'Step $n of 3', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.slate500)),
+      ]),
+    );
+  }
+}
+
+class _Heading extends StatelessWidget {
+  final IconData icon;
+  final String title, subtitle;
+  const _Heading({required this.icon, required this.title, required this.subtitle});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 54, height: 54,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [C.brand, Color(0xFF7C3AED)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(17),
+              boxShadow: [BoxShadow(color: C.brand.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 7))],
+            ),
+            child: Icon(icon, color: Colors.white, size: 27),
+          ),
+          const SizedBox(height: 18),
+          Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: C.ink, letterSpacing: -0.4)),
+          const SizedBox(height: 6),
+          Text(subtitle, style: const TextStyle(fontSize: 14.5, color: C.slate500, height: 1.35)),
+        ]),
+      );
+}
+
+/// A found or recent school. Tap to pick it.
+class _SchoolCard extends StatelessWidget {
+  final SchoolInfo school;
+  final bool selected, compact;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  const _SchoolCard({required this.school, required this.onTap, this.selected = false, this.compact = false, this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = school.subtitle;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFEEF0FF) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: selected ? C.brand : C.slate200, width: selected ? 2 : 1),
+        boxShadow: selected ? [BoxShadow(color: C.brand.withValues(alpha: 0.18), blurRadius: 20, offset: const Offset(0, 8))] : const [],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18), onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 10 : 14),
+            child: Row(children: [
+              SchoolLogo(school: school, size: compact ? 40 : 56),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(school.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 14 : 16, fontWeight: FontWeight.w800, color: C.ink)),
+                  if (sub.isNotEmpty && !compact) Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: C.slate500))),
+                  if (school.schoolId != null) Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(color: C.slate100, borderRadius: BorderRadius.circular(6)),
+                      child: Text('ID ${school.schoolId}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.slate600, letterSpacing: 0.6)),
+                    ),
+                  ),
+                ]),
+              ),
+              if (onRemove != null)
+                IconButton(onPressed: onRemove, icon: const Icon(Icons.close_rounded, size: 18), color: C.slate400, tooltip: 'Forget this school')
+              else
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                  child: selected
+                      ? Container(key: const ValueKey('on'), width: 26, height: 26, decoration: const BoxDecoration(color: C.brand, shape: BoxShape.circle), child: const Icon(Icons.check_rounded, color: Colors.white, size: 18))
+                      : Container(key: const ValueKey('off'), width: 26, height: 26, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: C.slate200, width: 2))),
+                ),
+            ]),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _label(String t) => Padding(padding: const EdgeInsets.only(bottom: 6, left: 2), child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: C.slate700, fontSize: 13.5)));
+class _SchoolChip extends StatelessWidget {
+  final SchoolInfo school;
+  final VoidCallback onChange;
+  const _SchoolChip({required this.school, required this.onChange});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(16), border: Border.all(color: C.slate200)),
+        child: Row(children: [
+          SchoolLogo(school: school, size: 36),
+          const SizedBox(width: 10),
+          Expanded(child: Text(school.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, color: C.ink))),
+          TextButton(onPressed: onChange, child: const Text('Change')),
+        ]),
+      );
+}
+
+class _UserChip extends StatelessWidget {
+  final String name;
+  final VoidCallback onChange;
+  const _UserChip({required this.name, required this.onChange});
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        CircleAvatar(radius: 18, backgroundColor: C.brand.withValues(alpha: 0.12),
+            child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(color: C.brandDark, fontWeight: FontWeight.w800))),
+        const SizedBox(width: 10),
+        Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, color: C.slate700))),
+        TextButton(onPressed: onChange, child: const Text('Not you?')),
+      ]);
 }
 
 /// The 6-digit code emailed when the school requires two-step sign-in.
@@ -143,15 +496,19 @@ class _OtpPanelState extends ConsumerState<_OtpPanel> {
   final _code = TextEditingController();
   bool _remember = true, _busy = false;
   String? _msg, _err;
+  int _shake = 0;
+
+  @override
+  void dispose() { _code.dispose(); super.dispose(); }
 
   Future<void> _verify() async {
     final code = _code.text.replaceAll(RegExp(r'\D'), '');
-    if (code.length != 6) { setState(() => _err = 'Enter the 6-digit code.'); return; }
+    if (code.length != 6) { setState(() { _err = 'Enter the 6-digit code.'; _shake++; }); return; }
     setState(() { _busy = true; _err = null; });
     try {
       await ref.read(sessionProvider.notifier).verifyOtp(widget.challenge, code, _remember);
     } catch (e) {
-      if (mounted) setState(() => _err = errorText(e));
+      if (mounted) setState(() { _err = errorText(e); _shake++; });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -159,35 +516,42 @@ class _OtpPanelState extends ConsumerState<_OtpPanel> {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Center(child: Container(width: 60, height: 60, decoration: BoxDecoration(color: C.brand.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(18)), child: const Icon(Icons.verified_user_outlined, color: C.brand, size: 30))),
-        const SizedBox(height: 16),
-        const Text('Check your email', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: C.ink)),
-        const SizedBox(height: 6),
-        Text('We sent a 6-digit code to ${widget.challenge.sentTo}. It expires in ${widget.challenge.minutes} minutes.', textAlign: TextAlign.center, style: const TextStyle(color: C.slate500)),
-        const SizedBox(height: 20),
-        TextField(
-          controller: _code, autofocus: true, keyboardType: TextInputType.number, textAlign: TextAlign.center, maxLength: 6,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly], onChanged: (v) { if (v.length == 6) _verify(); },
-          style: const TextStyle(fontSize: 26, letterSpacing: 12, fontWeight: FontWeight.w800),
-          decoration: const InputDecoration(counterText: '', hintText: '••••••'),
+        Rise(child: _Heading(icon: Icons.mark_email_read_rounded, title: 'Check your email',
+            subtitle: 'We sent a 6-digit code to ${widget.challenge.sentTo}. It expires in ${widget.challenge.minutes} minutes.')),
+        Rise(
+          delay: const Duration(milliseconds: 80),
+          child: Shake(
+            trigger: _shake,
+            child: TextField(
+              controller: _code, autofocus: true, keyboardType: TextInputType.number, textAlign: TextAlign.center, maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly], onChanged: (v) { if (v.length == 6) _verify(); },
+              autofillHints: const [AutofillHints.oneTimeCode],
+              style: const TextStyle(fontSize: 28, letterSpacing: 14, fontWeight: FontWeight.w800, color: C.ink),
+              decoration: InputDecoration(
+                counterText: '', hintText: '••••••', filled: true, fillColor: C.bg,
+                contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.slate200)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.slate200)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.brand, width: 2)),
+              ),
+            ),
+          ),
         ),
-        if (_err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_err!, textAlign: TextAlign.center, style: const TextStyle(color: C.red, fontWeight: FontWeight.w600))),
-        if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, textAlign: TextAlign.center, style: const TextStyle(color: C.green))),
+        if (_err != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_err!, textAlign: TextAlign.center, style: const TextStyle(color: C.red, fontWeight: FontWeight.w600))),
+        if (_msg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_msg!, textAlign: TextAlign.center, style: const TextStyle(color: C.green))),
         if (widget.challenge.canRemember)
           CheckboxListTile(
             value: _remember, onChanged: (v) => setState(() => _remember = v ?? true), contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading,
             title: Text("Don't ask again on this phone for ${widget.challenge.trustDays} days", style: const TextStyle(fontSize: 13.5, color: C.slate600)),
           ),
         const SizedBox(height: 8),
-        FilledButton(onPressed: _busy ? null : _verify, child: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white)) : const Text('Verify & sign in')),
-        const SizedBox(height: 8),
-        Row(children: [
-          TextButton.icon(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back, size: 18), label: const Text('Back')),
-          const Spacer(),
-          TextButton(onPressed: () async {
+        BrandButton(label: 'Verify & sign in', icon: Icons.verified_rounded, busy: _busy, onTap: _verify),
+        const SizedBox(height: 6),
+        Center(
+          child: TextButton(onPressed: () async {
             try { final m = await ref.read(sessionProvider.notifier).resendOtp(widget.challenge); setState(() { _msg = m; _err = null; }); }
             catch (e) { setState(() => _err = errorText(e)); }
           }, child: const Text('Resend code')),
-        ]),
+        ),
       ]);
 }

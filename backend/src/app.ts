@@ -120,9 +120,12 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
         const metaDb = getMetaDb();
         const sub = req.params.subdomain.toLowerCase().trim();
         const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // The mobile app looks schools up by ShuleCloud School ID (A482917M).
+        const { isSchoolId, normalizeSchoolId } = await import('./lib/schoolId');
+        const byId = isSchoolId(sub) ? await metaDb.collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(sub) }) : null;
         // Case/space-insensitive match — stored subdomain may be "Egerton" etc.
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
-        if (!tenant) return res.status(404).json({ message: 'School not found' });
+        const tenant = byId || await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant) return res.status(404).json({ message: isSchoolId(sub) ? `No school has the ID ${normalizeSchoolId(sub)}. Check it with your school.` : 'School not found' });
 
         // If this school belongs to an organization, show the ORGANISATION's
         // logo + name on the login page; otherwise the school's own branding.
@@ -143,6 +146,8 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
             name, logo, tagline,
             address:    tenant.address || null,
             subdomain:  tenant.subdomain,
+            schoolId:   tenant.shulecloudId || null,
+            status:     tenant.status || null,
             organization,
         });
     } catch (e: any) {
