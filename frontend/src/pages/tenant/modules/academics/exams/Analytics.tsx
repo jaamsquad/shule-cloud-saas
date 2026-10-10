@@ -5,7 +5,8 @@ import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area,
     LineChart, Line, Legend, CartesianGrid,
 } from "recharts";
-import { Loader2, ChevronRight, ArrowLeft, Trophy, TrendingUp, Users, Award, ChevronDown, Printer } from "lucide-react";
+import { Loader2, ChevronRight, ArrowLeft, Trophy, TrendingUp, Users, Award, ChevronDown, Printer, Settings2, CalendarCheck } from "lucide-react";
+import { AnalyticsSettingsModal, InsightsTab, useAnalyticsSettings } from "./AnalyticsInsights";
 import api from "@/lib/api";
 
 // Zeraki-style teacher/admin analytics. Two views:
@@ -63,11 +64,13 @@ export default function Analytics() {
         return p;
     });
     const [examOpen, setExamOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const { data: examData } = useQuery({ queryKey: ["an_exams"], queryFn: async () => (await api.get("/analytics/exams")).data });
     const exams = examData?.exams || [];
     const groups = examData?.groups || {};
-    const current = exams.find((e: any) => e.id === examId) || exams[0];
+    // Opens on the current term's latest exam (Analysis settings), else the most recent exam.
+    const current = exams.find((e: any) => e.id === examId) || exams.find((e: any) => e.id === examData?.currentExamId) || exams[exams.length - 1];
     const activeExamId = examId || current?.id || "";
 
     return (
@@ -78,8 +81,12 @@ export default function Analytics() {
                     {form && <button onClick={() => setForm(null)} className="mr-1"><ArrowLeft className="w-5 h-5" /></button>}
                     <h1 className="text-lg font-black">{form ? `${form} Analytics` : "Analysis"}</h1>
                 </div>
-                {/* Exam selector (grouped by term) */}
-                <div className="relative">
+                {/* Exam selector (grouped by term) + settings */}
+                <div className="relative flex items-center gap-2">
+                    {examData?.currentTerm && current?.id === examData?.currentExamId && (
+                        <span className="hidden sm:inline-flex items-center gap-1 h-9 px-3 rounded-lg bg-white/10 text-xs font-bold"><CalendarCheck className="w-4 h-4" /> Current term · {examData.currentTerm}</span>
+                    )}
+                    <button onClick={() => setSettingsOpen(true)} title="Analysis settings" className="h-9 w-9 rounded-lg bg-white/15 flex items-center justify-center"><Settings2 className="w-4 h-4" /></button>
                     <button onClick={() => setExamOpen(o => !o)} className="h-9 px-3 rounded-lg bg-white/15 text-white text-sm font-bold flex items-center gap-1.5 max-w-[18rem]">
                         <span className="truncate">{current?.title || "Select exam"}</span><ChevronDown className="w-4 h-4" />
                     </button>
@@ -114,6 +121,7 @@ export default function Analytics() {
                     <MyClasses examId={activeExamId} onAnalyze={setForm} />
                 )}
             </div>
+            {settingsOpen && <AnalyticsSettingsModal onClose={() => setSettingsOpen(false)} />}
         </div>
     );
 }
@@ -185,14 +193,18 @@ function MyClasses({ examId, onAnalyze }: { examId: string; onAnalyze: (f: strin
     );
 }
 
-const FORM_TABS = ["overview", "merit", "comparison", "subjects", "classes", "improved"] as const;
+const FORM_TABS = ["overview", "merit", "comparison", "subjects", "classes", "improved", "distribution", "gender", "topBottom", "atRisk", "subjectRanking"] as const;
 type FormTab = typeof FORM_TABS[number];
-const FORM_TAB_LABELS: Record<FormTab, string> = { overview: "Overview", merit: "Merit List", comparison: "Comparison", subjects: "Subjects", classes: "Class & Stream", improved: "Most Improved" };
+const FORM_TAB_LABELS: Record<FormTab, string> = { overview: "Overview", merit: "Merit List", comparison: "Comparison", subjects: "Subjects", classes: "Class & Stream", improved: "Most Improved", distribution: "Grades & Pass Rate", gender: "Gender", topBottom: "Top & Bottom", atRisk: "At Risk", subjectRanking: "Subject Ranking" };
+// tab → the Analysis-settings switch that shows it (Overview is always on)
+const TAB_SETTING: Partial<Record<FormTab, string>> = { merit: "meritList", comparison: "comparison", subjects: "subjects", classes: "classes", improved: "improved", distribution: "distribution", gender: "gender", topBottom: "topBottom", atRisk: "atRisk", subjectRanking: "subjectRanking" };
 
 function FormAnalytics({ examId, form }: { examId: string; form: string }) {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { data: anSettings } = useAnalyticsSettings();
+    const visibleTabs = FORM_TABS.filter(k => !TAB_SETTING[k] || (anSettings ? anSettings.views[TAB_SETTING[k]!] !== false : ["merit", "comparison", "subjects", "classes", "improved", "distribution"].includes(k)));
     const urlTab = (searchParams.get("tab") || "overview") as FormTab;
-    const tab: FormTab = FORM_TABS.includes(urlTab) ? urlTab : "overview";
+    const tab: FormTab = visibleTabs.includes(urlTab) ? urlTab : "overview";
     const setTab = (t: FormTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set("tab", t); return p; });
     const { data, isLoading } = useQuery({ queryKey: ["an_form", examId, form], queryFn: async () => (await api.get("/analytics/form", { params: { examId, form } })).data });
     const { data: ot } = useQuery({ queryKey: ["an_ot", form], queryFn: async () => (await api.get("/analytics/over-time", { params: { form } })).data });
@@ -213,7 +225,7 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-                {FORM_TABS.map(k => (
+                {visibleTabs.map(k => (
                     <button key={k} onClick={() => setTab(k)} className={`h-9 px-4 rounded-lg font-bold text-sm ${tab === k ? "text-white" : "bg-white text-slate-600 border border-slate-200"}`} style={tab === k ? { background: GREEN } : {}}>{FORM_TAB_LABELS[k]}</button>
                 ))}
             </div>
@@ -372,6 +384,7 @@ function FormAnalytics({ examId, form }: { examId: string; form: string }) {
             {tab === "subjects" && <SubjectSheet examId={examId} form={form} />}
             {tab === "classes" && <ClassLevels examId={examId} form={form} />}
             {tab === "improved" && <MostImproved examId={examId} />}
+            {(tab === "distribution" || tab === "gender" || tab === "topBottom" || tab === "atRisk" || tab === "subjectRanking") && <InsightsTab examId={examId} form={form} kind={tab} />}
         </div>
     );
 }

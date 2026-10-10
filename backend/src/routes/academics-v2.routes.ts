@@ -175,9 +175,21 @@ router.use(['/v2/classes', '/v2/streams', '/v2/enrollments/purge'], async (req, 
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+/** Classes / streams soft-deleted in the past are removed for good (with a dead class's streams). */
+async function purgeSoftDeletedClasses(db: any) {
+    const dead: any[] = await db.collection('v2_classes').find({ deletedAt: { $exists: true } }, { projection: { _id: 1 } }).toArray().catch(() => []);
+    if (dead.length) {
+        const ids = dead.flatMap((c: any) => [String(c._id), c._id]);
+        await db.collection('v2_streams').deleteMany({ classId: { $in: ids } }).catch(() => {});
+        await db.collection('v2_classes').deleteMany({ deletedAt: { $exists: true } }).catch(() => {});
+    }
+    await db.collection('v2_streams').deleteMany({ deletedAt: { $exists: true } }).catch(() => {});
+}
+
 router.get('/v2/classes', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await purgeSoftDeletedClasses(db);   // classes deleted before deletion became permanent
         const classes = await db.collection('v2_classes').find({ deletedAt: { $exists: false } }).sort({ level: 1, name: 1 }).toArray();
         // Curriculum-aware: attach each class's resolved curriculum config so the
         // frontend gets behavior (terminology, assessment mode, report layout) from
@@ -231,7 +243,11 @@ router.patch('/v2/classes/:id', async (req, res) => {
 router.delete('/v2/classes/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('v2_classes').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        // Deleted for good (no soft delete): the class and its streams leave the database,
+        // so they never show again — not in lists, analytics or pickers.
+        const id = req.params.id;
+        await db.collection('v2_streams').deleteMany({ classId: { $in: [id, toOid(id)].filter(Boolean) as any[] } });
+        await db.collection('v2_classes').deleteOne({ _id: toOid(id) });
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -243,6 +259,7 @@ router.delete('/v2/classes/:id', async (req, res) => {
 router.get('/v2/streams', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await purgeSoftDeletedClasses(db);
         const query: any = { deletedAt: { $exists: false } };
         if (req.query.classId) query.classId = req.query.classId.toString();
         const { healStreamNames } = await import('../lib/classRename');
@@ -284,7 +301,7 @@ router.patch('/v2/streams/:id', async (req, res) => {
 router.delete('/v2/streams/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('v2_streams').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        await db.collection('v2_streams').deleteOne({ _id: toOid(req.params.id) });   // deleted for good
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
