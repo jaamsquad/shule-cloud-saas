@@ -10,6 +10,8 @@ import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
+import { feeStructureGuard, feeStructureConflicts } from '../lib/feeStructureGuard';
+import { getClassTuition, saveClassTuition } from '../lib/classTuition';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
@@ -817,6 +819,8 @@ const COLLECTION_MODULE: Record<string, string> = {
     const cr = mk ? [enforceCrud(mk, 'create')] : [];
     const up = mk ? [enforceCrud(mk, 'update')] : [];
     const de = mk ? [enforceCrud(mk, 'delete')] : [];
+    // a class may sit in only one fee structure per term (lib/feeStructureGuard)
+    if (col === 'fee_structures') { cr.push(feeStructureGuard); up.push(feeStructureGuard); }
 
     router.get(`/${col}`,    c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
@@ -829,6 +833,27 @@ const COLLECTION_MODULE: Record<string, string> = {
     router.post(`/academics/${col}`,   ...cr, c.createItem(col));
     router.patch(`/academics/${col}/:id`,  ...up, c.updateItem(col));
     router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
+});
+
+// Termly tuition per class (Fee Particulars → Setup class tuition fees) — lib/classTuition.
+router.get('/fees/class-tuition', async (req, res) => {
+    try { res.json({ classes: await getClassTuition(getRequestDb(req)) }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
+    try {
+        const amounts = req.body?.amounts;
+        if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
+        const by = (req as any).tenantContext?.user?.name || undefined;
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// Which classes already have a fee structure for a term — the structure form greys them out.
+router.post('/fee_structures/check', async (req, res) => {
+    try {
+        const conflicts = await feeStructureConflicts(getRequestDb(req), req.body || {}, req.body?.excludeId || null);
+        res.json({ conflicts });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // Effective grading scale for a class: the class-specific grading_criteria if one

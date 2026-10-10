@@ -47,10 +47,19 @@ export async function loadTermContext(db: any, yearId: string, termId: string): 
         db.collection('transport_zones').find({}).toArray().catch(() => []),
         db.collection('fee_particulars').find({}).toArray().catch(() => []),
     ]);
+    const tuitionRows: any[] = await db.collection('class_tuition_fees').find({}).toArray().catch(() => []);
     const classNameById = new Map<string, string>();
     for (const c of classes) classNameById.set(sid(c._id), String(c.name || c.levelName || ''));
     const particulars: any[] = [];
     for (const g of particularGroups) for (const p of (g.particulars || [])) if (p?.label) particulars.push(p);
+    // per-class tuition saved by class (lib/classTuition) wins over the copy kept by class name
+    if (tuitionRows.length) {
+        const byClass: Record<string, any> = {};
+        for (const r of tuitionRows) { const name = classNameById.get(sid(r.classId)) || r.className; if (name) byClass[name] = r.amount; }
+        for (let i = 0; i < particulars.length; i++) {
+            if (isTuition(particulars[i].label)) particulars[i] = { ...particulars[i], classAmounts: { ...(particulars[i].classAmounts || {}), ...byClass } };
+        }
+    }
     return {
         yearId: sid(yearId), termId: sid(termId), year, term,
         yearLabel: year ? String(year.name || year.year || '') : '',

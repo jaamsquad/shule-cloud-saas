@@ -13,7 +13,7 @@ import { currentTerm, TermInfo } from '../modules/cbc/cbcTerm';
 const ADMIN_ROLES = ['super_admin', 'school_admin', 'admin', 'principal', 'super admin', 'school admin'];
 export const isAdminRole = (role?: string) => ADMIN_ROLES.includes(String(role || '').toLowerCase());
 
-const termNo = (v: any): string => {
+export const termNo = (v: any): string => {
     const s = String(v ?? '').toLowerCase();
     const d = s.match(/\d+/);
     if (d) return d[0];
@@ -22,7 +22,9 @@ const termNo = (v: any): string => {
     if (/\bthree\b|third/.test(s)) return '3';
     return s.trim();
 };
-const years = (v: any): string[] => String(v ?? '').match(/\b(19|20)\d{2}\b/g) || [];
+export const yearsIn = (v: any): string[] =>
+    String(v ?? '').match(/\b(19|20)\d{2}\b/g) || [];
+const years = yearsIn;
 const toDate = (v: any) => { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; };
 
 export interface MarksWindow { term: string; year: string; label: string }
