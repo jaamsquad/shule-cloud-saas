@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { RevenueModal, useRevenue } from "@/components/finance/RevenueList";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -318,6 +319,12 @@ export default function Dashboard() {
         [staff, currentMonthStr]
     );
 
+    // Money actually received this month (fee payments + other income), one row per receipt.
+    const monthFrom = `${currentMonthStr}-01`;
+    const monthTo = new Date().toISOString().slice(0, 10);
+    const { data: monthRevenue } = useRevenue(monthFrom, monthTo);
+    const [revenueOpen, setRevenueOpen] = useState(false);
+
     const finances = useMemo(() => {
         const thisMonthIncome = income.filter((i: any) => i.date?.startsWith(currentMonthStr));
         const thisMonthExpenses = expenses.filter((e: any) => e.date?.startsWith(currentMonthStr));
@@ -331,7 +338,7 @@ export default function Dashboard() {
             acc + (parseFloat(inv.paid_amount || inv.amount_paid || 0)), 0
         );
 
-        const revenue = thisMonthIncome.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0) + invoiceRevenue;
+        const revenue = monthRevenue ? monthRevenue.total : thisMonthIncome.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0) + invoiceRevenue;
         const expenseTotal = thisMonthExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
         const profit = revenue - expenseTotal;
 
@@ -359,7 +366,7 @@ export default function Dashboard() {
         });
 
         return { revenue, expenseTotal, profit, chart1Data };
-    }, [income, expenses, invoices, currentMonthStr]);
+    }, [income, expenses, invoices, currentMonthStr, monthRevenue]);
 
     const classChartData = useMemo(() => {
         if (classes.length === 0) return [];
@@ -523,8 +530,9 @@ export default function Dashboard() {
                 )}
 
                 {/* Revenue */}
+                {revenueOpen && <RevenueModal from={monthFrom} to={monthTo} title={`Revenue — ${new Date().toLocaleString("en-GB", { month: "long", year: "numeric" })}`} onClose={() => setRevenueOpen(false)} />}
                 {canFinance && (
-                <div onClick={() => navigate("/accounts/statement")}
+                <div onClick={() => setRevenueOpen(true)} title="See every payment received this month"
                     className="bg-[#ff808b] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Revenue</h3>
                     <div className="flex justify-between items-end">

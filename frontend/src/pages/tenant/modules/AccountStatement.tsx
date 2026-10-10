@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import { Home, Search, RotateCcw, ChevronDown, Calendar, Loader2, RefreshCw } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { useRevenue, RevenueDetails, ModeBadge, RevenueRow } from "@/components/finance/RevenueList";
 
 const KSh = (n: any) => `KSh ${(parseFloat(n) || 0).toLocaleString()}`;
 const dval = (v: any) => (v ? new Date(v).getTime() : 0);
@@ -12,12 +12,7 @@ const isoDay = (d: Date) => d.toISOString().split("T")[0];
 
 export default function AccountStatement() {
     const qc = useQueryClient();
-    const { items: income, isLoading: loadingIncome } = useItems("income");
     const { items: expenses, isLoading: loadingExpenses } = useItems("expenses");
-    // Fee payments count as real income on the statement.
-    const { data: feeTxns = [], isFetching: loadingTxns } = useQuery({ queryKey: ["acct_fee_txns"], queryFn: async () => { const r = await api.get("/transactions"); return Array.isArray(r.data) ? r.data : []; } });
-
-    const isLoading = loadingIncome || loadingExpenses;
 
     // ── Filters (all wired) ──────────────────────────────────────────────
     const today = new Date();
@@ -27,15 +22,19 @@ export default function AccountStatement() {
     const [showRefs, setShowRefs] = useState(false);
     const [search, setSearch] = useState("");
     const [showDate, setShowDate] = useState(false);
+    const [openRow, setOpenRow] = useState<string | null>(null);
 
-    const feeIncome = feeTxns.map((t: any) => ({ date: t.date || t.createdAt, description: `Fee Payment — ${t.studentName || "Student"}`, reference: t.reference || t.receiptNo || t.mpesaCode || "", amount: Number(t.amount || t.paidAmount || 0), type: "income" }));
+    // Money in: fee payments (every mode) + other income, with where it came from (/accounts/revenue).
+    const { data: revenue, isFetching: loadingTxns } = useRevenue(from, to);
+    const isLoading = loadingExpenses || (!revenue && loadingTxns);
+
+    const moneyIn = (revenue?.rows || []).map((r: RevenueRow) => ({ key: `${r.kind}-${r.id}`, date: r.date, description: r.description ? `${r.source} — ${r.description}` : r.source, reference: r.reference || r.details?.receiptNo || "", amount: r.amount, type: "income", mode: r.mode, revenue: r }));
 
     // Build the ledger oldest→newest for a running balance, then display newest first.
     const fullLedger = useMemo(() => [
-        ...income.map((i: any) => ({ ...i, type: "income" })),
-        ...feeIncome,
-        ...expenses.map((e: any) => ({ ...e, type: "expense" })),
-    ].sort((a, b) => dval(a.date) - dval(b.date)), [income, expenses, feeTxns]);
+        ...moneyIn,
+        ...expenses.map((e: any) => ({ ...e, type: "expense", key: `exp-${e._id}`, mode: e.paymentMethod || e.payment_mode || e.mode || "" })),
+    ].sort((a, b) => dval(a.date) - dval(b.date)), [revenue, expenses]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Date-range + search filter
     const fromMs = from ? new Date(from).setHours(0, 0, 0, 0) : 0;
@@ -45,7 +44,7 @@ export default function AccountStatement() {
         const t = dval(r.date);
         if (t && (t < fromMs || t > toMs)) return false;
         if (!term) return true;
-        return [r.description, r.category, r.reference].filter(Boolean).join(" ").toLowerCase().includes(term);
+        return [r.description, r.category, r.reference, r.mode, r.revenue?.details?.admNo, r.revenue?.details?.receiptNo].filter(Boolean).join(" ").toLowerCase().includes(term);
     });
 
     let running = 0;
@@ -121,7 +120,7 @@ export default function AccountStatement() {
         toast.success("Filters reset");
     };
     const refresh = () => {
-        qc.invalidateQueries({ queryKey: ["acct_fee_txns"] });
+        qc.invalidateQueries({ queryKey: ["revenue_ledger"] });
         qc.invalidateQueries({ queryKey: ["income"] });
         qc.invalidateQueries({ queryKey: ["expenses"] });
         toast.success("Refreshed");
@@ -215,6 +214,7 @@ export default function AccountStatement() {
                                     <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider rounded-l-2xl">Date</th>
                                     <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Description</th>
                                     {showRefs && <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Reference</th>}
+                                    <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Mode</th>
                                     <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Debit</th>
                                     <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">Credit</th>
                                     <th className="px-6 py-5 text-left text-xs font-bold text-gray-800 uppercase tracking-wider rounded-r-2xl">Net Balance</th>
@@ -223,32 +223,39 @@ export default function AccountStatement() {
                             <tbody>
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={showRefs ? 6 : 5} className="px-6 py-10 text-center">
+                                        <td colSpan={showRefs ? 7 : 6} className="px-6 py-10 text-center">
                                             <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#5C67F2]" />
                                         </td>
                                     </tr>
                                 ) : statement.length === 0 ? (
                                     <tr>
-                                        <td colSpan={showRefs ? 6 : 5} className="px-6 py-12 text-center text-gray-400 text-sm italic">
+                                        <td colSpan={showRefs ? 7 : 6} className="px-6 py-12 text-center text-gray-400 text-sm italic">
                                             No data available in table
                                         </td>
                                     </tr>
                                 ) : (
                                     statement.map((row: any, idx) => (
-                                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors text-sm text-gray-600 font-medium">
+                                        <Fragment key={row.key || idx}>
+                                        <tr onClick={() => row.revenue && setOpenRow(openRow === row.key ? null : row.key)} title={row.revenue ? "Click to see where this money came from" : undefined}
+                                            className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors text-sm text-gray-600 font-medium ${row.revenue ? "cursor-pointer" : ""}`}>
                                             <td className="px-6 py-4">{row.date ? new Date(row.date).toLocaleDateString() : "—"}</td>
                                             <td className="px-6 py-4">{row.description || row.category || "—"}</td>
                                             {showRefs && <td className="px-6 py-4 text-gray-400">{row.reference || "—"}</td>}
+                                            <td className="px-6 py-4">{row.mode ? <ModeBadge mode={row.mode} /> : "—"}</td>
                                             <td className="px-6 py-4 text-rose-500">{row.type === 'expense' ? KSh(row.amount) : '-'}</td>
                                             <td className="px-6 py-4 text-emerald-500">{row.type === 'income' ? KSh(row.amount) : '-'}</td>
                                             <td className={`px-6 py-4 font-bold ${row.balance < 0 ? "text-rose-600" : "text-slate-800"}`}>{KSh(row.balance)}</td>
                                         </tr>
+                                        {row.revenue && openRow === row.key && (
+                                            <tr><td colSpan={showRefs ? 7 : 6} className="px-6 py-4 bg-indigo-50/40"><RevenueDetails r={row.revenue} /></td></tr>
+                                        )}
+                                        </Fragment>
                                     ))
                                 )}
                             </tbody>
                             <tfoot>
                                 <tr className="border-t border-gray-100 font-black text-gray-800">
-                                    <td colSpan={showRefs ? 3 : 2} className="px-6 py-4">TOTALS</td>
+                                    <td colSpan={showRefs ? 4 : 3} className="px-6 py-4">TOTALS</td>
                                     <td className="px-6 py-4 text-rose-600">{KSh(totalExpense)}</td>
                                     <td className="px-6 py-4 text-emerald-600">{KSh(totalIncome)}</td>
                                     <td className={`px-6 py-4 bg-gray-50/50 ${netBalance < 0 ? "text-rose-600" : ""}`}>{KSh(netBalance)}</td>

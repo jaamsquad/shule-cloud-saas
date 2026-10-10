@@ -11,6 +11,7 @@ import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope'
 import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
 import { feeStructureGuard, feeStructureConflicts } from '../lib/feeStructureGuard';
+import { revenueLedger } from '../lib/revenueLedger';
 import { getClassTuition, saveClassTuition, getTuitionGrid, saveTuitionCells } from '../lib/classTuition';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
@@ -861,6 +862,15 @@ router.put('/fees/class-tuition/grid', enforceCrud('fees', 'update'), async (req
         res.json(await getTuitionGrid(getRequestDb(req), String(req.body?.yearId || '')));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+// Money received in a period, one row per receipt with its source and payment mode
+// (dashboard Revenue card → list, Accounts → Account Statement) — lib/revenueLedger.
+router.get('/accounts/revenue', async (req, res) => {
+    try {
+        const day = (v: any) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+        res.json(await revenueLedger(getRequestDb(req), day(req.query.from), day(req.query.to)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // Which classes already have a fee structure for a term — the structure form greys them out.
 router.post('/fee_structures/check', async (req, res) => {
     try {
