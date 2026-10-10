@@ -55,7 +55,7 @@ function printDoc(school: { name: string; logo: string; box?: string; tel?: stri
 
 export default function Analytics() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const [examId, setExamId] = useState("");
+    const [examId, setExamId] = useState(() => searchParams.get("exam") || "");   // ?exam= from Manage Exams
     // The selected class/form is URL-driven: /exams/analytics?class=Form%204&tab=merit
     const form = searchParams.get("class");   // null = My Classes view
     const setForm = (f: string | null) => setSearchParams(prev => {

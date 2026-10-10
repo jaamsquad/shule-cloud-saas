@@ -297,10 +297,8 @@ export default function NewExamPage() {
                                 {["Draft","Active","Archived"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </Field>
-                        <Field label="Publish Status">
-                            <select value={form.publishStatus} onChange={f("publishStatus")} className={selectCls}>
-                                {["Unpublished","Published"].map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                        <Field label="Results">
+                            <p className="text-xs text-slate-500 leading-snug pt-1">Results are published per class under <a href="/exams/manage" className="font-bold underline text-[#534AB7]">Exams → Manage Exams</a> once marks are in. Until then they don't show on merit lists, analytics, report cards or portals.</p>
                         </Field>
                     </div>
 
