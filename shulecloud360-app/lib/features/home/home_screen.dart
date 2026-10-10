@@ -12,6 +12,7 @@ import '../../core/ui.dart';
 import '../../core/widgets.dart';
 import '../apps/app_card.dart';
 import '../notifications/notifications_screen.dart';
+import '../shell/portal_switch.dart';
 
 /// Home: blue header with the person's card, today's numbers, Quick Access tiles, latest notices.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -58,7 +59,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           offset: const Offset(0, -52),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _ProfileCard(name: s.name, role: _kindLabel(s), school: s.subdomain.toUpperCase(), when: DateFormat('EEE, d MMM · HH:mm').format(_now)),
+            child: Column(children: [
+              _ProfileCard(name: s.name, role: _kindLabel(s), school: s.subdomain.toUpperCase(), when: DateFormat('EEE, d MMM · HH:mm').format(_now)),
+              if (s.hasBothPortals) const Padding(padding: EdgeInsets.only(top: 12), child: PortalSwitch()),
+            ]),
           ),
         ),
         Transform.translate(
@@ -84,6 +88,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   String _kindLabel(Session s) {
+    if (s.teaching) return 'Teacher';
     switch (s.kind) {
       case UserKind.admin: return s.isAdmin ? 'Administrator' : s.role.replaceAll('_', ' ').split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
       case UserKind.teacher: return 'Teacher';
@@ -137,6 +142,7 @@ final _summaryProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref)
   final s = ref.watch(sessionProvider).valueOrNull;
   if (s == null) return null;
   final dio = ref.read(apiProvider);
+  if (s.teaching) return Map<String, dynamic>.from((await dio.get('/auth/staff-portal/summary')).data as Map);
   switch (s.kind) {
     case UserKind.teacher:
       return Map<String, dynamic>.from((await dio.get('/auth/staff-portal/summary')).data as Map);
@@ -164,7 +170,7 @@ class _Summary extends ConsumerWidget {
         if (d == null || s == null) return const SizedBox.shrink();
         if (s.kind == UserKind.student || s.kind == UserKind.parent) return _FeesCard(d: d);
         final List<_Stat> stats;
-        if (s.kind == UserKind.teacher) {
+        if (s.teaching) {
           stats = [
             _Stat('Classes', '${d['classCount'] ?? 0}', Icons.class_rounded, const [Color(0xFF5AB0FF), Color(0xFF2563EB)]),
             _Stat('Subjects', '${d['subjectCount'] ?? 0}', Icons.menu_book_rounded, const [Color(0xFFA78BFA), Color(0xFF7C3AED)]),

@@ -5,6 +5,7 @@ import '../../core/catalog.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
+import 'portal_switch.dart';
 
 /// The frame around every main screen: a side menu (the open app's pages, then Home /
 /// Dashboard / Notifications / Help / Settings / Logout) and a bottom bar. Each screen
@@ -56,6 +57,33 @@ class _SideMenu extends ConsumerWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           onTap: () { Navigator.pop(context); onTap(); },
         );
+    final apps = ref.watch(appsProvider).valueOrNull ?? const <AppDef>[];
+    final messenger = ScaffoldMessenger.of(context);
+    Widget group(AppDef g) {
+      if (g.locked) {
+        return ListTile(
+          dense: true, leading: Icon(g.icon, size: 20, color: C.slate400),
+          title: Text(g.name, style: const TextStyle(fontSize: 14, color: C.slate400, fontWeight: FontWeight.w500)),
+          trailing: const Icon(Icons.lock_rounded, size: 15, color: C.amber),
+          onTap: () => messenger.showSnackBar(const SnackBar(content: Text('This module is not included in your plan, contact for more @ 0726151104'))),
+        );
+      }
+      final pages = g.sections.expand((sec) => sec.pages).toList();
+      if (pages.isEmpty) {
+        return row(g.icon, g.name, () => g.path == null ? context.go('/apps/${g.key}') : context.push(pageRoute(g, PageDef(g.name, g.path!))));
+      }
+      final isOpen = open?.key == g.key;
+      return ExpansionTile(
+        key: PageStorageKey(g.key),
+        initiallyExpanded: isOpen,
+        dense: true, tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: const Border(), collapsedShape: const Border(),
+        leading: Icon(g.icon, size: 20, color: isOpen ? C.brandDark : C.slate600),
+        title: Text(g.name, style: TextStyle(fontSize: 14, fontWeight: isOpen ? FontWeight.w700 : FontWeight.w600, color: isOpen ? C.brandDark : C.slate700)),
+        childrenPadding: const EdgeInsets.only(left: 26),
+        children: [for (final p in pages) row(null, p.label, () => context.push(pageRoute(g, p)))],
+      );
+    }
     return Drawer(
       backgroundColor: Colors.white,
       child: SafeArea(
@@ -64,31 +92,24 @@ class _SideMenu extends ConsumerWidget {
             margin: const EdgeInsets.fromLTRB(0, 0, 0, 10),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(gradient: const LinearGradient(colors: [C.sky, C.blue]), borderRadius: BorderRadius.circular(18)),
-            child: Row(children: [
-              Avatar(name: s?.name ?? '', size: 46, color: C.blue),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s?.name ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-                Text(open?.name ?? (s?.subdomain.toUpperCase() ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12.5)),
-              ])),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Avatar(name: s?.name ?? '', size: 46, color: C.blue),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s?.name ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                  Text('${s != null && s.teaching ? 'Teacher portal' : 'Admin portal'} · ${s?.subdomain.toUpperCase() ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12.5)),
+                ])),
+              ]),
+              if (s != null && s.hasBothPortals) ...[const SizedBox(height: 12), PortalSwitch(onDark: true, onSwitched: () => Navigator.pop(context))],
             ]),
           ),
-          if (open != null) ...[
-            row(Icons.dashboard_outlined, 'Dashboard', () => context.go('/apps/${open!.key}'), active: location == '/apps/${open!.key}'),
-            for (final sec in open!.sections)
-              if (open!.sections.length == 1)
-                for (final p in sec.pages) row(null, p.label, () => context.push(pageRoute(open!, p)))
-              else
-                ExpansionTile(
-                  dense: true, tilePadding: const EdgeInsets.symmetric(horizontal: 16), shape: const Border(), collapsedShape: const Border(),
-                  title: Text(sec.label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: C.slate700)),
-                  childrenPadding: const EdgeInsets.only(left: 12),
-                  children: [for (final p in sec.pages) row(null, p.label, () => context.push(pageRoute(open!, p)))],
-                ),
-            const Divider(height: 20),
-          ],
           row(Icons.home_outlined, 'Home', () => context.go('/'), active: location == '/'),
           row(Icons.grid_view_outlined, 'Dashboard', () => context.go('/apps'), active: location == '/apps'),
+          const Divider(height: 16),
+          for (final g in apps) group(g),
+          const Divider(height: 20),
           row(Icons.notifications_none_rounded, 'Notifications', () => context.push('/notifications')),
           row(Icons.help_outline, 'Help', () => context.push('/help')),
           row(Icons.settings_outlined, 'Settings', () => context.go('/account'), active: location.startsWith('/account')),

@@ -27,7 +27,7 @@ class Notice {
 final noticesProvider = FutureProvider.autoDispose<List<Notice>>((ref) async {
   final s = ref.watch(sessionProvider).valueOrNull;
   if (s == null) return const [];
-  final path = switch (s.kind) {
+  final path = s.teaching ? '/auth/staff-portal/announcements' : switch (s.kind) {
     UserKind.admin => '/announcements',
     UserKind.teacher => '/auth/staff-portal/announcements',
     UserKind.student => '/auth/student-portal/announcements',
@@ -42,7 +42,7 @@ final noticesProvider = FutureProvider.autoDispose<List<Notice>>((ref) async {
   }
 });
 
-String _seenKey(Session s) => 'sc360_seen_${s.subdomain}_${s.kind.name}_${s.name}';
+String _seenKey(Session s) => 'sc360_seen_${s.subdomain}_${s.kind.name}_${s.teaching ? 't' : 'a'}_${s.name}';
 
 /// How many notices arrived since this person last opened the list.
 final unreadProvider = FutureProvider.autoDispose<int>((ref) async {

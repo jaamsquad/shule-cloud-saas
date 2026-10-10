@@ -44,9 +44,6 @@ import PaymentInbox from "./pages/tenant/modules/PaymentInbox";
 import Login from "./pages/tenant/auth/Login";
 import Logout from "./pages/tenant/auth/Logout";
 import AccessDenied from "./pages/tenant/auth/AccessDenied";
-import HomePage from "./pages/tenant/apps/HomePage";
-import AppsPage from "./pages/tenant/apps/AppsPage";
-import AppDashboard from "./pages/tenant/apps/AppDashboard";
 import HelpPage from "./pages/tenant/apps/HelpPage";
 import ForgotPassword from "./pages/tenant/auth/ForgotPassword";
 import ResetPassword from "./pages/tenant/auth/ResetPassword";
@@ -632,9 +629,10 @@ const App = () => {
               {/* M-PESA integration */}
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
               <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
-              <Route path="/home" element={<HomePage />} />
-              <Route path="/apps" element={<AppsPage />} />
-              <Route path="/apps/:key" element={<AppDashboard />} />
+              {/* The sidebar is the way around; old Home/Apps links land on the dashboard. */}
+              <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/apps" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/apps/:key" element={<Navigate to="/dashboard" replace />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
               <Route path="/students/promote/auto" element={<AutoPromotion />} />

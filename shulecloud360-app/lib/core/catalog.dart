@@ -50,8 +50,33 @@ const _icons = <String, IconData>{
 
 class Catalog {
   final List<String> categories;
-  final List<AppDef> adminApps;
-  const Catalog(this.categories, this.adminApps);
+  final List<AppDef> adminApps;   // pages grouped by area — used for whole-area role grants
+  final List<AppDef> sidebar;     // the web sidebar's groups, in sidebar order — what the app shows
+  const Catalog(this.categories, this.adminApps, [this.sidebar = const []]);
+}
+
+/// Menu heading for the school's sidebar groups.
+const menuCategory = 'Menu';
+
+/// An icon for a sidebar group, from its name.
+IconData groupIcon(String label) {
+  final l = label.toLowerCase();
+  const map = <String, IconData>{
+    'dashboard': Icons.dashboard_outlined, 'classes': Icons.class_outlined, 'subjects': Icons.menu_book_outlined,
+    'students': Icons.school_outlined, 'parents': Icons.family_restroom_outlined, 'portal requests': Icons.assignment_ind_outlined,
+    'departments': Icons.apartment_outlined, 'employees': Icons.badge_outlined, 'requests': Icons.inbox_outlined,
+    'expense management': Icons.account_balance_wallet_outlined, 'procurement': Icons.shopping_cart_outlined,
+    'accounting': Icons.account_balance_outlined, 'fees': Icons.payments_outlined, 'salary': Icons.request_quote_outlined,
+    'transport': Icons.directions_bus_outlined, 'attendance': Icons.how_to_reg_outlined, 'cafeteria': Icons.restaurant_outlined,
+    'sports': Icons.emoji_events_outlined, 'trips & excursions': Icons.map_outlined, 'front desk': Icons.meeting_room_outlined,
+    'secretary': Icons.assignment_outlined, 'nemis assistant': Icons.account_balance_outlined, 'calendar': Icons.event_outlined,
+    'timetable': Icons.calendar_view_week_outlined, 'academic content': Icons.auto_stories_outlined, 'cbc assessment': Icons.grading_outlined,
+    'behaviour & skills': Icons.psychology_outlined, 'hostel': Icons.bed_outlined, 'library': Icons.local_library_outlined,
+    'point of sale': Icons.point_of_sale_outlined, 'live class & lms': Icons.videocam_outlined, 'question paper': Icons.quiz_outlined,
+    'exams': Icons.assignment_outlined, 'reports': Icons.insights_outlined, 'communications': Icons.forum_outlined,
+    'certificates': Icons.workspace_premium_outlined, 'general settings': Icons.tune_outlined, 'settings': Icons.settings_outlined,
+  };
+  return map[l] ?? Icons.folder_outlined;
 }
 
 final catalogProvider = FutureProvider<Catalog>((ref) async {
@@ -66,7 +91,19 @@ final catalogProvider = FutureProvider<Catalog>((ref) async {
           (s['pages'] as List).map((p) => PageDef(p['label'], p['path'], perm: p['perm'], create: p['create'] == true)).toList())).toList(),
     );
   }).toList();
-  return Catalog(cats, apps);
+  Color hex(Object? c) => Color(int.parse('FF${(c ?? '#2F7BF5').toString().replaceAll('#', '')}', radix: 16));
+  String slug(String l) => l.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+  final sidebar = ((j['sidebar'] ?? const []) as List).map((g) {
+    final pages = (g['pages'] as List).map((p) => PageDef(p['label'], p['path'], perm: p['perm'], create: p['create'] == true)).toList();
+    final label = g['label'].toString();
+    return AppDef(
+      key: 'g_${slug(label)}', name: label, category: menuCategory, color: hex(g['color']), icon: groupIcon(label),
+      description: pages.isEmpty ? label : pages.take(4).map((p) => p.label).join(', '),
+      path: pages.isEmpty ? g['path'] : null, modules: [if (g['module'] != null) g['module'].toString()],
+      sections: pages.isEmpty ? const [] : [SectionDef(label, g['module'], pages)],
+    );
+  }).toList();
+  return Catalog(cats, apps, sidebar);
 });
 
 // ── Portal apps for teachers, learners and parents (their web portal pages) ──
@@ -110,6 +147,7 @@ const parentApps = <AppDef>[
 
 /// The apps this person may open — the same rules as the web sidebar (lib/useAppAccess.ts).
 List<AppDef> visibleApps(Session s, Catalog cat) {
+  if (s.teaching) return teacherApps;   // teacher-only staff, or an admin who switched to the teacher portal
   switch (s.kind) {
     case UserKind.teacher: return teacherApps;
     case UserKind.student: return studentApps;
@@ -136,10 +174,11 @@ List<AppDef> visibleApps(Session s, Catalog cat) {
   }
 
   final out = <AppDef>[];
-  for (final a in cat.adminApps) {
+  // The school's sidebar, group by group (falls back to areas for an older catalogue).
+  for (final a in cat.sidebar.isNotEmpty ? cat.sidebar : cat.adminApps) {
     if (s.disabledApps.contains(a.key)) continue;   // switched off for this school by ShuleCloud
     final secs = a.sections.where((sec) => canModule(sec.module) && !planLocked(sec.module)).map((sec) => SectionDef(sec.label, sec.module, pagesOf(sec))).where((sec) => sec.pages.isNotEmpty).toList();
-    final pathOk = a.path != null && a.modules.any(canModule);
+    final pathOk = a.path != null && (a.modules.isEmpty ? all : a.modules.any(canModule)) && !a.modules.any(switchedOff);
     final lockedOnly = secs.isEmpty && a.sections.any((sec) => planLocked(sec.module) && (all || canModule(sec.module)));
     if (secs.isNotEmpty || pathOk) {
       out.add(a.withSections(secs));
@@ -147,18 +186,16 @@ List<AppDef> visibleApps(Session s, Catalog cat) {
       out.add(a.withSections(const [], locked: true));
     }
   }
-  if (s.canTeach) {
-    out.addAll(teacherApps.map((t) => AppDef(key: t.key, name: t.name, description: t.description, category: 'Teaching', color: t.color, icon: t.icon, sections: t.sections, portal: Portal.staff)));
-  }
   return out;
 }
 
 List<String> categoriesFor(Session s, Catalog cat) {
+  if (s.teaching) return const ['Teaching'];
   switch (s.kind) {
     case UserKind.teacher: return const ['Teaching'];
     case UserKind.student: return const ['My School'];
     case UserKind.parent: return const ['My Children'];
-    case UserKind.admin: return [...cat.categories, if (s.canTeach) 'Teaching'];
+    case UserKind.admin: return cat.sidebar.isNotEmpty ? const [menuCategory] : cat.categories;
   }
 }
 
