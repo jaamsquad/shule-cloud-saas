@@ -6,7 +6,10 @@ import { Award, Search, Printer, CheckCircle, Ban, Trash2, Calendar, User, Shiel
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { openPrintDoc } from "@/lib/pdfDoc";
+import { openPrintDoc, outputHtmlDoc } from "@/lib/pdfDoc";
+import QRCode from "qrcode";
+import { useSchoolBrand } from "@/lib/printDoc";
+import { certificateHtml } from "./students/certificates/certStyles";
 
 export default function SavedCertificates() {
     const queryClient = useQueryClient();
@@ -77,7 +80,20 @@ export default function SavedCertificates() {
         }
     });
 
+    const brand = useSchoolBrand();
+    // Certificates made with the student-profile designs (they carry a style) print in that design again
+    const printDesigned = async (cert: any) => {
+        const qr = cert.verifyUrl ? await QRCode.toDataURL(cert.verifyUrl, { margin: 1, width: 240, errorCorrectionLevel: "M" }).catch(() => "") : "";
+        const html = certificateHtml({
+            style: cert.style, title: cert.title || "CERTIFICATE", subtitle: cert.subtitle || "", name: cert.recipientName || "", body: cert.body || "", date: cert.date || "",
+            signatories: [{ name: cert.sig1Name || "", title: cert.sig1Desig || "" }, { name: cert.sig2Name || "", title: cert.sig2Desig || "" }],
+            certNo: cert.certId || "", qr, school: { name: brand.name, logo: brand.logo, address: brand.address, signature: brand.signature, stamp: brand.stamp },
+        });
+        outputHtmlDoc(`Certificate - ${cert.recipientName || ""}`, html.replace("</body>", "<script>window.onload=()=>setTimeout(()=>window.print(),250)</script></body>"), { fileName: `Certificate-${cert.recipientName || ""}` });
+    };
+
     const handlePrint = (cert: any) => {
+        if (cert.style && cert.certificateType !== "LEAVING" && cert.certificateType !== "TRANSFER") { printDesigned(cert); return; }
         const accentColor = activeTemplate?.accent_color || '#1e3a8a';
         const logoHtml = schoolLogo
             ? `<img src="${schoolLogo}" style="height: 60px; object-fit: contain; margin-bottom: 8px;" />`
@@ -524,6 +540,15 @@ ${certHtml}
                             <SelectItem value="MERIT" className="font-bold">Merit</SelectItem>
                             <SelectItem value="SPORTS" className="font-bold">Sports</SelectItem>
                             <SelectItem value="CUSTOM" className="font-bold">Custom</SelectItem>
+                            <SelectItem value="GRADUATION" className="font-bold">Graduation</SelectItem>
+                            <SelectItem value="ACADEMIC" className="font-bold">Academic Excellence</SelectItem>
+                            <SelectItem value="CONDUCT" className="font-bold">Good Conduct</SelectItem>
+                            <SelectItem value="ATTENDANCE" className="font-bold">Perfect Attendance</SelectItem>
+                            <SelectItem value="APPRECIATION" className="font-bold">Appreciation</SelectItem>
+                            <SelectItem value="CHARACTER" className="font-bold">Character</SelectItem>
+                            <SelectItem value="RECOMMENDATION" className="font-bold">Recommendation</SelectItem>
+                            <SelectItem value="LEAVING" className="font-bold">Leaving</SelectItem>
+                            <SelectItem value="TRANSFER" className="font-bold">Transfer</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
