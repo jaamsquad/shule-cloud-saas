@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Search, Check, Loader2, X, Plus } from "lucide-react";
+import { Home, Search, Check, Loader2, X, Plus, AlertTriangle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -213,8 +213,8 @@ export default function PaySalary() {
                                 className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"
                             />
                             {existingRun && (
-                                <p className="mt-3 text-[9px] font-black text-amber-600 uppercase tracking-wide">
-                                    ⚠ Record exists — will be updated
+                                <p className="mt-3 text-[9px] font-black text-amber-600 uppercase tracking-wide flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" />Record exists — will be updated
                                 </p>
                             )}
                         </div>

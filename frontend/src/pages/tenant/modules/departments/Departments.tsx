@@ -1,5 +1,5 @@
 import { who } from "@/lib/who";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -7,7 +7,7 @@ import {
     Building2, Plus, Loader2, X, Users, Crown, CalendarDays, FileText, Trash2,
     Check, Clock, UserPlus, Pencil, ClipboardCheck, ShieldCheck, History as HistoryIcon,
     FolderOpen, Bell, Download, Package, Sparkles, AlertTriangle,
-    ChevronRight as ChevronRightIcon,
+    ChevronRight as ChevronRightIcon, Hourglass,
 } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -366,9 +366,9 @@ function Examinations({ dept }: { dept: any }) {
                                 <p className="text-sm font-bold text-slate-700">{b.subject}</p>
                                 <div className="flex items-center gap-2 text-[11px]">
                                     <span className="text-slate-400">{b.total} total</span>
-                                    <span className="text-emerald-600 font-bold">{b.approved} ✓</span>
-                                    <span className="text-amber-600 font-bold">{b.pending} ⏳</span>
-                                    <span className="text-rose-500 font-bold">{b.rejected} ✕</span>
+                                    <span className="text-emerald-600 font-bold inline-flex items-center gap-0.5">{b.approved} <Check className="w-3.5 h-3.5" /></span>
+                                    <span className="text-amber-600 font-bold inline-flex items-center gap-0.5">{b.pending} <Hourglass className="w-3.5 h-3.5" /></span>
+                                    <span className="text-rose-500 font-bold inline-flex items-center gap-0.5">{b.rejected} <X className="w-3.5 h-3.5" /></span>
                                 </div>
                             </div>
                         ))}
@@ -377,7 +377,7 @@ function Examinations({ dept }: { dept: any }) {
             )}
 
             {view === "moderation" && (
-                (data?.pendingQuestions || []).length === 0 ? <p className="text-sm text-slate-400 text-center py-6">No questions awaiting moderation. 🎉</p> : (
+                (data?.pendingQuestions || []).length === 0 ? <p className="text-sm text-slate-400 text-center py-6">No questions awaiting moderation.</p> : (
                     <div className="space-y-1.5">
                         {data.pendingQuestions.map((q: any) => (
                             <div key={q.id} className="border border-slate-100 rounded-xl px-3 py-2.5">
@@ -629,7 +629,7 @@ function Analysis({ dept }: { dept: any }) {
         </div>
     );
 }
-const Panel = ({ title, children }: { title: string; children: any }) => (
+const Panel = ({ title, children }: { title: ReactNode; children: any }) => (
     <div className="bg-white rounded-xl border border-slate-100 p-4"><p className="text-xs font-black text-slate-500 uppercase mb-3">{title}</p>{children}</div>
 );
 const Muted = () => <p className="text-sm text-slate-400 text-center py-4">No data.</p>;
@@ -944,7 +944,7 @@ function DeptTimetable({ dept }: { dept: any }) {
                 <Stat label="Conflicts" value={s.conflicts ?? 0} color={s.conflicts ? "text-rose-600" : "text-emerald-600"} />
             </div>
             {(data?.conflicts || []).length > 0 && (
-                <Panel title="⚠️ Timetable Conflicts">
+                <Panel title={<span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-slate-400" />Timetable Conflicts</span>}>
                     <div className="space-y-1.5">
                         {data.conflicts.map((c: any, i: number) => (
                             <div key={i} className="border border-rose-100 bg-rose-50/40 rounded-xl px-3 py-2">

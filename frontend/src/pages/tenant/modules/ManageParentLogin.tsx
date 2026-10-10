@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
     Home, Eye, EyeOff, Save, RefreshCcw, Key, Search,
-    ExternalLink, Loader2, Users, Copy, CheckCircle2, Phone
+    ExternalLink, Loader2, Users, Copy, CheckCircle2, Phone, Lock
 } from "lucide-react";
 import UsernameInput from "@/components/UsernameInput";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -289,7 +289,7 @@ export default function ManageParentLogin() {
                                             {/* Password */}
                                             <td className="py-3 px-4">
                                                 <div className="relative">
-                                                    <div className="absolute -top-2.5 left-3 w-4 h-4 bg-[#5C67F2] rounded-full flex items-center justify-center z-10 text-white text-[8px] font-black">🔒</div>
+                                                    <div className="absolute -top-2.5 left-3 w-4 h-4 bg-[#5C67F2] rounded-full flex items-center justify-center z-10 text-white text-[8px] font-black"><Lock className="w-2.5 h-2.5" /></div>
                                                     <input
                                                         type={visiblePasswords[s._id] ? "text" : "password"}
                                                         value={getDisplayValue(s, "password")}

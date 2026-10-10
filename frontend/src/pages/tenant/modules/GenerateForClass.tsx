@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Download, Lock, Unlock, Edit3, Loader2, Calendar, Plus, Printer, ArrowRight } from "lucide-react";
+import { Play, Download, Lock, Unlock, Edit3, Loader2, Calendar, Plus, Printer, ArrowRight, Coffee, AlertTriangle, Check } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -35,7 +35,7 @@ function printTimetable(opts: {
 
     const logoHtml = schoolLogo
         ? `<img src="${schoolLogo}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />`
-        : `<span style="font-size:20px;">🏫</span>`;
+        : `<span style="display:inline-flex;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 3.447 1.724a1 1 0 0 1 .553.894V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7.382a1 1 0 0 1 .553-.894L6 10"/><path d="M18 5v17"/><path d="m4 6 8-4 8 4"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></svg></span>`;
 
     const DAY_LABELS: Record<string, string> = {
         MON: "Monday", TUE: "Tuesday", WED: "Wednesday",
@@ -53,7 +53,7 @@ function printTimetable(opts: {
         const cells = periods.map((p: any, pi: number) => {
             if (p.type === "BREAK") {
                 if (di === 0) {
-                    return `<td class="break-cell bg-amber-50" rowspan="${days.length}"><div style="writing-mode: vertical-lr; margin: auto; text-orientation: mixed;">☕ ${p.name}</div></td>`;
+                    return `<td class="break-cell bg-amber-50" rowspan="${days.length}"><div style="writing-mode: vertical-lr; margin: auto; text-orientation: mixed;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-bottom:4px;"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/></svg> ${p.name}</div></td>`;
                 }
                 return "";
             }
@@ -96,7 +96,7 @@ function printTimetable(opts: {
             <div class="slot-subject" style="color:${color}">${subName}</div>
             <div class="slot-teacher">${teaName}</div>
             <div class="slot-room">${rmName}</div>
-            ${slot.isLocked ? `<div class="slot-locked">🔒 Locked</div>` : ""}
+            ${slot.isLocked ? `<div class="slot-locked"><svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Locked</div>` : ""}
           </div>
         </td>`;
         }).join("");
@@ -855,7 +855,7 @@ export default function GenerateForClass() {
                                                 return (
                                                     <td key={p._id} rowSpan={activeWeekdays.length} className="bg-amber-50/40 text-amber-600 font-bold text-xs uppercase tracking-widest text-center select-none p-4 border-r border-gray-50 align-middle">
                                                         <div className="flex items-center justify-center h-full w-full" style={{ writingMode: "vertical-lr", textOrientation: "mixed" }}>
-                                                            ☕ {p.name}
+                                                            <Coffee className="w-3.5 h-3.5 mb-1" /> {p.name}
                                                         </div>
                                                     </td>
                                                 );
@@ -981,10 +981,10 @@ export default function GenerateForClass() {
                                             {items?.map((item: any) => <option key={item._id} value={item._id}>{getName(item)}</option>)}
                                         </select>
                                         {key === "teacherId" && overrideForm.subjectId && !hasSpecializedTeachers && (
-                                            <p className="text-[10px] text-amber-500 font-bold mt-1">⚠️ No teachers are specialized in this subject yet. Showing all staff.</p>
+                                            <p className="text-[10px] text-amber-500 font-bold mt-1 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> No teachers are specialized in this subject yet. Showing all staff.</p>
                                         )}
                                         {key === "teacherId" && overrideForm.subjectId && hasSpecializedTeachers && (
-                                            <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ Showing only teachers specialized in this subject.</p>
+                                            <p className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-1"><Check className="w-3.5 h-3.5 shrink-0" /> Showing only teachers specialized in this subject.</p>
                                         )}
                                     </div>
                                 );

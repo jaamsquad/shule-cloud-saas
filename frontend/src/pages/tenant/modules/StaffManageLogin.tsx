@@ -1,4 +1,4 @@
-import { Home, Eye, EyeOff, Save, Mail, Key, RefreshCcw, ExternalLink, Loader2, Search } from "lucide-react";
+import { Home, Eye, EyeOff, Save, Mail, Key, RefreshCcw, ExternalLink, Loader2, Search, Lock } from "lucide-react";
 import { useState } from "react";
 import UsernameInput from "@/components/UsernameInput";
 import { useItems } from "@/hooks/useItems";
@@ -163,7 +163,7 @@ export default function StaffManageLogin() {
                                         {/* Password */}
                                         <td className="py-3 px-4">
                                             <div className="relative">
-                                                <div className="absolute -top-2 left-3 w-4 h-4 bg-[#868DF4] rounded-full flex items-center justify-center z-10 text-white text-[8px]">🔒</div>
+                                                <div className="absolute -top-2 left-3 w-4 h-4 bg-[#868DF4] rounded-full flex items-center justify-center z-10 text-white text-[8px]"><Lock className="w-2.5 h-2.5" /></div>
                                                 <input type={visiblePasswords[s._id] ? "text" : "password"}
                                                     value={getDisplayValue(s, "password")} onChange={e => setFieldValue(s._id, "password", e.target.value)}
                                                     className="w-full h-9 px-3 pr-9 border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"

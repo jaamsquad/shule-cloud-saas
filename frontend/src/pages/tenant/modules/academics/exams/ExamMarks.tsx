@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
     Search, Save, AlertCircle, Loader2, Home, Users, CheckCircle,
-    XCircle, ChevronDown, ArrowLeft, Calculator, Lock, Send
+    XCircle, ChevronDown, ArrowLeft, Calculator, Lock, Send, Check
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -473,7 +473,7 @@ export default function ExamMarks() {
                                     <p className="text-xs text-slate-400 font-medium mt-0.5">
                                         {filtered.length} student(s) · Grades auto-calculated · Max marks: <strong className="text-[#5C67F2]">{subjectMaxMarks}</strong>
                                         {examSubjectConfigs.length > 0 && (
-                                            <span className="ml-2 text-emerald-600 font-bold">✓ From exam configuration</span>
+                                            <span className="ml-2 text-emerald-600 font-bold inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" />From exam configuration</span>
                                         )}
                                     </p>
                                 </div>

@@ -3,7 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useItems } from '@/hooks/useItems';
 import { toast } from 'sonner';
-import { Award, FileText, Printer, Search, Settings2, Users, Loader2, Sparkles } from 'lucide-react';
+import { Award, FileText, Printer, Search, Settings2, Users, Loader2, Sparkles, School, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -221,7 +221,7 @@ export default function GenerateCertificate() {
         const accentColor = activeTemplate?.accent_color || '#1e3a8a';
         const logoHtml = schoolLogo
             ? `<img src="${schoolLogo}" style="height: 60px; object-fit: contain; margin-bottom: 8px;" />`
-            : `<div style="font-size: 32px; margin-bottom: 8px;">🎓</div>`;
+            : `<div style="margin-bottom: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg></div>`;
 
         const isLeaving = mode === 'LEAVING';
         const isTransfer = mode === 'TRANSFER';
@@ -634,7 +634,7 @@ ${certsHtml}
                         }}
                         className={`h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all text-xs shadow-sm ${mode === 'LEAVING' ? 'bg-[#5C67F2] text-white hover:bg-[#4a54c4]' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
                     >
-                        🏫 Leaving Certificate
+                        <School className="w-4 h-4" /> Leaving Certificate
                     </Button>
                     <Button 
                         onClick={() => {
@@ -644,7 +644,7 @@ ${certsHtml}
                         }}
                         className={`h-11 px-5 rounded-xl font-bold flex items-center gap-2 transition-all text-xs shadow-sm ${mode === 'TRANSFER' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
                     >
-                        🔄 Transfer Certificate
+                        <RefreshCw className="w-4 h-4" /> Transfer Certificate
                     </Button>
                     
                     <Button onClick={handlePrintCurrent} className="group relative bg-white hover:bg-indigo-50 text-indigo-700 h-11 px-6 rounded-xl font-bold flex items-center gap-2 transition-all text-xs border border-indigo-200 hover:border-indigo-300 shadow-sm hover:shadow-md">

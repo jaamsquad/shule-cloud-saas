@@ -468,7 +468,7 @@ export default function DeleteFees() {
 
                             <p className="text-slate-500 text-xs font-medium leading-relaxed mb-6">
                                 {actionModal.type.includes('delete') 
-                                    ? "⚠️ WARNING: This will permanently purge the record from the database. Linked payments will be deleted. This is irreversible."
+                                    ? <><AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px] mr-1 text-rose-500" />WARNING: This will permanently purge the record from the database. Linked payments will be deleted. This is irreversible.</>
                                     : "This action will reverse/void ledger computations. The action is logged to the audit system."}
                             </p>
 

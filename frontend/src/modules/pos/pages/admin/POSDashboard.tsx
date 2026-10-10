@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import posApi from '../../lib/posApi'
 import {
   TrendingUp, ShoppingCart, Package, AlertTriangle,
-  ArrowRight, Landmark, RefreshCw
+  ArrowRight, Landmark, RefreshCw, CheckCircle2
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -91,7 +91,7 @@ export default function POSDashboard() {
               {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-800 rounded-lg animate-pulse" />)}
             </div>
           ) : !lowStock?.length ? (
-            <p className="text-gray-500 text-sm">All items fully stocked! ✅</p>
+            <p className="text-gray-500 text-sm flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-slate-400" />All items fully stocked!</p>
           ) : (
             <div className="space-y-2">
               {lowStock.slice(0, 5).map((p: any) => (

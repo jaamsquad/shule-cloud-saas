@@ -308,6 +308,7 @@ import CreateQuestionPaper from "./pages/tenant/modules/CreateQuestionPaper";
 import QuestionPaperForm from "./pages/tenant/modules/QuestionPaperForm";
 import AIQuestionImporter from "./pages/tenant/modules/AIQuestionImporter";
 import PaperImport from "./pages/tenant/modules/papers/PaperImport";
+import AfeyPage from "./pages/tenant/afey/AfeyPage";
 import QuestionBankPage from "./pages/tenant/modules/papers/QuestionBankPage";
 import PaperBuilder from "./pages/tenant/modules/papers/PaperBuilder";
 import Exams from "./pages/tenant/modules/Exams";
@@ -790,6 +791,7 @@ const App = () => {
               <Route path="/assessments/results" element={<Results />} />
 
               {/* Question Paper Management Module */}
+              <Route path="/afey" element={<AfeyPage />} />
               <Route path="/papers/import" element={<PaperImport />} />
               <Route path="/papers/import/ai" element={<AIQuestionImporter />} />
               <Route path="/papers/chapters" element={<SubjectChapters />} />

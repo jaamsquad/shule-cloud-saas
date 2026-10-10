@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText } from "lucide-react";
+import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -154,7 +154,7 @@ export default function OwnerSettings() {
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Video className="w-4 h-4" style={{ color: PRIMARY }} /> Live Classes — Jitsi / 8x8 JaaS</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">One JaaS account used by <b>all schools</b>. Each school's rooms stay isolated (namespaced by school). {meetingCfg?.configured ? "Configured ✓" : "Not configured yet."}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">One JaaS account used by <b>all schools</b>. Each school's rooms stay isolated (namespaced by school). {meetingCfg?.configured ? <>Configured <Check className="w-3.5 h-3.5 inline align-[-2px]" /></> : "Not configured yet."}</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => setMt((p: any) => ({ ...p, jitsiEnabled: !p.jitsiEnabled }))}
@@ -166,7 +166,7 @@ export default function OwnerSettings() {
                 {mtTest && (
                     <div className={`rounded-lg px-3 py-2 mb-3 text-[12px] font-semibold ${mtTest.ok ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
                         {mtTest.message}
-                        {mtTest.kid && <div className="mt-1 font-mono text-[10px] text-slate-500">kid: {mtTest.kid} · key {mtTest.keyLooksPem ? "PEM ✓" : "not PEM ✗"} ({mtTest.keyLength} chars)</div>}
+                        {mtTest.kid && <div className="mt-1 font-mono text-[10px] text-slate-500">kid: {mtTest.kid} · key {mtTest.keyLooksPem ? <>PEM <Check className="w-3 h-3 inline align-[-2px]" /></> : <>not PEM <X className="w-3 h-3 inline align-[-2px]" /></>} ({mtTest.keyLength} chars)</div>}
                     </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -197,7 +197,7 @@ export default function OwnerSettings() {
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><FileText className="w-4 h-4" style={{ color: PRIMARY }} /> KRA PIN Checker</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">One KRA app used by <b>all schools</b> to look up an employee's KRA PIN by National ID or PIN when registering staff. {kraCfg?.configured ? "Configured ✓" : "Not configured yet."}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">One KRA app used by <b>all schools</b> to look up an employee's KRA PIN by National ID or PIN when registering staff. {kraCfg?.configured ? <>Configured <Check className="w-3.5 h-3.5 inline align-[-2px]" /></> : "Not configured yet."}</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => testKra.mutate()} disabled={testKra.isPending} className="h-9 px-3 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 flex items-center gap-1.5">{testKra.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Test</button>

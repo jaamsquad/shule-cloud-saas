@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Wallet, Check, X } from "lucide-react";
+import { Loader2, Wallet, Check, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { isOrgUser } from "@/lib/orgContext";
@@ -31,7 +31,7 @@ export default function OrgExpenses() {
             </div>
             <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
                 {isLoading ? <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-slate-300" /></div> : rows.length === 0 ? (
-                    <div className="py-16 text-center text-slate-400 font-bold">No pending expenses across branches 🎉</div>
+                    <div className="py-16 text-center text-slate-400 font-bold flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4 text-slate-400" />No pending expenses across branches</div>
                 ) : (
                     <table className="w-full text-sm">
                         <thead><tr className="bg-slate-50 text-slate-400 text-[11px] uppercase">

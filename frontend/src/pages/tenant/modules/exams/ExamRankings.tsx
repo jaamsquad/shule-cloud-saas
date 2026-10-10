@@ -47,7 +47,7 @@ function printRankings(
     const schoolName = institute?.schoolName || institute?.name || "School";
     const rows = rankings.map((s, i) => `
         <tr style="background:${i < 3 ? ["#fffbeb","#f0fff4","#fdf4ff"][i] : i%2===0?"white":"#f8fafc"}">
-            <td style="text-align:center;font-weight:900;font-size:14px;padding:10px 8px;color:${["#f59e0b","#10b981","#8b5cf6"][i]||"#64748b"}">${i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}</td>
+            <td style="text-align:center;font-weight:900;font-size:14px;padding:10px 8px;color:${["#f59e0b","#10b981","#8b5cf6"][i]||"#64748b"}">${i + 1}</td>
             <td style="font-weight:700;padding:10px 8px">${s.studentName}</td>
             <td style="padding:10px 8px;color:#64748b">${s.admNo || "—"}</td>
             <td style="padding:10px 8px;color:#64748b">${s.className || "—"}</td>
@@ -283,15 +283,15 @@ export default function ExamRankings() {
                 {viewMode === "overall" && displayList.length >= 3 && (
                     <div className="grid grid-cols-3 gap-4 mb-6">
                         {[
-                            { pos: 0, emoji: "🥇", bg: "bg-amber-50", border: "border-amber-200", color: "text-amber-600" },
-                            { pos: 1, emoji: "🥈", bg: "bg-slate-50", border: "border-slate-200", color: "text-slate-500" },
-                            { pos: 2, emoji: "🥉", bg: "bg-orange-50", border: "border-orange-200", color: "text-orange-600" },
-                        ].map(({ pos, emoji, bg, border, color }) => {
+                            { pos: 0, bg: "bg-amber-50", border: "border-amber-200", color: "text-amber-600" },
+                            { pos: 1, bg: "bg-slate-50", border: "border-slate-200", color: "text-slate-500" },
+                            { pos: 2, bg: "bg-orange-50", border: "border-orange-200", color: "text-orange-600" },
+                        ].map(({ pos, bg, border, color }) => {
                             const s = displayList[pos];
                             if (!s) return null;
                             return (
                                 <div key={pos} className={`${bg} border-2 ${border} rounded-[2rem] p-5 text-center`}>
-                                    <div className="text-4xl mb-2">{emoji}</div>
+                                    <div className={`flex items-center justify-center gap-1 mb-2 ${color}`}><Medal className="w-8 h-8" /><span className="text-2xl font-black">{pos + 1}</span></div>
                                     <p className="font-black text-slate-800 text-sm">{s.studentName}</p>
                                     <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">{s.className || s.admNo}</p>
                                     <p className={`text-xl font-black mt-2 ${color}`}>{s.totalMarks}/{s.totalOutOf}</p>
@@ -410,7 +410,7 @@ function RankingTable({ students, isLoading = false, hasExam = true, showClassCo
                                 <tr key={s.studentId} className={`transition-colors ${isTop ? "bg-amber-50/20" : "hover:bg-slate-50/50"}`}>
                                     <td className="py-3 px-4 text-center">
                                         <span className={`text-lg font-black ${i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-orange-500" : "text-slate-400 text-sm"}`}>
-                                            {i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}
+                                            {i < 3 ? <span className="inline-flex items-center gap-1"><Medal className="w-4 h-4" />{i + 1}</span> : i + 1}
                                         </span>
                                     </td>
                                     <td className="py-3 px-4 font-black text-slate-800">{s.studentName}</td>

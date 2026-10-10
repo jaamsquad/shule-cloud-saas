@@ -9,7 +9,7 @@ import { useState, useMemo } from "react";
 import {
     Plus, Check, X, Loader2, Calendar, ChevronDown, ChevronRight,
     Settings, Edit2, Trash2, AlertCircle, BookOpen, RefreshCw,
-    ChevronLeft, ArrowRight, ArrowLeft, Wand2, Lock, Eye, EyeOff
+    ChevronLeft, ArrowRight, ArrowLeft, Wand2, Lock, Eye, EyeOff, Target
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -298,8 +298,8 @@ export default function Periods() {
             {/* ── Tabs ──────────────────────────────────────────────────── */}
             <div className="px-6 pt-4 flex items-center gap-1 border-b border-gray-100 bg-white">
                 {([
-                    { id: "current", label: "Current Period", icon: "🎯" },
-                    { id: "all",     label: "All Years & Terms", icon: "📅" },
+                    { id: "current", label: "Current Period", icon: Target },
+                    { id: "all",     label: "All Years & Terms", icon: Calendar },
                 ] as const).map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-2 px-4 py-3 text-xs font-black uppercase tracking-wide border-b-2 transition-all -mb-px ${
@@ -307,7 +307,7 @@ export default function Periods() {
                                 ? "border-[#5C67F2] text-[#5C67F2]"
                                 : "border-transparent text-gray-400 hover:text-gray-600"
                         }`}>
-                        <span>{t.icon}</span> {t.label}
+                        <t.icon className="w-3.5 h-3.5" /> {t.label}
                     </button>
                 ))}
             </div>

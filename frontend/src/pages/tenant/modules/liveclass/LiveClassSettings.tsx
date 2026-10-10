@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, CheckCircle2, XCircle, Plug } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, Plug, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { liveClass } from "@/lib/liveClassApi";
 
@@ -61,11 +61,11 @@ export default function LiveClassSettings() {
           <Section title="Jitsi Configuration">
             {f.jaasActive ? (
               <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-[12px] text-emerald-700 leading-snug">
-                ✅ <b>Unlimited meetings are active.</b> Your live classes run on the platform's managed 8x8 JaaS account — no 5-minute limit, and your school's rooms are kept private and isolated from other schools. Nothing to configure here.
+                <CheckCircle2 className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" /><b>Unlimited meetings are active.</b> Your live classes run on the platform's managed 8x8 JaaS account — no 5-minute limit, and your school's rooms are kept private and isolated from other schools. Nothing to configure here.
               </div>
             ) : (
               <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[12px] text-amber-700 leading-snug">
-                ⚠️ The platform's unlimited Jitsi (8x8 JaaS) isn't set up yet, so meetings currently use the free public server and end after <b>5 minutes</b>. Ask your ShuleCloud provider to enable it — it then applies to your school automatically.
+                <AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />The platform's unlimited Jitsi (8x8 JaaS) isn't set up yet, so meetings currently use the free public server and end after <b>5 minutes</b>. Ask your ShuleCloud provider to enable it — it then applies to your school automatically.
               </div>
             )}
             <Field label="Room name prefix"><input value={f.jitsiRoomPrefix || ""} onChange={e => set("jitsiRoomPrefix", e.target.value)} placeholder="ShuleCloud" className="inp" /></Field>

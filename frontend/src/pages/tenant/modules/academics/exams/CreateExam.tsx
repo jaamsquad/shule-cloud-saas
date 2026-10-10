@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
     Plus, Search, Edit3, Trash2, Archive, BookOpen, Calendar, Loader2,
     CheckCircle, XCircle, AlertCircle, MoreHorizontal, ChevronRight,
-    GraduationCap, Eye, Copy, Home, Layers, ExternalLink, Settings
+    GraduationCap, Eye, Copy, Home, Layers, ExternalLink, Settings, X
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -305,8 +305,8 @@ export default function CreateExam() {
                     {/* Active indicators */}
                     {(filterYear || filterTerm) && (
                         <button onClick={() => { setFilterYear(""); setFilterTerm(""); }}
-                            className="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors px-2 py-1">
-                            ✕ Clear
+                            className="inline-flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors px-2 py-1">
+                            <X className="w-3.5 h-3.5" /> Clear
                         </button>
                     )}
                     {currentPeriod && (

@@ -332,3 +332,9 @@ textarea.inp { height: auto; padding: 0.5rem 0.75rem; }
   background: conic-gradient(from 20deg, rgba(255, 255, 255, 0) 0deg 46deg, rgba(255, 255, 255, .35) 120deg, #fff 318deg, rgba(255, 255, 255, 0) 319deg);
 }
 @keyframes sc-spin { to { transform: rotate(360deg); } }
+
+/* ── Afey (AI helper) ─────────────────────────────────────────────────────── */
+.afey-ring { background: linear-gradient(90deg, #ec4899, #a855f7 45%, #6366f1); }
+.afey-ring:focus-within { box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.14); }
+.afey-glow { position: absolute; top: -160px; right: -120px; width: 520px; height: 420px; border-radius: 9999px;
+    background: radial-gradient(closest-side, rgba(168, 85, 247, 0.10), rgba(168, 85, 247, 0.03) 55%, transparent); filter: blur(10px); }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Plus, Check, X, Loader2, Calendar, ChevronRight, Settings } from "lucide-react";
+import { Home, Plus, Check, X, Loader2, Calendar, ChevronRight, Settings, Pencil } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ export default function AcademicYearsPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {!y.isActive && <button onClick={e => { e.stopPropagation(); setActiveMut.mutate({ id: y._id, type: "year" }); }} className="h-7 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 font-black text-[9px] uppercase rounded-xl transition-colors">Set Active</button>}
-                                        <button onClick={e => { e.stopPropagation(); setEditYearId(y._id); setYearForm({ year: String(y.year), name: y.name, startDate: y.startDate || "", endDate: y.endDate || "" }); setShowYearModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
+                                        <button onClick={e => { e.stopPropagation(); setEditYearId(y._id); setYearForm({ year: String(y.year), name: y.name, startDate: y.startDate || "", endDate: y.endDate || "" }); setShowYearModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100"><Pencil className="w-3.5 h-3.5" /></button>
                                         <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${selectedYear?._id === y._id ? "rotate-90" : ""}`} />
                                     </div>
                                 </div>
@@ -111,7 +111,7 @@ export default function AcademicYearsPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {!t.isActive && <button onClick={() => setActiveMut.mutate({ id: t._id, type: "term" })} className="h-7 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 font-black text-[9px] uppercase rounded-xl">Set Active</button>}
-                                        <button onClick={() => { setEditTermId(t._id); setTermForm({ academicYearId: t.academicYearId, name: t.name, termNumber: String(t.termNumber), startDate: t.startDate || "", endDate: t.endDate || "" }); setShowTermModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">✎</button>
+                                        <button onClick={() => { setEditTermId(t._id); setTermForm({ academicYearId: t.academicYearId, name: t.name, termNumber: String(t.termNumber), startDate: t.startDate || "", endDate: t.endDate || "" }); setShowTermModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100"><Pencil className="w-3.5 h-3.5" /></button>
                                     </div>
                                 </div>
                             </div>

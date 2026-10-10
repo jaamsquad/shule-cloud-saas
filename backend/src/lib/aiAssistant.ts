@@ -133,7 +133,7 @@ function systemPrompt(c: AiCaller, school: string) {
     ].join('\n');
 }
 
-function queryTool() {
+export function queryTool() {
     const cats = listCategories();
     const ids = cats.flatMap(c => c.queries.map(q => q.id));
     const described = cats.map(c => `${c.category}: ${c.queries.map(q => `${q.id} (${q.label})`).join('; ')}`).join('\n');
@@ -157,7 +157,7 @@ function queryTool() {
     };
 }
 
-const cardText = (k: SmartCard) => JSON.stringify({
+export const cardText = (k: SmartCard) => JSON.stringify({
     title: k.title, summary: k.summary, stat: k.stat, breakdown: (k.breakdown || []).slice(0, 15), chart: k.chart?.data?.slice(0, 15),
 });
 

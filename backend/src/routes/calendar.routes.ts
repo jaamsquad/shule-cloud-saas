@@ -6,20 +6,20 @@ const router = express.Router();
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
 const DEFAULT_CATEGORIES = [
-    { key: 'academic', name: 'Academic', color: '#2563eb', icon: '📘' },
-    { key: 'examinations', name: 'Examinations', color: '#dc2626', icon: '📝' },
-    { key: 'sports', name: 'Sports', color: '#7c3aed', icon: '🏅' },
-    { key: 'meetings', name: 'Meetings', color: '#0891b2', icon: '👥' },
-    { key: 'fees', name: 'Fees', color: '#d97706', icon: '💳' },
-    { key: 'transport', name: 'Transport', color: '#0f766e', icon: '🚌' },
-    { key: 'hostel', name: 'Hostel', color: '#be185d', icon: '🏠' },
-    { key: 'library', name: 'Library', color: '#4f46e5', icon: '📚' },
-    { key: 'medical', name: 'Medical', color: '#16a34a', icon: '🩺' },
-    { key: 'religious', name: 'Religious', color: '#a16207', icon: '🕯️' },
-    { key: 'public_holiday', name: 'Public Holiday', color: '#f43f5e', icon: '🎉' },
-    { key: 'school_holiday', name: 'School Holiday', color: '#64748b', icon: '🌴' },
-    { key: 'administration', name: 'Administration', color: '#475569', icon: '🏢' },
-    { key: 'other', name: 'Other', color: '#6b7280', icon: '📌' },
+    { key: 'academic', name: 'Academic', color: '#2563eb', icon: 'book-open' },
+    { key: 'examinations', name: 'Examinations', color: '#dc2626', icon: 'pencil' },
+    { key: 'sports', name: 'Sports', color: '#7c3aed', icon: 'medal' },
+    { key: 'meetings', name: 'Meetings', color: '#0891b2', icon: 'users' },
+    { key: 'fees', name: 'Fees', color: '#d97706', icon: 'credit-card' },
+    { key: 'transport', name: 'Transport', color: '#0f766e', icon: 'bus' },
+    { key: 'hostel', name: 'Hostel', color: '#be185d', icon: 'home' },
+    { key: 'library', name: 'Library', color: '#4f46e5', icon: 'library' },
+    { key: 'medical', name: 'Medical', color: '#16a34a', icon: 'stethoscope' },
+    { key: 'religious', name: 'Religious', color: '#a16207', icon: 'flame' },
+    { key: 'public_holiday', name: 'Public Holiday', color: '#f43f5e', icon: 'party-popper' },
+    { key: 'school_holiday', name: 'School Holiday', color: '#64748b', icon: 'palmtree' },
+    { key: 'administration', name: 'Administration', color: '#475569', icon: 'building' },
+    { key: 'other', name: 'Other', color: '#6b7280', icon: 'pin' },
 ];
 
 const fmtDate = (date: Date) => date.toISOString().slice(0, 10);
@@ -105,7 +105,7 @@ router.post('/calendar/categories', async (req: Request, res: Response) => {
             key: payload.key || `custom_${Date.now()}`,
             name: payload.name || 'Custom Category',
             color: payload.color || '#5C67F2',
-            icon: payload.icon || '📌',
+            icon: payload.icon || 'pin',
             permissions: payload.permissions || ['create','read','update'],
             createdAt: new Date(),
             updatedAt: new Date(),

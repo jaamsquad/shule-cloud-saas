@@ -654,7 +654,7 @@ export default function StudentsReportCard() {
                                 <div class="school-addr">${schoolAddress || ""}</div>
                                 <div class="report-badge">Annual Report Card</div>
                             </div>
-                            <div class="crest" style="background: #0F172A;">★</div>
+                            <div class="crest" style="background: #0F172A;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
                         </div>
 
                         <div class="student-bar">

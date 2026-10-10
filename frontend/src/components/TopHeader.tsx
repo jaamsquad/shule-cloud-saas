@@ -1,3 +1,4 @@
+import AfeyLauncher from "./afey/AfeyLauncher";
 import { useState, useEffect, useRef } from "react";
 import {
     Menu, Search, Maximize, MessageSquare, Bell,
@@ -235,6 +236,7 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                             <GraduationCap className="w-4 h-4" /> Teaching Portal
                         </button>
                     )}
+                    <AfeyLauncher tone={isDark ? "dark" : "light"} />
                     <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
                         <MessageSquare className="w-6 h-6" strokeWidth={1.5} />
                     </button>

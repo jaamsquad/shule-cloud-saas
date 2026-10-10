@@ -11,7 +11,7 @@
 import { useState, useMemo } from "react";
 import {
     CheckCircle2, AlertCircle, Loader2, ChevronRight, ChevronLeft,
-    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap, RefreshCw, Trash2
+    Eye, FileText, GraduationCap, Home, Search, ArrowRight, Circle, Zap, RefreshCw, Trash2, Check
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -654,7 +654,7 @@ export default function GenerateReportCards() {
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span className="text-sm font-black text-gray-900">{g.className}</span>
                                                     {g.streamName && <span className="text-[10px] font-bold text-slate-500">· {g.streamName}</span>}
-                                                    <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">✓ Generated</span>
+                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full"><Check className="w-3 h-3" />Generated</span>
                                                 </div>
                                                 <p className="text-[10px] text-gray-400 font-medium mt-0.5">
                                                     {g.mainExamName}{g.additionalExamIds?.length > 0 ? ` + ${g.additionalExamIds.length} internal` : ""} · {g.term} {g.academicYear}

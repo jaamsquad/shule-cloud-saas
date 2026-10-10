@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Laptop, Smartphone, CheckCircle2, XCircle, MessageSquare, Send, Settings2,
-  Loader2, Inbox,
+  Loader2, Inbox, BatteryMedium,
 } from "lucide-react";
 import { toast } from "sonner";
 import { sms } from "@/lib/smsApi";
@@ -102,7 +102,7 @@ export default function SmsConnection({ onOpenDashboard }: { onOpenDashboard?: (
               <>
                 <p className="text-sm font-bold text-slate-700 mt-1">{device.name || "Android device"}</p>
                 <p className="text-[11px] text-slate-400">
-                  {device.simOperator ? `SIM: ${device.simOperator}` : "SIM info pending"}{device.phone ? ` · ${device.phone}` : ""}{device.battery != null ? ` · 🔋 ${device.battery}%` : ""}
+                  {device.simOperator ? `SIM: ${device.simOperator}` : "SIM info pending"}{device.phone ? ` · ${device.phone}` : ""}{device.battery != null && <> · <BatteryMedium className="w-3 h-3 inline-block align-[-2px]" /> {device.battery}%</>}
                 </p>
               </>
             )}

@@ -2488,7 +2488,7 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
 
             <div style="font-size: 11px; font-weight: bold; margin-bottom: 15px;">
                 ${invoiceBalance <= 0 
-                    ? '<span style="color: #10b981;">✓ FULLY PAID (KSh 0 Balance)</span>' 
+                    ? '<span style="color: #10b981;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> FULLY PAID (KSh 0 Balance)</span>' 
                     : `<span style="color: #ef4444;">Balance Remaining: KSh ${invoiceBalance.toLocaleString()}</span>`}
             </div>
 
@@ -2531,7 +2531,7 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
         </head>
         <body>
             ${stubHtml('School Copy')}
-            <div class="stub-divider">✂ - - - - - - - - - - STUDENT COPY - - - - - - - - - - ✂</div>
+            <div class="stub-divider"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg> - - - - - - - - - - STUDENT COPY - - - - - - - - - - <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg></div>
             ${stubHtml('Student Copy')}
             <script>window.print();</script>
         </body>

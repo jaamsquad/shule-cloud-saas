@@ -105,7 +105,7 @@ export default function AcademicTermSettings() {
             <div className="flex-1 bg-[#f8fafc] min-h-screen p-6">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><CalendarRange className="w-5 h-5 text-indigo-600" /></div>
-                    <div><h1 className="text-xl font-black text-slate-800">Academic Term Settings</h1><p className="text-xs text-slate-500">Pick a term to configure (or click the ⚙ on a term in Learning Periods)</p></div>
+                    <div><h1 className="text-xl font-black text-slate-800">Academic Term Settings</h1><p className="text-xs text-slate-500">Pick a term to configure (or click the <Settings className="w-3 h-3 inline-block align-[-2px]" /> on a term in Learning Periods)</p></div>
                 </div>
                 {isLoading ? <Loader2 className="w-6 h-6 animate-spin text-indigo-400" /> : terms.length === 0 ? (
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 text-sm text-slate-500">No terms yet. Create academic years and terms in <a href="/academics/periods" className="text-indigo-600 font-bold underline">Learning Periods</a>.</div>

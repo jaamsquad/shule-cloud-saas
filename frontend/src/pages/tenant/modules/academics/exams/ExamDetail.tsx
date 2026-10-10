@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ArrowLeft, Users, BookOpen, Briefcase, BarChart3, Award, Printer, ChevronRight, Loader2, TrendingUp, TrendingDown, GraduationCap } from "lucide-react";
+import { ArrowLeft, Users, BookOpen, Briefcase, BarChart3, Award, Printer, ChevronRight, Loader2, TrendingUp, TrendingDown, GraduationCap, CheckCircle2, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
@@ -157,7 +157,7 @@ export default function ExamDetail() {
                 <td style="padding:8px 12px;text-align:center;font-weight:900;color:#5C67F2">${s.obtained}/${s.max}</td>
                 <td style="padding:8px 12px;text-align:center;font-weight:900;color:${s.pct >= 50 ? '#10b981' : '#ef4444'}">${s.pct}%</td>
                 <td style="padding:8px 12px;text-align:center;font-weight:900">${s.grade}</td>
-                <td style="padding:8px 12px;text-align:center">${s.pct >= 50 ? "✅ Pass" : "❌ Fail"}</td>
+                <td style="padding:8px 12px;text-align:center">${s.pct >= 50 ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg> Pass` : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Fail`}</td>
             </tr>
         `).join("");
 
@@ -497,7 +497,7 @@ export default function ExamDetail() {
                                             <tr key={s.studentId} className={`border-b border-gray-50 ${idx < 3 ? "bg-amber-50/30" : idx % 2 === 0 ? "bg-white" : "bg-gray-50/20"}`}>
                                                 <td className="px-4 py-3 text-center">
                                                     <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mx-auto ${idx === 0 ? "bg-yellow-400 text-white" : idx === 1 ? "bg-gray-400 text-white" : idx === 2 ? "bg-amber-700 text-white" : "bg-gray-100 text-gray-600"}`}>
-                                                        {idx < 3 ? ["🥇","🥈","🥉"][idx] : idx + 1}
+                                                        {idx + 1}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -525,8 +525,8 @@ export default function ExamDetail() {
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
                                                     {s.pct >= 50
-                                                        ? <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✅ Pass</span>
-                                                        : <span className="text-[10px] font-black text-red-500 bg-red-50 px-2 py-0.5 rounded-full">❌ Fail</span>}
+                                                        ? <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"><CheckCircle2 className="w-3.5 h-3.5" />Pass</span>
+                                                        : <span className="inline-flex items-center gap-1 text-[10px] font-black text-red-500 bg-red-50 px-2 py-0.5 rounded-full"><XCircle className="w-3.5 h-3.5" />Fail</span>}
                                                 </td>
                                             </tr>
                                         ))}

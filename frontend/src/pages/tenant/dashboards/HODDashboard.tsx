@@ -135,7 +135,7 @@ export default function HODDashboard() {
                             {/* Teachers missing marks */}
                             <Card title={<span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-rose-500" /> Teachers Who Haven't Submitted Marks</span>}>
                                 {(data.teachersMissingMarks || []).length === 0 ? (
-                                    <Empty msg="All department teachers have submitted marks. 🎉" />
+                                    <Empty msg="All department teachers have submitted marks." />
                                 ) : (
                                     <div className="space-y-1.5">
                                         {data.teachersMissingMarks.map((t: any) => (

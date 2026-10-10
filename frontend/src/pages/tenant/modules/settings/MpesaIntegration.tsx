@@ -97,7 +97,7 @@ export default function MpesaIntegration() {
                             </select>
                             {form.env === "sandbox" && (
                                 <p className="text-[11px] text-amber-600 font-semibold mt-1.5 leading-snug">
-                                    ⚠️ Sandbox never sends a real prompt to a normal phone. It only works with Safaricom's test number <b>254708374149</b>. To receive prompts on real phones, switch to <b>Production</b> with your live Paybill/Till credentials.
+                                    <AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Sandbox never sends a real prompt to a normal phone. It only works with Safaricom's test number <b>254708374149</b>. To receive prompts on real phones, switch to <b>Production</b> with your live Paybill/Till credentials.
                                 </p>
                             )}
                         </div>
