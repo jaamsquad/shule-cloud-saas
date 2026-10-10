@@ -16,6 +16,7 @@ import { printableReports } from '../lib/portalReportCard';
 import { scholarSheetData, reportCardSettings } from './reports.routes';
 import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
+import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -2312,16 +2313,22 @@ router.get('/staff-portal/attendance', authed(async (req, res, db, decoded) => {
     }
     const students = await studentsInClass(db, className);
     const existing = await db.collection('student_attendance').find({ className, date, subject: subject || 'General' }).toArray();
-    const map: Record<string, string> = {};
-    existing.forEach((r: any) => { map[String(r.studentId)] = r.status; });
+    const map: Record<string, any> = {};
+    existing.forEach((r: any) => { map[String(r.studentId)] = r; });
+    // Students signed out at the front desk that day → shown as Excused (reason).
+    const signouts = await signoutsOn(db, date, students.map((s: any) => String(s._id)));
     res.json({
         className, subject: subject || 'General', date,
-        students: students.map((s: any) => ({
-            studentId: String(s._id), name: s.studentName,
-            // Empty status = unmarked. The teacher must explicitly set each student's
-            // status; unmarked students are not saved (see POST below).
-            registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)] || '',
-        })),
+        students: students.map((s: any) => {
+            const so = signouts.get(String(s._id));
+            return {
+                studentId: String(s._id), name: s.studentName,
+                // Empty status = unmarked. The teacher must explicitly set each student's
+                // status; unmarked students are not saved (see POST below).
+                registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)]?.status || '', remarks: map[String(s._id)]?.remarks || '',
+                signout: so ? { reason: so.reason, timeOut: so.timeOut, pickedBy: so.pickedBy, label: excusedLabel(so) } : null,
+            };
+        }),
     });
 }));
 
@@ -2340,7 +2347,7 @@ router.post('/staff-portal/attendance', authed(async (req, res, db, decoded) => 
         if (!r.status) continue;
         await db.collection('student_attendance').updateOne(
             { studentId: String(r.studentId), className, date, subject: subj },
-            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, markedBy: decoded.name, updatedAt: new Date() } },
+            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, remarks: String(r.remarks || '').slice(0, 200), markedBy: decoded.name, updatedAt: new Date() } },
             { upsert: true },
         );
         saved++;
@@ -2607,7 +2614,7 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
         present,
         absent: records.length - present,
         rate: records.length ? Math.round((present / records.length) * 100) : 0,
-        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present' })),
+        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present', remarks: r.remarks || '' })),
     });
 }));
 
