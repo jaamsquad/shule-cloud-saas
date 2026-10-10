@@ -7,6 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import SubjectPicker from "@/components/subjects/SubjectPicker";
+import { useSubjectCatalog } from "@/lib/subjectCatalog";
 
 const DEFAULT_STREAMS = ["East", "West", "North", "South", "Red", "Blue", "Green", "Gold", "A", "B", "C", "D"];
 
@@ -21,6 +23,11 @@ export default function NewClass() {
     const [curriculum, setCurriculum]   = useState("CBC");
     const [teacherId, setTeacherId]     = useState("");
     const [isSaving, setIsSaving]       = useState(false);
+    // Subjects done by this class (built-in list; ticking one the school doesn't offer yet adds it)
+    const { data: catalog, refetch: refetchCatalog } = useSubjectCatalog();
+    const [classSubjects, setClassSubjects] = useState<Set<string>>(new Set());
+    const [allSubjects, setAllSubjects] = useState(false);
+    const offeredKeys = new Set((catalog?.subjects || []).filter(x => x.offered).map(x => x.key));
 
     // ── Stream template manager state ──────────────────────────────────────
     const [showTemplateManager, setShowTemplateManager] = useState(false);
@@ -128,12 +135,23 @@ export default function NewClass() {
                 classTeacherId: teacherId || null,
             });
 
-            // 3. Mirror to legacy /academics/classes for backward compat
+            // 3. Subjects done by this class — make sure the school offers them, then link them
+            let subjects: { subjectId: string; subjectName: string }[] = [];
+            if (classSubjects.size) {
+                const missing = [...classSubjects].filter(k => !offeredKeys.has(k));
+                if (missing.length) await api.put("/subject-catalog/offered", { keys: [...offeredKeys, ...missing] });
+                const fresh = missing.length ? (await refetchCatalog()).data : catalog;
+                subjects = (fresh?.subjects || []).filter(x => classSubjects.has(x.key) && x.subjectId).map(x => ({ subjectId: x.subjectId as string, subjectName: x.name }));
+            }
+
+            // 4. Mirror to legacy /academics/classes for backward compat (carries the class's subjects)
             await api.post("/academics/classes", {
                 levelName: preview,
                 capacity: Number(capacity),
                 classTeacherId: teacherId || null,
+                ...(subjects.length ? { subjects } : {}),
             });
+            if (subjects.length) qc.invalidateQueries({ queryKey: ["subject_catalog"] });
 
             qc.invalidateQueries({ queryKey: ["classes"] });
             qc.invalidateQueries({ queryKey: ["v2_classes"] });
@@ -393,6 +411,24 @@ export default function NewClass() {
                                     </select>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Subjects done by this class */}
+                    <div className="px-6 pb-6">
+                        <div className="rounded-2xl border border-gray-100 bg-gray-50/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                <div>
+                                    <p className="text-sm font-black text-gray-800">Subjects done by this class <span className="text-gray-400 font-bold">({classSubjects.size})</span></p>
+                                    <p className="text-[11px] text-gray-400">Optional — you can change them later under Subjects → Classes With Subjects.</p>
+                                </div>
+                                {offeredKeys.size > 0 && (
+                                    <label className="flex items-center gap-2 text-[11px] font-bold text-gray-500 cursor-pointer">
+                                        <input type="checkbox" checked={allSubjects} onChange={e => setAllSubjects(e.target.checked)} className="w-4 h-4" /> Show all subjects, not only the ones we offer
+                                    </label>
+                                )}
+                            </div>
+                            <SubjectPicker catalog={catalog} value={classSubjects} onChange={setClassSubjects} only={offeredKeys.size && !allSubjects ? offeredKeys : null} columns={2} />
                         </div>
                     </div>
 

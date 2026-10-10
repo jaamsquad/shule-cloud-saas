@@ -115,6 +115,8 @@ import Departments from "./pages/tenant/modules/Departments";
 import Subjects from "./pages/tenant/modules/Subjects";
 import AllSubjects from "./pages/tenant/modules/AllSubjects";
 import NewSubject from "./pages/tenant/modules/NewSubject";
+import SubjectsOffered from "./pages/tenant/modules/subjects/SubjectsOffered";
+import SubjectPathways from "./pages/tenant/modules/subjects/Pathways";
 import AssignSubjects from "./pages/tenant/modules/AssignSubjects";
 import CoCurricularActivities from "./pages/tenant/modules/CoCurricularActivities";
 import AddStudent from "./pages/tenant/modules/AddStudent";
@@ -681,6 +683,8 @@ const App = () => {
               <Route path="/subjects" element={<Subjects />} />
               <Route path="/subjects/all" element={<AllSubjects />} />
               <Route path="/subjects/new" element={<NewSubject />} />
+              <Route path="/subjects/offered" element={<SubjectsOffered />} />
+              <Route path="/subjects/pathways" element={<SubjectPathways />} />
               <Route path="/subjects/assign" element={<AssignSubjects />} />
               <Route path="/subjects/activities" element={<CoCurricularActivities />} />
               <Route path="/subjects/categories" element={<PlaceholderPage title="Subject Categories" subtitle="Organize subjects by department" />} />
