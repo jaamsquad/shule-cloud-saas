@@ -80,7 +80,7 @@ export default function DashboardLayout() {
 
     return (
         <div className="flex flex-col h-screen w-full bg-[#f8fafc] overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
-            <TopHeader onMenuClick={() => setSidebarOpen(v => !v)} />
+            <div data-app-chrome><TopHeader onMenuClick={() => setSidebarOpen(v => !v)} /></div>
 
             <div className="flex flex-1 overflow-hidden relative">
                 {/* ── Mobile overlay backdrop ─────────────────────────────── */}
@@ -93,7 +93,7 @@ export default function DashboardLayout() {
 
                 {/* ── Sidebar ─────────────────────────────────────────────── */}
                 {/* Desktop: pushes content. Mobile: overlays as drawer from left. */}
-                <div className={`
+                <div data-app-chrome className={`
                     transition-all duration-300 ease-in-out flex-shrink-0
                     md:relative md:top-0 md:z-auto
                     fixed left-0 top-16 bottom-0 z-30

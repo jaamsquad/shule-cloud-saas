@@ -284,7 +284,12 @@ router.post('/smart-login', async (req, res) => {
         };
 
         if (subdomain) {
-            const t = await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            // The mobile app sends the ShuleCloud School ID (A482917M); the web sends the subdomain.
+            const { isSchoolId, normalizeSchoolId } = await import('../lib/schoolId');
+            const t = isSchoolId(String(subdomain))
+                ? await metaDb.collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(String(subdomain)) })
+                : await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            if (!t && isSchoolId(String(subdomain))) return res.status(404).json({ message: `School ID "${normalizeSchoolId(String(subdomain))}" not found. Check the ID with your school.` });
             if (t) {
                 // Block login for schools still under review (registered but not activated).
                 if (t.status && t.status !== 'active') {
