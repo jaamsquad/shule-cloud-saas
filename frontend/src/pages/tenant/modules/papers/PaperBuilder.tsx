@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
 import { DEFAULT_NUMBERING, Numbering, Paper, PaperSection, paperHtml, paperTotal, questionMarks, questionNumbers, mainLabel } from "@/lib/paperNumbering";
-import { QPShell, Panel, Label, inp, useQPSubjects, useQPClasses, useQPChapters, QuestionBody, QuestionEditor, QQuestion, TypeBadge, DiffBadge, TYPES } from "./qpShared";
+import { QPShell, Panel, Label, inp, useQPSubjects, useQPPaperClasses, useQPChapters, QuestionBody, QuestionEditor, QQuestion, TypeBadge, DiffBadge, TYPES } from "./qpShared";
 
 const DEFAULT_RULES = [
     "Write your name, admission number and class in the spaces provided.",
@@ -44,7 +44,7 @@ export default function PaperBuilder() {
     const brand = useSchoolBrand();
     const [params, setParams] = useSearchParams();
     const { data: subjects = [] } = useQPSubjects();
-    const { data: classes = [] } = useQPClasses();
+    const { data: classes = [] } = useQPPaperClasses();
     const { data: chapters = [] } = useQPChapters();
 
     const [paperId, setPaperId] = useState<string | null>(null);
@@ -68,7 +68,8 @@ export default function PaperBuilder() {
     const [showSaved, setShowSaved] = useState(false);
 
     const subj = subjects.find((s: any) => s.key === subject);
-    const cls = classes.find((c: any) => c.id === classId);
+    // the paper is for a grade or one of its streams (Grade 1 North); questions come from that grade only
+    const cls = classes.find((c: any) => c.name === classId || (c.id && c.id === classId));
     const subjChapters = useMemo(() => chapters.filter((c: any) => subj && (String(c.subjectId) === subj.id || String(c.subjectName || "").toLowerCase() === subj.key)), [chapters, subj]);
     const paper: Paper = {
         header: { school: brand.name, logo: brand.logo, title, subject: subj?.name || "", className: cls?.name || "", duration, term, showCandidateFields: candidate },
@@ -81,25 +82,27 @@ export default function PaperBuilder() {
 
     const generate = async () => {
         if (!subj) { toast.error("Choose a subject"); return; }
+        if (!cls) { toast.error("Choose the class the paper is for"); return; }
         setBusy(true);
         try {
             const r = (await api.post("/qp/generate", {
-                subject: subj.name, subjectId: subj.id, classId, chapterIds,
+                subject: subj.name, subjectId: subj.id, classId: cls.id, className: cls.name, chapterIds,
                 difficulty: useMix ? mix : undefined,
                 sections: plans.map(p => ({ name: p.name, instructions: p.instructions, count: p.count, types: p.types, marksEach: p.marksEach ? Number(p.marksEach) : undefined })),
             })).data;
             setSections(r.sections.map((s: any) => ({ name: s.name, instructions: s.instructions, questions: s.questions })));
             const short = r.sections.filter((s: any) => s.short).map((s: any) => `${s.name || "The paper"}: only ${s.questions.length} of ${s.wanted} found${s.questions.length < s.wanted ? " — add more questions to the bank or relax the types/chapters" : ""}`);
+            if (r.unassigned) short.push(`${r.unassigned} ${subj.name} question${r.unassigned === 1 ? " has" : "s have"} no class and ${r.unassigned === 1 ? "was" : "were"} left out — give them a class in the Question bank to use them.`);
             setShortages(short);
-            if (!r.available) toast.error(`No ${subj.name} questions in the bank yet — import a paper first`);
-            else toast.success(`Paper generated from ${r.available} ${subj.name} question${r.available === 1 ? "" : "s"}`);
+            if (!r.available) toast.error(`No ${cls.grade} ${subj.name} questions in the bank yet — import a ${cls.grade} paper first`);
+            else toast.success(`Paper generated from ${r.available} ${cls.grade} ${subj.name} question${r.available === 1 ? "" : "s"}`);
         } catch (e: any) { toast.error(e?.response?.data?.message || "Could not generate"); } finally { setBusy(false); }
     };
     const replace = async (si: number, qi: number) => {
         const cur = sections[si].questions[qi];
         const plan = plans[si];
         try {
-            const r = (await api.post("/qp/generate", { subject: subj?.name, subjectId: subj?.id, classId, chapterIds, exclude: allIds, sections: [{ count: 1, types: cur.type ? [cur.type] : plan?.types || [] }] })).data;
+            const r = (await api.post("/qp/generate", { subject: subj?.name, subjectId: subj?.id, classId: cls?.id, className: cls?.name, chapterIds, exclude: allIds, sections: [{ count: 1, types: cur.type ? [cur.type] : plan?.types || [] }] })).data;
             const nq = r.sections[0]?.questions?.[0];
             if (!nq) { toast.info("No other question of this type in the bank"); return; }
             setSections(ss => ss.map((s, i) => i !== si ? s : { ...s, questions: s.questions.map((q, k) => k === qi ? nq : q) }));
@@ -109,7 +112,7 @@ export default function PaperBuilder() {
     const removeQ = (si: number, qi: number) => setSections(ss => ss.map((s, i) => i !== si ? s : { ...s, questions: s.questions.filter((_, k) => k !== qi) }));
     const shuffle = () => setSections(ss => ss.map(s => ({ ...s, questions: [...s.questions].sort(() => Math.random() - 0.5) })));
 
-    const body = () => ({ paperTitle: title, subject: subj?.name || "", subjectId: subj?.id || "", classId, className: cls?.name || "", header: paper.header, rules: paper.rules, numbering, sections, totalMarks: total, duration });
+    const body = () => ({ paperTitle: title, subject: subj?.name || "", subjectId: subj?.id || "", classId: cls?.id || "", className: cls?.name || "", header: paper.header, rules: paper.rules, numbering, sections, totalMarks: total, duration });
     const save = async () => {
         if (!sections.some(s => s.questions.length)) { toast.error("Generate the paper first"); return; }
         setSaving(true);
@@ -132,7 +135,7 @@ export default function PaperBuilder() {
             const p = (await api.get(`/qp/papers/${id}`)).data;
             setPaperId(String(p._id)); setTitle(p.header?.title || p.paperTitle || ""); setTerm(p.header?.term || ""); setDuration(p.header?.duration || p.duration || "");
             setCandidate(p.header?.showCandidateFields !== false); setRules(p.rules || []); setNumbering({ ...DEFAULT_NUMBERING, ...(p.numbering || {}) }); setSections(p.sections || []);
-            const s = subjects.find((x: any) => x.name === p.subject || x.id === p.subjectId); if (s) setSubject(s.key); setClassId(p.classId || "");
+            const s = subjects.find((x: any) => x.name === p.subject || x.id === p.subjectId); if (s) setSubject(s.key); setClassId(p.className || p.classId || "");
             setShowSaved(false); setShortages([]);
         } catch { toast.error("Could not open the paper"); }
     };
@@ -157,7 +160,8 @@ export default function PaperBuilder() {
                     <Panel title="1 · Subject & questions">
                         <div className="space-y-3">
                             <div><Label>Subject *</Label><select value={subject} onChange={e => { setSubject(e.target.value); setChapterIds([]); }} className={inp}><option value="">Choose subject…</option>{subjects.map((s: any) => <option key={s.key} value={s.key}>{s.name} · {s.count} question{s.count === 1 ? "" : "s"}</option>)}</select></div>
-                            <div><Label>Class</Label><select value={classId} onChange={e => setClassId(e.target.value)} className={inp}><option value="">Any class</option>{classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                            <div><Label>Class *</Label><select value={cls?.name || ""} onChange={e => setClassId(e.target.value)} className={inp}><option value="">Choose class…</option>{classes.map((c: any) => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
+                                {cls && <p className="text-[10px] text-slate-400 mt-1">Uses only {cls.grade} questions{cls.grade !== cls.name ? ` (shared by all ${cls.grade} streams)` : ""}.</p>}</div>
                             {subjChapters.length > 0 && (
                                 <div><Label>Chapters (none = all)</Label><div className="flex flex-wrap gap-1.5">{subjChapters.map((c: any) => { const on = chapterIds.includes(String(c._id)); return <button key={c._id} onClick={() => setChapterIds(ids => on ? ids.filter(x => x !== String(c._id)) : [...ids, String(c._id)])} className={`px-2.5 h-7 rounded-full text-[11px] font-bold border ${on ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>{c.chapterName}</button>; })}</div></div>
                             )}
