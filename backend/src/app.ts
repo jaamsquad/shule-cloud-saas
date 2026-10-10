@@ -363,7 +363,8 @@ app.use('/api/v1', posRoutes);
 app.use('/api/v1', promotionScheduleRoutes);   // scheduled automatic promotion
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
-app.use('/api/v1', meetingsRoutes);              // Communication → meetings calendar + SMS/email templates
+app.use('/api/v1', meetingsRoutes);
+app.use('/api/v1/secretary', meetingsRoutes);    // Secretary → Meeting Management (same meetings, under the Secretary/Front Desk app)              // Communication → meetings calendar + SMS/email templates
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)

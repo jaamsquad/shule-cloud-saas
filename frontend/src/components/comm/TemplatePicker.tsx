@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, ChevronDown, Settings2, Search } from "lucide-react";
@@ -7,10 +7,17 @@ import api from "@/lib/api";
 // Saved SMS / email templates (Communication → Templates), for any composer.
 export interface MessageTemplate { _id: string; channel: "sms" | "email"; name: string; category: string; subject?: string; body: string; usageCount?: number }
 
+/**
+ * Where the meetings / templates / contacts API is served from: "" (Communication) or
+ * "/secretary" (Secretary → Meeting Management, so it works under the Front Desk app too).
+ */
+export const CommApiBase = createContext("");
+
 export function useTemplates(channel?: "sms" | "email") {
+    const base = useContext(CommApiBase);
     return useQuery<MessageTemplate[]>({
         queryKey: ["message_templates", channel || "all"],
-        queryFn: async () => (await api.get("/communications/templates", { params: channel ? { channel } : {} })).data || [],
+        queryFn: async () => (await api.get(`${base}/communications/templates`, { params: channel ? { channel } : {} })).data || [],
         staleTime: 60_000,
     });
 }
@@ -23,6 +30,7 @@ export default function TemplatePicker({ channel, onPick, align = "left" }: { ch
     const [q, setQ] = useState("");
     const box = useRef<HTMLDivElement>(null);
     const { data = [], isLoading } = useTemplates(channel);
+    const base = useContext(CommApiBase);
     useEffect(() => {
         if (!open) return;
         const close = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
@@ -35,7 +43,7 @@ export default function TemplatePicker({ channel, onPick, align = "left" }: { ch
     const pick = (t: MessageTemplate) => {
         onPick(t);
         setOpen(false);
-        api.post(`/communications/templates/${t._id}/used`).catch(() => {});
+        api.post(`${base}/communications/templates/${t._id}/used`).catch(() => {});
     };
 
     return (
