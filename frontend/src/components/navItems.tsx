@@ -428,6 +428,7 @@ export const navItems: NavItem[] = [
       { label: "Learning Periods", path: "/academics/periods" },
       { label: "Academic Term Settings", path: "/settings/term-settings" },
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
+      { label: "Class Tuition Fees", path: "/settings/class-tuition" },
       { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
       { label: "Discount Type", path: "/settings/discount-type", locked: true },
       { label: "Rules & Regulations", path: "/settings/rules" },

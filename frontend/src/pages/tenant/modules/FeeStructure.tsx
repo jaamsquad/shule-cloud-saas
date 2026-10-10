@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { FeesPage } from "@/components/fees/FeesUI";
+import { ClassTuitionModal } from "@/components/fees/ClassTuitionGrid";
 import { Layers as LayersPageIcon } from "lucide-react";
 
 export default function FeeStructure() {
@@ -47,12 +48,6 @@ export default function FeeStructure() {
     };
     const yearLabelOf = (s: any) => yearName(s.academic_year_id) || s.year || "N/A";
 
-    // Termly tuition saved per class (Fee Particulars → Setup class tuition fees)
-    const { data: classTuition = [] } = useQuery<any[]>({
-        queryKey: ["class_tuition"],
-        queryFn: async () => (await api.get("/fees/class-tuition")).data?.classes || [],
-    });
-    const tuitionFor = (classId: string) => classTuition.find((c: any) => String(c.classId) === String(classId) && c.saved);
 
     // List filter: academic year + Term 1 / Term 2 / Term 3
     const [listYearId, setListYearId] = useState<string>("");
@@ -96,6 +91,15 @@ export default function FeeStructure() {
     });
 
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [tuitionOpen, setTuitionOpen] = useState(false);
+
+    // Tuition per class for the term being set up (Fees → Class Tuition): the term's own
+    // price where it has one, else the class's usual tuition.
+    const { data: classTuition = [] } = useQuery<any[]>({
+        queryKey: ["class_tuition", formData.semester_id || ""],
+        queryFn: async () => (await api.get("/fees/class-tuition", { params: { termId: formData.semester_id || "" } })).data?.classes || [],
+    });
+    const tuitionFor = (classId: string) => classTuition.find((c: any) => String(c.classId) === String(classId) && c.source !== "none");
 
     // A class can be in only one fee structure per term: ask the server which classes this
     // term already has a structure for, and grey those out.
@@ -227,6 +231,7 @@ export default function FeeStructure() {
     if (view === "form") {
         return (
             <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col">
+                {tuitionOpen && <ClassTuitionModal onClose={() => setTuitionOpen(false)} />}
                 {/* Breadcrumb Header */}
                 <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl">
                     <div className="flex items-center text-sm font-medium text-gray-500">
@@ -341,6 +346,7 @@ export default function FeeStructure() {
                             <div className="flex items-center justify-between">
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                                     Fee Particulars Setup
+                                    <button type="button" onClick={() => setTuitionOpen(true)} className="normal-case tracking-normal text-[10px] font-black text-[#5C67F2] underline">Class tuition per term</button>
                                 </h4>
                                 <button 
                                     type="button"
@@ -365,7 +371,7 @@ export default function FeeStructure() {
 
                             {Object.keys(formData.amounts).some(l => /tuition/i.test(l)) && formData.classIds.some((id: string) => tuitionFor(id)) && (
                                 <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-800">
-                                    <span className="uppercase tracking-wider">Tuition is charged per class</span> (from Fee Particulars → class tuition):{" "}
+                                    <span className="uppercase tracking-wider">Tuition is charged per class</span> (from Class Tuition, for this term):{" "}
                                     {formData.classIds.map((id: string) => {
                                         const c = classes.find((x: any) => x._id === id); const t = tuitionFor(id);
                                         return `${c?.name || c?.levelName || "Class"} KES ${t ? Number(t.amount).toLocaleString() : "— (uses the amount below)"}`;

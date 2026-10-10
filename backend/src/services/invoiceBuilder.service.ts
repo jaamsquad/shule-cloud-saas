@@ -52,10 +52,12 @@ export async function loadTermContext(db: any, yearId: string, termId: string): 
     for (const c of classes) classNameById.set(sid(c._id), String(c.name || c.levelName || ''));
     const particulars: any[] = [];
     for (const g of particularGroups) for (const p of (g.particulars || [])) if (p?.label) particulars.push(p);
-    // per-class tuition saved by class (lib/classTuition) wins over the copy kept by class name
+    // per-class tuition saved by class (lib/classTuition) wins over the copy kept by class name;
+    // this term's own price wins over the class's usual tuition
     if (tuitionRows.length) {
         const byClass: Record<string, any> = {};
-        for (const r of tuitionRows) { const name = classNameById.get(sid(r.classId)) || r.className; if (name) byClass[name] = r.amount; }
+        const ordered = [...tuitionRows.filter(r => !sid(r.termId)), ...tuitionRows.filter(r => sid(r.termId) && sid(r.termId) === sid(termId))];
+        for (const r of ordered) { const name = classNameById.get(sid(r.classId)) || r.className; if (name) byClass[name] = r.amount; }
         for (let i = 0; i < particulars.length; i++) {
             if (isTuition(particulars[i].label)) particulars[i] = { ...particulars[i], classAmounts: { ...(particulars[i].classAmounts || {}), ...byClass } };
         }

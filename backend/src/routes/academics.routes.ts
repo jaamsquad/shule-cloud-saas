@@ -11,7 +11,7 @@ import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope'
 import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
 import { feeStructureGuard, feeStructureConflicts } from '../lib/feeStructureGuard';
-import { getClassTuition, saveClassTuition } from '../lib/classTuition';
+import { getClassTuition, saveClassTuition, getTuitionGrid, saveTuitionCells } from '../lib/classTuition';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
@@ -835,9 +835,9 @@ const COLLECTION_MODULE: Record<string, string> = {
     router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
 });
 
-// Termly tuition per class (Fee Particulars → Setup class tuition fees) — lib/classTuition.
+// Tuition per class, optionally a different price per term (Fees → Class Tuition) — lib/classTuition.
 router.get('/fees/class-tuition', async (req, res) => {
-    try { res.json({ classes: await getClassTuition(getRequestDb(req)) }); }
+    try { res.json({ classes: await getClassTuition(getRequestDb(req), String(req.query.termId || '')) }); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
@@ -845,7 +845,20 @@ router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res
         const amounts = req.body?.amounts;
         if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
         const by = (req as any).tenantContext?.user?.name || undefined;
-        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by) });
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, String(req.body?.termId || '')) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.get('/fees/class-tuition/grid', async (req, res) => {
+    try { res.json(await getTuitionGrid(getRequestDb(req), String(req.query.yearId || ''))); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/fees/class-tuition/grid', enforceCrud('fees', 'update'), async (req, res) => {
+    try {
+        const cells = req.body?.cells;
+        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termId, amount }' });
+        const by = (req as any).tenantContext?.user?.name || undefined;
+        await saveTuitionCells(getRequestDb(req), cells, by);
+        res.json(await getTuitionGrid(getRequestDb(req), String(req.body?.yearId || '')));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 // Which classes already have a fee structure for a term — the structure form greys them out.

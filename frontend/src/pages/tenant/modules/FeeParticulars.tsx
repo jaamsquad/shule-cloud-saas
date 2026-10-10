@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { FeesPage } from "@/components/fees/FeesUI";
+import { ClassTuitionModal } from "@/components/fees/ClassTuitionGrid";
 import { ListChecks as ListChecksPageIcon } from "lucide-react";
 
 export default function FeeParticulars() {
@@ -23,7 +24,6 @@ export default function FeeParticulars() {
 
     const [rows, setRows] = useState<any[]>([]);
     const [classSetupModalOpen, setClassSetupModalOpen] = useState(false);
-    const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
     useEffect(() => {
         if (particularsData?.particulars) {
@@ -84,53 +84,9 @@ export default function FeeParticulars() {
     };
 
     // Open class setup modal for a tuition row
-    const openClassSetup = (index: number) => {
-        setSelectedRowIndex(index);
+    const openClassSetup = (_index: number) => {
         setClassSetupModalOpen(true);
     };
-
-    // Termly tuition per class — saved on the server one row per class (/fees/class-tuition),
-    // so each class keeps its own amount; fee structures and invoices read it from there.
-    const { data: classTuition = [], isLoading: tuitionLoading } = useQuery<any[]>({
-        queryKey: ["class_tuition"],
-        queryFn: async () => (await api.get("/fees/class-tuition")).data?.classes || [],
-    });
-    const [tuitionDraft, setTuitionDraft] = useState<Record<string, string>>({});
-    useEffect(() => {
-        if (!classSetupModalOpen) return;
-        const d: Record<string, string> = {};
-        classTuition.forEach((c: any) => { d[c.classId] = c.saved ? String(c.amount) : ""; });
-        setTuitionDraft(d);
-    }, [classSetupModalOpen, classTuition]);
-
-    const handleClassAmountChange = (classId: string, amount: string) => {
-        setTuitionDraft(prev => ({ ...prev, [classId]: amount }));
-    };
-
-    const saveTuition = useMutation({
-        mutationFn: async () => {
-            const amounts: Record<string, number> = {};
-            Object.entries(tuitionDraft).forEach(([id, v]) => { if (v !== "") amounts[id] = parseFloat(v) || 0; });
-            return (await api.put("/fees/class-tuition", { amounts })).data?.classes || [];
-        },
-        onSuccess: (saved: any[]) => {
-            queryClient.setQueryData(["class_tuition"], saved);
-            // keep this page's tuition row in step (by class name, as invoices read it), then save the list
-            const byName: Record<string, string> = {};
-            saved.forEach((c: any) => { if (c.saved) byName[c.className] = String(c.amount); });
-            const vals = Object.values(byName).map(Number);
-            const next = rows.map((r, i) => i === selectedRowIndex
-                ? { ...r, classAmounts: { ...(r.classAmounts || {}), ...byName }, amount: vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(0) : r.amount }
-                : r);
-            setRows(next);
-            setClassSetupModalOpen(false);
-            saveMutation.mutate(next);
-            toast.success("Class tuition fees saved");
-        },
-        onError: (err: any) => toast.error(err?.response?.data?.message || "Could not save class tuition fees"),
-    });
-
-    const handleClassSetupDone = () => saveTuition.mutate();
 
     const handleAddParticular = () => {
         setRows(prev => [
@@ -227,64 +183,8 @@ export default function FeeParticulars() {
                 </div>
             </div>
 
-            {/* Class Setup Modal */}
-            {classSetupModalOpen && selectedRowIndex !== null && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-                        <div className="px-8 py-5 bg-gradient-to-r from-[#5C67F2] to-indigo-500 text-white flex justify-between items-center">
-                            <div>
-                                <h3 className="text-sm font-black uppercase tracking-wider">Setup Class Tuition Fees</h3>
-                                <p className="text-[10px] opacity-80 font-bold uppercase mt-0.5">{rows[selectedRowIndex]?.label}</p>
-                            </div>
-                            <button 
-                                onClick={() => setClassSetupModalOpen(false)}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="p-8 max-h-[55vh] overflow-y-auto space-y-4">
-                            {tuitionLoading ? (
-                                <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-[#5C67F2]" /></div>
-                            ) : classTuition.length > 0 ? (
-                                classTuition.map((c: any) => (
-                                    <div key={c.classId} className="flex items-center justify-between gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                        <div className="min-w-0">
-                                            <span className="text-xs font-black text-slate-700 uppercase block truncate">{c.className}</span>
-                                            <span className={`text-[9px] font-bold uppercase tracking-wider ${c.saved ? "text-emerald-600" : "text-slate-400"}`}>
-                                                {c.saved ? `Saved · KES ${Number(c.amount).toLocaleString()}` : "Not set"}
-                                            </span>
-                                        </div>
-                                        <div className="w-32 relative shrink-0">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400">KES</span>
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={tuitionDraft[c.classId] ?? ""}
-                                                onChange={(e) => handleClassAmountChange(c.classId, e.target.value)}
-                                                placeholder="0"
-                                                className="w-full text-xs p-2 pl-9 bg-white border border-slate-150 rounded-lg outline-none focus:border-[#5C67F2] font-black text-slate-700 text-right"
-                                            />
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-center text-xs text-slate-400 py-6 uppercase font-bold tracking-wider">No classes created yet. Setup classes in Academics module.</p>
-                            )}
-                        </div>
-                        <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end">
-                            <button
-                                onClick={handleClassSetupDone}
-                                disabled={saveTuition.isPending || tuitionLoading}
-                                className="px-6 py-2 bg-[#5C67F2] hover:bg-indigo-600 text-white text-xs font-black rounded-lg uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {saveTuition.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                                Save
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Class tuition (per class, per term) */}
+            {classSetupModalOpen && <ClassTuitionModal onClose={() => setClassSetupModalOpen(false)} />}
         </FeesPage>
     );
 }
@@ -342,7 +242,7 @@ function ParticularRow({
                     title="Setup amount for each class individually"
                 >
                     <Settings2 className="w-3.5 h-3.5" />
-                    Setup per Class
+                    Per class &amp; term
                 </button>
             )}
 
