@@ -468,6 +468,14 @@ router.patch('/academics/subject-groups/:id',      c.updateItem('subject_groups'
 router.delete('/academics/subject-groups/:id',     c.deleteItem('subject_groups'));
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
+// Subjects a school no longer offers (Subjects → Subjects we offer) are hidden from pickers;
+// ?all=1 lists every subject (with history), any other query keeps the generic filters.
+router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
+    if (req.query.all) { delete (req.query as any).all; return next(); }
+    if (Object.keys(req.query).length) return next();
+    try { res.json(await getRequestDb(req).collection('subjects').find({ offered: { $ne: false } }).toArray()); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/subjects',              c.getItems('subjects'));
 router.post('/subjects',             c.createItem('subjects'));
 router.patch('/subjects/:id',        c.updateItem('subjects'));
