@@ -8,7 +8,10 @@ import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } fr
 import { syncStudentToParents } from '../services/parent-student-sync.service';
 import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
+import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
+import { feeStructureGuard, feeStructureConflicts } from '../lib/feeStructureGuard';
+import { getClassTuition, saveClassTuition } from '../lib/classTuition';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
@@ -289,6 +292,27 @@ router.post('/assessments',       c.createItem('exams'));
 router.patch('/assessments/:id',  c.updateItem('exams'));
 router.delete('/assessments/:id', c.deleteItem('exams'));
 
+// ?for=marks → the exams a person may enter marks for: admins get all, everyone else only
+// this term's (lib/examWindow). Without the flag the list is unchanged.
+router.get('/academics/exams', async (req, res, next) => {
+    if (req.query.for !== 'marks') return next();
+    delete (req.query as any).for;
+    const role = (req as any).tenantContext?.user?.role;
+    if (isAdminRole(role)) return c.getItems('exams')(req, res);
+    try {
+        const db = getRequestDb(req);
+        const win = await marksWindow(db);
+        const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
+        res.json(exams.filter((e: any) => examInWindow(e, win)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.get('/academics/marks-window', async (req, res) => {
+    try {
+        const win = await marksWindow(getRequestDb(req));
+        const admin = isAdminRole((req as any).tenantContext?.user?.role);
+        res.json({ restricted: !!win && !admin, isAdmin: admin, term: win?.term || '', year: win?.year || '', label: win?.label || '' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/academics/exams',              c.getItems('exams'));
 router.get('/academics/exams/:id',          c.getItem('exams'));
 router.post('/academics/exams',             c.createItem('exams'));
@@ -299,10 +323,32 @@ router.delete('/academics/exams/:id',       c.deleteItem('exams'));
 // Bare alias — several pages read a student's marks as GET /exam_marks?studentId=...
 router.get('/exam_marks',                    c.getItems('exam_marks'));
 router.get('/academics/exam-marks',          c.getItems('exam_marks'));
-router.post('/academics/exam-marks',         c.createItem('exam_marks'));
-router.patch('/academics/exam-marks/:id',    c.updateItem('exam_marks'));
+// Non-admins may only record marks for this term's exams.
+const marksWindowGuard = async (req: any, res: any, next: any) => {
+    try {
+        if (isAdminRole(req.tenantContext?.user?.role)) return next();
+        const db = getRequestDb(req);
+        const win = await marksWindow(db);
+        if (!win) return next();
+        const ids = new Set<string>();
+        const body = req.body || {};
+        if (Array.isArray(body.entries)) body.entries.forEach((e: any) => e?.examId && ids.add(String(e.examId)));
+        if (body.examId) ids.add(String(body.examId));
+        if (req.params?.id && !ids.size) {
+            const m: any = await db.collection('exam_marks').findOne({ _id: (ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : req.params.id) as any }).catch(() => null);
+            if (m?.examId) ids.add(String(m.examId));
+        }
+        for (const id of ids) {
+            const exam = await db.collection('exams').findOne({ _id: (ObjectId.isValid(id) ? new ObjectId(id) : id) as any }).catch(() => null);
+            if (exam && !examInWindow(exam, win)) return res.status(403).json({ message: WINDOW_MESSAGE(win), code: 'EXAM_OUTSIDE_TERM' });
+        }
+        next();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+};
+router.post('/academics/exam-marks',         marksWindowGuard, c.createItem('exam_marks'));
+router.patch('/academics/exam-marks/:id',    marksWindowGuard, c.updateItem('exam_marks'));
 router.delete('/academics/exam-marks/:id',   c.deleteItem('exam_marks'));
-router.post('/academics/exam-marks/bulk', async (req, res) => {
+router.post('/academics/exam-marks/bulk', marksWindowGuard, async (req, res) => {
     try {
         const db = getRequestDb(req);
         const { entries } = req.body;
@@ -773,6 +819,8 @@ const COLLECTION_MODULE: Record<string, string> = {
     const cr = mk ? [enforceCrud(mk, 'create')] : [];
     const up = mk ? [enforceCrud(mk, 'update')] : [];
     const de = mk ? [enforceCrud(mk, 'delete')] : [];
+    // a class may sit in only one fee structure per term (lib/feeStructureGuard)
+    if (col === 'fee_structures') { cr.push(feeStructureGuard); up.push(feeStructureGuard); }
 
     router.get(`/${col}`,    c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
@@ -785,6 +833,27 @@ const COLLECTION_MODULE: Record<string, string> = {
     router.post(`/academics/${col}`,   ...cr, c.createItem(col));
     router.patch(`/academics/${col}/:id`,  ...up, c.updateItem(col));
     router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
+});
+
+// Termly tuition per class (Fee Particulars → Setup class tuition fees) — lib/classTuition.
+router.get('/fees/class-tuition', async (req, res) => {
+    try { res.json({ classes: await getClassTuition(getRequestDb(req)) }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
+    try {
+        const amounts = req.body?.amounts;
+        if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
+        const by = (req as any).tenantContext?.user?.name || undefined;
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// Which classes already have a fee structure for a term — the structure form greys them out.
+router.post('/fee_structures/check', async (req, res) => {
+    try {
+        const conflicts = await feeStructureConflicts(getRequestDb(req), req.body || {}, req.body?.excludeId || null);
+        res.json({ conflicts });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 // Effective grading scale for a class: the class-specific grading_criteria if one

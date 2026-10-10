@@ -60,7 +60,7 @@ async function loadGrading(database: Db, classId?: string, className?: string) {
     return { scale, gradeOf, meanGrade };
 }
 
-router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:studentId'], async (req: Request, res: Response) => {
+const scholarSheetHandler = async (req: Request, res: Response) => {
     try {
         const database = getRequestDb(req);
         const sid = req.params.studentId;
@@ -607,7 +607,28 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             nextTermBegins,
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
+};
+router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:studentId'], scholarSheetHandler);
+
+/** The ScholarSheet payload for one learner and exam (used by the student & parent portals). */
+export function scholarSheetData(req: Request, studentId: string, examId: string): Promise<{ status: number; body: any }> {
+    return new Promise(resolve => {
+        const r: any = Object.create(req);
+        r.params = { ...(req.params || {}), studentId };
+        r.query = { ...(req.query || {}), examId };
+        const out: any = {
+            statusCode: 200,
+            status(c: number) { this.statusCode = c; return this; },
+            json(body: any) { resolve({ status: this.statusCode, body }); return this; },
+        };
+        scholarSheetHandler(r, out).catch((e: any) => resolve({ status: 500, body: { message: e?.message } }));
+    });
+}
+
+/** Report Card Settings (columns shown on the ScholarSheet). */
+export async function reportCardSettings(db: Db) {
+    return mergeRcSettings(await db.collection('report_card_settings').findOne({}).catch(() => null));
+}
 
 // Academic History — the classes a student has been in (current + previous after
 // promotion) and the exams sat in each, so the profile can list each class's

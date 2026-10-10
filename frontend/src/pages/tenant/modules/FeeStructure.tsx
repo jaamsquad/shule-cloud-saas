@@ -31,6 +31,33 @@ export default function FeeStructure() {
     const activeYear = academicYears.find((y: any) => y.isActive) || academicYears[0];
     const termsOfYear = (yearId: string) => terms.filter((t: any) => String(t.academicYearId) === String(yearId));
     const activeTerm = (yearId: string) => termsOfYear(yearId).find((t: any) => t.isActive) || termsOfYear(yearId)[0];
+    const yearName = (yearId: any) => { const y = academicYears.find((x: any) => String(x._id) === String(yearId)); return y ? String(y.year || y.name || "") : ""; };
+    // "Term 2" / "TERM TWO" → "2"
+    const termNo = (v: any) => { const t = String(v ?? "").toLowerCase().replace(/\b(19|20)\d{2}\b/g, ""); const d = t.match(/\d+/); if (d) return d[0]; if (/\bone\b|first/.test(t)) return "1"; if (/\btwo\b|second/.test(t)) return "2"; if (/\bthree\b|third/.test(t)) return "3"; return t.trim(); };
+    /** Is structure `s` set for term `t`? (by term id, or by name + year for older structures) */
+    const structureInTerm = (s: any, t: any) => {
+        if (s.semester_id) return String(s.semester_id) === String(t._id);
+        if (!s.term) return false;
+        const y = yearName(t.academicYearId);
+        return termNo(s.term) === termNo(t.name) && (!s.year || !y || String(s.year).includes(y) || y.includes(String(s.year)));
+    };
+    const termLabelOf = (s: any) => {
+        const t = s.semester_id ? terms.find((x: any) => String(x._id) === String(s.semester_id)) : null;
+        return t?.name || s.term || "All terms";
+    };
+    const yearLabelOf = (s: any) => yearName(s.academic_year_id) || s.year || "N/A";
+
+    // Termly tuition saved per class (Fee Particulars → Setup class tuition fees)
+    const { data: classTuition = [] } = useQuery<any[]>({
+        queryKey: ["class_tuition"],
+        queryFn: async () => (await api.get("/fees/class-tuition")).data?.classes || [],
+    });
+    const tuitionFor = (classId: string) => classTuition.find((c: any) => String(c.classId) === String(classId) && c.saved);
+
+    // List filter: academic year + Term 1 / Term 2 / Term 3
+    const [listYearId, setListYearId] = useState<string>("");
+    const [listTermId, setListTermId] = useState<string>("all");
+    useEffect(() => { if (!listYearId && activeYear) setListYearId(String(activeYear._id)); }, [activeYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Dynamic extraction of unique fee particulars from all category configurations
     const { data: rawParticulars = [], data: particularsData = [] } = useQuery({
@@ -69,6 +96,24 @@ export default function FeeStructure() {
     });
 
     const [editingId, setEditingId] = useState<string | null>(null);
+
+    // A class can be in only one fee structure per term: ask the server which classes this
+    // term already has a structure for, and grey those out.
+    const { data: termConflicts = [] } = useQuery<any[]>({
+        queryKey: ["fee_structure_conflicts", formData.academic_year_id, formData.semester_id, editingId, classes.length],
+        enabled: view === "form" && !!formData.semester_id && classes.length > 0,
+        queryFn: async () => {
+            const sem = terms.find((t: any) => String(t._id) === String(formData.semester_id));
+            const r = await api.post("/fee_structures/check", {
+                academic_year_id: formData.academic_year_id, semester_id: formData.semester_id,
+                term: sem?.name || "", year: yearName(formData.academic_year_id),
+                class_ids: classes.map((c: any) => c._id), excludeId: editingId,
+            });
+            return r.data?.conflicts || [];
+        },
+    });
+    const takenBy = (c: any) => termConflicts.find((x: any) => (x.classId && String(x.classId) === String(c._id)) || String(x.className).toLowerCase() === String(c.name || c.levelName || "").toLowerCase());
+    const selectedTaken = classes.filter((c: any) => formData.classIds.includes(c._id) && takenBy(c));
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
     const handleDeleteConfirm = () => {
@@ -138,9 +183,12 @@ export default function FeeStructure() {
             if (!has) {
                 const cls = classes.find((c: any) => c._id === selectedClass);
                 const label = cls?.name || cls?.levelName || "";
+                const savedTuition = tuitionFor(selectedClass);
                 // Auto pre-fill tuition fees if configured class-wise
                 rawParticulars.forEach((p: any) => {
-                    if (p.classAmounts && p.classAmounts[label]) {
+                    if (savedTuition && /tuition/i.test(p.label) && (prev.classIds.length === 0 || !updatedAmounts[p.label])) {
+                        updatedAmounts[p.label] = String(savedTuition.amount);
+                    } else if (p.classAmounts && p.classAmounts[label]) {
                         updatedAmounts[p.label] = p.classAmounts[label];
                     } else if (p.amount) {
                         // Fallback to prefix default amount if not already custom set
@@ -160,6 +208,15 @@ export default function FeeStructure() {
         // Tab filtering
         const matchesTab = s.status === activeTab || (!s.status && activeTab === "Active");
         if (!matchesTab) return false;
+
+        // Year / term filtering
+        if (listTermId !== "all") {
+            const t = terms.find((x: any) => String(x._id) === listTermId);
+            if (t && !structureInTerm(s, t)) return false;
+        } else if (listYearId) {
+            const inYear = s.academic_year_id ? String(s.academic_year_id) === listYearId : (!s.year || String(s.year).includes(yearName(listYearId)));
+            if (!inYear) return false;
+        }
 
         // Search term filtering
         const q = searchTerm.toLowerCase();
@@ -224,14 +281,27 @@ export default function FeeStructure() {
                                     {classes.length === 0 && <span className="text-[10px] text-slate-400 font-bold uppercase py-1.5">No classes created yet</span>}
                                     {classes.map((c: any) => {
                                         const on = formData.classIds.includes(c._id);
+                                        const taken = takenBy(c);
                                         return (
-                                            <button key={c._id} type="button" onClick={() => toggleClass(c._id)}
-                                                className={`px-3 h-8 rounded-full text-[10px] font-black uppercase tracking-wide border transition-all ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>
+                                            <button key={c._id} type="button" onClick={() => (taken && !on) ? toast.error(`${c.name || c.levelName} is already in “${taken.structureName}” for this term`) : toggleClass(c._id)}
+                                                title={taken ? `Already in “${taken.structureName}” for this term` : undefined}
+                                                className={`px-3 min-h-8 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border transition-all text-left ${taken
+                                                    ? (on ? "bg-rose-500 text-white border-rose-500" : "bg-slate-100 text-slate-400 border-dashed border-slate-300 cursor-not-allowed")
+                                                    : on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>
                                                 {c.name || c.levelName}
+                                                {taken && <span className="block text-[8px] font-bold normal-case tracking-normal opacity-80">In {taken.structureName}</span>}
                                             </button>
                                         );
                                     })}
                                 </div>
+                                {selectedTaken.length > 0 && (
+                                    <p className="mt-2 text-[11px] font-bold text-rose-600">
+                                        {selectedTaken.map((c: any) => c.name || c.levelName).join(", ")} already {selectedTaken.length > 1 ? "have" : "has"} a fee structure for this term. Remove {selectedTaken.length > 1 ? "them" : "it"} or pick another term — a class can only be in one fee structure per term.
+                                    </p>
+                                )}
+                                {formData.semester_id && termConflicts.length > 0 && selectedTaken.length === 0 && (
+                                    <p className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Greyed-out classes already have a fee structure this term.</p>
+                                )}
                             </div>
                             <div className="relative">
                                 <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Academic Year*</div>
@@ -246,15 +316,24 @@ export default function FeeStructure() {
                             </div>
                             <div className="relative">
                                 <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">Term*</div>
-                                <select
-                                    className="w-full h-12 px-6 border border-slate-100 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-black text-xs bg-slate-50/50 shadow-inner appearance-none cursor-pointer"
-                                    value={formData.semester_id}
-                                    onChange={(e) => setFormData({ ...formData, semester_id: e.target.value })}
-                                    disabled={!formData.academic_year_id}
-                                >
-                                    <option value="">Select term…</option>
-                                    {termsOfYear(formData.academic_year_id).map((t: any) => <option key={t._id} value={t._id}>{t.name}{t.isActive ? " (Current)" : ""}</option>)}
-                                </select>
+                                <div className="w-full min-h-12 px-3 pt-4 pb-2 border border-slate-100 rounded-2xl bg-slate-50/50 shadow-inner flex flex-wrap gap-2 items-center">
+                                    {!formData.academic_year_id && <span className="text-[10px] text-slate-400 font-bold uppercase">Pick the year first</span>}
+                                    {formData.academic_year_id && termsOfYear(formData.academic_year_id).length === 0 && (
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase">No terms for this year — <Link to="/academic-system/years" className="text-[#5C67F2] underline">add terms</Link></span>
+                                    )}
+                                    {termsOfYear(formData.academic_year_id).map((t: any) => {
+                                        const on = String(formData.semester_id) === String(t._id);
+                                        return (
+                                            <button key={t._id} type="button" onClick={() => setFormData({ ...formData, semester_id: String(t._id) })}
+                                                className={`px-3 h-8 rounded-full text-[10px] font-black uppercase tracking-wide border transition-all ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200 hover:border-[#5C67F2]"}`}>
+                                                {t.name}{t.isActive ? " · Current" : ""}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {formData.academic_year_id && termsOfYear(formData.academic_year_id).length > 0 && termsOfYear(formData.academic_year_id).length < 3 && (
+                                    <p className="mt-1.5 text-[10px] font-bold text-slate-400">Only {termsOfYear(formData.academic_year_id).length} term(s) set up for this year — <Link to="/academic-system/years" className="text-[#5C67F2] underline">add the rest</Link> to make Term 1, 2 and 3 structures.</p>
+                                )}
                             </div>
                         </div>
 
@@ -283,6 +362,16 @@ export default function FeeStructure() {
                                     <Plus className="w-4 h-4" strokeWidth={3} /> Add Particular Item
                                 </button>
                             </div>
+
+                            {Object.keys(formData.amounts).some(l => /tuition/i.test(l)) && formData.classIds.some((id: string) => tuitionFor(id)) && (
+                                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-800">
+                                    <span className="uppercase tracking-wider">Tuition is charged per class</span> (from Fee Particulars → class tuition):{" "}
+                                    {formData.classIds.map((id: string) => {
+                                        const c = classes.find((x: any) => x._id === id); const t = tuitionFor(id);
+                                        return `${c?.name || c?.levelName || "Class"} KES ${t ? Number(t.amount).toLocaleString() : "— (uses the amount below)"}`;
+                                    }).join(" · ")}
+                                </div>
+                            )}
 
                             {Object.entries(formData.amounts).length > 0 ? (
                                 <div className="space-y-3">
@@ -370,7 +459,7 @@ export default function FeeStructure() {
                             <button
                                 type="button"
                                 onClick={() => createMutation.mutate(formData)}
-                                disabled={createMutation.isPending || !formData.name.trim() || formData.classIds.length === 0 || !formData.academic_year_id || !formData.semester_id}
+                                disabled={createMutation.isPending || !formData.name.trim() || formData.classIds.length === 0 || !formData.academic_year_id || !formData.semester_id || selectedTaken.length > 0}
                                 className="flex items-center gap-2 px-8 py-3.5 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-lg hover:shadow-xl transition-all transform active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -431,6 +520,33 @@ export default function FeeStructure() {
                         </div>
                     </div>
 
+                    {/* Year + Term 1 / Term 2 / Term 3 */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                        <select value={listYearId} onChange={(e) => { setListYearId(e.target.value); setListTermId("all"); }}
+                            className="h-10 px-4 border border-slate-200 rounded-xl text-xs font-black text-slate-700 bg-white">
+                            {academicYears.map((y: any) => <option key={y._id} value={String(y._id)}>{y.year || y.name}{y.isActive ? " (Current)" : ""}</option>)}
+                            {academicYears.length === 0 && <option value="">All years</option>}
+                        </select>
+                        <div className="flex gap-1.5 overflow-x-auto">
+                            {[{ _id: "all", name: "All terms" }, ...termsOfYear(listYearId)].map((t: any) => {
+                                const on = listTermId === String(t._id);
+                                const count = t._id === "all" ? null : (structures || []).filter((x: any) => (x.status || "Active") === activeTab && structureInTerm(x, t)).length;
+                                return (
+                                    <button key={t._id} type="button" onClick={() => setListTermId(String(t._id))}
+                                        className={`shrink-0 px-4 h-9 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${on ? "bg-[#5C67F2] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:text-slate-800"}`}>
+                                        {t.name}{t.isActive ? " · Current" : ""}{count !== null ? ` (${count})` : ""}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {listTermId !== "all" && (
+                            <button type="button" onClick={() => { handleOpenCreateModal(); setFormData((prev: any) => ({ ...prev, academic_year_id: listYearId, semester_id: listTermId })); }}
+                                className="sm:ml-auto shrink-0 px-4 h-9 rounded-xl bg-[#5C67F2]/10 text-[#5C67F2] text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                <Plus className="w-3.5 h-3.5" /> New for {terms.find((t: any) => String(t._id) === listTermId)?.name || "this term"}
+                            </button>
+                        )}
+                    </div>
+
                     {/* Premium Grid layout of Cards */}
                     {isLoading ? (
                         <div className="bg-white rounded-3xl p-20 text-center border border-slate-100 shadow-sm">
@@ -459,7 +575,7 @@ export default function FeeStructure() {
                                             <div className="flex justify-between items-start mb-4">
                                                 <div>
                                                     <span className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-[#5C67F2]/10 text-[#5C67F2] mb-2">
-                                                        {s.term || "Term 1"}
+                                                        {termLabelOf(s)}
                                                     </span>
                                                     <h3 className="text-lg font-black text-slate-800 tracking-tight group-hover:text-[#5C67F2] transition-colors">
                                                         {s.name || classNames || "Untitled structure"}
@@ -486,6 +602,24 @@ export default function FeeStructure() {
                                                     >
                                                         <Edit2 className="w-3.5 h-3.5" />
                                                     </button>
+                                                    <button
+                                                        title="Copy to another term"
+                                                        onClick={() => {
+                                                            setEditingId(null);
+                                                            const amounts = s.amounts && Object.keys(s.amounts).length ? s.amounts : Object.fromEntries((s.items || []).map((it: any) => [it.category, it.amount]));
+                                                            const classIds = Array.isArray(s.class_ids) && s.class_ids.length ? s.class_ids : classes.filter((c: any) => (c.name || c.levelName) === s.className).map((c: any) => c._id);
+                                                            const yearId = s.academic_year_id || (activeYear ? String(activeYear._id) : "");
+                                                            const ts = termsOfYear(yearId);
+                                                            const idx = ts.findIndex((t: any) => String(t._id) === String(s.semester_id));
+                                                            const next = ts[idx + 1] || ts.find((t: any) => String(t._id) !== String(s.semester_id));
+                                                            const name = next ? String(s.name || "").replace(/term\s*\d+/i, String(next.name).toUpperCase()) : s.name;
+                                                            setFormData({ name: name && name !== s.name ? name : `${s.name || "Fee structure"} (copy)`, classIds, academic_year_id: yearId, semester_id: next ? String(next._id) : "", amounts: { ...amounts } });
+                                                            setView("form");
+                                                        }}
+                                                        className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-[#5C67F2] hover:text-white text-slate-400 flex items-center justify-center transition-colors shadow-sm"
+                                                    >
+                                                        <Layers className="w-3.5 h-3.5" />
+                                                    </button>
                                                     <button 
                                                         onClick={() => setDeleteConfirmId(s._id || s.id)}
                                                         className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-500 hover:text-white text-slate-400 flex items-center justify-center transition-colors shadow-sm"
@@ -498,7 +632,7 @@ export default function FeeStructure() {
                                             {/* Details Info */}
                                             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-6 uppercase tracking-wider">
                                                 <Calendar className="w-4 h-4 text-slate-300" />
-                                                Session Year: <span className="text-slate-655 font-extrabold">{s.year || "N/A"}</span>
+                                                Session Year: <span className="text-slate-655 font-extrabold">{yearLabelOf(s)}</span>
                                             </div>
 
                                             {/* Particulars Breakdown */}

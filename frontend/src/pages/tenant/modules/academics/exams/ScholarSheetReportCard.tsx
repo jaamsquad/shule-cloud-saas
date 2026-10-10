@@ -8,7 +8,9 @@ import { reportQr } from "@/lib/reportQr";
 // Subjects are curriculum-driven (from the class) and grades use the chosen
 // grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, hideToolbar = false, preloaded }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any }) {
+// `portal`: the student/parent portals pass everything in (data with its settings, the school
+// profile and a server-signed QR), so the card makes no admin API calls there.
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, hideToolbar = false, preloaded, portal }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any; portal?: { profile?: any; qrUrl?: string } }) {
     // When the parent page has already fetched the data (whole-class print), use
     // it directly so the card never shows a spinner mid-print. Otherwise fetch.
     const { data: fetched, isLoading } = useQuery({
@@ -22,14 +24,16 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
         queryKey: ["rc_settings"],
         queryFn: async () => (await api.get("/report-card-settings")).data,
         staleTime: 10_000,
+        enabled: !portal,
     });
     const data = preloaded || fetched;
     // the principal's signature and the school stamp (Institute Profile)
-    const { data: profile } = useQuery<any>({ queryKey: ["tenant_profile_global"], staleTime: 60_000, queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
+    const { data: adminProfile } = useQuery<any>({ queryKey: ["tenant_profile_global"], staleTime: 60_000, enabled: !portal, queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
+    const profile = portal ? portal.profile : adminProfile;
     // QR (bottom centre) that opens the online verification page for this report card
-    const { data: qr } = useQuery({
+    const { data: adminQr } = useQuery({
         queryKey: ["rc_qr", studentId, examId, data?.termYear, data?.summary?.meanScore, data?.summary?.meanGrade],
-        enabled: !!studentId && !!data && !data.notReady,
+        enabled: !portal && !!studentId && !!data && !data.notReady,
         staleTime: 5 * 60_000,
         queryFn: () => reportQr({
             studentId, className: data.student?.className || "", term: data.termYear || "",
@@ -37,6 +41,8 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
             average: Number(data.summary?.meanScore) || null, grade: String(data.summary?.meanGrade || ""),
         }),
     });
+
+    const qr = portal ? portal.qrUrl : adminQr;
 
     if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
     if (!data) return <div className="p-8 text-center text-slate-400">No report data.</div>;

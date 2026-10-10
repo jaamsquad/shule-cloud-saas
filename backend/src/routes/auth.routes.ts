@@ -9,6 +9,12 @@ import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../li
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
 import { finishSchoolLogin } from '../lib/schoolLogin';
+import { marksWindow, examInWindow, WINDOW_MESSAGE } from '../lib/examWindow';
+import { idForms, onePublishedTimetable, studentClassSlotFilter } from '../lib/portalTimetable';
+import analyticsRoutes from './analytics.routes';
+import { printableReports } from '../lib/portalReportCard';
+import { scholarSheetData, reportCardSettings } from './reports.routes';
+import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 const router = Router();
 
@@ -1392,6 +1398,7 @@ const resolveClassId = async (db: Db, className?: string): Promise<string | null
 const buildTimetable = async (db: Db, filter: any) => {
     let slots: any[] = [];
     try { slots = await db.collection('timetable_slots').find(filter || {}).toArray(); } catch { slots = []; }
+    slots = await onePublishedTimetable(db, slots);
     if (slots.length === 0) return { timeSlots: [], grid: {} };
 
     const [subjects, staff, rooms, pers] = await Promise.all([
@@ -1528,8 +1535,7 @@ router.post('/student-portal/registration', authed(async (req, res, db, decoded)
 // ─── Student Portal: timetable ────────────────────────────────────────────────
 router.get('/student-portal/timetable', authed(async (req, res, db, decoded) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
-    const classId = student?.classId ? String(student.classId) : await resolveClassId(db, student?.studentClass || student?.currentClass);
-    res.json(await buildTimetable(db, { classId: classId || '___none___' }));
+    res.json(await buildTimetable(db, await studentClassSlotFilter(db, student)));
 }));
 
 // ─── Student Portal: assignments & homework (view + submit) ───────────────────
@@ -1789,10 +1795,34 @@ const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?:
     const selectedTerm = req.query.term ? String(req.query.term) : (terms[0] || '');
     const results = selectedTerm ? all.filter((r: any) => r.term === selectedTerm) : all;
 
+    // The card exactly as the school prints it (same template, maths and verify QR).
+    let printable: any = null;
+    try {
+        const examIds = results.map((r: any) => String(r.examId)).filter(id => id && id !== 'unknown');
+        printable = await printableReports(db, req, sid, examIds);
+        if (printable?.templateId === 'scholarsheet') {
+            const settings = await reportCardSettings(db);
+            const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
+            for (const id of examIds) {
+                const out = await scholarSheetData(req, sid, id);
+                if (out.status !== 200 || !out.body) continue;
+                const d = out.body;
+                const verifyUrl = d.notReady ? '' : `${publicAppUrl()}/${slug}/report/verify/online/${signToken({
+                    s: sid, n: d.student?.name || '', r: d.student?.adm || '', c: d.student?.className || '',
+                    t: d.termYear || '', y: String(d.termYear || '').match(/\d{4}/)?.[0] || '', e: d.termYear || '',
+                    a: Number(d.summary?.meanScore) || null, g: String(d.summary?.meanGrade || ''), at: Date.now(),
+                })}`;
+                printable.exams[id] = { ...(printable.exams[id] || {}), scholar: { ...d, settings }, verifyUrl: verifyUrl || printable.exams[id]?.verifyUrl };
+            }
+        }
+    } catch (e: any) { console.warn('[report-card] printable failed:', e?.message); }
+
     return {
+        printable,
         template: { id: tenant?.reportTemplate || 'kcse_classic', family },
         school: { name: tenant?.name || '', crest: tenant?.crest || tenant?.logo || null },
         student: {
+            id: sid,
             name: student?.studentName || fallbackName,
             registrationNo: student?.registrationNo || student?.admNo,
             class: student?.studentClass || student?.currentClass,
@@ -1980,8 +2010,41 @@ router.get('/staff-portal/my-classes', authed(async (req, res, db, decoded) => {
     res.json(out);
 }));
 
+// Class list for one of the teacher's classes (My Classes → click a class): the learners
+// plus the school's name and logo for the printed list. Only classes the teacher teaches
+// or heads are allowed.
+router.get('/staff-portal/my-classes/students', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || '').trim();
+    if (!className) return res.status(400).json({ message: 'className is required' });
+    const { assignments, classTeacherOf } = await staffAssignments(db, decoded);
+    const same = (a: any) => String(a || '').trim().toLowerCase() === className.toLowerCase();
+    const mine = assignments.filter(a => same(a.className));
+    if (!mine.length && !classTeacherOf.some(c => same(c.className))) {
+        return res.status(403).json({ message: 'You are not assigned to this class' });
+    }
+    const rows = await studentsInClass(db, mine[0]?.className || className);
+    const tenant: any = await tenantMetaRecord(req);
+    res.json({
+        className: mine[0]?.className || className,
+        subjects: [...new Set(mine.map(a => a.subject).filter(Boolean))],
+        school: {
+            name: tenant?.name || tenant?.instituteName || (req as any).tenantContext?.tenantName || 'School',
+            logo: tenant?.logo || tenant?.logoUrl || '',
+            address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '),
+            phone: tenant?.phone || '', email: tenant?.email || '', motto: tenant?.tagline || tenant?.targetLine || '',
+        },
+        students: rows.map((s: any) => ({
+            _id: String(s._id),
+            name: s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim() || s.name || '—',
+            admNo: s.admissionNumber || s.admNo || s.registrationNo || '',
+            gender: s.gender || '',
+            status: s.status || '',
+        })),
+    });
+}));
+
 router.get('/staff-portal/timetable', authed(async (req, res, db, decoded) => {
-    res.json(await buildTimetable(db, { teacherId: decoded.staffId }));
+    res.json(await buildTimetable(db, { teacherId: { $in: idForms([decoded.staffId]) } }));
 }));
 
 // Exams selectable for MARKS ENTRY — inactive exams (Draft/Archived/Completed)
@@ -1990,14 +2053,32 @@ router.get('/staff-portal/timetable', authed(async (req, res, db, decoded) => {
 const INACTIVE_EXAM_STATUS = new Set(['draft', 'archived', 'completed', 'inactive']);
 
 router.get('/staff-portal/exams', authed(async (req, res, db) => {
+    // Teachers only see this term's exams — earlier ones are for admins (lib/examWindow).
+    const win = await marksWindow(db);
     const exams = (await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray())
-        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()));
+        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()))
+        .filter((e: any) => examInWindow(e, win));
     res.json(exams.map((e: any) => ({
         _id: String(e._id), name: e.examName || e.name || e.type || 'Exam',
         term: e.term, academicYear: e.academicYear,
         totalMarks: Number(e.settings?.totalMarks) || 100,   // "Out Of" from exam settings
     })));
 }));
+
+// Which term marks entry is open for (shown on the Marks page).
+router.get('/staff-portal/marks-window', authed(async (_req, res, db) => {
+    const win = await marksWindow(db);
+    res.json({ restricted: !!win, term: win?.term || '', year: win?.year || '', label: win?.label || '' });
+}));
+
+// Guard: the exam belongs to the current term (teachers can't touch earlier exams).
+const examOpenForTeacher = async (db: Db, examId: string) => {
+    const win = await marksWindow(db);
+    if (!win) return { ok: true, win };
+    const oid = safeObjId(examId);
+    const exam = await db.collection('exams').findOne(oid ? { _id: oid } : ({ _id: examId } as any)).catch(() => null);
+    return { ok: examInWindow(exam, win), win };
+};
 
 // Guard: confirm this teacher is assigned to (className, subject) before mutating.
 const assertAssigned = async (db: Db, decoded: any, className: string, subject?: string) => {
@@ -2014,6 +2095,7 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    if (examId) { const w = await examOpenForTeacher(db, examId); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const students = await studentsInClass(db, className);
     // "Out Of" is determined by the exam's Total Marks setting.
     const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
@@ -2038,6 +2120,7 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     // Respect the exam's active status + "Allow Marks Entry" setting (default allowed).
     try {
         const oid = safeObjId(examId);
@@ -2148,6 +2231,7 @@ router.post('/staff-portal/marks/submit', authed(async (req, res, db, decoded) =
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
     const key = { examId: String(examId), subjectNorm: nrmS };
 
@@ -2482,10 +2566,29 @@ router.get('/parent-portal/announcements', authed(async (req, res, db) => {
     res.json(items);
 }));
 
+// ─── Parent (and student) portal: performance analytics ─────────────────────
+// The portal API lives under /auth, so the analytics pages call /auth/analytics/…; serve
+// those from the analytics routes, always for the parent's own active child (the student
+// id in the URL is ignored — parentStudentId only allows this parent's children).
+const childAnalytics = (path: (sid: string) => string) => authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    if (!isObjId(sid)) return res.status(404).json({ message: 'Child not found' });
+    (req as any).tenantDb = db;
+    req.query = { ...req.query, studentId: sid } as any;
+    req.url = path(sid);
+    await new Promise<void>(resolve => {
+        res.once('finish', () => resolve());
+        res.once('close', () => resolve());
+        (analyticsRoutes as any).handle(req, res, () => { res.status(404).json({ message: 'Not found' }); });
+    });
+});
+router.get('/analytics/exams', childAnalytics(() => '/analytics/exams'));
+router.get('/analytics/student/:studentId', childAnalytics(sid => `/analytics/student/${sid}`));
+router.get('/analytics/student/:studentId/over-time', childAnalytics(sid => `/analytics/student/${sid}/over-time`));
+
 router.get('/parent-portal/timetable', authed(async (req, res, db, decoded) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(parentStudentId(req, decoded)) });
-    const classId = student?.classId ? String(student.classId) : await resolveClassId(db, student?.studentClass || student?.currentClass);
-    res.json(await buildTimetable(db, { classId: classId || '___none___' }));
+    res.json(await buildTimetable(db, await studentClassSlotFilter(db, student)));
 }));
 
 router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => {

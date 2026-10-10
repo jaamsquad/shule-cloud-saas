@@ -6,6 +6,7 @@ import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
 import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
 import { applyScholarshipsToInvoice } from '../services/feeAid.service';
+import { feeStructureGuard, feeStructureConflicts, conflictMessage } from '../lib/feeStructureGuard';
 import { nextInvoiceNo, getInvoiceFormat, saveInvoiceFormat, previewInvoiceNo } from '../lib/invoiceNumbering';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
@@ -815,7 +816,7 @@ router.get('/schools/:sid/fee-structures', async (req: Request, res: Response) =
 });
 
 // POST /schools/:sid/fee-structures
-router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), feeStructureGuard, async (req: Request, res: Response) => {
     try {
     const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
@@ -882,7 +883,7 @@ router.get('/schools/:sid/fee-structures/:id', async (req: Request, res: Respons
 });
 
 // PUT /schools/:sid/fee-structures/:id
-router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), feeStructureGuard, async (req: Request, res: Response) => {
     try {
     const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
@@ -997,6 +998,10 @@ router.post('/schools/:sid/fee-structures/:id/duplicate', requireRole('ADMIN'), 
             createdAt: new Date().toISOString()
         };
 
+        const clash = await feeStructureConflicts(db, duplicated);
+        if (clash.length) {
+            return res.status(409).json({ data: null, meta: {}, errors: [{ code: 'CLASS_ALREADY_IN_TERM_STRUCTURE', message: conflictMessage(clash) }] });
+        }
         await db.collection('fee_structures').insertOne(duplicated);
         res.status(201).json({ data: duplicated, meta: {}, errors: [] });
     } catch (e: any) {
