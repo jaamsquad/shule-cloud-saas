@@ -75,7 +75,7 @@ describe("sitemap", () => {
 
   it("only uses reliable static lastmod dates", () => {
     const e = pageEntries(site);
-    expect(e.find(x => x.loc === `${SITE}/terms`)?.lastmod).toBe("2026-02-28");
+    expect(e.find(x => x.loc === `${SITE}/terms`)?.lastmod).toBe("2026-10-10");
     expect(e.find(x => x.loc === `${SITE}/features`)?.lastmod).toBeNull();
     expect(lastmodOf("2030-01-01", NOW)).toBeNull();
     expect(lastmodOf("not a date", NOW)).toBeNull();
