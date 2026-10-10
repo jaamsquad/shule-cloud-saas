@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, Loader2, Check, Users, Copy, Save, UserPlus, X, Crown, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { PERMISSION_GROUPS, DEFAULT_ROLE_PERMISSIONS, MIS_ROLE_GROUPS, MIS_ROLES } from "@/lib/permissions";
+import { DEFAULT_ROLE_PERMISSIONS, MIS_ROLE_GROUPS } from "@/lib/permissions";
+import AppPermissions from "./AppPermissions";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
@@ -102,7 +103,7 @@ export default function StaffRoles() {
         <div className="flex-1 bg-[#f8fafc] min-h-screen p-6">
             <div className="flex items-center gap-3 mb-5">
                 <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><Shield className="w-5 h-5 text-indigo-600" /></div>
-                <div><h1 className="text-xl font-black text-slate-800">Role Management</h1><p className="text-xs text-slate-500">Assign permissions to roles and staff to roles — the staff portal adapts automatically</p></div>
+                <div><h1 className="text-xl font-black text-slate-800">Roles & Permissions</h1><p className="text-xs text-slate-500">Give each role the apps it may open — people only see and manage the apps their role allows</p></div>
             </div>
 
             {/* Scope switcher: assign permissions to a ROLE, or directly to a STAFF member */}
@@ -164,35 +165,7 @@ export default function StaffRoles() {
                             <span className={`w-10 h-5 rounded-full relative ${isAll ? "bg-emerald-500" : "bg-slate-300"}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isAll ? "left-5" : "left-0.5"}`} /></span>
                         </button>
 
-                        <div className={`space-y-4 ${isAll ? "opacity-40 pointer-events-none" : ""}`}>
-                            {PERMISSION_GROUPS.map(g => {
-                                const codes = g.perms.map(p => p.code);
-                                const allOn = codes.every(c => has(c));
-                                const onCount = codes.filter(c => has(c)).length;
-                                const isOpen = !collapsed.has(g.group);
-                                return (
-                                    <div key={g.group} className="border border-slate-100 rounded-xl overflow-hidden">
-                                        <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50/60">
-                                            <button onClick={() => toggleCollapse(g.group)} className="flex items-center gap-2 flex-1 text-left">
-                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
-                                                <span className="text-xs font-black text-slate-600 uppercase">{g.group}</span>
-                                                <span className="text-[10px] font-bold text-slate-400">{onCount}/{codes.length}</span>
-                                            </button>
-                                            <button onClick={() => toggleGroup(codes)} className="text-[10px] font-black text-[#5C67F2] uppercase tracking-wide px-2">{allOn ? "Clear all" : "Select all"}</button>
-                                        </div>
-                                        {isOpen && (
-                                            <div className="flex flex-wrap gap-1.5 p-3">
-                                                {g.perms.map(p => (
-                                                    <button key={p.code} onClick={() => toggle(p.code)} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${has(p.code) ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:border-[#5C67F2]"}`}>
-                                                        {has(p.code) && <Check className="w-3 h-3" />} {p.name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <AppPermissions perms={perms} setPerms={fn => setPerms(fn)} disabled={isAll} />
                     </div>
 
                     {/* CRUD matrix — what this role/staff may create, update, delete per module */}

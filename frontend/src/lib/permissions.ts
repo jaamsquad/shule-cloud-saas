@@ -2,7 +2,7 @@
 // Permission codes are grouped for the role editor. "*" is a wildcard that
 // grants everything (used by Super Admin / Principal).
 
-import { PAGE_PERMISSIONS } from "@/components/AppSidebar";
+import { PAGE_PERMISSIONS } from "@/components/navItems";
 
 export interface Perm { code: string; name: string }
 export interface PermGroup { group: string; perms: Perm[] }

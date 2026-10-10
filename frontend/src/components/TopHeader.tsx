@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { navItems } from "./AppSidebar";
 import BranchSwitcher from "./BranchSwitcher";
+import AppSwitcher from "./AppSwitcher";
 import TenantBranchSwitcher from "./TenantBranchSwitcher";
 
 // Flatten the sidebar nav into searchable {label, path, group} entries.
@@ -235,6 +236,7 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                             <GraduationCap className="w-4 h-4" /> Teaching Portal
                         </button>
                     )}
+                    <AppSwitcher className={`${textSecondary} ${hoverSecondary}`} />
                     <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
                         <MessageSquare className="w-6 h-6" strokeWidth={1.5} />
                     </button>

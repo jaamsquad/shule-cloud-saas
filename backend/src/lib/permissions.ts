@@ -273,6 +273,8 @@ export function permsToModules(perms: string[] | undefined): string[] {
     for (const code of perms) {
         // A raw module key passed through directly (forward-compatible).
         if (!code.includes('.')) { modules.add(code); continue; }
+        // "app.<key>" grants every module of that app (Roles & Permissions → Apps).
+        if (code.startsWith('app.')) { (APP_MODULES[code.slice(4)] || []).forEach(m => modules.add(m)); continue; }
         const mapped = CODE_TO_MODULES[code];
         if (mapped) { mapped.forEach(m => modules.add(m)); continue; }
         // Page-level permission convention "<moduleKey>.<page>" → reveal the
@@ -283,8 +285,33 @@ export function permsToModules(perms: string[] | undefined): string[] {
     return Array.from(modules);
 }
 
+// Apps of the admin web app → the sidebar modules they contain (mirror of frontend lib/apps.ts).
+export const APP_MODULES: Record<string, string[]> = {
+    academics: ['classes', 'subjects', 'timetable', 'academics_content', 'calendar'],
+    exams: ['exams', 'question_paper', 'certificates'],
+    cbc: ['cbc'],
+    elearning: ['live_class'],
+    students: ['students'],
+    frontdesk: ['frontdesk', 'secretary'],
+    communication: ['communications'],
+    attendance: ['attendance', 'behaviour'],
+    boarding: ['hostel', 'cafeteria'],
+    library: ['library'],
+    transport: ['transport'],
+    activities: ['sports', 'trips'],
+    fees: ['fees'],
+    accounting: ['accounting', 'expenses', 'procurement'],
+    payroll: ['salary'],
+    pos: ['pos'],
+    overview: ['dashboard'],
+    hr: ['employees'],
+    reports: ['reports'],
+    administration: ['settings', 'nemis'],
+};
+
 // Every sidebar module key — page-perms "<moduleKey>.<page>" map to these.
 const KNOWN_MODULE_KEYS = new Set<string>([
+    'expenses', 'procurement', 'accounting', 'cbc', 'nemis', 'calendar',
     'dashboard', 'settings', 'classes', 'subjects', 'students', 'employees',
     'accounts', 'fees', 'salary', 'transport', 'attendance', 'cafeteria',
     'sports', 'trips', 'frontdesk', 'secretary', 'reports', 'timetable',
