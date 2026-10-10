@@ -123,7 +123,7 @@ export async function resolveStaffPermissions(
 // STRICT mapping: each permission code unlocks ONLY its own module(s). A module
 // appears in the sidebar only when a permission that directly governs it is held —
 // no broad "view" code reveals unrelated admin sections.
-const CODE_TO_MODULES: Record<string, string[]> = {
+export const CODE_TO_MODULES: Record<string, string[]> = {
     // Finance → Fees only (Accounts has its own accounting.* codes)
     'finance.view': ['fees'],
     'finance.payments': ['fees'],
@@ -132,10 +132,10 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'finance.discounts': ['fees'],
     'finance.reports': ['fees'],
     // Accounting → Accounts; payroll → Salary
-    'accounting.income': ['accounts'],
-    'accounting.expenses': ['accounts'],
+    'accounting.income': ['accounting'],
+    'accounting.expenses': ['accounting'],
     'accounting.payroll': ['salary'],
-    'accounting.budget': ['accounts'],
+    'accounting.budget': ['accounting'],
     // Expense Management
     'expenses.view': ['expenses'],
     'expenses.manage': ['expenses'],
@@ -157,7 +157,7 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'classes.view': ['classes'],
     'subjects.view': ['subjects'],
     'timetable.view': ['timetable'],
-    'academics.view': ['academic_system'],
+    'academics.view': ['academics_content'],
     'exams.manage': ['exams'],
     'results.entry': ['exams'],
     'results.view': ['exams'],
@@ -198,8 +198,8 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'cafeteria.serve': ['cafeteria'],
     'cafeteria.menu': ['cafeteria'],
     'cafeteria.history': ['cafeteria'],
-    'canteen.sell': ['cafeteria', 'pos'],
-    'canteen.transactions': ['cafeteria', 'pos'],
+    'canteen.sell': ['cafeteria'],
+    'canteen.transactions': ['cafeteria'],
     'canteen.settings': ['cafeteria'],
     // Sports
     'sports.view': ['sports'],
@@ -217,12 +217,12 @@ const CODE_TO_MODULES: Record<string, string[]> = {
     'frontdesk.appointments': ['frontdesk'],
     // Secretary
     'secretary.view': ['secretary'],
-    'secretary.records': ['secretary', 'students'],
+    'secretary.records': ['secretary'],
     'secretary.meetings': ['secretary'],
     // Communication & reports
     'communications.send': ['communications'],
     'reports.view': ['reports'],
-    'audit.view': ['reports'],
+    'audit.view': ['employees'],
     // Administration
     'settings.manage': ['settings'],
     'roles.manage': ['settings'],
@@ -273,6 +273,8 @@ export function permsToModules(perms: string[] | undefined): string[] {
     for (const code of perms) {
         // A raw module key passed through directly (forward-compatible).
         if (!code.includes('.')) { modules.add(code); continue; }
+        // "app.<key>" grants every module of that app (Roles & Permissions → Apps).
+        if (code.startsWith('app.')) { (APP_MODULES[code.slice(4)] || []).forEach(m => modules.add(m)); continue; }
         const mapped = CODE_TO_MODULES[code];
         if (mapped) { mapped.forEach(m => modules.add(m)); continue; }
         // Page-level permission convention "<moduleKey>.<page>" → reveal the
@@ -283,8 +285,56 @@ export function permsToModules(perms: string[] | undefined): string[] {
     return Array.from(modules);
 }
 
+// Apps of the admin web app → the sidebar modules they contain (mirror of frontend lib/apps.ts).
+export const APP_MODULES: Record<string, string[]> = {
+    academics: ['classes', 'subjects', 'timetable', 'academics_content', 'calendar'],
+    exams: ['exams', 'question_paper', 'certificates'],
+    cbc: ['cbc'],
+    elearning: ['live_class'],
+    students: ['students'],
+    frontdesk: ['frontdesk', 'secretary'],
+    communication: ['communications'],
+    attendance: ['attendance', 'behaviour'],
+    boarding: ['hostel', 'cafeteria'],
+    library: ['library'],
+    transport: ['transport'],
+    activities: ['sports', 'trips'],
+    fees: ['fees'],
+    accounting: ['accounting', 'expenses', 'procurement'],
+    payroll: ['salary'],
+    pos: ['pos'],
+    overview: ['dashboard'],
+    hr: ['employees'],
+    reports: ['reports'],
+    administration: ['settings', 'nemis'],
+};
+
+/** Apps every school keeps (needed to run and administer the school). */
+export const CORE_APPS = ['overview', 'administration'];
+
+/**
+ * Apps the platform owner switched off for a school (Tenant.disabledApps) and the
+ * modules they hide. Cached briefly: read on every API call by the app gate.
+ */
+const disabledCache = new Map<string, { at: number; apps: string[] }>();
+export async function disabledAppsFor(tenantId?: string | null): Promise<string[]> {
+    if (!tenantId) return [];
+    const hit = disabledCache.get(tenantId);
+    if (hit && Date.now() - hit.at < 30_000) return hit.apps;
+    let apps: string[] = [];
+    try {
+        const t: any = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(tenantId) }, { projection: { disabledApps: 1 } });
+        apps = (Array.isArray(t?.disabledApps) ? t.disabledApps.map(String) : []).filter((a: string) => APP_MODULES[a] && !CORE_APPS.includes(a));
+    } catch { /* treat as none */ }
+    disabledCache.set(tenantId, { at: Date.now(), apps });
+    return apps;
+}
+export const forgetDisabledApps = (tenantId: string) => disabledCache.delete(tenantId);
+export const modulesOfApps = (apps: string[]) => Array.from(new Set(apps.flatMap(a => APP_MODULES[a] || [])));
+
 // Every sidebar module key — page-perms "<moduleKey>.<page>" map to these.
 const KNOWN_MODULE_KEYS = new Set<string>([
+    'expenses', 'procurement', 'accounting', 'cbc', 'nemis', 'calendar',
     'dashboard', 'settings', 'classes', 'subjects', 'students', 'employees',
     'accounts', 'fees', 'salary', 'transport', 'attendance', 'cafeteria',
     'sports', 'trips', 'frontdesk', 'secretary', 'reports', 'timetable',
@@ -320,6 +370,9 @@ export const enforceCrud = (moduleKey: string, action: 'create' | 'update' | 'de
             if (sid) { try { staff = await database.collection('staff').findOne({ _id: new ObjectId(sid) }); } catch { /* ignore */ } }
             if (!staff) staff = { designation: role.replace(/_/g, ' ') };
 
+            // A role with full access ("*") may act everywhere, as the role editor promises.
+            const codes = await resolveStaffPermissions(database, staff, { teacherFallback: false, useRoleDefaults: false });
+            if (codes.includes('*')) return next();
             const crud = await resolveStaffCrud(database, staff);
             const allowed = Array.isArray(crud[moduleKey]) && crud[moduleKey].includes(action);
             if (!allowed) return res.status(403).json({ message: `Not allowed to ${action} in ${moduleKey}` });

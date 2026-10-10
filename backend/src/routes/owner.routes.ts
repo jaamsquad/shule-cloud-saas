@@ -96,6 +96,29 @@ router.post('/reminders', createReminder);
 router.patch('/reminders/:id', updateReminder);
 router.delete('/reminders/:id', deleteReminder);
 
+// ─── Apps switched off for one school (hidden for everyone there, admins included) ─
+router.post('/schools/:id/apps', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Your role does not allow this action.' });
+    try {
+        const { APP_MODULES, CORE_APPS, forgetDisabledApps } = await import('../lib/permissions');
+        const list = Array.isArray(req.body?.disabledApps) ? req.body.disabledApps.map(String) : null;
+        if (!list) return res.status(400).json({ message: 'disabledApps must be a list' });
+        const unknown = list.filter((a: string) => !APP_MODULES[a]);
+        if (unknown.length) return res.status(400).json({ message: `Unknown app: ${unknown.join(', ')}` });
+        if (list.some((a: string) => CORE_APPS.includes(a))) return res.status(400).json({ message: 'School Overview and Administration cannot be turned off.' });
+        const id = new ObjectId(req.params.id);
+        const r = await getMetaDb().collection('Tenant').updateOne({ _id: id }, { $set: { disabledApps: Array.from(new Set(list)), updatedAt: new Date() } });
+        if (!r.matchedCount) return res.status(404).json({ message: 'School not found' });
+        forgetDisabledApps(req.params.id);
+        try {
+            const { ownerAudit } = await import('../controllers/owner.controller');
+            await ownerAudit(req as any, 'SCHOOL_APPS_UPDATED', 'Tenant', { schoolId: req.params.id, disabledApps: list });
+        } catch { /* audit is best-effort */ }
+        res.json({ message: 'Saved', disabledApps: list });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── School sign-in security: 2FA policy + Google sign-in (owner / super_owner) ─
 const ownerOf = (req: any) => { try { return jwt.verify(String(req.headers.authorization || '').split(' ')[1], process.env.OWNER_JWT_SECRET || 'owner_secret') as any; } catch { return null; } };
 router.get('/school-auth', async (req, res) => {

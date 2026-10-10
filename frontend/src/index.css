@@ -259,3 +259,8 @@
 .inp { width: 100%; height: 2.5rem; padding: 0 0.75rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.875rem; outline: none; color: #1e293b; }
 .inp:focus { border-color: #5C67F2; }
 textarea.inp { height: auto; padding: 0.5rem 0.75rem; }
+
+/* Inside the ShuleCloud 360 phone app the app draws the navigation (see main.tsx). */
+.sc-embed [data-app-chrome],
+.sc-embed [data-portal-chrome] { display: none !important; }
+.sc-embed [data-portal-main] { margin-left: 0 !important; }

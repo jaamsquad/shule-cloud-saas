@@ -1,10 +1,11 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ShieldX, Home, ArrowLeft } from "lucide-react";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export default function AccessDenied() {
     const navigate = useNavigate();
     const { role, isTeacher } = usePermissions();
+    const switchedOff = !!(useLocation().state as any)?.disabled;
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center bg-[#F8FAFC] min-h-screen font-sans p-6">
@@ -14,13 +15,15 @@ export default function AccessDenied() {
                 </div>
                 <h1 className="text-2xl font-black text-slate-900 mb-2">Access Denied</h1>
                 <p className="text-slate-500 text-sm font-bold mb-1">
-                    You don't have permission to view this page.
+                    {switchedOff ? "This app is turned off for your school." : "You don't have permission to view this page."}
                 </p>
                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
                     Role: <span className="text-[#5C67F2]">{role?.replace("_", " ").toUpperCase()}</span>
                 </p>
                 <p className="text-slate-400 text-[10px] font-bold mb-8 leading-relaxed">
-                    {isTeacher
+                    {switchedOff
+                        ? "ShuleCloud turned this app off for your school. Call 0726151104 to turn it on."
+                        : isTeacher
                         ? "Ask your school administrator to grant you access to this module via Roles & Permissions."
                         : "Contact your system administrator if you need access to this section."}
                 </p>

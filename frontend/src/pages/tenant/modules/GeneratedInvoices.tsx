@@ -1,394 +1,180 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-    Home, FileText, Search, Loader2, MessageSquare,
-    Mail, Phone, RefreshCw, ChevronDown, X, Check,
-    AlertCircle, Clock, Filter, Send, Eye
-} from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import api from "@/lib/api";
 import { toast } from "sonner";
-import { FeesPage } from "@/components/fees/FeesUI";
-import { FileText as FileTextPageIcon } from "lucide-react";
+import { FileText, Search, X, RefreshCw, Eye, Send, Phone, Mail, MessageSquare, Wallet, Banknote, AlertCircle, Layers, UserPlus } from "lucide-react";
+import api from "@/lib/api";
+import {
+    FeesPage, FCard, FStat, FBadge, FButton, FInput, FSelect, FModal, FTable, td, FEmpty, FLoading, money, fmtDate, statusTone,
+} from "@/components/fees/FeesUI";
+import { useTerms, TermPicker } from "@/components/fees/TermPicker";
 
-type TabKey = "ALL" | "PAID" | "UNPAID" | "PARTIAL";
-
-const TABS: { key: TabKey; label: string; color: string; bg: string; dot: string }[] = [
-    { key: "ALL",     label: "All Invoices",    color: "text-slate-700",   bg: "bg-slate-100",   dot: "bg-slate-400" },
-    { key: "UNPAID",  label: "Unpaid",           color: "text-amber-700",   bg: "bg-amber-100",   dot: "bg-amber-500" },
-    { key: "PARTIAL", label: "Partially Paid",   color: "text-blue-700",    bg: "bg-blue-100",    dot: "bg-blue-500"  },
-    { key: "PAID",    label: "Paid",             color: "text-emerald-700", bg: "bg-emerald-100", dot: "bg-emerald-500" },
+// Every invoice for a term — the current year and term are shown first.
+type Status = "ALL" | "UNPAID" | "OVERDUE" | "PARTIAL" | "PAID" | "WAIVED" | "VOIDED";
+const STATUS_TABS: { key: Status; label: string }[] = [
+    { key: "ALL", label: "All" }, { key: "UNPAID", label: "Unpaid" }, { key: "OVERDUE", label: "Overdue" },
+    { key: "PARTIAL", label: "Partly paid" }, { key: "PAID", label: "Paid" }, { key: "VOIDED", label: "Voided" },
 ];
 
-function statusBadge(status: string) {
-    const map: Record<string, string> = {
-        PAID:    "bg-emerald-100 text-emerald-700",
-        UNPAID:  "bg-amber-100 text-amber-700",
-        PARTIAL: "bg-blue-100 text-blue-700",
-        OVERDUE: "bg-rose-100 text-rose-700",
-    };
-    return map[status?.toUpperCase()] ?? "bg-slate-100 text-slate-600";
-}
-
 export default function GeneratedInvoices() {
-    const [activeTab, setActiveTab] = useState<TabKey>("ALL");
-    const [search, setSearch]       = useState("");
-    const [reminderInvoice, setReminderInvoice] = useState<any>(null);
-    const [reminderMsg, setReminderMsg]         = useState("");
-    const [page, setPage]           = useState(1);
+    const t = useTerms({ allowAll: true });
+    const [status, setStatus] = useState<Status>("ALL");
+    const [search, setSearch] = useState("");
+    const [q, setQ] = useState("");
+    const [klass, setKlass] = useState("");
+    const [page, setPage] = useState(1);
+    const [remind, setRemind] = useState<any>(null);
+    const [msg, setMsg] = useState("");
 
-    // ── Fetch invoices ─────────────────────────────────────────────────
-    const { data: res, isLoading, refetch } = useQuery({
-        queryKey: ["generated_invoices", activeTab, search, page],
-        queryFn: async () => {
-            const params = new URLSearchParams({ page: String(page), limit: "20" });
-            if (activeTab !== "ALL") params.set("status", activeTab);
-            if (search.trim().length >= 2) params.set("search", search.trim());
-            const r = await api.get(`/schools/default/invoices?${params}`);
-            return r.data;
-        },
-        keepPreviousData: true,
-    } as any);
+    useEffect(() => { const h = setTimeout(() => { setQ(search.trim()); setPage(1); }, 300); return () => clearTimeout(h); }, [search]);
+    useEffect(() => { setPage(1); }, [t.yearId, t.termId, status, klass]);
 
-    const invoices: any[] = res?.data || res || [];
-    const meta            = res?.meta || {};
-
-    // ── Reminder mutation ───────────────────────────────────────────────
-    const reminderMutation = useMutation({
-        mutationFn: async ({ id, channel }: { id: string; channel: "sms" | "email" | "whatsapp" }) => {
-            return api.post(`/schools/default/invoices/${id}/remind`, {
-                channel,
-                message: reminderMsg || undefined,
-            });
-        },
-        onSuccess: (_, vars) => {
-            toast.success(`Reminder sent via ${vars.channel.toUpperCase()}!`);
-            setReminderInvoice(null);
-            setReminderMsg("");
-        },
-        onError: (err: any) => {
-            toast.error(err?.response?.data?.message || "Failed to send reminder");
-        },
+    const { data: classes = [] } = useQuery<any[]>({ queryKey: ["academics_classes"], queryFn: async () => (await api.get("/academics/classes")).data || [] });
+    const { data: res, isLoading, isFetching, refetch } = useQuery<any>({
+        queryKey: ["generated_invoices", t.yearId, t.termId, status, q, klass, page], enabled: !!t.yearId || t.years.length === 0,
+        queryFn: async () => (await api.get("/schools/default/invoices", { params: {
+            page, limit: 25, status,
+            academic_year_id: t.yearId || undefined, semester_id: t.termId && t.termId !== "all" ? t.termId : undefined,
+            search: q.length >= 2 ? q : undefined, class_name: klass || undefined,
+        } })).data,
+        placeholderData: prev => prev,
     });
+    const rows: any[] = res?.data || [];
+    const meta = res?.meta || {};
+    const counts = meta.counts || {};
+    const m = meta.money || {};
 
-    const counts = {
-        ALL:     meta.total     ?? invoices.length,
-        PAID:    meta.paid      ?? invoices.filter((i: any) => i.status?.toUpperCase() === "PAID").length,
-        UNPAID:  meta.unpaid    ?? invoices.filter((i: any) => i.status?.toUpperCase() === "UNPAID").length,
-        PARTIAL: meta.partial   ?? invoices.filter((i: any) => i.status?.toUpperCase() === "PARTIAL").length,
-    };
+    const reminder = useMutation({
+        mutationFn: async (channel: "sms" | "email" | "whatsapp") => api.post(`/schools/default/invoices/${remind._id}/remind`, { channel, message: msg || undefined }),
+        onSuccess: (_, ch) => { toast.success(`Reminder sent by ${ch === "sms" ? "SMS" : ch === "email" ? "email" : "WhatsApp"}`); setRemind(null); setMsg(""); },
+        onError: (e: any) => toast.error(e.response?.data?.message || e.response?.data?.errors?.[0]?.message || "Could not send the reminder"),
+    });
+    const allTerms = t.termId === "all";
+    const countOf = (k: Status) => (k === "UNPAID" ? (counts.UNPAID || 0) + (counts.OVERDUE || 0) : counts[k] || 0);
 
     return (
-        <FeesPage title="Invoices" subtitle="Every fee invoice issued. Filter by status, open one, or send reminders by SMS, email or WhatsApp." icon={FileTextPageIcon} actions={<>
-                <button
-                    onClick={() => refetch()}
-                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                    title="Refresh"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                </button>
+        <FeesPage wide title="Invoices" icon={FileText}
+            subtitle={`Every fee invoice${t.label ? ` for ${t.label}` : ""}. Open one, or remind the parent by SMS, email or WhatsApp.`}
+            actions={<>
+                <TermPicker t={t} allowAll />
+                <Link to="/fees/generate-invoice"><FButton variant="secondary" icon={Layers}>Generate</FButton></Link>
+                <FButton variant="ghost" icon={RefreshCw} onClick={() => refetch()} title="Refresh" />
             </>}>
-
-            <div>
-
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                    {TABS.map(t => (
-                        <button
-                            key={t.key}
-                            onClick={() => { setActiveTab(t.key); setPage(1); }}
-                            className={`p-4 rounded-xl border text-left transition-all shadow-sm ${
-                                activeTab === t.key
-                                    ? `${t.bg} border-current ${t.color} shadow-md`
-                                    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                            }`}
-                        >
-                            <div className="flex items-center gap-2 mb-1">
-                                <div className={`w-2 h-2 rounded-full ${t.dot}`} />
-                                <span className="text-xs font-semibold uppercase tracking-wider">{t.label}</span>
-                            </div>
-                            <p className="text-2xl font-black">{counts[t.key] ?? "—"}</p>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Search & Filters */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-4 p-4 flex flex-col sm:flex-row gap-3 items-center">
-                    <div className="relative flex-1 w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => { setSearch(e.target.value); setPage(1); }}
-                            placeholder="Search by student name, invoice no, class..."
-                            className="w-full h-10 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-[#5C67F2] focus:bg-white transition-colors"
-                        />
-                        {search && (
-                            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500">
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium whitespace-nowrap">
-                        <Filter className="w-3.5 h-3.5" />
-                        <span>
-                            {activeTab === "ALL" ? "All statuses" : TABS.find(t => t.key === activeTab)?.label}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Table */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    {isLoading ? (
-                        <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
-                            <Loader2 className="w-7 h-7 animate-spin text-[#5C67F2]" />
-                            <p className="text-sm font-medium">Loading invoices...</p>
-                        </div>
-                    ) : invoices.length === 0 ? (
-                        <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-3">
-                            <FileText className="w-12 h-12 text-slate-300" />
-                            <p className="text-sm font-semibold">No invoices found</p>
-                            <p className="text-xs">Try a different tab or search term</p>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Desktop table */}
-                            <div className="hidden md:block overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-50 border-b border-slate-200">
-                                        <tr>
-                                            {["Invoice No", "Student", "Class", "Due Date", "Total", "Paid", "Balance", "Status", "Remind"].map(h => (
-                                                <th key={h} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {invoices.map((inv: any) => (
-                                            <tr key={inv._id || inv.id} className="hover:bg-slate-50 transition-colors group">
-                                                <td className="px-4 py-3 font-semibold text-slate-800">{inv.invoice_no}</td>
-                                                <td className="px-4 py-3 text-slate-700">
-                                                    <Link 
-                                                        to={`/fees/invoice/${inv._id || inv.id}`}
-                                                        className="font-bold text-[#5C67F2] hover:underline"
-                                                    >
-                                                        {inv.student_name || inv.student?.studentName || inv.student?.name || "—"}
-                                                    </Link>
-                                                </td>
-                                                <td className="px-4 py-3 text-slate-500">{inv.class_name || "—"}</td>
-                                                <td className="px-4 py-3 text-slate-500 text-xs">{inv.due_date || "—"}</td>
-                                                <td className="px-4 py-3 font-medium text-slate-700">KSh {Number(inv.total_due || 0).toLocaleString()}</td>
-                                                <td className="px-4 py-3 font-medium text-emerald-600">KSh {Number(inv.amount_paid || 0).toLocaleString()}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`font-bold ${Number(inv.balance) <= 0 ? "text-emerald-500" : "text-rose-600"}`}>
-                                                        KSh {Number(inv.balance || 0).toLocaleString()}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${statusBadge(inv.status)}`}>
-                                                        {inv.status || "—"}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <Link
-                                                            to={`/fees/invoice/${inv._id || inv.id}`}
-                                                            className="flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-2.5 py-1.5 rounded-lg transition-colors border border-slate-200"
-                                                        >
-                                                            <Eye className="w-3.5 h-3.5" /> View
-                                                        </Link>
-                                                        {inv.status?.toUpperCase() !== "PAID" && (
-                                                            <button
-                                                                onClick={() => { setReminderInvoice(inv); setReminderMsg(""); }}
-                                                                className="flex items-center gap-1.5 text-[11px] font-bold text-[#5C67F2] hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-colors border border-indigo-100"
-                                                            >
-                                                                <Send className="w-3 h-3" /> Remind
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Mobile cards */}
-                            <div className="md:hidden divide-y divide-slate-100">
-                                {invoices.map((inv: any) => (
-                                    <div key={inv._id || inv.id} className="p-4 space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-bold text-slate-800 text-sm">{inv.invoice_no}</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${statusBadge(inv.status)}`}>
-                                                {inv.status}
-                                            </span>
-                                        </div>
-                                        <Link 
-                                            to={`/fees/invoice/${inv._id || inv.id}`}
-                                            className="text-sm font-bold text-[#5C67F2] hover:underline block text-left"
-                                        >
-                                            {inv.student_name || inv.student?.studentName || "—"}
-                                        </Link>
-                                        <p className="text-xs text-slate-500 text-left">{inv.class_name || "—"} · Due: {inv.due_date || "N/A"}</p>
-                                        <div className="flex gap-4 text-xs font-medium">
-                                            <span className="text-slate-600">Total: <strong>KSh {Number(inv.total_due || 0).toLocaleString()}</strong></span>
-                                            <span className="text-emerald-600">Paid: <strong>KSh {Number(inv.amount_paid || 0).toLocaleString()}</strong></span>
-                                            <span className={Number(inv.balance) <= 0 ? "text-emerald-500" : "text-rose-600"}>
-                                                Bal: <strong>KSh {Number(inv.balance || 0).toLocaleString()}</strong>
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 pt-1">
-                                            <Link
-                                                to={`/fees/invoice/${inv._id || inv.id}`}
-                                                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors border border-slate-200"
-                                            >
-                                                <Eye className="w-3.5 h-3.5" /> View Invoice
-                                            </Link>
-                                            {inv.status?.toUpperCase() !== "PAID" && (
-                                                <button
-                                                    onClick={() => { setReminderInvoice(inv); setReminderMsg(""); }}
-                                                    className="flex items-center gap-1.5 text-[11px] font-bold text-[#5C67F2] hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100"
-                                                >
-                                                    <Send className="w-3 h-3" /> Send Reminder
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Pagination */}
-                            {(meta.pages > 1 || meta.totalPages > 1) && (
-                                <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-                                    <p className="text-xs text-slate-500">
-                                        Page {meta.page || page} of {meta.pages || meta.totalPages}
-                                    </p>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                                            disabled={page <= 1}
-                                            className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition-colors"
-                                        >
-                                            Previous
-                                        </button>
-                                        <button
-                                            onClick={() => setPage(p => p + 1)}
-                                            disabled={page >= (meta.pages || meta.totalPages || 1)}
-                                            className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition-colors"
-                                        >
-                                            Next
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <FStat label="Invoices" value={countOf("ALL")} icon={FileText} loading={isLoading} hint={t.label} />
+                <FStat label="Billed" value={money(m.billed || 0)} icon={Banknote} tone="sky" loading={isLoading} />
+                <FStat label="Collected" value={money(m.collected || 0)} icon={Wallet} tone="emerald" loading={isLoading} hint={m.billed ? `${Math.round(((m.collected || 0) / m.billed) * 100)}% of billed` : undefined} />
+                <FStat label="Outstanding" value={money(m.outstanding || 0)} icon={AlertCircle} tone={(m.outstanding || 0) > 0 ? "rose" : "emerald"} loading={isLoading} hint={`${countOf("OVERDUE")} overdue`} />
             </div>
 
-            {/* ── Reminder Modal ─────────────────────────────────────────── */}
-            {reminderInvoice && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                            <div>
-                                <h3 className="font-bold text-slate-800">Send Payment Reminder</h3>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    Invoice <strong>{reminderInvoice.invoice_no}</strong> · Balance: KSh{" "}
-                                    <strong className="text-rose-600">{Number(reminderInvoice.balance || 0).toLocaleString()}</strong>
-                                </p>
-                            </div>
-                            <button onClick={() => setReminderInvoice(null)} className="text-slate-400 hover:text-rose-500 transition-colors">
-                                <X className="w-5 h-5" />
+            <FCard bodyClassName="p-0">
+                <div className="p-4 flex flex-col lg:flex-row gap-3 lg:items-center justify-between border-b border-slate-100">
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar p-1 bg-slate-100 rounded-xl w-fit max-w-full">
+                        {STATUS_TABS.map(s => (
+                            <button key={s.key} onClick={() => setStatus(s.key)}
+                                className={`h-8 px-3 rounded-lg text-[13px] font-semibold whitespace-nowrap transition-colors ${status === s.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                                {s.label} <span className="ml-1 text-[11px] text-slate-400">{countOf(s.key)}</span>
                             </button>
-                        </div>
-
-                        {/* Student info */}
-                        <div className="px-5 pt-4">
-                            <div className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100 mb-4">
-                                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-[#5C67F2] text-sm">
-                                    {(reminderInvoice.student_name || reminderInvoice.student?.studentName || "S")[0]}
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-slate-800">
-                                        {reminderInvoice.student_name || reminderInvoice.student?.studentName || "Student"}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                        {reminderInvoice.class_name || reminderInvoice.student?.currentClass || ""}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Optional custom message */}
-                            <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
-                                Custom Message <span className="font-normal text-slate-400">(optional)</span>
-                            </label>
-                            <textarea
-                                value={reminderMsg}
-                                onChange={e => setReminderMsg(e.target.value)}
-                                rows={3}
-                                placeholder="Leave blank to use default reminder template..."
-                                className="w-full text-sm p-3 border border-slate-200 rounded-xl outline-none focus:border-[#5C67F2] resize-none text-slate-700 bg-slate-50 focus:bg-white transition-colors"
-                            />
-                        </div>
-
-                        {/* Channel buttons */}
-                        <div className="p-5 space-y-3">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Choose channel</p>
-                            <div className="grid grid-cols-3 gap-3">
-                                {/* SMS */}
-                                <button
-                                    onClick={() => reminderMutation.mutate({ id: reminderInvoice._id || reminderInvoice.id, channel: "sms" })}
-                                    disabled={reminderMutation.isPending}
-                                    className="flex flex-col items-center gap-2 py-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all group disabled:opacity-50"
-                                >
-                                    {reminderMutation.isPending ? (
-                                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                                    ) : (
-                                        <Phone className="w-5 h-5 text-blue-500 group-hover:scale-110 transition-transform" />
-                                    )}
-                                    <span className="text-xs font-bold text-blue-600">SMS</span>
-                                </button>
-
-                                {/* Email */}
-                                <button
-                                    onClick={() => reminderMutation.mutate({ id: reminderInvoice._id || reminderInvoice.id, channel: "email" })}
-                                    disabled={reminderMutation.isPending}
-                                    className="flex flex-col items-center gap-2 py-4 rounded-xl border-2 border-slate-200 hover:border-[#5C67F2] hover:bg-indigo-50 transition-all group disabled:opacity-50"
-                                >
-                                    {reminderMutation.isPending ? (
-                                        <Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />
-                                    ) : (
-                                        <Mail className="w-5 h-5 text-[#5C67F2] group-hover:scale-110 transition-transform" />
-                                    )}
-                                    <span className="text-xs font-bold text-[#5C67F2]">Email</span>
-                                </button>
-
-                                {/* WhatsApp */}
-                                <button
-                                    onClick={() => reminderMutation.mutate({ id: reminderInvoice._id || reminderInvoice.id, channel: "whatsapp" })}
-                                    disabled={reminderMutation.isPending}
-                                    className="flex flex-col items-center gap-2 py-4 rounded-xl border-2 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all group disabled:opacity-50"
-                                >
-                                    {reminderMutation.isPending ? (
-                                        <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
-                                    ) : (
-                                        <MessageSquare className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
-                                    )}
-                                    <span className="text-xs font-bold text-emerald-600">WhatsApp</span>
-                                </button>
-                            </div>
-
-                            <button
-                                onClick={() => { setReminderInvoice(null); setReminderMsg(""); }}
-                                className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-colors mt-1"
-                            >
-                                Cancel
-                            </button>
+                        ))}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                        <FSelect value={klass} onChange={e => setKlass(e.target.value)} className="lg:!w-44">
+                            <option value="">All classes</option>
+                            {classes.map((c: any) => { const n = c.name || c.levelName; return <option key={c._id} value={n}>{n}</option>; })}
+                        </FSelect>
+                        <div className="relative flex-1 lg:w-72">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <FInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, admission or invoice no…" className="pl-9 pr-8" />
+                            {search && <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
                         </div>
                     </div>
                 </div>
-            )}
+
+                {isLoading ? <FLoading /> : !rows.length ? (
+                    <FEmpty icon={FileText} title={q || klass || status !== "ALL" ? "No invoices match" : `No invoices for ${t.label || "this term"} yet`}
+                        hint={q || klass || status !== "ALL" ? "Try another filter or term." : "Generate them for whole classes or one learner."}
+                        action={!(q || klass || status !== "ALL") && <div className="flex gap-2"><Link to="/fees/generate-invoice"><FButton icon={Layers}>Generate for classes</FButton></Link><Link to="/fees/generate-student-invoice"><FButton variant="secondary" icon={UserPlus}>One learner</FButton></Link></div>} />
+                ) : (
+                    <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
+                        <div className="hidden md:block">
+                            <FTable head={["Invoice", "Learner", "Class", ...(allTerms ? ["Term"] : []), "Due", "Total", "Paid", "Balance", "Status", ""]}>
+                                {rows.map(inv => (
+                                    <tr key={inv._id}>
+                                        <td className={`${td} font-semibold text-slate-800 whitespace-nowrap`}>{inv.invoice_no}</td>
+                                        <td className={td}>
+                                            <Link to={`/fees/invoice/${inv._id}`} className="font-semibold text-[#5C67F2] hover:underline whitespace-nowrap">{inv.student_name}</Link>
+                                            {inv.admission_no && <p className="text-[11px] text-slate-400">{inv.admission_no}</p>}
+                                        </td>
+                                        <td className={`${td} whitespace-nowrap`}>{inv.class_name}</td>
+                                        {allTerms && <td className={`${td} whitespace-nowrap text-xs text-slate-500`}>{[inv.term_label, inv.year_label].filter(Boolean).join(" · ") || "—"}</td>}
+                                        <td className={`${td} whitespace-nowrap text-xs`}>
+                                            {inv.due_date ? fmtDate(inv.due_date) : "—"}
+                                            {inv.days_overdue > 0 && <p className="text-[11px] text-rose-600 font-semibold">{inv.days_overdue}d overdue</p>}
+                                        </td>
+                                        <td className={`${td} whitespace-nowrap`}>{money(inv.total_due)}</td>
+                                        <td className={`${td} whitespace-nowrap text-emerald-600`}>{money(inv.amount_paid)}</td>
+                                        <td className={`${td} whitespace-nowrap font-bold ${Number(inv.balance) > 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(inv.balance)}</td>
+                                        <td className={td}><FBadge tone={statusTone(inv.status)}>{String(inv.status || "").toLowerCase()}</FBadge></td>
+                                        <td className={`${td} text-right whitespace-nowrap`}>
+                                            <div className="inline-flex gap-1.5">
+                                                <Link to={`/fees/invoice/${inv._id}`}><FButton size="sm" variant="secondary" icon={Eye} title="View" /></Link>
+                                                {Number(inv.balance) > 0 && !["VOIDED", "WAIVED"].includes(inv.status) && <FButton size="sm" variant="ghost" icon={Send} title="Send reminder" onClick={() => { setRemind(inv); setMsg(""); }} />}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </FTable>
+                        </div>
+                        <div className="md:hidden divide-y divide-slate-100">
+                            {rows.map(inv => (
+                                <div key={inv._id} className="p-4 space-y-2">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <Link to={`/fees/invoice/${inv._id}`} className="text-sm font-bold text-[#5C67F2]">{inv.student_name}</Link>
+                                            <p className="text-xs text-slate-500">{inv.invoice_no} · {inv.class_name}</p>
+                                        </div>
+                                        <FBadge tone={statusTone(inv.status)}>{String(inv.status || "").toLowerCase()}</FBadge>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div><p className="text-slate-400">Total</p><p className="font-semibold">{money(inv.total_due)}</p></div>
+                                        <div><p className="text-slate-400">Paid</p><p className="font-semibold text-emerald-600">{money(inv.amount_paid)}</p></div>
+                                        <div><p className="text-slate-400">Balance</p><p className={`font-bold ${Number(inv.balance) > 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(inv.balance)}</p></div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Link to={`/fees/invoice/${inv._id}`} className="flex-1"><FButton size="sm" variant="secondary" icon={Eye} className="w-full">View</FButton></Link>
+                                        {Number(inv.balance) > 0 && !["VOIDED", "WAIVED"].includes(inv.status) && <FButton size="sm" variant="ghost" icon={Send} className="flex-1" onClick={() => { setRemind(inv); setMsg(""); }}>Remind</FButton>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+                            <p className="text-xs text-slate-500">{meta.total || 0} invoice{meta.total === 1 ? "" : "s"} · page {meta.page || 1} of {meta.pages || 1}</p>
+                            <div className="flex gap-2">
+                                <FButton size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</FButton>
+                                <FButton size="sm" variant="secondary" disabled={page >= (meta.pages || 1)} onClick={() => setPage(p => p + 1)}>Next</FButton>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </FCard>
+
+            <FModal open={!!remind} onClose={() => setRemind(null)} title="Send a payment reminder"
+                subtitle={remind ? `${remind.invoice_no} · ${remind.student_name} · balance ${money(remind.balance)}` : ""}>
+                {remind && (
+                    <div className="space-y-4">
+                        <textarea rows={3} value={msg} onChange={e => setMsg(e.target.value)} placeholder="Optional message — leave empty for the standard reminder"
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#5C67F2]/25 focus:border-[#5C67F2]" />
+                        <div className="grid grid-cols-3 gap-2">
+                            {([["sms", "SMS", Phone], ["email", "Email", Mail], ["whatsapp", "WhatsApp", MessageSquare]] as const).map(([k, l, I]) => (
+                                <button key={k} disabled={reminder.isPending} onClick={() => reminder.mutate(k)}
+                                    className="rounded-xl border border-slate-200 py-4 flex flex-col items-center gap-1.5 hover:border-[#5C67F2] hover:bg-indigo-50/50 disabled:opacity-50">
+                                    <I className="w-5 h-5 text-[#5C67F2]" /><span className="text-xs font-semibold text-slate-700">{l}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </FModal>
         </FeesPage>
     );
 }

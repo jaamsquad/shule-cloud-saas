@@ -2,97 +2,103 @@
 // Permission codes are grouped for the role editor. "*" is a wildcard that
 // grants everything (used by Super Admin / Principal).
 
-import { PAGE_PERMISSIONS } from "@/components/AppSidebar";
+import { PAGE_PERMISSIONS } from "@/components/navItems";
 
 export interface Perm { code: string; name: string }
 export interface PermGroup { group: string; perms: Perm[] }
 
-// High-level/module permissions (control whole modules & broad capabilities).
-const MODULE_PERMISSION_GROUPS: PermGroup[] = [
-    { group: "Finance", perms: [
-        { code: "finance.view", name: "View Finance" },
-        { code: "finance.payments", name: "Record Payments / Receipts" },
-        { code: "finance.invoices", name: "Manage Invoices & Fee Structures" },
-        { code: "finance.wallet", name: "Manage Wallets" },
-        { code: "finance.discounts", name: "Discounts & Scholarships" },
-        { code: "finance.reports", name: "Finance & Revenue Reports" },
-    ]},
-    { group: "Accounting", perms: [
-        { code: "accounting.income", name: "Income" },
-        { code: "accounting.expenses", name: "Expenses" },
-        { code: "accounting.payroll", name: "Payroll" },
-        { code: "accounting.budget", name: "Budgeting" },
-    ]},
-    { group: "Academics", perms: [
-        { code: "classes.view", name: "Classes" },
-        { code: "subjects.view", name: "Subjects" },
-        { code: "timetable.view", name: "Timetable" },
-        { code: "academics.view", name: "Academic System (Years/Streams)" },
-        { code: "exams.manage", name: "Manage Exams" },
-        { code: "results.entry", name: "Marks Entry" },
-        { code: "results.view", name: "View Results" },
-        { code: "content.manage", name: "Lesson Plans / Schemes / Resources" },
-    ]},
-    { group: "Attendance", perms: [
-        { code: "attendance.mark", name: "Mark Attendance" },
-        { code: "attendance.view", name: "View Attendance" },
-    ]},
-    { group: "Students & Admissions", perms: [
-        { code: "students.view", name: "View Students" },
-        { code: "students.manage", name: "Manage Students" },
-        { code: "admissions.manage", name: "Admissions" },
-    ]},
-    { group: "Staff & HR", perms: [
-        { code: "staff.view", name: "View Staff" },
-        { code: "hr.manage", name: "Manage HR" },
-        { code: "departments.manage", name: "Manage Departments" },
-    ]},
-    { group: "Operations", perms: [
-        { code: "library.manage", name: "Library" },
-        { code: "transport.manage", name: "Transport" },
-        { code: "boarding.manage", name: "Boarding" },
-        { code: "health.manage", name: "Health / Clinic" },
-    ]},
-    { group: "Cafeteria", perms: [
-        { code: "cafeteria.serve", name: "Serve Meals (Kitchen)" },
-        { code: "cafeteria.menu", name: "Manage Weekly Menu" },
-        { code: "cafeteria.history", name: "View Meal History" },
-        { code: "canteen.sell", name: "Canteen Quick Sale" },
-        { code: "canteen.transactions", name: "View Canteen Transactions" },
-        { code: "canteen.settings", name: "Canteen Settings" },
-    ]},
-    { group: "Sports", perms: [
-        { code: "sports.view", name: "View Sports" },
-        { code: "sports.manage", name: "Manage Sports & Enrolments" },
-        { code: "sports.attendance", name: "Sports Attendance" },
-        { code: "sports.performance", name: "Performance & Awards" },
-    ]},
-    { group: "Trips & Excursions", perms: [
-        { code: "trips.view", name: "View Trips" },
-        { code: "trips.manage", name: "Manage Trips & Participants" },
-        { code: "trips.attendance", name: "Trip Attendance" },
-    ]},
-    { group: "Front Desk", perms: [
-        { code: "frontdesk.view", name: "View Front Desk" },
-        { code: "frontdesk.visitors", name: "Visitor Management" },
-        { code: "frontdesk.signout", name: "Student Sign Out" },
-        { code: "frontdesk.appointments", name: "Appointments" },
-    ]},
-    { group: "Secretary", perms: [
-        { code: "secretary.view", name: "View Secretary Office" },
-        { code: "secretary.records", name: "Manage Student Records" },
-        { code: "secretary.meetings", name: "Meeting Management" },
-    ]},
-    { group: "Communication & Reports", perms: [
-        { code: "communications.send", name: "Send Communications" },
-        { code: "reports.view", name: "View Reports" },
-        { code: "audit.view", name: "Audit Logs" },
-    ]},
-    { group: "Administration", perms: [
-        { code: "settings.manage", name: "School Settings" },
-        { code: "roles.manage", name: "Manage Roles & Permissions" },
-    ]},
+// Capabilities: finer rights used inside an app (record payments, enter marks…).
+// Every capability belongs to exactly ONE app and only opens that app's modules
+// (the server's CODE_TO_MODULES in backend/src/lib/permissions.ts must agree —
+// checked by frontend/scripts/check-permissions.ts).
+export interface Capability extends Perm { app: string }
+export const CAPABILITIES: Capability[] = [
+    // Fees
+    { app: "fees", code: "finance.view", name: "View fees" },
+    { app: "fees", code: "finance.payments", name: "Record payments / receipts" },
+    { app: "fees", code: "finance.invoices", name: "Manage invoices & fee structures" },
+    { app: "fees", code: "finance.wallet", name: "Manage wallets" },
+    { app: "fees", code: "finance.discounts", name: "Discounts & scholarships" },
+    { app: "fees", code: "finance.reports", name: "Fee reports" },
+    // Accounting
+    { app: "accounting", code: "accounting.income", name: "Income" },
+    { app: "accounting", code: "accounting.expenses", name: "Expenses" },
+    { app: "accounting", code: "accounting.budget", name: "Budgeting" },
+    { app: "accounting", code: "accounting.ledger", name: "General ledger" },
+    { app: "accounting", code: "accounting.journals", name: "Journal entries" },
+    { app: "accounting", code: "accounting.statements", name: "Financial statements" },
+    { app: "accounting", code: "expenses.view", name: "View expense requests" },
+    { app: "accounting", code: "expenses.manage", name: "Manage expense requests" },
+    { app: "accounting", code: "expenses.approve", name: "Approve expenses" },
+    { app: "accounting", code: "procurement.view", name: "View procurement" },
+    { app: "accounting", code: "procurement.manage", name: "Manage procurement" },
+    { app: "accounting", code: "procurement.approve", name: "Approve purchases" },
+    // Payroll
+    { app: "payroll", code: "accounting.payroll", name: "Run payroll" },
+    // Academics
+    { app: "academics", code: "classes.view", name: "Classes" },
+    { app: "academics", code: "subjects.view", name: "Subjects" },
+    { app: "academics", code: "timetable.view", name: "Timetable" },
+    { app: "academics", code: "academics.view", name: "Academic content" },
+    { app: "academics", code: "content.manage", name: "Lesson plans, schemes & resources" },
+    // Exams
+    { app: "exams", code: "exams.manage", name: "Manage exams" },
+    { app: "exams", code: "results.entry", name: "Marks entry" },
+    { app: "exams", code: "results.view", name: "View results" },
+    // CBC
+    { app: "cbc", code: "cbc.view", name: "View CBC assessment" },
+    { app: "cbc", code: "cbc.assess", name: "Assess learners" },
+    { app: "cbc", code: "cbc.manage", name: "Manage strands & rubrics" },
+    // Attendance & discipline
+    { app: "attendance", code: "attendance.mark", name: "Mark attendance" },
+    { app: "attendance", code: "attendance.view", name: "View attendance" },
+    // Students
+    { app: "students", code: "students.view", name: "View learners" },
+    { app: "students", code: "students.manage", name: "Manage learners" },
+    { app: "students", code: "admissions.manage", name: "Admissions" },
+    { app: "students", code: "health.manage", name: "Medical records" },
+    // Human resources
+    { app: "hr", code: "staff.view", name: "View staff" },
+    { app: "hr", code: "hr.manage", name: "Manage HR" },
+    { app: "hr", code: "departments.manage", name: "Manage departments" },
+    { app: "hr", code: "audit.view", name: "Audit log" },
+    // Student life
+    { app: "library", code: "library.manage", name: "Run the library" },
+    { app: "transport", code: "transport.manage", name: "Run transport" },
+    { app: "boarding", code: "boarding.manage", name: "Run boarding" },
+    { app: "boarding", code: "cafeteria.serve", name: "Serve meals (kitchen)" },
+    { app: "boarding", code: "cafeteria.menu", name: "Weekly menu" },
+    { app: "boarding", code: "cafeteria.history", name: "Meal history" },
+    { app: "boarding", code: "canteen.sell", name: "Canteen quick sale" },
+    { app: "boarding", code: "canteen.transactions", name: "Canteen transactions" },
+    { app: "boarding", code: "canteen.settings", name: "Canteen settings" },
+    { app: "activities", code: "sports.view", name: "View sports" },
+    { app: "activities", code: "sports.manage", name: "Manage sports & enrolments" },
+    { app: "activities", code: "sports.attendance", name: "Sports attendance" },
+    { app: "activities", code: "sports.performance", name: "Performance & awards" },
+    { app: "activities", code: "trips.view", name: "View trips" },
+    { app: "activities", code: "trips.manage", name: "Manage trips & participants" },
+    { app: "activities", code: "trips.attendance", name: "Trip attendance" },
+    // Front office
+    { app: "frontdesk", code: "frontdesk.view", name: "View front desk" },
+    { app: "frontdesk", code: "frontdesk.visitors", name: "Visitors" },
+    { app: "frontdesk", code: "frontdesk.signout", name: "Learner sign-out" },
+    { app: "frontdesk", code: "frontdesk.appointments", name: "Appointments" },
+    { app: "frontdesk", code: "secretary.view", name: "Secretary office" },
+    { app: "frontdesk", code: "secretary.records", name: "Learner records (secretary)" },
+    { app: "frontdesk", code: "secretary.meetings", name: "Meetings (secretary)" },
+    { app: "communication", code: "communications.send", name: "Send messages" },
+    // Back office
+    { app: "reports", code: "reports.view", name: "View reports" },
+    { app: "administration", code: "settings.manage", name: "School settings" },
+    { app: "administration", code: "roles.manage", name: "Roles & permissions" },
 ];
+
+// Kept for older screens: capabilities grouped by app name.
+const MODULE_PERMISSION_GROUPS: PermGroup[] = Array.from(new Set(CAPABILITIES.map(c => c.app))).map(app => ({
+    group: app.charAt(0).toUpperCase() + app.slice(1),
+    perms: CAPABILITIES.filter(c => c.app === app).map(({ code, name }) => ({ code, name })),
+}));
 
 // Fine-grained per-page permission groups, auto-generated from the sidebar so
 // every page in every group is individually grantable. Labelled "<Group> — Pages".

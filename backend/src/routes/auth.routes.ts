@@ -284,7 +284,12 @@ router.post('/smart-login', async (req, res) => {
         };
 
         if (subdomain) {
-            const t = await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            // The mobile app sends the ShuleCloud School ID (A482917M); the web sends the subdomain.
+            const { isSchoolId, normalizeSchoolId } = await import('../lib/schoolId');
+            const t = isSchoolId(String(subdomain))
+                ? await metaDb.collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(String(subdomain)) })
+                : await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            if (!t && isSchoolId(String(subdomain))) return res.status(404).json({ message: `School ID "${normalizeSchoolId(String(subdomain))}" not found. Check the ID with your school.` });
             if (t) {
                 // Block login for schools still under review (registered but not activated).
                 if (t.status && t.status !== 'active') {
@@ -470,6 +475,12 @@ router.get('/my-permissions', async (req, res) => {
             return mods.filter(m => ALWAYS.includes(m) || enabledModules!.includes(m));
         };
 
+        // Apps the platform owner switched off for this school: hidden for everyone, admins included.
+        const { disabledAppsFor, modulesOfApps } = await import('../lib/permissions');
+        const disabledApps = await disabledAppsFor(tid);
+        const disabledModules = modulesOfApps(disabledApps);
+        const dropDisabled = (mods: string[]) => mods.filter(m => !disabledModules.includes(m));
+
         // planModules tells the UI which modules the school's PLAN allows (null =
         // unrestricted). The sidebar uses it to LOCK out-of-plan modules instead of
         // hiding them. ALWAYS modules are implicitly included.
@@ -477,7 +488,7 @@ router.get('/my-permissions', async (req, res) => {
 
         // ── Full admin → wildcard, but capped by the school's enabled modules ──
         if (userRole === 'school_admin' || userRole === 'super_admin') {
-            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {}, planModules });
+            return res.json({ role: userRole, userId, modules: enabledModules ? dropDisabled(capModules(['*'])) : ['*'], permissions: ['*'], crud: {}, planModules, disabledApps, disabledModules });
         }
 
         // ── Resolve the staff member's effective permission CODES, then map them
@@ -499,10 +510,10 @@ router.get('/my-permissions', async (req, res) => {
         // teacher fallback, no built-in role defaults. A freshly registered
         // teacher therefore sees nothing until an admin grants access.
         const codes = await resolveStaffPermissions(db, staffForPerms, { teacherFallback: false, useRoleDefaults: false });
-        const resolvedModules = capModules(permsToModules(codes));
+        const resolvedModules = dropDisabled(capModules(permsToModules(codes)));
         const crud = await resolveStaffCrud(db, staffForPerms);
 
-        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud, planModules });
+        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud, planModules, disabledApps, disabledModules });
     } catch (e: any) {
         res.status(500).json({ message: e.message });
     }

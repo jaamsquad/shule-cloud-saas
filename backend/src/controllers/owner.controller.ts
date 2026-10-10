@@ -445,6 +445,7 @@ export const getSchoolDetail = async (req: Request, res: Response) => {
             allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: p.price })),
             // Per-school module overrides (falls back to plan modules if unset).
             enabledModules: Array.isArray(t.enabledModules) ? t.enabledModules : (plan?.modules || []),
+            disabledApps: Array.isArray(t.disabledApps) ? t.disabledApps : [],
             counts: { students, staff },
             dbUsage: { sizeMB: dbSizeMB, collections, dbName: tenantDbOf(t) },
             createdAt: t.createdAt,
