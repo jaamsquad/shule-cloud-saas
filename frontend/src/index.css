@@ -302,3 +302,33 @@ textarea.inp { height: auto; padding: 0.5rem 0.75rem; }
 .sc-embed [data-app-chrome],
 .sc-embed [data-portal-chrome] { display: none !important; }
 .sc-embed [data-portal-main] { margin-left: 0 !important; }
+
+/* ── ShuleCloud spinner ─────────────────────────────────────────────────────────
+   Every loading spinner (lucide Loader2 / LoaderCircle, the ring spinners and <Spinner/>)
+   is drawn as a blue → green arc that fades out at its tail. Inside coloured buttons
+   (text-white) the same arc is white so it stays visible. Size comes from w-/h- classes. */
+.lucide-loader-circle,
+.sc-spinner,
+.rounded-full.animate-spin[class*="border-t-"] {
+  --sc-ring: max(2px, 9.5%);
+  border: 0 !important;
+  border-radius: 9999px;
+  background: conic-gradient(from 20deg,
+      rgba(22, 163, 74, 0) 0deg 46deg,
+      rgba(110, 205, 150, .35) 70deg,
+      #16a34a 190deg,
+      #0aa5d6 300deg,
+      #0891c2 318deg,
+      rgba(8, 145, 194, 0) 319deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--sc-ring)), #000 calc(100% - var(--sc-ring) + .5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - var(--sc-ring)), #000 calc(100% - var(--sc-ring) + .5px));
+  animation: sc-spin .85s linear infinite;
+  flex-shrink: 0;
+}
+.lucide-loader-circle > *, .sc-spinner > * { opacity: 0; }
+.lucide-loader-circle.text-white,
+.text-white > .lucide-loader-circle,
+.sc-spinner.sc-spinner--light {
+  background: conic-gradient(from 20deg, rgba(255, 255, 255, 0) 0deg 46deg, rgba(255, 255, 255, .35) 120deg, #fff 318deg, rgba(255, 255, 255, 0) 319deg);
+}
+@keyframes sc-spin { to { transform: rotate(360deg); } }
