@@ -153,7 +153,7 @@ export default function OwnerPlans() {
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(p.id)}><Trash2 className="w-4 h-4" /></Button>
                             </div>
                             <Badge className="w-fit mb-2 gradient-primary rounded-sm font-mono tracking-widest text-[10px] py-0 px-1.5 border-none shadow-sm">
-                                KES {(Number(p.priceMonthly ?? p.price ?? 0)).toLocaleString()}/MO
+                                KES {(Number(p.priceMonthly ?? p.price ?? 0)).toLocaleString()}{({ yearly: "/YR", annually: "/YR", termly: "/TERM" } as Record<string, string>)[p.billingCycle] || "/MO"}
                             </Badge>
                             <CardTitle className="text-xl font-heading">{p.name}</CardTitle>
                             <CardDescription className="line-clamp-2 mt-1 min-h-[40px] text-xs">

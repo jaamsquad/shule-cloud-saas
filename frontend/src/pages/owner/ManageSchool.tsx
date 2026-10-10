@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import SchoolAppsCard from "@/components/owner/SchoolAppsCard";
+import SchoolPricingCard from "@/components/owner/SchoolPricingCard";
 
 const PRIMARY = "#534AB7";
 const ksh = (n: any) => `KES ${Number(n || 0).toLocaleString()}`;
@@ -194,11 +195,14 @@ export default function ManageSchool() {
                         <select value={school.plan?._id || ""} onChange={(e) => assignPlan.mutate(e.target.value)}
                             className="h-10 px-3 rounded-lg text-sm font-bold text-slate-700 min-w-[200px]" style={{ border: "0.5px solid #e5e7eb" }}>
                             <option value="">— No plan —</option>
-                            {(school.allPlans || []).map((p: any) => <option key={p._id} value={p._id}>{p.name} ({ksh(p.price)}/mo)</option>)}
+                            {(school.allPlans || []).map((p: any) => <option key={p._id} value={p._id}>{p.name} ({ksh(p.price)}{p.per || "/mo"})</option>)}
                         </select>
-                        {school.plan && <span className="text-xs text-slate-500">Current: <b>{school.plan.name}</b> · {ksh(school.plan.price)}/mo · {school.plan.maxStudents ?? "∞"} students</span>}
+                        {school.plan && <span className="text-xs text-slate-500">Current: <b>{school.plan.name}</b> · {ksh(school.plan.price)}{school.plan.per || "/mo"}{school.plan.listPrice !== undefined && Number(school.plan.listPrice) !== Number(school.plan.price) ? <span className="text-emerald-600 font-bold"> (standard {ksh(school.plan.listPrice)})</span> : null} · {school.plan.maxStudents ?? "∞"} students</span>}
                     </div>
                 </div>
+
+                {/* This school's own prices + discount */}
+                <SchoolPricingCard schoolId={String(id)} plans={school.allPlans || []} pricing={school.pricing} currentPlanId={school.plan?._id} />
 
                 {/* Message the school directly */}
                 <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>

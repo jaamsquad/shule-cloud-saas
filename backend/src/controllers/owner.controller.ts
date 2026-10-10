@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { getDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
+import { schoolPrice, cleanSchoolPricing, CYCLES, cycleOf } from '../lib/planPricing';
 
 // ─── Owner roles & permissions ───────────────────────────────────────────────
 // Roles available to owner-portal users and what each can do.
@@ -120,15 +121,17 @@ export const createPlan = async (req: Request, res: Response) => {
     if (!guard(req, res, 'plans.manage')) return;
     try {
         const db = getDb();
-        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays, billingCycle } = req.body || {};
         if (!name) return res.status(400).json({ message: 'Plan name is required' });
+        const cycle = cycleOf({ billingCycle });
         const doc = {
             name: String(name).trim(),
-            price: Number(price) || 0,
+            price: Number(price) || 0,                                    // per billing cycle
+            billingCycle: cycle,
             limits: { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) },
             modules: Array.isArray(modules) ? modules : [],
             description: description || '',
-            durationDays: Number(durationDays) > 0 ? Number(durationDays) : 30,   // billing period length
+            durationDays: Number(durationDays) > 0 ? Number(durationDays) : CYCLES[cycle].days,   // billing period length
             graceDays: Number(graceDays) >= 0 ? Number(graceDays) : 0,            // post-expiry grace
             isActive: isActive !== false,
             createdAt: new Date(), updatedAt: new Date(),
@@ -142,8 +145,9 @@ export const updatePlan = async (req: Request, res: Response) => {
     if (!guard(req, res, 'plans.manage')) return;
     try {
         const db = getDb();
-        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays } = req.body || {};
+        const { name, price, maxStudents, modules, description, isActive, durationDays, graceDays, billingCycle } = req.body || {};
         const set: any = { updatedAt: new Date() };
+        if (billingCycle !== undefined) set.billingCycle = cycleOf({ billingCycle });
         if (name !== undefined) set.name = String(name).trim();
         if (price !== undefined) set.price = Number(price) || 0;
         if (maxStudents !== undefined) set.limits = { maxStudents: maxStudents === '' || maxStudents == null ? null : Number(maxStudents) };
@@ -241,7 +245,8 @@ async function loadSchoolRows(db: any) {
             subdomain: t.subdomain || '',
             shulecloudId: t.shulecloudId || '',
             plan: plan?.name || sub?.planName || t.plan || 'Basic',
-            planPrice: num(plan?.price ?? sub?.amount ?? t.planPrice),
+            planPrice: plan ? schoolPrice(t, plan).price : num(sub?.amount ?? t.planPrice),
+            planPer: plan ? CYCLES[cycleOf(plan)].short : '/mo',
             status,
             studentCount: num(t.studentCount ?? t.studentsCount),
             modules: Array.isArray(t.enabledModules) ? t.enabledModules.length : num(t.moduleCount),
@@ -441,8 +446,10 @@ export const getSchoolDetail = async (req: Request, res: Response) => {
             phone: t.phone || t.contactPhone || '',
             organizationId: t.organizationId ? String(t.organizationId) : null,
             status,
-            plan: plan ? { _id: String(plan._id), name: plan.name, price: plan.price, maxStudents: plan.limits?.maxStudents ?? null, modules: plan.modules || [] } : null,
-            allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: p.price })),
+            plan: plan ? { _id: String(plan._id), name: plan.name, price: schoolPrice(t, plan).price, listPrice: plan.price, per: CYCLES[cycleOf(plan)].short, maxStudents: plan.limits?.maxStudents ?? null, modules: plan.modules || [] } : null,
+            allPlans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, ...schoolPrice(t, p) })),
+            // this school's own prices + discount (Pricing & discount card)
+            pricing: { planPricing: t.planPricing || {}, discount: t.discount || null },
             // Per-school module overrides (falls back to plan modules if unset).
             enabledModules: Array.isArray(t.enabledModules) ? t.enabledModules : (plan?.modules || []),
             disabledApps: Array.isArray(t.disabledApps) ? t.disabledApps : [],
@@ -461,14 +468,34 @@ export const assignSchoolPlan = async (req: Request, res: Response) => {
         const { planId } = req.body || {};
         const tid = new ObjectId(req.params.id);
         const plan = planId ? await meta.collection('Plan').findOne({ _id: new ObjectId(planId) }) : null;
+        const tenant = await meta.collection('Tenant').findOne({ _id: tid });
         await meta.collection('TenantSubscription').updateOne(
             { tenantId: tid },
-            { $set: { tenantId: tid, planId: plan?._id || null, planName: plan?.name || null, amount: plan?.price || 0, status: 'active', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+            { $set: { tenantId: tid, planId: plan?._id || null, planName: plan?.name || null, amount: plan ? schoolPrice(tenant, plan).price : 0, status: 'active', updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
             { upsert: true },
         );
         await meta.collection('Tenant').updateOne({ _id: tid }, { $set: { planId: plan?._id || null, plan: plan?.name || null, enabledModules: plan?.modules || [], updatedAt: new Date() } });
         await ownerAudit(req, 'school.assign_plan', `school:${req.params.id}`, { plan: plan?.name });
         return res.json({ ok: true });
+    } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// A school's own plan prices + discount (lib/planPricing).
+export const setSchoolPricing = async (req: Request, res: Response) => {
+    if (!guard(req, res, 'schools.manage')) return;
+    try {
+        const meta = getDb();
+        const tid = new ObjectId(req.params.id);
+        const plans = await meta.collection('Plan').find({}, { projection: { _id: 1 } }).toArray();
+        const { planPricing, discount } = cleanSchoolPricing(req.body || {}, plans.map((p: any) => String(p._id)));
+        const r = await meta.collection('Tenant').updateOne({ _id: tid }, discount ? { $set: { planPricing, discount, updatedAt: new Date() } } : { $set: { planPricing, updatedAt: new Date() }, $unset: { discount: '' } });
+        if (!r.matchedCount) return res.status(404).json({ message: 'School not found' });
+        // keep the current subscription's amount in step
+        const t: any = await meta.collection('Tenant').findOne({ _id: tid });
+        const sub: any = await meta.collection('TenantSubscription').findOne({ tenantId: tid });
+        if (sub?.planId) { const p = await meta.collection('Plan').findOne({ _id: sub.planId }); if (p) await meta.collection('TenantSubscription').updateOne({ tenantId: tid }, { $set: { amount: schoolPrice(t, p).price, updatedAt: new Date() } }); }
+        await ownerAudit(req, 'school.pricing', `school:${req.params.id}`, { planPricing, discount });
+        return res.json({ ok: true, planPricing, discount });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 

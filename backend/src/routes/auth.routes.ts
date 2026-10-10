@@ -2884,9 +2884,12 @@ router.get('/tenant/subscription', async (req, res) => {
         const plans = await meta.collection('Plan').find({ isActive: { $ne: false } }).sort({ price: 1 }).toArray();
         const sub = await meta.collection('TenantSubscription').findOne({ tenantId: new ObjectId(tid) });
         const current = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId }) : null;
+        const { schoolPrice } = await import('../lib/planPricing');
+        const tenant = await meta.collection('Tenant').findOne({ _id: new ObjectId(tid) });
+        // the price THIS school pays (its own price / discount), per billing cycle
         res.json({
-            plans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: Number(p.price || 0), maxStudents: p.limits?.maxStudents ?? null, modules: p.modules || [], description: p.description || '' })),
-            current: current ? { _id: String(current._id), name: current.name, price: Number(current.price || 0) } : null,
+            plans: plans.map((p: any) => { const sp = schoolPrice(tenant, p); return { _id: String(p._id), name: p.name, price: sp.price, listPrice: sp.listPrice, per: sp.per, cycle: sp.cycle, cycleLabel: sp.cycleLabel, discount: sp.discount, maxStudents: p.limits?.maxStudents ?? null, modules: p.modules || [], description: p.description || '' }; }),
+            current: current ? { _id: String(current._id), name: current.name, price: schoolPrice(tenant, current).price, per: schoolPrice(tenant, current).per } : null,
             status: sub?.status || 'none',
             expiresAt: sub?.expiresAt || sub?.currentPeriodEnd || null,
         });
@@ -2904,7 +2907,8 @@ router.post('/tenant/subscribe', async (req, res) => {
         const plan = await meta.collection('Plan').findOne({ _id: new ObjectId(planId) });
         if (!plan) return res.status(404).json({ message: 'Plan not found' });
         const tenantId = new ObjectId(tid);
-        const price = Number(plan.price || 0);
+        const { schoolPrice } = await import('../lib/planPricing');
+        const price = schoolPrice(await meta.collection('Tenant').findOne({ _id: tenantId }), plan).price;   // this school's price after its discount
 
         // Plan duration + grace from the plan config (defaults: 30 days / 0 grace).
         const durationDays = Number(plan.durationDays) > 0 ? Number(plan.durationDays) : 30;
