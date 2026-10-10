@@ -143,7 +143,7 @@ function AssignLearners({ data }: { data: PathwaysData }) {
                 <label><span className="block text-[11px] font-bold text-slate-500 mb-1">Stream</span>
                     <select className={`${sel} min-w-[120px]`} style={border} value={stream} onChange={e => setStream(e.target.value)}><option value="">All</option>{streams.filter(s => String(s.classId) === String(clsObj?._id)).map(s => <option key={s._id} value={s.name}>{s.name}</option>)}</select></label>
                 {picked.size > 0 && (
-                    <div className="flex flex-wrap items-end gap-2 rounded-xl px-3 py-2" style={{ background: "#eef0fb" }}>
+                    <div className="flex flex-wrap items-end gap-2 rounded-xl px-3 py-2 w-full md:w-auto" style={{ background: "#eef0fb" }}>
                         <span className="text-xs font-bold self-center" style={{ color: INK }}>{picked.size} selected →</span>
                         <select className={sel} style={border} value={bp} onChange={e => { setBp(e.target.value); setBt(""); }}><option value="">Pathway…</option>{data.pathways.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}</select>
                         <select className={sel} style={border} value={bt} onChange={e => setBt(e.target.value)} disabled={!bp}><option value="">Track…</option>{tracksOf(bp).map(t => <option key={t.key} value={t.key}>{t.name}</option>)}</select>
@@ -155,7 +155,35 @@ function AssignLearners({ data }: { data: PathwaysData }) {
             {isFetching ? <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div> : !learners.length ? (
                 <div className="py-14 text-center text-sm text-slate-500 flex flex-col items-center gap-2"><Users className="w-6 h-6 text-slate-300" />No learners in {cls || "this class"}.</div>
             ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* phones: one card per learner */}
+                <div className="md:hidden space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 px-1"><input type="checkbox" checked={picked.size === learners.length} onChange={e => setPicked(e.target.checked ? new Set(learners.map(l => l._id)) : new Set())} className="w-4 h-4" /> Select all</label>
+                    {learners.map(l => {
+                        const r = rows[l._id] || { pathway: "", track: "", electives: [] };
+                        const opts = electivesOf(r.pathway, r.track);
+                        return (
+                            <div key={l._id} className="rounded-xl p-3 bg-slate-50/60 space-y-2" style={border}>
+                                <label className="flex items-start gap-2">
+                                    <input type="checkbox" checked={picked.has(l._id)} onChange={() => setPicked(p => { const n = new Set(p); if (n.has(l._id)) n.delete(l._id); else n.add(l._id); return n; })} className="w-4 h-4 mt-0.5" />
+                                    <span><span className="block font-bold" style={{ color: INK }}>{l.name}</span><span className="text-[11px] text-slate-400">{[l.adm, l.stream].filter(Boolean).join(" · ")}</span></span>
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select className={`${sel} w-full`} style={border} value={r.pathway} onChange={e => set(l._id, { pathway: e.target.value, track: "", electives: [] })}><option value="">Pathway…</option>{data.pathways.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}</select>
+                                    <select className={`${sel} w-full`} style={border} value={r.track} disabled={!r.pathway} onChange={e => set(l._id, { track: e.target.value, electives: [] })}><option value="">Track…</option>{tracksOf(r.pathway).map(t => <option key={t.key} value={t.key}>{t.name}</option>)}</select>
+                                </div>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {Array.from({ length: data.core.electivesPerLearner }).map((_, i) => (
+                                        <select key={i} className={`${sel} w-full`} style={border} disabled={!r.pathway} value={r.electives[i] || ""} onChange={e => { const ev = [...r.electives]; ev[i] = e.target.value; set(l._id, { electives: ev.filter(Boolean) }); }}>
+                                            <option value="">Elective {i + 1}</option>{opts.filter(o => o === r.electives[i] || !r.electives.includes(o)).map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm min-w-[880px]">
                         <thead><tr className="text-[10px] font-black uppercase tracking-wide text-slate-400 text-left">
                             <th className="py-2 w-8"><input type="checkbox" checked={picked.size === learners.length} onChange={e => setPicked(e.target.checked ? new Set(learners.map(l => l._id)) : new Set())} className="w-4 h-4" /></th>
@@ -182,6 +210,7 @@ function AssignLearners({ data }: { data: PathwaysData }) {
                         </tbody>
                     </table>
                 </div>
+                </>
             )}
         </div>
     );

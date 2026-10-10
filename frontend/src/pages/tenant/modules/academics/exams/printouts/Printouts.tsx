@@ -46,9 +46,9 @@ export default function Printouts() {
                         <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white" style={{ background: INK }}><Printer className="w-5 h-5" /></div>
                         <div><h1 className="text-xl font-black" style={{ color: INK }}>Printouts</h1><p className="text-xs text-slate-500">Choose what to print. Exam printouts use published results only.</p></div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
                         {CARDS.map(c => (
-                            <button key={c.key} onClick={() => (c.view ? setParams({ view: c.view }) : nav(c.to!))} className="text-left bg-white rounded-2xl p-4 hover:-translate-y-0.5 hover:shadow-md transition-all" style={border}>
+                            <button key={c.key} onClick={() => (c.view ? setParams({ view: c.view }) : nav(c.to!))} className="text-left bg-white rounded-2xl p-3 sm:p-4 hover:-translate-y-0.5 hover:shadow-md transition-all" style={border}>
                                 <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: c.tint }}><c.icon className="w-5 h-5" style={{ color: INK }} /></div>
                                 <div className="font-black text-sm" style={{ color: INK }}>{c.title}</div>
                                 <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{c.desc}</div>
@@ -123,9 +123,20 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     const loading = view === "transcripts" ? tdata.isFetching : report.isFetching;
     const error = (view === "transcripts" ? tdata.error : report.error) as { response?: { data?: { message?: string } } } | null;
 
+    // Preview: the page is laid out at A4 width; on narrow screens it is scaled down to fit.
     const frame = useRef<HTMLIFrameElement>(null);
-    useEffect(() => { const h = () => fit(); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); });
-    const fit = () => { const d = frame.current?.contentDocument; if (d && frame.current) frame.current.style.height = `${Math.max(500, d.documentElement.scrollHeight + 20)}px`; };
+    const box = useRef<HTMLDivElement>(null);
+    const [boxW, setBoxW] = useState(0);
+    const [docH, setDocH] = useState(600);
+    const [actual, setActual] = useState(false);   // phones: fit the page to the screen, or show it at full size
+    useEffect(() => {
+        const el = box.current; if (!el) return;
+        const ro = new ResizeObserver(() => setBoxW(el.clientWidth));
+        ro.observe(el); setBoxW(el.clientWidth);
+        return () => ro.disconnect();
+    }, [html, loading]);
+    const fit = () => { const d = frame.current?.contentDocument; if (d) setDocH(Math.max(500, d.documentElement.scrollHeight + 20)); };
+    useEffect(() => { const t = setTimeout(fit, 60); return () => clearTimeout(t); }, [boxW, html]);
     const landscape = view !== "transcripts" && !(view === "merit" && merit.section === "breakdown");
 
     const upload = (field: "principalSignature" | "schoolStamp") => async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,8 +258,27 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
                     ) : !html ? (
                         <div className="py-16 text-center text-sm text-slate-500 flex flex-col items-center gap-2"><Wand2 className="w-6 h-6 text-slate-300" />{view === "transcripts" ? "Pick a class." : exams.length ? "Pick a class and an exam." : "No published exams for this class yet — publish results under Exams → Manage Exams."}</div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <iframe ref={frame} title="preview" srcDoc={html} onLoad={fit} className="block mx-auto bg-white" style={{ width: "100%", maxWidth: landscape ? 1180 : 840, minWidth: landscape ? 1000 : 760, border: 0 }} />
+                        <div ref={box} className={`w-full ${actual ? "overflow-x-auto" : "overflow-hidden"}`}>
+                            {(() => {
+                                const docW = boxW >= (landscape ? 1000 : 760) ? Math.min(boxW, landscape ? 1180 : 840) : (landscape ? 1120 : 820);
+                                const fitScale = boxW && boxW < docW ? boxW / docW : 1;
+                                const scale = actual ? 1 : fitScale;
+                                return (
+                                    <>
+                                    {fitScale < 1 && (
+                                        <div className="flex justify-end mb-2 sticky left-0">
+                                            <div className="flex rounded-lg p-0.5 bg-slate-100 text-[11px] font-bold">
+                                                <button onClick={() => setActual(false)} className={`px-2.5 h-7 rounded-md ${!actual ? "bg-white shadow-sm" : "text-slate-500"}`} style={!actual ? { color: INK } : {}}>Fit</button>
+                                                <button onClick={() => setActual(true)} className={`px-2.5 h-7 rounded-md ${actual ? "bg-white shadow-sm" : "text-slate-500"}`} style={actual ? { color: INK } : {}}>Actual size</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="mx-auto" style={{ width: docW * scale, height: docH * scale }}>
+                                        <iframe ref={frame} title="preview" srcDoc={html} onLoad={fit} className="block bg-white" style={{ width: docW, height: docH, border: 0, transform: `scale(${scale})`, transformOrigin: "top left" }} />
+                                    </div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     )}
                 </div>

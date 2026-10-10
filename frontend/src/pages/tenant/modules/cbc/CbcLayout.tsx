@@ -25,8 +25,8 @@ export default function CbcLayout() {
                     <div className="w-11 h-11 rounded-2xl bg-[#7C3AED] flex items-center justify-center text-white"><BookOpenCheck className="w-5 h-5" /></div>
                     <div><h1 className="text-lg font-black text-slate-800">CBC Assessment</h1><p className="text-xs text-slate-500">Competency-based assessment, progress & report cards</p></div>
                 </div>
-                <div className="flex gap-1 overflow-x-auto">
-                    {TABS.map(t => <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `px-4 py-2.5 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${isActive ? "border-[#7C3AED] text-[#7C3AED]" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{t.label}</NavLink>)}
+                <div className="flex gap-1 overflow-x-auto -mx-1 px-1 [scrollbar-width:none]">
+                    {TABS.map(t => <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `shrink-0 px-4 py-2.5 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${isActive ? "border-[#7C3AED] text-[#7C3AED]" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{t.label}</NavLink>)}
                 </div>
             </div>
             <div className="p-6"><CbcTermProvider><Outlet /></CbcTermProvider></div>
