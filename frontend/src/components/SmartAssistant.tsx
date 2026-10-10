@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import AiChat, { type AiStatus } from "./AiChat";
 
 // Smart Assistant — a floating, button-driven school insights panel. No typing:
 // pick a category → pick a question → get a SmartCard (summary, stat, chart,
@@ -50,6 +51,18 @@ export default function SmartAssistant() {
     const [open, setOpen] = useState(false);
     const [category, setCategory] = useState<string | null>(null);
     const [card, setCard] = useState<any | null>(null);
+    const [tab, setTab] = useState<"ai" | "insights" | null>(null);
+
+    // AI chat (Groq) — shown when ShuleCloud set it up; the school admin can turn it on/off.
+    const { data: ai } = useQuery<AiStatus>({
+        queryKey: ["ai_status"],
+        enabled: open,
+        queryFn: async () => (await api.get("/assistant/ai/status")).data,
+        staleTime: 60 * 1000,
+        retry: false,
+    });
+    const aiVisible = !!ai && (ai.enabled || (ai.canManage && ai.platform));
+    const view = tab ?? (ai?.enabled ? "ai" : "insights");
 
     const { data: catalog } = useQuery({
         queryKey: ["assistant_catalog"],
@@ -135,16 +148,26 @@ export default function SmartAssistant() {
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 text-white bg-gradient-to-br from-[#5C67F2] to-[#4a54c4]">
                         <div className="flex items-center gap-2">
-                            {(category || card) && <button onClick={card ? reset : backToCats} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center"><ChevronLeft className="w-4 h-4" /></button>}
+                            {view === "insights" && (category || card) && <button onClick={card ? reset : backToCats} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center"><ChevronLeft className="w-4 h-4" /></button>}
                             <Bot className="w-5 h-5" />
-                            <div><p className="text-sm font-black leading-tight">ShuleCloud Assistant</p><p className="text-[10px] text-white/70">{card ? "Insight" : category || "What would you like to know?"}</p></div>
+                            <div><p className="text-sm font-black leading-tight">ShuleCloud Assistant</p><p className="text-[10px] text-white/70">{view === "ai" ? "Ask anything · AI" : card ? "Insight" : category || "What would you like to know?"}</p></div>
                         </div>
                         <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center"><X className="w-4 h-4" /></button>
                     </div>
 
+                    {aiVisible && (
+                        <div className="flex gap-1 p-1.5 bg-white border-b border-slate-100">
+                            {([["ai", "Ask AI"], ["insights", "Insights"]] as const).map(([k, l]) => (
+                                <button key={k} onClick={() => setTab(k)} className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-colors ${view === k ? "bg-[#5C67F2] text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+                                    {k === "ai" && <Sparkles className="w-3 h-3 inline mr-1 -mt-0.5" />}{l}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <div className="flex-1 overflow-y-auto p-4 bg-slate-50/40">
-                        {/* Result card */}
-                        {card ? (
+                        {view === "ai" && ai ? (
+                            <AiChat status={ai} renderCard={(c) => <SmartCardView card={c} onAction={onAction} loading={false} />} />
+                        ) : card ? (
                             <SmartCardView card={card} onAction={onAction} loading={runQuery.isPending} />
                         ) : !category ? (
                             /* Category grid */
@@ -179,7 +202,7 @@ export default function SmartAssistant() {
 
                     {/* Footer hint */}
                     <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-1.5 text-[10px] text-slate-400 bg-white">
-                        <Sparkles className="w-3 h-3" /> Live data · button-driven · AI-ready
+                        <Sparkles className="w-3 h-3" /> {view === "ai" ? `Live school data · AI${ai?.model ? ` (${ai.model})` : ""}` : "Live data · tap a question"}
                     </div>
                 </div>
             )}

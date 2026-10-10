@@ -14,7 +14,9 @@ class CurvedHeader extends StatelessWidget {
   final Widget? below;            // tabs, a profile row, a search field…
   final List<Color>? colors;
   final double extraBottom;       // room for a card that overlaps the curve
-  const CurvedHeader({super.key, required this.title, this.back = false, this.onLeading, this.onBell, this.unread = 0, this.below, this.colors, this.extraBottom = 0});
+  final IconData trailingIcon;    // the bell by default
+  const CurvedHeader({super.key, required this.title, this.back = false, this.onLeading, this.onBell, this.unread = 0, this.below, this.colors, this.extraBottom = 0,
+      this.trailingIcon = Icons.notifications_none_rounded});
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +44,7 @@ class CurvedHeader extends StatelessWidget {
                 Expanded(child: Text(title, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.2))),
                 Stack(clipBehavior: Clip.none, children: [
-                  _round(Icons.notifications_none_rounded, onBell),
+                  _round(trailingIcon, onBell),
                   if (unread > 0)
                     Positioned(
                       right: 8, top: 8,

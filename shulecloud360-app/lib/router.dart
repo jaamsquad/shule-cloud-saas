@@ -7,6 +7,7 @@ import 'features/account/account_screen.dart';
 import 'features/apps/app_screen.dart';
 import 'features/apps/apps_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/assistant/assistant_screen.dart';
 import 'features/login/login_screen.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/login/welcome_screen.dart';
@@ -34,6 +35,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (_, __) => const _Splash()),
       GoRoute(path: '/welcome', pageBuilder: (_, st) => _fade(st, const WelcomeScreen())),
       GoRoute(path: '/login', pageBuilder: (_, st) => _fade(st, const LoginScreen())),
+      GoRoute(path: '/assistant', builder: (_, __) => const AssistantScreen()),
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
       GoRoute(path: '/open', builder: (_, st) => openPage(

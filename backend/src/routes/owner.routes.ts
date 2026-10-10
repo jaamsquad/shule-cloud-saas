@@ -148,6 +148,38 @@ router.post('/school-auth', async (req, res) => {
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
+// ─── AI assistant (Groq) — owner sets the key and model for every school ─────
+router.get('/ai-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { getAiConfig, publicAiConfig } = await import('../lib/aiAssistant');
+        const cfg = publicAiConfig(await getAiConfig());
+        const day = new Date().toISOString().slice(0, 10);
+        const usage = await getMetaDb().collection('ai_usage').aggregate([{ $match: { day } }, { $group: { _id: null, requests: { $sum: '$count' }, tokens: { $sum: '$tokens' }, schools: { $sum: 1 } } }]).toArray();
+        const off = await getMetaDb().collection('Tenant').countDocuments({ aiEnabled: false });
+        res.json({ ...cfg, today: usage[0] || { requests: 0, tokens: 0, schools: 0 }, schoolsOff: off });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/ai-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Only an owner can change the AI settings.' });
+    try {
+        const { saveAiConfig } = await import('../lib/aiAssistant');
+        await saveAiConfig(req.body || {});
+        const { ownerAudit } = await import('../controllers/owner.controller');
+        await ownerAudit(req as any, 'AI_SETTINGS_UPDATED', 'Platform', { enabled: req.body?.enabled, model: req.body?.model, keyChanged: !!req.body?.apiKey || !!req.body?.clearKey, dailyLimit: req.body?.dailyLimit });
+        res.json({ message: 'Saved' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+router.post('/ai-settings/test', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { testAi } = await import('../lib/aiAssistant');
+        const reply = await testAi(req.body || {});
+        res.json({ ok: true, message: `Connected — the model replied "${reply.slice(0, 40)}".` });
+    } catch (e: any) { res.status(400).json({ ok: false, message: e.message }); }
+});
+
 // ─── Company email (SMTP) — super_owner only ─────────────────────────────────
 router.get('/company-email', getCompanyEmail);
 router.post('/company-email', setCompanyEmail);

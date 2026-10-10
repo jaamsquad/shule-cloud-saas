@@ -6,6 +6,7 @@ import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import 'portal_switch.dart';
+import '../assistant/assistant_screen.dart';
 
 /// The frame around every main screen: a side menu (the open app's pages, then Home /
 /// Dashboard / Notifications / Help / Settings / Logout) and a bottom bar. Each screen
@@ -23,8 +24,17 @@ class AppShell extends ConsumerWidget {
     final openKey = RegExp(r'^/apps/([^/?]+)').firstMatch(location)?.group(1);
     final open = openKey == null ? null : apps.where((a) => a.key == openKey).firstOrNull;
 
+    final ai = ref.watch(aiStatusProvider).valueOrNull;
+    final showAi = ai != null && (ai.enabled || (ai.canManage && ai.platform));
     return Scaffold(
-      drawer: _SideMenu(open: open, location: location),
+      drawer: _SideMenu(open: open, location: location, showAi: showAi),
+      floatingActionButton: showAi && !location.startsWith('/account')
+          ? FloatingActionButton.extended(
+              heroTag: 'ai', onPressed: () => context.push('/assistant'),
+              backgroundColor: C.blue, foregroundColor: Colors.white, elevation: 4,
+              icon: const Icon(Icons.auto_awesome_rounded), label: const Text('Ask AI', style: TextStyle(fontWeight: FontWeight.w800)),
+            )
+          : null,
       body: child,
       bottomNavigationBar: NavigationBar(
         backgroundColor: Colors.white, surfaceTintColor: Colors.white, elevation: 8, shadowColor: Colors.black26,
@@ -44,7 +54,8 @@ class AppShell extends ConsumerWidget {
 class _SideMenu extends ConsumerWidget {
   final AppDef? open;
   final String location;
-  const _SideMenu({required this.open, required this.location});
+  final bool showAi;
+  const _SideMenu({required this.open, required this.location, this.showAi = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -110,6 +121,7 @@ class _SideMenu extends ConsumerWidget {
           const Divider(height: 16),
           for (final g in apps) group(g),
           const Divider(height: 20),
+          if (showAi) row(Icons.auto_awesome_outlined, 'AI Assistant', () => context.push('/assistant')),
           row(Icons.notifications_none_rounded, 'Notifications', () => context.push('/notifications')),
           row(Icons.help_outline, 'Help', () => context.push('/help')),
           row(Icons.settings_outlined, 'Settings', () => context.go('/account'), active: location.startsWith('/account')),

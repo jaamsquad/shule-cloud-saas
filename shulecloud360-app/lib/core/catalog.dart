@@ -93,7 +93,8 @@ final catalogProvider = FutureProvider<Catalog>((ref) async {
   }).toList();
   Color hex(Object? c) => Color(int.parse('FF${(c ?? '#2F7BF5').toString().replaceAll('#', '')}', radix: 16));
   String slug(String l) => l.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
-  final sidebar = ((j['sidebar'] ?? const []) as List).map((g) {
+  // the web Dashboard link is Home in the app
+  final sidebar = ((j['sidebar'] ?? const []) as List).where((g) => !(g['path'] == '/dashboard' && (g['pages'] as List).isEmpty)).map((g) {
     final pages = (g['pages'] as List).map((p) => PageDef(p['label'], p['path'], perm: p['perm'], create: p['create'] == true)).toList();
     final label = g['label'].toString();
     return AppDef(
