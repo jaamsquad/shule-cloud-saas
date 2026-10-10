@@ -14,6 +14,7 @@ import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import examPublishRoutes from './routes/examPublish.routes';
+import examPrintoutsRoutes from './routes/examPrintouts.routes';
 import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
@@ -344,6 +345,7 @@ app.use('/api/v1', appGate);   // apps the owner switched off for a school
 // API Routes
 app.use('/api/v1', academicsRoutes);
 app.use('/api/v1', analyticsRoutes);
+app.use('/api/v1', examPrintoutsRoutes);   // Exams → Printouts: merit list, analysis, transcripts
 app.use('/api/v1', examPublishRoutes);   // Exams → Manage Exams: publish / unpublish results
 app.use('/api/v1', messagingRoutes);
 app.use('/api/v1', attendanceRoutes);
