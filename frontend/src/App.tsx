@@ -362,6 +362,7 @@ import ThemeLanguage from "./pages/tenant/modules/ThemeLanguage";
 import AccountSettings from "./pages/tenant/modules/AccountSettings";
 import FeeParticulars from "./pages/tenant/modules/FeeParticulars";
 import FeeStructure from "./pages/tenant/modules/FeeStructure";
+import ClassTuition from "./pages/tenant/modules/ClassTuition";
 import FeesSettings from "./pages/tenant/modules/FeesSettings";
 import DiscountTypes from "./pages/tenant/modules/DiscountTypes";
 
@@ -1055,6 +1056,7 @@ const App = () => {
               <Route path="/settings/profile" element={<InstituteProfile />} />
               <Route path="/settings/fees-particulars" element={<FeeParticulars />} />
               <Route path="/settings/fees-structure" element={<FeeStructure />} />
+              <Route path="/settings/class-tuition" element={<ClassTuition />} />
               <Route path="/fees/settings" element={<FeesSettings />} />
               <Route path="/settings/discount-type" element={<DiscountTypes />} />
               <Route path="/settings/accounts" element={<AccountsForFees />} />

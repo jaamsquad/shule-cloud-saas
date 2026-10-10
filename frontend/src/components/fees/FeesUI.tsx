@@ -47,6 +47,7 @@ export const FEES_NAV: { group: string; items: { label: string; path: string }[]
     { group: "Setup", items: [
         { label: "Fee Structure", path: "/settings/fees-structure" },
         { label: "Fee Particulars", path: "/settings/fees-particulars" },
+        { label: "Class Tuition", path: "/settings/class-tuition" },
         { label: "Settings", path: "/fees/settings" },
         { label: "Delete Fees", path: "/fees/delete" },
     ] },

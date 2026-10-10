@@ -77,7 +77,7 @@ router.post('/communications/whatsapp/send', async (req, res) => {
 // Searchable contacts (students, parents, staff/teachers) for sending to a
 // single person. Each row carries a phone + email so the same list works for
 // SMS, WhatsApp and Email composers. ?q= filters by name; ?type= narrows.
-router.get('/communications/contacts', async (req, res) => {
+router.get(['/communications/contacts', '/secretary/communications/contacts'], async (req, res) => {
     try {
         const db = dbFromReq(req);
         const q = String((req.query as any).q || '').trim().toLowerCase();
