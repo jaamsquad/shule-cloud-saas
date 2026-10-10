@@ -21,6 +21,7 @@ import feeAidRoutes from './routes/feeAid.routes';
 import feesOverviewRoutes from './routes/feesOverview.routes';
 import questionImportRoutes from './modules/questionImport/questionImport.routes';
 import questionBankRoutes from './modules/questionBank/questionBank.routes';
+import questionPapersRoutes from './routes/questionPapers.routes';
 import onlineExamRoutes from './modules/onlineExam/onlineExam.routes';
 import examGeneratorRoutes from './modules/examGenerator/examGenerator.routes';
 import certificatesRoutes from './modules/certificates/certificates.routes';
@@ -348,6 +349,7 @@ app.use('/api/v1', reportsRoutes);
 app.use('/api/v1', feesOverviewRoutes);         // Fees dashboard (overview, overdue, records, M-PESA in process…)
 app.use('/api/v1', feesRoutes);
 app.use('/api/v1', feeAidRoutes);
+app.use('/api/v1', questionPapersRoutes);          // Question Paper: import → bank → generate → papers
 app.use('/api/v1', questionImportRoutes);
 app.use('/api/v1', questionBankRoutes);
 app.use('/api/v1', onlineExamRoutes);

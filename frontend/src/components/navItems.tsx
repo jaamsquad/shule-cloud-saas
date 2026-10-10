@@ -367,7 +367,7 @@ export const navItems: NavItem[] = [
       { label: "LMS Dashboard", path: "/lms" },
   ] },
   { label: "Question Paper", icon: Copy, moduleKey: "question_paper", children: [
-      { label: "AI Past Paper Importer", path: "/papers/import" },
+      { label: "Import Past Paper", path: "/papers/import" },
       { label: "Subject Chapters", path: "/papers/chapters" },
       { label: "Question Bank", path: "/papers/questions" },
       { label: "Create Question Paper", path: "/papers/create" }

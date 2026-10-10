@@ -41,11 +41,20 @@ export function InvoiceQuoteEditor({ type, id, onDone, onCancel }: { type: "invo
     const t = calcTotals(f);
 
     // A plan line: paying the invoice puts the school on this plan (needs a school chosen above).
-    const addPlan = (planId: string) => {
+    const addPlan = async (planId: string) => {
         const p = plans.find((x: any) => String(x._id || x.id) === planId); if (!p) return;
-        const name = `ShuleCloud ${p.name} subscription${p.durationDays ? ` (${p.durationDays} days)` : ""}`;
+        // a school's own price / discount (Owner → school → Pricing & discount) when invoicing a school
+        let rate = Number(p.price) || 0, note = "";
+        if (f.customer?.tenantId) {
+            try {
+                const sp = ((await api.get(`/owner/schools/${f.customer.tenantId}`)).data?.allPlans || []).find((x: any) => String(x._id) === String(p._id || p.id));
+                if (sp) { rate = Number(sp.price) || 0; if (sp.discountAmount > 0 || sp.custom) note = sp.discountAmount > 0 ? ` — ${sp.discount?.type === "percent" ? `${sp.discount.value}%` : `KES ${Number(sp.discountAmount).toLocaleString()}`} discount` : " — school price"; }
+            } catch { /* keep the standard price */ }
+        }
+        const per = ({ monthly: "1 month", termly: "1 term", yearly: "1 year" } as any)[p.billingCycle] || (p.durationDays ? `${p.durationDays} days` : "");
+        const name = `ShuleCloud ${p.name} subscription${per ? ` (${per})` : ""}${note}`;
         const blank = f.items.length === 1 && !f.items[0].description && !Number(f.items[0].rate);
-        set({ items: [...(blank ? [] : f.items), { description: name, quantity: 1, rate: Number(p.price) || 0, taxPercent: 0 }], subscription: f.customer?.tenantId ? { tenantId: f.customer.tenantId, planId: String(p._id || p.id), planName: p.name } : f.subscription });
+        set({ items: [...(blank ? [] : f.items), { description: name, quantity: 1, rate, taxPercent: 0 }], subscription: f.customer?.tenantId ? { tenantId: f.customer.tenantId, planId: String(p._id || p.id), planName: p.name } : f.subscription });
         if (!f.customer?.tenantId) toast.info("Choose the school above so paying this invoice activates its plan automatically.");
     };
 

@@ -4,6 +4,8 @@ import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { marksWindow, examInWindow } from '../lib/examWindow';
+import { enforceCrud } from '../lib/permissions';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -16,6 +18,41 @@ const levelOf = (s: string) => {
     if (m) { const w = m[0].replace(/\s+/g, ' ').trim().toLowerCase(); return w.charAt(0).toUpperCase() + w.slice(1); }
     return String(s || 'Class').trim();
 };
+
+/**
+ * Class levels that still exist (v2 classes + their streams, and the older class list).
+ * Analytics only shows these — a deleted class/grade no longer appears even if old marks
+ * mention it. null = the school has no classes set up yet (then nothing is hidden).
+ */
+async function liveLevels(database: Db): Promise<Set<string> | null> {
+    const [v2, legacy] = await Promise.all([
+        database.collection('v2_classes').find({ deletedAt: { $exists: false } }, { projection: { name: 1 } }).toArray().catch(() => [] as any[]),
+        database.collection('classes').find({}, { projection: { name: 1, levelName: 1 } }).toArray().catch(() => [] as any[]),
+    ]);
+    const set = new Set<string>();
+    v2.forEach((c: any) => c.name && set.add(levelOf(c.name).toLowerCase()));
+    legacy.forEach((c: any) => { const n = c.levelName || c.name; if (n) set.add(levelOf(n).toLowerCase()); });
+    return set.size ? set : null;
+}
+
+// ─── Analytics settings (Exams → Analysis → Settings) ──────────────────────────
+// The basic views are on by default; the extra insights are opt-in.
+export const DEFAULT_ANALYTICS_SETTINGS = {
+    views: {
+        meritList: true, comparison: true, subjects: true, classes: true, improved: true,   // basics
+        distribution: true,                                                                  // grade spread + pass rate
+        gender: false, topBottom: false, atRisk: false, subjectRanking: false,               // extra insights
+    },
+    passMarkPct: 50,          // a learner "passes" at this mean %
+    atRiskBelowPct: 40,       // at risk when the mean % is below this…
+    atRiskDropPoints: 1,      // …or the mean points fell by at least this since the last exam
+    topBottomCount: 10,
+    defaultToCurrentTerm: true,
+};
+export async function analyticsSettings(database: Db) {
+    const s: any = await database.collection('analytics_settings').findOne({ _id: 'default' as any }).catch(() => null);
+    return { ...DEFAULT_ANALYTICS_SETTINGS, ...(s || {}), views: { ...DEFAULT_ANALYTICS_SETTINGS.views, ...(s?.views || {}) } };
+}
 
 // ─── Grading (KCSE 12-point) ───────────────────────────────────────────────────
 // Loads the school's grading scale and exposes pct → { grade, points }. Falls
@@ -141,6 +178,7 @@ export async function buildExamResults(database: Db, examId: string) {
             stream,
             className,
             kcpe: num(stu.kcpeMarks ?? stu.kcpe),
+            gender: String(stu.gender || stu.sex || '').trim(),
             subjects, totalMarks, totalPoints,
             meanPct: round(meanPct, 2), meanPoints: round(meanPoints, 2),
             meanGrade: meanGradeFromPoints(scale, meanPoints),
@@ -192,7 +230,21 @@ router.get('/analytics/exams', async (req: Request, res: Response) => {
         // Group by term label.
         const groups: Record<string, any[]> = {};
         data.forEach((e: any) => { (groups[e.term || 'Other'] ||= []).push(e); });
-        res.json({ exams: data, groups });
+        // Default: the latest exam of the CURRENT term that has marks (else of the current
+        // term, else the latest exam overall).
+        let currentExamId: string | null = null;
+        const settings = await analyticsSettings(database);
+        if (settings.defaultToCurrentTerm) {
+            const win = await marksWindow(database).catch(() => null);
+            const inTerm = win ? exams.filter((e: any) => examInWindow(e, win)) : [];
+            if (inTerm.length) {
+                const withMarks = new Set((await database.collection('exam_marks').distinct('examId', { examId: { $in: inTerm.map((e: any) => String(e._id)) } }).catch(() => [])).map(String));
+                const pick = [...inTerm].reverse().find((e: any) => withMarks.has(String(e._id))) || inTerm[inTerm.length - 1];
+                currentExamId = String(pick._id);
+            }
+        }
+        if (!currentExamId && data.length) currentExamId = data[data.length - 1].id;
+        res.json({ exams: data, groups, currentExamId, currentTerm: (await marksWindow(database).catch(() => null))?.label || null });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -258,9 +310,13 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         }
         classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
+        // Only classes that still exist — a deleted class/grade is not shown.
+        const live = await liveLevels(database);
+        const shown = live ? classes.filter(c => live.has(String(c.name).toLowerCase())) : classes;
+
         // Each class already carries its own `curriculum` + `grades`. Return the
         // school-default `grades` too for any consumer that wants the fallback set.
-        res.json({ classes, grades });
+        res.json({ classes: shown, grades });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -462,7 +518,101 @@ router.get('/analytics/class-levels', async (req: Request, res: Response) => {
                 streams: Object.entries(byStream).map(([stream, sl]) => ({ stream, students: sl.length, meanPoints: round(sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length, 2), meanPct: round(sl.reduce((a, r) => a + r.meanPct, 0) / sl.length, 2), meanGrade: meanGradeFromPoints(scale, sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length) })).sort((a, b) => b.meanPoints - a.meanPoints),
             };
         }).sort((a, b) => a.level.localeCompare(b.level));
-        res.json({ classes });
+        const live = await liveLevels(db(req));
+        res.json({ classes: live ? classes.filter(c => live.has(c.level.toLowerCase())) : classes });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Analytics settings: which views show, and the thresholds the insights use.
+router.get('/analytics/settings', async (req: Request, res: Response) => {
+    try { res.json(await analyticsSettings(db(req))); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/analytics/settings', enforceCrud('exams', 'update'), async (req: Request, res: Response) => {
+    try {
+        const b = req.body || {};
+        const cur = await analyticsSettings(db(req));
+        const views: any = { ...cur.views };
+        for (const k of Object.keys(DEFAULT_ANALYTICS_SETTINGS.views)) if (typeof b.views?.[k] === 'boolean') views[k] = b.views[k];
+        const clamp = (v: any, lo: number, hi: number, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+        const next = {
+            views,
+            passMarkPct: clamp(b.passMarkPct, 0, 100, cur.passMarkPct),
+            atRiskBelowPct: clamp(b.atRiskBelowPct, 0, 100, cur.atRiskBelowPct),
+            atRiskDropPoints: clamp(b.atRiskDropPoints, 0, 12, cur.atRiskDropPoints),
+            topBottomCount: Math.round(clamp(b.topBottomCount, 3, 50, cur.topBottomCount)),
+            defaultToCurrentTerm: typeof b.defaultToCurrentTerm === 'boolean' ? b.defaultToCurrentTerm : cur.defaultToCurrentTerm,
+            updatedAt: new Date(),
+        };
+        await db(req).collection('analytics_settings').updateOne({ _id: 'default' as any }, { $set: next }, { upsert: true });
+        res.json(next);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Extra insights for one form in one exam: grade spread + pass rate, gender, top &
+// bottom learners, learners at risk, and subjects ranked (with their teachers).
+router.get('/analytics/insights', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const examId = String(req.query.examId || '');
+        const form = String(req.query.form || '');
+        if (!examId) return res.status(400).json({ message: 'examId required' });
+        const settings = await analyticsSettings(database);
+        const inForm = (rows: any[]) => form ? rows.filter(r => levelOf(r.className || r.stream).toLowerCase() === levelOf(form).toLowerCase()) : rows;
+        const { rows: all } = await buildExamResults(database, examId);
+        const rows = inForm(all);
+        const g = await resolveGrading(database, undefined, form || (rows[0]?.className || ''));
+        const grades = g.scale.map((b: any) => b.grade);
+        const mean = (list: any[], k: string) => list.length ? round(list.reduce((a, r) => a + (r[k] || 0), 0) / list.length, 2) : 0;
+
+        // grade spread + pass rate
+        const counts: Record<string, number> = {}; grades.forEach((x: string) => counts[x] = 0);
+        rows.forEach(r => { const gr = g.meanGrade(r.meanPoints); counts[gr] = (counts[gr] || 0) + 1; });
+        const passed = rows.filter(r => r.meanPct >= settings.passMarkPct).length;
+        const distribution = { grades, counts, passMarkPct: settings.passMarkPct, passed, failed: rows.length - passed, passRate: rows.length ? round((passed / rows.length) * 100, 1) : 0 };
+
+        // gender
+        const gKey = (v: string) => /^f/i.test(v) ? 'Female' : /^m/i.test(v) ? 'Male' : 'Not recorded';
+        const byG: Record<string, any[]> = {};
+        rows.forEach(r => { (byG[gKey(r.gender)] ||= []).push(r); });
+        const gender = Object.entries(byG).map(([k, list]) => ({ gender: k, students: list.length, meanPoints: mean(list, 'meanPoints'), meanPct: mean(list, 'meanPct'), meanGrade: g.meanGrade(mean(list, 'meanPoints')) }))
+            .sort((a, b) => b.meanPoints - a.meanPoints);
+
+        // top / bottom
+        const n = settings.topBottomCount;
+        const ranked = [...rows].sort((a, b) => b.meanPoints - a.meanPoints || b.meanPct - a.meanPct);
+        const brief = (r: any) => ({ name: r.name, adm: r.adm, stream: r.stream, meanPoints: r.meanPoints, meanPct: r.meanPct, meanGrade: g.meanGrade(r.meanPoints) });
+        const top = ranked.slice(0, n).map(brief);
+        const bottom = ranked.slice(-n).reverse().map(brief);
+
+        // at risk: low mean %, or a big drop since the previous exam
+        const exams = await examsChrono(database);
+        const idx = exams.findIndex((e: any) => String(e._id) === examId);
+        const prev = idx > 0 ? exams[idx - 1] : null;
+        const prevBy: Record<string, any> = {};
+        if (prev) inForm((await buildExamResults(database, String(prev._id))).rows).forEach((r: any) => prevBy[r.studentId] = r);
+        const atRisk = rows.map(r => {
+            const p = prevBy[r.studentId];
+            const drop = p ? round(p.meanPoints - r.meanPoints, 2) : 0;
+            const reasons: string[] = [];
+            if (r.meanPct < settings.atRiskBelowPct) reasons.push(`Mean ${r.meanPct}% (below ${settings.atRiskBelowPct}%)`);
+            if (p && drop >= settings.atRiskDropPoints && drop > 0) reasons.push(`Dropped ${drop} points since ${formatExamName(prev)}`);
+            const weak = r.subjects.filter((s: any) => s.pct < settings.passMarkPct).map((s: any) => s.name);
+            return reasons.length ? { ...brief(r), reasons, weakSubjects: weak } : null;
+        }).filter(Boolean).sort((a: any, b: any) => a.meanPct - b.meanPct);
+
+        // subjects ranked, with the teacher who teaches each in this form
+        const staff: any[] = await database.collection('staff').find({}, { projection: { name: 1, employeeName: 1, firstName: 1, lastName: 1, subjectAssignments: 1 } }).toArray().catch(() => []);
+        const teachersOf = (subject: string) => [...new Set(staff.filter(t => (t.subjectAssignments || []).some((a: any) =>
+            String(a.subjectName || a.subject || '').toLowerCase() === subject.toLowerCase() && (!form || levelOf(a.className || a.class || '').toLowerCase() === levelOf(form).toLowerCase())))
+            .map(t => t.employeeName || t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim()).filter(Boolean))];
+        const agg: Record<string, { pts: number; pct: number; n: number; pass: number }> = {};
+        rows.forEach(r => r.subjects.forEach((s: any) => { const a = (agg[s.name] ||= { pts: 0, pct: 0, n: 0, pass: 0 }); a.pts += s.points; a.pct += s.pct; a.n++; if (s.pct >= settings.passMarkPct) a.pass++; }));
+        const subjectRanking = Object.entries(agg).map(([name, a]) => ({
+            name, students: a.n, meanPoints: round(a.pts / a.n, 2), meanPct: round(a.pct / a.n, 1), grade: g.meanGrade(a.pts / a.n),
+            passRate: round((a.pass / a.n) * 100, 1), teachers: teachersOf(name),
+        })).sort((x, y) => y.meanPoints - x.meanPoints).map((x, i) => ({ rank: i + 1, ...x }));
+
+        res.json({ settings, students: rows.length, distribution, gender, top, bottom, atRisk, subjectRanking, comparedTo: prev ? formatExamName(prev) : null });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

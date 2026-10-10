@@ -77,6 +77,16 @@ router.post('/communications/whatsapp/send', async (req, res) => {
 // Searchable contacts (students, parents, staff/teachers) for sending to a
 // single person. Each row carries a phone + email so the same list works for
 // SMS, WhatsApp and Email composers. ?q= filters by name; ?type= narrows.
+// Which email account this school's emails go out through (set by ShuleCloud — lib/emailRouting).
+router.get('/communications/email-route', async (req, res) => {
+    try {
+        const { resolveEmailRoute } = await import('../lib/emailRouting');
+        const db = dbFromReq(req);
+        const r = await resolveEmailRoute(db, await getCommSettings(db));
+        res.json({ mode: r.mode, via: r.via, from: r.smtp ? `${r.smtp.fromName} <${r.smtp.fromAddress}>` : null, reason: r.reason || null });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get(['/communications/contacts', '/secretary/communications/contacts'], async (req, res) => {
     try {
         const db = dbFromReq(req);

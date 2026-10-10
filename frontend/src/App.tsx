@@ -304,6 +304,9 @@ import SubjectChapters from "./pages/tenant/modules/SubjectChapters";
 import CreateQuestionPaper from "./pages/tenant/modules/CreateQuestionPaper";
 import QuestionPaperForm from "./pages/tenant/modules/QuestionPaperForm";
 import AIQuestionImporter from "./pages/tenant/modules/AIQuestionImporter";
+import PaperImport from "./pages/tenant/modules/papers/PaperImport";
+import QuestionBankPage from "./pages/tenant/modules/papers/QuestionBankPage";
+import PaperBuilder from "./pages/tenant/modules/papers/PaperBuilder";
 import Exams from "./pages/tenant/modules/Exams";
 import MarkEntry from "./pages/tenant/modules/MarkEntry";
 import Results from "./pages/tenant/modules/Results";
@@ -778,10 +781,12 @@ const App = () => {
               <Route path="/assessments/results" element={<Results />} />
 
               {/* Question Paper Management Module */}
-              <Route path="/papers/import" element={<AIQuestionImporter />} />
+              <Route path="/papers/import" element={<PaperImport />} />
+              <Route path="/papers/import/ai" element={<AIQuestionImporter />} />
               <Route path="/papers/chapters" element={<SubjectChapters />} />
-              <Route path="/papers/questions" element={<QuestionBank />} />
-              <Route path="/papers/create" element={<CreateQuestionPaper />} />
+              <Route path="/papers/questions" element={<QuestionBankPage />} />
+              <Route path="/papers/create" element={<PaperBuilder />} />
+              <Route path="/papers/older" element={<CreateQuestionPaper />} />
               <Route path="/papers/create/new" element={<QuestionPaperForm />} />
               <Route path="/papers/create/new/:id" element={<QuestionPaperForm />} />
 
