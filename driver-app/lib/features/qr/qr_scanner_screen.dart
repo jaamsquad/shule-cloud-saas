@@ -22,7 +22,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool _handling = false;
   Student? _result;
-  String? _lastAction; // e.g. "Boarded ✓ — Jane Doe"
+  String? _lastAction; // e.g. "Boarded — Jane Doe"
   bool _lastError = false;
 
   bool get _isBoard => widget.mode == 'board';
@@ -70,7 +70,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       } else {
         await ctrl.drop(s.id);
       }
-      setState(() { _lastAction = '${board ? "Boarded" : "Dropped"} ✓ — ${s.name}'; _lastError = false; });
+      setState(() { _lastAction = '${board ? "Boarded" : "Dropped"} — ${s.name}'; _lastError = false; });
     } on BoardingRuleError catch (e) {
       setState(() { _lastAction = '${s.name}: ${e.message}'; _lastError = true; });
     }
@@ -114,7 +114,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                         color: _lastError ? AppColors.danger : accent,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(_lastAction!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_lastError ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(_lastAction!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      ]),
                     ),
                   ),
               ],
