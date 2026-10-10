@@ -16,6 +16,8 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { enforceCrud } from '../lib/permissions';
 import { extractPaper, questionPlainText } from '../lib/paperExtract';
+import { levelKey } from '../lib/examPublish';
+import { matchScheme, aiAnswers } from '../lib/qpAnswers';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -47,17 +49,58 @@ function cleanQuestion(q: any) {
 const toDoc = (c: ReturnType<typeof cleanQuestion>, meta: any) => ({
     ...c, questionText: questionPlainText(c), questionType: c.type, correctAnswer: c.answer,
     subjectId: meta.subjectId, subjectName: meta.subjectName, subjectKey: nrm(meta.subjectName),
-    classId: meta.classId || '', className: meta.className || '', chapterId: meta.chapterId || '', chapterName: meta.chapterName || '',
+    classId: meta.classId || '', className: meta.className || '', classLevel: meta.className ? levelKey(meta.className) : '', chapterId: meta.chapterId || '', chapterName: meta.chapterName || '',
     section: str(meta.section, 120), sourceDocument: str(meta.sourceDocument, 200), textKey: textKey(c),
 });
 
 // ─── extract (preview only) ────────────────────────────────────────────────────
-router.post('/qp/extract', W, upload.single('file'), async (req: any, res) => {
+// optional `scheme` file: a marking scheme numbered like the paper → answers per question
+router.post('/qp/extract', W, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'scheme', maxCount: 1 }]), async (req: any, res) => {
     try {
-        if (!req.file) return res.status(400).json({ message: 'Choose a file to upload' });
-        const r = await extractPaper(req.file.buffer, req.file.originalname || 'paper');
-        res.json({ filename: req.file.originalname, ...r });
+        const file = req.files?.file?.[0], scheme = req.files?.scheme?.[0];
+        if (!file) return res.status(400).json({ message: 'Choose a file to upload' });
+        const r: any = await extractPaper(file.buffer, file.originalname || 'paper');
+        let schemeInfo: any = null;
+        if (scheme) {
+            try {
+                const sr = await extractPaper(scheme.buffer, scheme.originalname || 'scheme');
+                const m = matchScheme(r.questions, sr.questions);
+                r.questions = r.questions.map((q: any, i: number) => (m.answers[i] ? { ...q, answer: m.answers[i]!.answer, markingScheme: m.answers[i]!.markingScheme } : q));
+                schemeInfo = { filename: scheme.originalname, matched: m.matched, unmatched: m.unmatched, extra: m.extra };
+                if (m.unmatched.length) r.warnings = [...(r.warnings || []), `The marking scheme has no answer for question${m.unmatched.length > 1 ? 's' : ''} ${m.unmatched.join(', ')}.`];
+            } catch (e: any) { r.warnings = [...(r.warnings || []), `The marking scheme could not be read: ${e.message || 'unknown error'}`]; }
+        }
+        res.json({ filename: file.originalname, ...r, scheme: schemeInfo });
     } catch (e: any) { res.status(400).json({ message: e.message || 'Could not read this file' }); }
+});
+
+// ─── AI answers & marking schemes ──────────────────────────────────────────────
+// POST /qp/ai-answers { subject, className, questions } → { results: [{ answer, markingScheme }] } (nothing saved)
+router.post('/qp/ai-answers', W, async (req, res) => {
+    try {
+        const qs = (Array.isArray(req.body?.questions) ? req.body.questions : []).slice(0, 80).map(cleanQuestion);
+        if (!qs.length) return res.status(400).json({ message: 'No questions' });
+        const r = await aiAnswers(req, qs, { subject: str(req.body?.subject, 120), className: str(req.body?.className, 120) });
+        res.json(r);
+    } catch (e: any) { res.status(e.status || 500).json({ message: e.message }); }
+});
+// POST /qp/bank/ai-answers { ids, overwrite? } → answers + marking schemes written to bank questions
+router.post('/qp/bank/ai-answers', U, async (req, res) => {
+    try {
+        const d = db(req);
+        const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(oid).filter(Boolean).slice(0, 80) as ObjectId[];
+        const rows: any[] = ids.length ? await d.collection('questions').find({ _id: { $in: ids } }).toArray() : [];
+        const todo = req.body?.overwrite ? rows : rows.filter(r => !String(r.markingScheme || '').trim());
+        if (!todo.length) return res.json({ updated: 0, message: 'These questions already have marking schemes' });
+        const r = await aiAnswers(req, todo.map(x => cleanQuestion({ ...x, text: x.text ?? x.questionText })), { subject: todo[0].subjectName || '', className: todo[0].className || '' });
+        let updated = 0;
+        for (const [i, row] of todo.entries()) {
+            const a = r.results[i]; if (!a?.markingScheme && !a?.answer) continue;
+            await d.collection('questions').updateOne({ _id: row._id }, { $set: { answer: a.answer, correctAnswer: a.answer, markingScheme: a.markingScheme, schemeBy: 'AI', updatedAt: new Date() } });
+            updated++;
+        }
+        res.json({ updated, failed: r.failed });
+    } catch (e: any) { res.status(e.status || 500).json({ message: e.message }); }
 });
 
 // ─── subjects with bank counts ─────────────────────────────────────────────────
@@ -83,11 +126,22 @@ router.get('/qp/subjects', async (req, res) => {
 });
 
 // ─── bank ──────────────────────────────────────────────────────────────────────
+/** The class level (grade) a request refers to: "Grade 1 North" or its id → "grade 1". */
+async function levelFrom(d: Db, classId: any, className: any): Promise<string> {
+    if (String(className || '').trim()) return levelKey(className);
+    const id = String(classId || '').trim(); if (!id) return '';
+    const o = oid(id);
+    const c: any = (o && (await d.collection('v2_classes').findOne({ _id: o }).catch(() => null))) || (o && (await d.collection('classes').findOne({ _id: o }).catch(() => null))) || (await d.collection('v2_streams').findOne({ _id: o as any }).catch(() => null));
+    return c ? levelKey(c.className && c.name && !/\d/.test(c.name) ? `${c.className} ${c.name}` : (c.name || c.levelName || c.className)) : '';
+}
+/** Questions of one grade only — streams share their grade's questions; no other grade's. */
+const levelOfQ = (r: any) => r.classLevel || (r.className ? levelKey(r.className) : '');
+const onlyLevel = (rows: any[], level: string) => rows.filter(r => levelOfQ(r) === level);
+
 function bankFilter(q: any) {
     const f: any = {};
     const and: any[] = [];
     if (q.subject) and.push({ $or: [{ subjectKey: nrm(q.subject) }, { subjectId: String(q.subjectId || '') || '__none__' }, { subjectName: new RegExp(`^${String(q.subject).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }] });
-    if (q.classId) and.push({ $or: [{ classId: String(q.classId) }, { classId: '' }, { classId: 'General' }, { classId: { $exists: false } }] });
     if (q.chapterId) f.chapterId = String(q.chapterId);
     if (q.type) and.push({ $or: [{ type: String(q.type) }, { questionType: String(q.type) }] });
     if (q.difficulty) f.difficulty = String(q.difficulty).toUpperCase();
@@ -97,7 +151,10 @@ function bankFilter(q: any) {
 }
 router.get('/qp/bank', async (req, res) => {
     try {
-        const rows = await db(req).collection('questions').find(bankFilter(req.query)).sort({ createdAt: -1 }).limit(Math.min(2000, Number(req.query.limit) || 1000)).toArray();
+        const d = db(req);
+        let rows = await d.collection('questions').find(bankFilter(req.query)).sort({ createdAt: -1 }).limit(Math.min(5000, Number(req.query.limit) || 2000)).toArray();
+        if (req.query.unassigned) rows = rows.filter(r => !levelOfQ(r));
+        else if (req.query.classId || req.query.className) rows = onlyLevel(rows, await levelFrom(d, req.query.classId, req.query.className));
         res.json(rows.map((r: any) => ({ ...r, text: r.text ?? r.questionText ?? '', type: r.type || r.questionType || 'Short Answer', answer: r.answer ?? r.correctAnswer ?? '', parts: r.parts || [], options: (r.options || []).map((o: any, i: number) => typeof o === 'string' ? { label: String.fromCharCode(65 + i), text: o } : o) })));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -107,6 +164,9 @@ router.post('/qp/bank', W, async (req, res) => {
         const d = db(req);
         const b = req.body || {};
         if (!String(b.subjectName || '').trim()) return res.status(400).json({ message: 'Choose the subject these questions belong to' });
+        // every question belongs to a class (grade) so papers are only made from that grade's questions
+        const level = await levelFrom(d, b.classId, b.className);
+        if (!level) return res.status(400).json({ message: 'Choose the class (grade) these questions are for' });
         const list = (Array.isArray(b.questions) ? b.questions : []).slice(0, 500).map(cleanQuestion).filter((q: any) => q.text.trim() || q.parts.length);
         if (!list.length) return res.status(400).json({ message: 'No questions to save' });
         const actor = (req as any).tenantContext?.user || {};
@@ -140,6 +200,17 @@ router.put('/qp/bank/:id', U, async (req, res) => {
 router.delete('/qp/bank/:id', D, async (req, res) => {
     try { const id = oid(req.params.id); if (id) await db(req).collection('questions').deleteOne({ _id: id }); res.json({ ok: true }); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// POST /qp/bank/assign-class { ids, classId, className } — put questions under a class (grade)
+router.post('/qp/bank/assign-class', U, async (req, res) => {
+    try {
+        const d = db(req);
+        const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(oid).filter(Boolean) as ObjectId[];
+        const level = await levelFrom(d, req.body?.classId, req.body?.className);
+        if (!ids.length || !level) return res.status(400).json({ message: 'Choose questions and a class' });
+        const r = await d.collection('questions').updateMany({ _id: { $in: ids } }, { $set: { classId: str(req.body?.classId, 60), className: str(req.body?.className, 120), classLevel: level, updatedAt: new Date() } });
+        res.json({ updated: r.modifiedCount ?? ids.length });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.post('/qp/bank/delete', D, async (req, res) => {
     try {
@@ -182,14 +253,20 @@ router.post('/qp/generate', W, async (req, res) => {
     try {
         const b = req.body || {};
         if (!b.subject) return res.status(400).json({ message: 'Choose a subject' });
-        const f: any = bankFilter({ subject: b.subject, subjectId: b.subjectId, classId: b.classId });
+        const d = db(req);
+        // only this class's grade: Grade 1 North / East … all use Grade 1 questions, never Grade 2's
+        const level = await levelFrom(d, b.classId, b.className);
+        if (!level) return res.status(400).json({ message: 'Choose the class the paper is for' });
+        const f: any = bankFilter({ subject: b.subject, subjectId: b.subjectId });
         if (Array.isArray(b.chapterIds) && b.chapterIds.length) f.chapterId = { $in: b.chapterIds.map(String) };
         if (Array.isArray(b.exclude) && b.exclude.length) f._id = { $nin: b.exclude.map(oid).filter(Boolean) };
-        const pool = await db(req).collection('questions').find(f).toArray();
+        const all = await d.collection('questions').find(f).toArray();
+        const pool = onlyLevel(all, level);
+        const unassigned = all.filter(r => !levelOfQ(r)).length;
         const norm = pool.map((r: any) => ({ ...r, text: r.text ?? r.questionText ?? '', type: r.type || r.questionType || 'Short Answer', answer: r.answer ?? r.correctAnswer ?? '', parts: r.parts || [], options: (r.options || []).map((o: any, i: number) => typeof o === 'string' ? { label: String.fromCharCode(65 + i), text: o } : o) }));
         const sections = Array.isArray(b.sections) && b.sections.length ? b.sections.slice(0, 10) : [{ name: '', count: Number(b.count) || 10, types: b.types || [] }];
         const picked = pickQuestions(norm, sections, b.difficulty);
-        res.json({ available: norm.length, sections: picked });
+        res.json({ available: norm.length, level, unassigned, sections: picked });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
