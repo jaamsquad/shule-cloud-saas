@@ -4,6 +4,7 @@ import { getMetaDb } from '../lib/mongodb';
 import * as c from '../controllers/academics.controller';
 import { enforceCrud } from '../lib/permissions';
 import { issueStudentCertificate, CERT_TYPES } from '../modules/certificates/studentCerts.routes';
+import { sendSignoutOtp, checkSignoutOtp } from '../lib/signoutOtp';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extra MIS modules: Sports, Trips & Excursions, Front Desk, Secretary.
@@ -190,6 +191,45 @@ router.post('/sports/:id/certificates', enforceCrud('certificates', 'create'), a
             issued.push(doc);
         }
         res.json({ issued, failed });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Front desk: student sign-out with a parent code (lib/signoutOtp) ──────────
+router.post('/student-signouts/otp/send', enforceCrud('frontdesk', 'create'), async (req: Request, res: Response) => {
+    try {
+        const ctx = (req as any).tenantContext || {};
+        const r: any = await sendSignoutOtp(db(req), String(ctx.tenantId || ''), String(req.body?.studentId || ''), { pickedBy: String(req.body?.pickedBy || '').slice(0, 80), reason: String(req.body?.reason || '').slice(0, 80), schoolName: ctx.tenantName });
+        if (r.error) return res.status(r.status || 400).json({ message: r.error });
+        res.json(r);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/student-signouts/record', enforceCrud('frontdesk', 'create'), async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const b = req.body || {};
+        const sid = oidOf(b.studentId);
+        const st: any = sid ? await database.collection('students').findOne({ _id: sid }) : null;
+        if (!st) return res.status(400).json({ message: 'Pick the student' });
+        if (!String(b.parentName || '').trim()) return res.status(400).json({ message: 'Who is picking the student?' });
+        let otp: any = null;
+        if (String(b.otpCode || '').trim()) {
+            otp = await checkSignoutOtp(database, String(st._id), String(b.otpCode));
+            if (!otp.ok) return res.status(400).json({ message: otp.error });
+        }
+        const now = new Date();
+        const actor = (req as any).tenantContext?.user || {};
+        const doc = {
+            studentId: String(st._id), studentName: nameOf(st), admNo: st.registrationNo || st.admissionNumber || st.admNo || '',
+            studentClass: st.studentClass || st.currentClass || '',
+            parentName: String(b.parentName).trim().slice(0, 100), parentPhone: String(b.parentPhone || '').slice(0, 30), idNumber: String(b.idNumber || '').slice(0, 30),
+            reason: String(b.reason || '').slice(0, 200),
+            date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : todayStr(),
+            timeOut: String(b.timeOut || '').slice(0, 10) || now.toTimeString().slice(0, 5),
+            otpVerified: otp?.ok ? 'Yes' : 'No', otpSentTo: otp?.ok ? otp.sentTo : [], otpVerifiedAt: otp?.ok ? now : null,
+            recordedBy: actor.name || actor.staffId || 'admin', createdAt: now,
+        };
+        const r = await database.collection('student_signouts').insertOne(doc);
+        res.status(201).json({ ...doc, _id: r.insertedId });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
