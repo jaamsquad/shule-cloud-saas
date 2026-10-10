@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award, Phone, BarChart3, Eye, EyeOff } from "lucide-react";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award, Phone, BarChart3, Eye, EyeOff, TrendingDown, Lock } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -549,7 +549,7 @@ export default function StudentReport() {
                                 {[
                                     { label: "Best Average", value: `${Math.max(...trendData.map((d: any) => d.Average)).toFixed(1)}%`, color: "text-emerald-600" },
                                     { label: "Latest Average", value: `${(trendData[trendData.length - 1]?.Average || 0).toFixed(1)}%`, color: "text-[#868DF4]" },
-                                    { label: "Trend", value: trendData.length >= 2 && trendData[trendData.length - 1]?.Average > trendData[0]?.Average ? "📈 Improving" : "📉 Declining", color: "text-slate-600" },
+                                    { label: "Trend", value: trendData.length >= 2 && trendData[trendData.length - 1]?.Average > trendData[0]?.Average ? <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-slate-500" />Improving</span> : <span className="inline-flex items-center gap-1"><TrendingDown className="w-3.5 h-3.5 text-slate-500" />Declining</span>, color: "text-slate-600" },
                                 ].map(s => (
                                     <div key={s.label} className="text-center bg-slate-50 rounded-2xl p-3">
                                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
@@ -881,7 +881,7 @@ export default function StudentReport() {
                                         key={sub._id}
                                         onClick={() => {
                                             if (isCore) {
-                                                toast("Core subjects are compulsory and cannot be removed.", { icon: "🔒" });
+                                                toast("Core subjects are compulsory and cannot be removed.", { icon: <Lock className="w-4 h-4 text-slate-500" /> });
                                                 return;
                                             }
                                             if (isSelected) {

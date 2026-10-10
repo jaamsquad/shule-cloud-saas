@@ -115,6 +115,8 @@ import Departments from "./pages/tenant/modules/Departments";
 import Subjects from "./pages/tenant/modules/Subjects";
 import AllSubjects from "./pages/tenant/modules/AllSubjects";
 import NewSubject from "./pages/tenant/modules/NewSubject";
+import SubjectsOffered from "./pages/tenant/modules/subjects/SubjectsOffered";
+import SubjectPathways from "./pages/tenant/modules/subjects/Pathways";
 import AssignSubjects from "./pages/tenant/modules/AssignSubjects";
 import CoCurricularActivities from "./pages/tenant/modules/CoCurricularActivities";
 import AddStudent from "./pages/tenant/modules/AddStudent";
@@ -306,6 +308,7 @@ import CreateQuestionPaper from "./pages/tenant/modules/CreateQuestionPaper";
 import QuestionPaperForm from "./pages/tenant/modules/QuestionPaperForm";
 import AIQuestionImporter from "./pages/tenant/modules/AIQuestionImporter";
 import PaperImport from "./pages/tenant/modules/papers/PaperImport";
+import AfeyPage from "./pages/tenant/afey/AfeyPage";
 import QuestionBankPage from "./pages/tenant/modules/papers/QuestionBankPage";
 import PaperBuilder from "./pages/tenant/modules/papers/PaperBuilder";
 import Exams from "./pages/tenant/modules/Exams";
@@ -321,6 +324,8 @@ import ViewGeneratedReportCards from "./pages/tenant/modules/academics/exams/Vie
 import ReportCardSettings from "./pages/tenant/modules/academics/exams/ReportCardSettings";
 import ScholarSheetPage from "./pages/tenant/modules/academics/exams/ScholarSheetPage";
 import OnlineExamBuilder from "./pages/tenant/modules/academics/exams/OnlineExamBuilder";
+import ManageExams from "./pages/tenant/modules/academics/exams/ManageExams";
+import ExamPrintouts from "./pages/tenant/modules/academics/exams/printouts/Printouts";
 import ExamAnalytics from "./pages/tenant/modules/academics/exams/Analytics";
 import ExamDetail from "./pages/tenant/modules/academics/exams/ExamDetail";
 import ExamRankings from "./pages/tenant/modules/academics/exams/ExamRankings";
@@ -679,6 +684,8 @@ const App = () => {
               <Route path="/subjects" element={<Subjects />} />
               <Route path="/subjects/all" element={<AllSubjects />} />
               <Route path="/subjects/new" element={<NewSubject />} />
+              <Route path="/subjects/offered" element={<SubjectsOffered />} />
+              <Route path="/subjects/pathways" element={<SubjectPathways />} />
               <Route path="/subjects/assign" element={<AssignSubjects />} />
               <Route path="/subjects/activities" element={<CoCurricularActivities />} />
               <Route path="/subjects/categories" element={<PlaceholderPage title="Subject Categories" subtitle="Organize subjects by department" />} />
@@ -784,6 +791,7 @@ const App = () => {
               <Route path="/assessments/results" element={<Results />} />
 
               {/* Question Paper Management Module */}
+              <Route path="/afey" element={<AfeyPage />} />
               <Route path="/papers/import" element={<PaperImport />} />
               <Route path="/papers/import/ai" element={<AIQuestionImporter />} />
               <Route path="/papers/chapters" element={<SubjectChapters />} />
@@ -796,6 +804,8 @@ const App = () => {
               {/* Exams Management Module */}
               <Route path="/exams" element={<Exams />} />
               <Route path="/exams/create" element={<CreateExam />} />
+              <Route path="/exams/manage" element={<ManageExams />} />
+              <Route path="/exams/printouts" element={<ExamPrintouts />} />
               <Route path="/exams/skills" element={<SkillReports />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />

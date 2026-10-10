@@ -5,7 +5,7 @@ import {
     CreditCard, Save, Loader2, Camera, MapPin, Building2, Globe2,
     Mail, Phone, User, Clock, Bell, Lock, Database, Smartphone,
     CheckCircle2, AlertCircle, Upload, Trash2, Plus, RefreshCw,
-    Key, Eye, EyeOff, Wifi, Send, Volume2, Timer, BookOpen
+    Key, Eye, EyeOff, Wifi, Send, Volume2, Timer, BookOpen, Sun, Moon
 } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
@@ -668,13 +668,13 @@ export default function Settings() {
                                                         onClick={() => setBrand({ ...brand, portalTheme: "light" })}
                                                         className={`flex-1 rounded-2xl h-16 font-black text-sm border-2 transition-all ${brand.portalTheme !== "dark" ? "border-primary bg-primary/5 text-primary" : "border-border/50 bg-white text-foreground"}`}
                                                     >
-                                                        ☀️ Light Mode
+                                                        <span className="inline-flex items-center gap-2"><Sun className="w-4 h-4" />Light Mode</span>
                                                     </button>
                                                     <button
                                                         onClick={() => setBrand({ ...brand, portalTheme: "dark" })}
                                                         className={`flex-1 rounded-2xl h-16 font-black text-sm border-2 transition-all ${brand.portalTheme === "dark" ? "border-primary bg-slate-900 text-white" : "border-border/50 bg-slate-900 text-white/60"}`}
                                                     >
-                                                        🌙 Dark Mode
+                                                        <span className="inline-flex items-center gap-2"><Moon className="w-4 h-4" />Dark Mode</span>
                                                     </button>
                                                 </div>
                                             </div>

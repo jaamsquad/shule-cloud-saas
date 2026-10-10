@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
     BookOpen, Check, Loader2, Plus, Trash2, Save, AlertCircle,
-    ChevronDown, GraduationCap, Settings, ToggleLeft, ToggleRight
+    ChevronDown, GraduationCap, Settings, ToggleLeft, ToggleRight,
+    BarChart3, Scale, FileText, MapPin
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -14,7 +15,7 @@ const CURRICULUM_TYPES = [
         id: "CBC",
         label: "CBC",
         fullName: "Competency Based Curriculum",
-        country: "Kenya 🇰🇪",
+        country: "Kenya",
         color: "#10B981",
         description: "Learner-centered approach with competency levels",
         gradingScale: [
@@ -32,7 +33,7 @@ const CURRICULUM_TYPES = [
         id: "844",
         label: "8-4-4",
         fullName: "8-4-4 System (KCSE / KCPE)",
-        country: "Kenya 🇰🇪",
+        country: "Kenya",
         color: "#5C67F2",
         description: "Traditional KCSE letter grades with points system",
         gradingScale: [
@@ -59,7 +60,7 @@ const CURRICULUM_TYPES = [
         id: "Cambridge",
         label: "Cambridge",
         fullName: "Cambridge International",
-        country: "International 🌍",
+        country: "International",
         color: "#8B5CF6",
         description: "Cambridge IGCSE / A-Level grading",
         gradingScale: [
@@ -81,7 +82,7 @@ const CURRICULUM_TYPES = [
         id: "IB",
         label: "IB",
         fullName: "International Baccalaureate",
-        country: "International 🌍",
+        country: "International",
         color: "#EC4899",
         description: "IB 1–7 point scale with bilingual diploma",
         gradingScale: [
@@ -103,7 +104,7 @@ const CURRICULUM_TYPES = [
         id: "Custom",
         label: "Custom",
         fullName: "Custom Grading System",
-        country: "Flexible ✏️",
+        country: "Flexible",
         color: "#F59E0B",
         description: "Define your own grading scale and assessment types",
         gradingScale: [],
@@ -228,10 +229,10 @@ export default function CurriculumSettings() {
     );
 
     const SECTIONS = [
-        { id: "curriculum", label: "Curriculum Type",     icon: "🎓" },
-        { id: "grading",    label: "Grading Scale",       icon: "📊" },
-        { id: "assessment", label: "Assessment Weights",  icon: "⚖️" },
-        { id: "report",     label: "Report Card Options", icon: "📄" },
+        { id: "curriculum", label: "Curriculum Type",     icon: GraduationCap },
+        { id: "grading",    label: "Grading Scale",       icon: BarChart3 },
+        { id: "assessment", label: "Assessment Weights",  icon: Scale },
+        { id: "report",     label: "Report Card Options", icon: FileText },
     ] as const;
 
     return (
@@ -272,7 +273,7 @@ export default function CurriculumSettings() {
                                 ? "border-[#5C67F2] text-[#5C67F2]"
                                 : "border-transparent text-gray-400 hover:text-gray-600"
                         }`}>
-                        <span>{s.icon}</span> {s.label}
+                        <s.icon className="w-3.5 h-3.5" /> {s.label}
                     </button>
                 ))}
             </div>
@@ -317,8 +318,8 @@ export default function CurriculumSettings() {
                                         </div>
                                         <h3 className="font-black text-gray-900 text-sm mb-1">{c.fullName}</h3>
                                         <p className="text-[10px] text-gray-400 font-medium mb-2">{c.description}</p>
-                                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full" style={{ backgroundColor: `${c.color}15`, color: c.color }}>
-                                            {c.country}
+                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full" style={{ backgroundColor: `${c.color}15`, color: c.color }}>
+                                            <MapPin className="w-3 h-3" /> {c.country}
                                         </span>
                                         <div className="mt-3 text-[9px] text-gray-400 font-bold">
                                             {c.gradingScale.length} grade levels · {c.assessmentTypes.length} assessment types
@@ -431,7 +432,7 @@ export default function CurriculumSettings() {
                                 <div className={`w-2 h-2 rounded-full ${totalWeight === 100 ? "bg-emerald-500" : "bg-amber-500"}`} />
                                 <p className={`text-xs font-black ${totalWeight === 100 ? "text-emerald-700" : "text-amber-700"}`}>
                                     Total weight: <strong>{totalWeight}%</strong>
-                                    {totalWeight === 100 ? " ✓ Perfect" : totalWeight > 100 ? ` — ${totalWeight - 100}% over budget` : ` — needs ${100 - totalWeight}% more`}
+                                    {totalWeight === 100 ? <> <Check className="inline w-3.5 h-3.5 -mt-0.5" /> Perfect</> : totalWeight > 100 ? ` — ${totalWeight - 100}% over budget` : ` — needs ${100 - totalWeight}% more`}
                                 </p>
                             </div>
 

@@ -79,6 +79,35 @@ export function useQPClasses() {
         },
     });
 }
+const levelOf = (name: string) => (name.match(/(form|grade|pp|class|year)\s*\d+/i)?.[0] || name).replace(/\s+/g, " ").trim();
+type RawClass = { _id?: string; name?: string; levelName?: string; classId?: string };
+/** Grades (Grade 1, Form 3…) — every question belongs to one. Streams share their grade's questions. */
+export function useQPGrades() {
+    return useQuery<{ id: string; name: string }[]>({
+        queryKey: ["qp_grades"],
+        queryFn: async () => {
+            const [v2, legacy] = await Promise.all([api.get("/v2/classes").then(r => r.data || []).catch((): RawClass[] => []), api.get("/classes").then(r => r.data || []).catch((): RawClass[] => [])]);
+            const seen = new Set<string>(); const out: { id: string; name: string }[] = [];
+            v2.forEach((c: RawClass) => { const n = String(c.name || "").trim(); if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push({ id: String(c._id), name: n }); } });
+            legacy.forEach((c: RawClass) => { const n = levelOf(String(c.name || c.levelName || "")); if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push({ id: "", name: n }); } });
+            return out;
+        },
+    });
+}
+/** Classes a paper can be set for: each grade and each of its streams (Grade 1 North…). */
+export function useQPPaperClasses() {
+    return useQuery<{ id: string; name: string; grade: string }[]>({
+        queryKey: ["qp_paper_classes"],
+        queryFn: async () => {
+            const [v2, streams, legacy] = await Promise.all([api.get("/v2/classes").then(r => r.data || []).catch((): RawClass[] => []), api.get("/v2/streams").then(r => r.data || []).catch((): RawClass[] => []), api.get("/classes").then(r => r.data || []).catch((): RawClass[] => [])]);
+            const seen = new Set<string>(); const out: { id: string; name: string; grade: string }[] = [];
+            const add = (id: string, name: string) => { const n = name.trim(); if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push({ id, name: n, grade: levelOf(n) }); } };
+            v2.forEach((c: RawClass) => { add(String(c._id), String(c.name || "")); streams.filter((s: RawClass) => String(s.classId) === String(c._id)).forEach((s: RawClass) => add(String(s._id), `${c.name} ${s.name}`)); });
+            legacy.forEach((c: RawClass) => add(String(c._id), String(c.name || c.levelName || "")));
+            return out;
+        },
+    });
+}
 export function useQPChapters() {
     return useQuery<any[]>({ queryKey: ["chapters"], queryFn: async () => (await api.get("/chapters")).data || [] });
 }
@@ -116,6 +145,7 @@ export function QuestionBody({ q, showAnswer }: { q: QQuestion; showAnswer?: boo
                 </div>
             )}
             {showAnswer && q.answer && !q.options?.length && <p className="mt-1.5 text-xs text-emerald-700"><b>Answer:</b> {q.answer}</p>}
+            {showAnswer && q.markingScheme && <details className="mt-1.5 text-xs text-slate-600"><summary className="cursor-pointer font-bold text-slate-500">Marking scheme</summary><p className="whitespace-pre-wrap mt-1 pl-2 border-l-2 border-slate-200">{q.markingScheme}</p></details>}
         </div>
     );
 }

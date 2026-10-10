@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { Db, ObjectId } from 'mongodb';
 import { publicAppUrl } from './verifyDocs';
 import { formatExamName } from './examName';
+import { onlyPublished } from './examPublish';
 
 const secret = () => process.env.DOC_VERIFY_SECRET || process.env.JWT_SECRET || 'shulecloud_doc_verify_secret';
 
@@ -53,7 +54,7 @@ export async function resultSnapshot(db: Db, examId: string, studentId: string) 
     let sOid: ObjectId, eOid: ObjectId;
     try { sOid = new ObjectId(studentId); eOid = new ObjectId(examId); } catch { return null; }
     const [marks, exam, student, grade] = await Promise.all([
-        db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []),
+        db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []).then(m => onlyPublished(db, m)),
         db.collection('exams').findOne({ _id: eOid }).catch(() => null) as Promise<any>,
         db.collection('students').findOne({ _id: sOid }).catch(() => null) as Promise<any>,
         gradeFn(db),

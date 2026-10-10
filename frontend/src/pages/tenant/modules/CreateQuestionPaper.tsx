@@ -105,7 +105,7 @@ function printExamPaper(paper: any, answerLinesCount: number, schoolName: string
 
     const logoHtml = schoolLogo
         ? `<img src="${schoolLogo}" alt="Logo" style="width:72px;height:72px;object-fit:contain;margin-bottom:8px;" />`
-        : `<div style="width:60px;height:60px;border-radius:50%;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;margin-bottom:8px;font-size:28px;">📖</div>`;
+        : `<div style="width:60px;height:60px;border-radius:50%;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;margin-bottom:8px;"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></div>`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">

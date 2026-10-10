@@ -13,6 +13,10 @@ import { ownerBusinessRouter, publicDocsRouter } from './routes/business.routes'
 import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import examPublishRoutes from './routes/examPublish.routes';
+import examPrintoutsRoutes from './routes/examPrintouts.routes';
+import curriculumCatalogRoutes from './routes/curriculumCatalog.routes';
+import dashboardsRoutes from './routes/dashboards.routes';
 import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
@@ -43,6 +47,7 @@ import kraRoutes from './routes/kra.routes';
 import departmentsRoutes from './routes/departments.routes';
 import markApprovalsRoutes from './routes/markApprovals.routes';
 import assistantRoutes from './routes/assistant.routes';
+import afeyRoutes from './routes/afey.routes';
 import curriculumRoutes from './routes/curriculum.routes';
 import gradingTemplatesRoutes from './routes/gradingTemplates.routes';
 import cafeteriaRoutes from './routes/cafeteria.routes';
@@ -343,6 +348,10 @@ app.use('/api/v1', appGate);   // apps the owner switched off for a school
 // API Routes
 app.use('/api/v1', academicsRoutes);
 app.use('/api/v1', analyticsRoutes);
+app.use('/api/v1', dashboardsRoutes);   // dashboard switcher: 8-4-4 exam overview, teacher subject classes
+app.use('/api/v1', curriculumCatalogRoutes);   // Subjects we offer, CBE pathways, CBC learning areas
+app.use('/api/v1', examPrintoutsRoutes);   // Exams → Printouts: merit list, analysis, transcripts
+app.use('/api/v1', examPublishRoutes);   // Exams → Manage Exams: publish / unpublish results
 app.use('/api/v1', messagingRoutes);
 app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
@@ -376,6 +385,7 @@ app.use('/api/v1', kraRoutes);              // KRA PIN Checker lookup (Add Emplo
 app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
 app.use('/api/v1', assistantRoutes);      // Smart Assistant (logic-based insights)
+app.use('/api/v1', afeyRoutes);           // Afey: top-bar AI helper (approve-before-send actions)
 app.use('/api/v1', curriculumRoutes);     // Curriculum engine (class → behavior config)
 app.use('/api/v1', gradingTemplatesRoutes); // Named grading-scale templates
 app.use('/api/v1', cafeteriaRoutes);      // kitchen meal service + canteen quick sale

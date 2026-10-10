@@ -6,7 +6,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Printer, Filter, ChevronDown, TrendingUp, TrendingDown, BarChart3, Users, BookOpen } from "lucide-react";
+import { ArrowLeft, Printer, Filter, ChevronDown, TrendingUp, TrendingDown, BarChart3, Users, BookOpen, Trophy } from "lucide-react";
 import api from "@/lib/api";
 import { openPrintDoc } from "@/lib/pdfDoc";
 
@@ -239,7 +239,7 @@ export default function ExamRankings() {
                 <td style="padding:7px 10px;text-align:center;font-weight:900">${s.meanGrade}</td>
                 <td style="padding:7px 10px;text-align:center">${s.streamPos}</td>
                 <td style="padding:7px 10px;text-align:center;color:${s.improvement===null?'#94a3b8':s.improvement>0?'#10b981':'#ef4444'}">${s.improvement===null?'—':(s.improvement>0?'+':'')+s.improvement+'%'}</td>
-                <td style="padding:7px 10px;text-align:center">${s.totalPct>=passMark?'✅':'❌'}</td>
+                <td style="padding:7px 10px;text-align:center">${s.totalPct>=passMark?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg>':'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'}</td>
             </tr>
         `).join("");
 
@@ -288,10 +288,10 @@ export default function ExamRankings() {
     if (!exam) return <div className="flex-1 flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-[#5C67F2] border-t-transparent rounded-full" /></div>;
 
     const TABS = [
-        { id: "rankings",         label: "Rankings",           icon: "🏆" },
-        { id: "stats",            label: "Statistics",         icon: "📊" },
-        { id: "grade_dist",       label: "Grade Distribution", icon: "📈" },
-        { id: "subject_analysis", label: "Subject Analysis",   icon: "📚" },
+        { id: "rankings",         label: "Rankings",           icon: Trophy },
+        { id: "stats",            label: "Statistics",         icon: BarChart3 },
+        { id: "grade_dist",       label: "Grade Distribution", icon: TrendingUp },
+        { id: "subject_analysis", label: "Subject Analysis",   icon: BookOpen },
     ] as const;
 
     return (
@@ -354,7 +354,7 @@ export default function ExamRankings() {
                     {TABS.map(t => (
                         <button key={t.id} onClick={() => setShowTab(t.id)}
                             className={`flex items-center gap-1.5 px-4 py-3 text-xs font-black uppercase tracking-wide border-b-2 transition-all -mb-px ${showTab === t.id ? "border-[#5C67F2] text-[#5C67F2]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-                            <span>{t.icon}</span> {t.label}
+                            <t.icon className="w-3.5 h-3.5" /> {t.label}
                         </button>
                     ))}
                 </div>
@@ -402,7 +402,7 @@ export default function ExamRankings() {
                                         <tr key={s.studentId} className={`border-b border-gray-50 ${idx < 3 ? "bg-amber-50/30" : idx % 2 === 0 ? "bg-white" : "bg-gray-50/20"}`}>
                                             <td className="px-3 py-2.5 text-center">
                                                 <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black mx-auto ${idx===0?"bg-yellow-400 text-white":idx===1?"bg-gray-400 text-white":idx===2?"bg-amber-700 text-white":"bg-gray-100 text-gray-600"}`}>
-                                                    {idx < 3 ? ["🥇","🥈","🥉"][idx] : s.classPos}
+                                                    {s.classPos}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2.5">

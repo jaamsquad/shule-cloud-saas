@@ -17,6 +17,7 @@ import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef }
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
+import { onlyPublished } from '../lib/examPublish';
 
 const router = Router();
 
@@ -227,7 +228,8 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             if (!email) email = st.parentEmail || st.fatherEmail || st.motherEmail || st.guardianEmail || '';
             if (!email) { skipped++; return; }
             try {
-                const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
+                const marks = await onlyPublished(db, await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
+                if (!marks.length) { skipped++; return; }
                 const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
@@ -282,6 +284,9 @@ router.get('/search', async (req: Request, res) => {
 });
 
 // ─── Exams / Assessments ───────────────────────────────────────────────────
+// New exams wait for their results to be published per class (Exams → Manage Exams).
+const manualPublishing = (req: any, _res: any, next: any) => { if (req.body && typeof req.body === 'object') req.body.publishing = 'manual'; next(); };
+router.post(['/exams', '/assessments', '/academics/exams'], manualPublishing);
 router.get('/exams',              c.getItems('exams'));
 router.get('/exams/:id',          c.getItem('exams'));
 router.post('/exams',             c.createItem('exams'));
@@ -463,6 +468,14 @@ router.patch('/academics/subject-groups/:id',      c.updateItem('subject_groups'
 router.delete('/academics/subject-groups/:id',     c.deleteItem('subject_groups'));
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
+// Subjects a school no longer offers (Subjects → Subjects we offer) are hidden from pickers;
+// ?all=1 lists every subject (with history), any other query keeps the generic filters.
+router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
+    if (req.query.all) { delete (req.query as any).all; return next(); }
+    if (Object.keys(req.query).length) return next();
+    try { res.json(await getRequestDb(req).collection('subjects').find({ offered: { $ne: false } }).toArray()); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/subjects',              c.getItems('subjects'));
 router.post('/subjects',             c.createItem('subjects'));
 router.patch('/subjects/:id',        c.updateItem('subjects'));

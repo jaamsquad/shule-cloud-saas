@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Home, RefreshCcw, Check, Calendar, Loader2, Upload, Download, X, AlertCircle, CheckCircle2, FileSpreadsheet, ChevronDown, ChevronUp, ArrowLeft, Search } from "lucide-react";
+import { Home, RefreshCcw, Check, Star, Calendar, Loader2, Upload, Download, X, AlertCircle, CheckCircle2, FileSpreadsheet, ChevronDown, ChevronUp, ArrowLeft, Search } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -653,7 +653,7 @@ export default function AddEmployee() {
                             {formData.designation === "Teacher" && (
                                 <div className="pt-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="flex items-center gap-2 mb-6 border-b border-gray-200 pb-2">
-                                        <div className="w-6 h-6 rounded-full bg-[#5C67F2] text-white flex items-center justify-center text-xs font-bold">★</div>
+                                        <div className="w-6 h-6 rounded-full bg-[#5C67F2] text-white flex items-center justify-center text-xs font-bold"><Star className="w-3.5 h-3.5" /></div>
                                         <h3 className="text-gray-800 font-bold text-lg">Subject Specialization</h3>
                                     </div>
                                     <p className="text-xs text-gray-500 font-semibold mb-4">Select the curriculum subjects this teacher is specialized in and permitted to teach:</p>
@@ -670,7 +670,7 @@ export default function AddEmployee() {
                                                         className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all h-20 ${sel ? "border-[#5C67F2] bg-[#5C67F2]/5 text-[#5C67F2]" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50/50"}`}>
                                                         <span className="font-bold text-xs line-clamp-2 leading-snug">{sub.name || sub.subjectName}</span>
                                                         <span className={`text-[8px] font-black uppercase tracking-widest self-end ${sel ? "text-[#5C67F2]" : "text-gray-400"}`}>
-                                                            {sel ? "✓ Assigned" : "Unassigned"}
+                                                            {sel ? <span className="inline-flex items-center gap-0.5"><Check className="w-2.5 h-2.5" />Assigned</span> : "Unassigned"}
                                                         </span>
                                                     </button>
                                                 );

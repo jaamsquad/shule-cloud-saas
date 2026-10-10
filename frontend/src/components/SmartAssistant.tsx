@@ -4,6 +4,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import {
     Bot, X, ChevronLeft, Loader2, Eye, Download, MessageSquare, Printer,
     CheckCircle2, Sparkles, ArrowRight,
+    Users, CalendarCheck, Coins, Banknote, BookOpen, Presentation, NotebookPen, Target,
+    Bus, Home, Package, Receipt, UsersRound, Scale, Stethoscope, Calendar, GraduationCap,
+    BarChart3, Settings, LayoutGrid, type LucideIcon,
 } from "lucide-react";
 import {
     BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -17,17 +20,17 @@ import AiChat, { type AiStatus } from "./AiChat";
 // quick actions). Every question calls the same backend query engine, so a future
 // AI can reuse it. Mounted globally by DashboardLayout.
 
-const CAT_META: Record<string, { icon: string; color: string }> = {
-    Students: { icon: "📚", color: "#5C67F2" }, Attendance: { icon: "🗓️", color: "#0EA5E9" },
-    Fees: { icon: "💰", color: "#16A34A" }, Finance: { icon: "💵", color: "#16A34A" },
-    Library: { icon: "📖", color: "#D97706" }, Staff: { icon: "👨‍🏫", color: "#7C3AED" },
-    Academics: { icon: "📝", color: "#DB2777" }, Examinations: { icon: "🎯", color: "#DC2626" },
-    Transport: { icon: "🚌", color: "#CA8A04" }, Hostel: { icon: "🏠", color: "#0891B2" },
-    Inventory: { icon: "📦", color: "#64748B" }, Payroll: { icon: "🧾", color: "#059669" },
-    Parents: { icon: "👪", color: "#2563EB" }, Discipline: { icon: "⚖️", color: "#B91C1C" },
-    Health: { icon: "🩺", color: "#E11D48" }, Calendar: { icon: "📅", color: "#7C3AED" },
-    Admissions: { icon: "🎓", color: "#0D9488" }, Reports: { icon: "📊", color: "#4F46E5" },
-    System: { icon: "⚙️", color: "#475569" },
+const CAT_META: Record<string, { icon: LucideIcon; color: string }> = {
+    Students: { icon: Users, color: "#5C67F2" }, Attendance: { icon: CalendarCheck, color: "#0EA5E9" },
+    Fees: { icon: Coins, color: "#16A34A" }, Finance: { icon: Banknote, color: "#16A34A" },
+    Library: { icon: BookOpen, color: "#D97706" }, Staff: { icon: Presentation, color: "#7C3AED" },
+    Academics: { icon: NotebookPen, color: "#DB2777" }, Examinations: { icon: Target, color: "#DC2626" },
+    Transport: { icon: Bus, color: "#CA8A04" }, Hostel: { icon: Home, color: "#0891B2" },
+    Inventory: { icon: Package, color: "#64748B" }, Payroll: { icon: Receipt, color: "#059669" },
+    Parents: { icon: UsersRound, color: "#2563EB" }, Discipline: { icon: Scale, color: "#B91C1C" },
+    Health: { icon: Stethoscope, color: "#E11D48" }, Calendar: { icon: Calendar, color: "#7C3AED" },
+    Admissions: { icon: GraduationCap, color: "#0D9488" }, Reports: { icon: BarChart3, color: "#4F46E5" },
+    System: { icon: Settings, color: "#475569" },
 };
 const PIE = ["#5C67F2", "#16A34A", "#F59E0B", "#DC2626", "#0EA5E9", "#7C3AED", "#DB2777"];
 const ACTION_ICON: Record<string, any> = { eye: Eye, download: Download, message: MessageSquare, printer: Printer, check: CheckCircle2 };
@@ -175,11 +178,11 @@ export default function SmartAssistant() {
                                 {categories.length === 0 ? (
                                     <div className="col-span-2 flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-indigo-300" /></div>
                                 ) : categories.map(c => {
-                                    const m = CAT_META[c.category] || { icon: "•", color: "#5C67F2" };
+                                    const m = CAT_META[c.category] || { icon: LayoutGrid, color: "#5C67F2" };
                                     return (
                                         <button key={c.category} onClick={() => setCategory(c.category)}
                                             className="flex flex-col items-start gap-1 p-3 rounded-2xl border border-slate-100 bg-white hover:border-[#5C67F2] hover:shadow-sm transition-all text-left">
-                                            <span className="text-2xl">{m.icon}</span>
+                                            <m.icon className="w-6 h-6 text-slate-500" />
                                             <span className="text-sm font-black text-slate-700">{c.category}</span>
                                             <span className="text-[10px] text-slate-400">{c.queries.length} insight{c.queries.length !== 1 ? "s" : ""}</span>
                                         </button>

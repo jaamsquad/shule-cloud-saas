@@ -64,9 +64,23 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 // ── Config CRUD pages ─────────────────────────────────────────────────────────
 export function LearningAreasPage() {
     const classes = useClasses(); const teachers = useTeachers(); const subjects = useSubjects();
-    return <CbcCrud collection="cbc_learning_areas" title="Learning Areas" addLabel="New Learning Area"
+    const qc = useQueryClient();
+    const [loading, setLoading] = useState(false);
+    // KICD learning areas per band; senior school uses the subjects the school offers + pathways
+    const load = async () => {
+        setLoading(true);
+        try { const r = await cbc.loadKicdAreas(); toast.success(r.message || "Loaded"); qc.invalidateQueries({ queryKey: ["cbc"] }); }
+        catch (e: any) { toast.error(e?.response?.data?.message || "Could not load"); } finally { setLoading(false); }
+    };
+    return <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap items-center gap-3 justify-between">
+            <div className="text-sm text-slate-600 max-w-2xl">Learning areas follow the KICD curriculum for each band — pre-primary, lower and upper primary, junior school — and, in senior school (Grades 10–12), the subjects you offer and each learner's <a href="/subjects/pathways" className="font-bold underline" style={{ color: ACCENT }}>pathway</a>.</div>
+            <button onClick={load} disabled={loading} className="h-10 px-4 rounded-xl text-sm font-bold text-white flex items-center gap-2 disabled:opacity-50" style={{ background: ACCENT }}>{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />} Load KICD learning areas</button>
+        </div>
+        <CbcCrud collection="cbc_learning_areas" title="Learning Areas" addLabel="New Learning Area"
         fields={[{ k: "name", label: "Name (pick a subject)", type: "select", options: () => subjects, allowCustom: true, required: true }, { k: "grade", label: "Grade Level", type: "select", options: () => classes }, { k: "code", label: "Code" }, { k: "description", label: "Description", type: "textarea" }, { k: "teacher", label: "Assigned Teacher", type: "select", options: () => teachers }, { k: "active", label: "Status", type: "select", options: ["Active", "Inactive"] }]}
-        columns={[{ k: "name", label: "Learning Area" }, { k: "grade", label: "Grade" }, { k: "code", label: "Code" }, { k: "teacher", label: "Teacher" }]} />;
+        columns={[{ k: "name", label: "Learning Area" }, { k: "bandName", label: "Band" }, { k: "grade", label: "Grade" }, { k: "code", label: "Code" }, { k: "teacher", label: "Teacher" }]} />
+    </div>;
 }
 export function CompetenciesPage() {
     return <CbcCrud collection="cbc_competencies" title="Core Competencies" addLabel="New Competency"
@@ -106,7 +120,9 @@ export function RecordPage() {
     const [saving, setSaving] = useState(false);
     const activity = activities.find((a: any) => a._id === activityId);
     useEffect(() => { setActivityId(""); setMarks({}); }, [key]);   // the activity list changes with the term
-    const roster = useMemo(() => activity?.grade ? students.filter((s: any) => (s.currentClass || s.studentClass || "") === activity.grade || (s.currentClass || s.studentClass || "").includes(activity.grade)) : students, [students, activity]);
+    // Learners for the activity: its grade, and for a senior-school elective only those who take it (pathways)
+    const { data: serverRoster } = useQuery({ queryKey: ["cbc_roster", activityId], enabled: !!activityId, queryFn: () => cbc.roster(activityId), retry: false });
+    const roster = useMemo(() => serverRoster || (activity?.grade ? students.filter((s: any) => (s.currentClass || s.studentClass || "") === activity.grade || (s.currentClass || s.studentClass || "").includes(activity.grade)) : students), [serverRoster, students, activity]);
 
     const save = async () => {
         if (!activityId || !activity) return toast.error("Select an activity");

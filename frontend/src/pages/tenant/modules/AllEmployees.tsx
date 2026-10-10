@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye } from "lucide-react";
+import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye, Check } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
@@ -408,7 +408,7 @@ export default function AllEmployees() {
                                                         >
                                                             <span className="font-bold text-[11px] line-clamp-1 leading-snug">{sub.name || sub.subjectName}</span>
                                                             <span className="text-[7.5px] font-black uppercase tracking-wider self-end mt-0.5">
-                                                                {isSelected ? '✓ Assigned' : 'Unassigned'}
+                                                                {isSelected ? <span className="inline-flex items-center gap-0.5"><Check className="w-2.5 h-2.5" />Assigned</span> : 'Unassigned'}
                                                             </span>
                                                         </button>
                                                     );

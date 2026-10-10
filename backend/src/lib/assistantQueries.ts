@@ -199,7 +199,7 @@ def('students.birthdays', 'Students', 'Students with birthdays today.', async ({
     const bdays = filterStudents(all, filters).filter(s => { const d = new Date(s.dob || s.dateOfBirth || 0); return !isNaN(d.getTime()) && `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === md; });
     return {
         id: 'students.birthdays', title: 'Birthdays Today',
-        summary: bdays.length ? `🎉 ${bdays.length} student(s) have a birthday today!` : 'No student birthdays today.',
+        summary: bdays.length ? `${bdays.length} student(s) have a birthday today!` : 'No student birthdays today.',
         stat: { value: bdays.length, label: 'Birthdays' },
         breakdown: bdays.map(s => ({ label: s.studentName || s.name || 'Student', value: classOf(s) })),
         actions: [{ label: 'Send Wishes SMS', icon: 'message', action: 'sendSms', params: { template: 'birthday' } }],
@@ -415,7 +415,7 @@ def('staff.birthdays', 'Staff', 'Staff birthdays.', async ({ db, scope }) => {
     const staff = await db.collection('staff').find(scope.isAdmin ? {} : scope.staffFilter).toArray().catch(() => []);
     const now = new Date(); const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const bdays = staff.filter((s: any) => { const d = new Date(s.dob || s.dateOfBirth || 0); return !isNaN(d.getTime()) && `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === md; });
-    return { id: 'staff.birthdays', title: 'Staff Birthdays', summary: bdays.length ? `🎉 ${bdays.length} staff have a birthday today.` : 'No staff birthdays today.', stat: { value: bdays.length, label: 'Birthdays' }, breakdown: bdays.map((s: any) => ({ label: s.employeeName || s.name || 'Staff', value: s.designation || '' })) };
+    return { id: 'staff.birthdays', title: 'Staff Birthdays', summary: bdays.length ? `${bdays.length} staff have a birthday today.` : 'No staff birthdays today.', stat: { value: bdays.length, label: 'Birthdays' }, breakdown: bdays.map((s: any) => ({ label: s.employeeName || s.name || 'Staff', value: s.designation || '' })) };
 });
 
 // ─── ACADEMICS ───────────────────────────────────────────────────────────────

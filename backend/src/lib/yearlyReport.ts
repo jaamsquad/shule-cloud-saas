@@ -9,6 +9,7 @@
 import { Db, ObjectId } from 'mongodb';
 import { loadTerms, pickCurrent } from '../modules/cbc/cbcTerm';
 import { canonicalStatus } from './studentStatus';
+import { onlyPublished } from './examPublish';
 
 export const termNumberOf = (v: any): number => { const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10); return isNaN(n) ? 0 : n; };
 const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -70,7 +71,7 @@ export async function computeYearly(db: Db, students: any[], year: string): Prom
     });
     const allExamIds = Array.from(new Set(plan.flatMap(p => p.perTerm.flat())));
     const studentIds = students.map(s => String(s._id));
-    const live: any[] = allExamIds.length ? await db.collection('exam_marks').find({ examId: { $in: allExamIds }, studentId: { $in: studentIds } }).toArray().catch(() => []) : [];
+    const live: any[] = allExamIds.length ? await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: allExamIds }, studentId: { $in: studentIds } }).toArray().catch(() => [])) : [];
 
     // marks by student|exam|subject — the marks frozen at report-card generation win over live edits
     const key = (sid: string, eid: string, sub: string) => `${sid}|${eid}|${norm(sub)}`;

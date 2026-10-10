@@ -88,7 +88,7 @@ export default function ChannelComposer({ channel }: Props) {
 
     const test = useMutation({
         mutationFn: async () => (await api.post(`/communications/${channel}/test`, { to: testTo })).data,
-        onSuccess: (d: any) => { toast.success(d.sent ? "Test sent ✓" : `Test failed: ${d.results?.[0]?.error || ""}`); qc.invalidateQueries({ queryKey: ["comm_logs", channel] }); },
+        onSuccess: (d: any) => { toast.success(d.sent ? "Test sent" : `Test failed: ${d.results?.[0]?.error || ""}`); qc.invalidateQueries({ queryKey: ["comm_logs", channel] }); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Test failed"),
     });
 

@@ -55,12 +55,14 @@ export const navItems: NavItem[] = [
     ]
   },
   { label: "Subjects", icon: BookOpen, moduleKey: "subjects", children: [
+      { label: "Subjects We Offer", path: "/subjects/offered" },
       { label: "All Subjects", path: "/subjects/all" },
       { label: "New Subject", path: "/subjects/new" },
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },
       { label: "Teacher ↔ Subjects", path: "/academic-system/teacher-subjects" },
+      { label: "Pathways (CBE)", path: "/subjects/pathways" },
   ] },
   { label: "Students", icon: User, moduleKey: "students", children: [
       { label: "All Students", path: "/students", pagePerm: "students.all" },
@@ -374,10 +376,12 @@ export const navItems: NavItem[] = [
   ] },
   { label: "Exams", icon: ClipboardList, moduleKey: "exams", children: [
       { label: "Create New Exam", path: "/exams/create" },
+      { label: "Manage Exams", path: "/exams/manage" },
       { label: "Online Examinations", path: "/exams/online" },
       { label: "Add / Update Exam Marks", path: "/exams/marks" },
       { label: "Skill-Based Reports", path: "/exams/skills" },
       { label: "Analytics", path: "/exams/analytics" },
+      { label: "Printouts", path: "/exams/printouts" },
       // { label: "Generate Report Cards", path: "/exams/generate-reports" },
       // { label: "ScholarSheet (A4 Card)", path: "/exams/scholar-sheet" },
       { label: "Generate Report Cards", path: "/exams/generate-reports" },

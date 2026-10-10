@@ -81,7 +81,7 @@ export default function SavedCertificates() {
         const accentColor = activeTemplate?.accent_color || '#1e3a8a';
         const logoHtml = schoolLogo
             ? `<img src="${schoolLogo}" style="height: 60px; object-fit: contain; margin-bottom: 8px;" />`
-            : `<div style="font-size: 32px; margin-bottom: 8px;">🎓</div>`;
+            : `<div style="margin-bottom: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg></div>`;
 
         const isLeaving = cert.certificateType === "LEAVING";
         const isTransfer = cert.certificateType === "TRANSFER";

@@ -16,6 +16,8 @@ import { printableReports } from '../lib/portalReportCard';
 import { scholarSheetData, reportCardSettings } from './reports.routes';
 import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
+import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
+import { onlyPublished } from '../lib/examPublish';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -848,7 +850,7 @@ router.get('/student-portal/marks', async (req, res) => {
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
         // Only APPROVED marks reach the student (un-approved batches are hidden until
         // the HOD/admin approves). Legacy marks with no flag stay visible.
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
+        const marks = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray());
         res.json(marks);
     } catch (e: any) {
         res.status(401).json({ message: 'Invalid or expired token' });
@@ -876,7 +878,7 @@ router.get('/student-portal/exam-results', async (req, res) => {
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
 
         // Only approved marks are shown to the student.
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
+        const marks = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray());
         const exams = await db.collection('exams').find({}).toArray();
         const examMap: Record<string, any> = {};
         exams.forEach((e: any) => { examMap[e._id.toString()] = e; });
@@ -1272,7 +1274,8 @@ const buildExamResults = async (db: Db, studentId: string) => {
     // Match exam marks whether studentId is stored as a string or ObjectId.
     const ids: any[] = [studentId];
     if (isObjId(studentId)) ids.push(new ObjectId(studentId));
-    const marks = await db.collection('exam_marks').find({ $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }] }).toArray();
+    // Only published results (Exams → Manage Exams).
+    const marks = await onlyPublished(db, await db.collection('exam_marks').find({ $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }] }).toArray());
     const exams = await db.collection('exams').find({}).toArray();
     const examMap: Record<string, any> = {};
     exams.forEach((e: any) => { examMap[e._id.toString()] = e; });
@@ -2312,16 +2315,22 @@ router.get('/staff-portal/attendance', authed(async (req, res, db, decoded) => {
     }
     const students = await studentsInClass(db, className);
     const existing = await db.collection('student_attendance').find({ className, date, subject: subject || 'General' }).toArray();
-    const map: Record<string, string> = {};
-    existing.forEach((r: any) => { map[String(r.studentId)] = r.status; });
+    const map: Record<string, any> = {};
+    existing.forEach((r: any) => { map[String(r.studentId)] = r; });
+    // Students signed out at the front desk that day → shown as Excused (reason).
+    const signouts = await signoutsOn(db, date, students.map((s: any) => String(s._id)));
     res.json({
         className, subject: subject || 'General', date,
-        students: students.map((s: any) => ({
-            studentId: String(s._id), name: s.studentName,
-            // Empty status = unmarked. The teacher must explicitly set each student's
-            // status; unmarked students are not saved (see POST below).
-            registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)] || '',
-        })),
+        students: students.map((s: any) => {
+            const so = signouts.get(String(s._id));
+            return {
+                studentId: String(s._id), name: s.studentName,
+                // Empty status = unmarked. The teacher must explicitly set each student's
+                // status; unmarked students are not saved (see POST below).
+                registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)]?.status || '', remarks: map[String(s._id)]?.remarks || '',
+                signout: so ? { reason: so.reason, timeOut: so.timeOut, pickedBy: so.pickedBy, label: excusedLabel(so) } : null,
+            };
+        }),
     });
 }));
 
@@ -2340,7 +2349,7 @@ router.post('/staff-portal/attendance', authed(async (req, res, db, decoded) => 
         if (!r.status) continue;
         await db.collection('student_attendance').updateOne(
             { studentId: String(r.studentId), className, date, subject: subj },
-            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, markedBy: decoded.name, updatedAt: new Date() } },
+            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, remarks: String(r.remarks || '').slice(0, 200), markedBy: decoded.name, updatedAt: new Date() } },
             { upsert: true },
         );
         saved++;
@@ -2607,7 +2616,7 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
         present,
         absent: records.length - present,
         rate: records.length ? Math.round((present / records.length) * 100) : 0,
-        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present' })),
+        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present', remarks: r.remarks || '' })),
     });
 }));
 

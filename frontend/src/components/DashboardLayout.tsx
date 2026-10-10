@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import AppSidebar from "./AppSidebar";
 import TopHeader from "./TopHeader";
 import PermissionGuard from "./PermissionGuard";
-import SmartAssistant from "./SmartAssistant";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
@@ -113,8 +112,6 @@ export default function DashboardLayout() {
                     <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FFC165]/5 rounded-full blur-[100px] pointer-events-none -ml-48 -mb-48" />
                 </main>
             </div>
-            {/* Global floating Smart Assistant — button-driven live insights */}
-            <SmartAssistant />
         </div>
     );
 }

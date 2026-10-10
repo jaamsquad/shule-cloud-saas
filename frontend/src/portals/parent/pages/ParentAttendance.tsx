@@ -59,8 +59,8 @@ export default function ParentAttendance() {
                                         <td className="py-2.5 text-slate-600">{r.date ? new Date(r.date).toLocaleDateString("en-GB") : "—"}</td>
                                         <td className="py-2.5 text-slate-500">{r.subject}</td>
                                         <td className="py-2.5 text-right">
-                                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${/present/i.test(r.status) ? "bg-emerald-100 text-emerald-700" : /late/i.test(r.status) ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
-                                                {r.status}
+                                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${/present/i.test(r.status) ? "bg-emerald-100 text-emerald-700" : /late/i.test(r.status) ? "bg-amber-100 text-amber-700" : /excused/i.test(r.status) ? "bg-sky-100 text-sky-700" : "bg-rose-100 text-rose-700"}`}>
+                                                {r.status}{/excused/i.test(r.status) && r.remarks ? ` (${r.remarks})` : ""}
                                             </span>
                                         </td>
                                     </tr>

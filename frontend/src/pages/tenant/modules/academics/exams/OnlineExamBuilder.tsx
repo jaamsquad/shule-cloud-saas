@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Loader2, Trash2, ArrowLeft, Send, Settings, FileText, GripVertical, Check } from "lucide-react";
+import { Plus, Loader2, Trash2, ArrowLeft, Send, Settings, FileText, GripVertical, Check, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -324,8 +324,8 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                 {/* Schedule display */}
                 {exam?.startAt && exam?.endAt && (
                     <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 mb-4 text-xs font-bold text-slate-600">
-                        <p>📅 <strong>Start:</strong> {new Date(exam.startAt).toLocaleString()}</p>
-                        <p>📅 <strong>End:</strong> {new Date(exam.endAt).toLocaleString()}</p>
+                        <p className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400" /><strong>Start:</strong> {new Date(exam.startAt).toLocaleString()}</p>
+                        <p className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400" /><strong>End:</strong> {new Date(exam.endAt).toLocaleString()}</p>
                     </div>
                 )}
 

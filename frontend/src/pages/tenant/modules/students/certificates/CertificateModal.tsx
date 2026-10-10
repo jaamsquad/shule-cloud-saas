@@ -90,7 +90,7 @@ export default function CertificateModal({ student, onClose }: { student: any; o
                             <div className="grid grid-cols-3 gap-2">
                                 {types.map(t => (
                                     <button key={t.key} onClick={() => pickType(t.key)} className={`p-2 rounded-xl border-2 text-center transition-all ${type === t.key ? "border-[#5C67F2] bg-indigo-50" : "border-gray-100 hover:border-indigo-200"}`}>
-                                        <div className="text-xl">{t.icon}</div><div className="text-[10px] font-bold text-slate-700 leading-tight mt-0.5">{t.label}</div>
+                                        <t.icon className="w-5 h-5 mx-auto text-slate-500" /><div className="text-[10px] font-bold text-slate-700 leading-tight mt-0.5">{t.label}</div>
                                     </button>
                                 ))}
                             </div>

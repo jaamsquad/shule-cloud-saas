@@ -78,7 +78,7 @@ export default function NemisMissing() {
                         ))}
                     </tbody>
                 </table>
-                {filtered.length === 0 && <div className="py-12 text-center text-slate-400 text-xs font-bold uppercase">All students complete 🎉</div>}
+                {filtered.length === 0 && <div className="py-12 text-center text-slate-400 text-xs font-bold uppercase">All students complete</div>}
             </div>
         </div>
     );

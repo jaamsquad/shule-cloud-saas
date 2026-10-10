@@ -8,6 +8,7 @@
  */
 import { Router, Request } from 'express';
 import { getMetaDb } from '../../lib/mongodb';
+import { onlyPublished } from '../../lib/examPublish';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
@@ -23,7 +24,7 @@ const marks = async (req: Request) => {
     const examId = String((req.query.exam_id as string) || '').trim();
     const examFilter: any = { deletedAt: { $exists: false } };
     if (examId) examFilter.examId = examId;
-    let all = await db(req).collection('exam_marks').find(examFilter).toArray().catch(() => []);
+    let all = await onlyPublished(db(req), await db(req).collection('exam_marks').find(examFilter).toArray().catch(() => []));
     if (!all.length && !examId) all = await db(req).collection('student_exam_marks_v2').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
     if (!all.length) return all;
 

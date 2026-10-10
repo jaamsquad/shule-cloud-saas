@@ -4,6 +4,7 @@ import { Db, ObjectId } from 'mongodb';
 import { formatExamName } from '../lib/examName';
 import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum } from '../lib/curriculum';
 import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
+import { onlyPublished, publishedView } from '../lib/examPublish';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -193,7 +194,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const frozen: any[] = Array.isArray(gen.frozenMarks) ? gen.frozenMarks : [];
         const allMarks: any[] = frozen.length
             ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
-            : await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+            : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
 
         // Supplement with ONLINE-exam attempt scores for any online exams in the set
         // whose results haven't been published into exam_marks yet, so their CAT/Mid
@@ -238,7 +239,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // Marks used for ranking: the End-Term (main) exam across ALL students. If for
         // some reason that's empty, fall back to the full pinned exam set.
         const rankExamId = mainEff;
-        const rankMarksMain = await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []);
+        const rankMarksMain = await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
         // Normalized class identity for a student — prefer the v2 classId, else the
@@ -348,7 +349,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         if (mine.length === 0) {
             const selExam: any = exam || examMeta[examId];
             const term = String(selExam?.term || '').toLowerCase();
-            const studentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+            const studentMarks = await onlyPublished(database, await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []));
             const examsAll = await database.collection('exams').find({}).toArray().catch(() => []);
             const eById: Record<string, any> = {}; examsAll.forEach((e: any) => eById[String(e._id)] = e);
             const termMarks = studentMarks.filter((m: any) => {
@@ -392,7 +393,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             const eById2: Record<string, any> = {};
             [...examsAll2, ...onlineAll2].forEach((e: any) => { if (!eById2[String(e._id)]) eById2[String(e._id)] = e; });
             const [regMarks, onlineAttempts] = await Promise.all([
-                database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+                database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(database, m)),
                 database.collection('online_exam_attempts')
                     .find({ studentId: sid, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
                     .toArray().catch(() => []),
@@ -509,7 +510,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const valueAdded = kcpeMean ? RND(meanPoint - (kcpeMean / 100 * 12), 1) : null;
 
         // Historical grid: from this student's exam_marks across exams → Form×Term MP/MG/POS.
-        const myAll = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+        const myAll = await onlyPublished(database, await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []));
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
         // Level system comes from the resolved curriculum (Form/Grade/Year), not a
@@ -642,7 +643,7 @@ router.get('/reports/student-academic-history/:studentId', async (req: Request, 
         const currentClass = student.studentClass || student.currentClass || '';
 
         const [marks, exams] = await Promise.all([
-            database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(database, m)),
             database.collection('exams').find({}).toArray().catch(() => []),
         ]);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
@@ -686,7 +687,7 @@ router.get('/reports/student-history/:studentId', async (req: Request, res: Resp
         const fallbackClass = student.studentClass || student.className || student.currentClass || 'Class';
 
         const [marks, invoices, payments, exams] = await Promise.all([
-            db.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            db.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(db, m)),
             db.collection('invoices').find({ $or: [{ student_id: sid }, { studentId: sid }] }).toArray().catch(() => []),
             db.collection('payments').find({ $or: [{ student_id: sid }, { studentId: sid }], is_voided: { $ne: true } }).toArray().catch(() => []),
             db.collection('exams').find({}).toArray().catch(() => []),
@@ -804,7 +805,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         // (fields: studentId, subjectId, subjectName, examId, marksObtained, totalMarks).
         const examIds: string[] = String(exam_id || '').split(',').map(s => s.trim()).filter(Boolean);
         const marks = examIds.length
-            ? await db.collection('exam_marks').find({ examId: { $in: examIds } }).toArray()
+            ? await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: examIds } }).toArray())
             : [];
         const examDocs = examIds.length
             ? await db.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray()
@@ -867,7 +868,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const cutoff = selectedOrders.length ? selectedOrders[selectedOrders.length - 1] : '￿';
         // All marks for the students in this report (for the trend), keyed by student+exam.
         const sIds = students.map((s: any) => s._id.toString());
-        const allMarksForTrend = await db.collection('exam_marks').find({ studentId: { $in: sIds } }).toArray().catch(() => []);
+        const allMarksForTrend = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: { $in: sIds } }).toArray().catch(() => []));
         const isAnnual = examIds.length > 1;
 
         // ── Real attendance (student_attendance) summarised per student ──────────────
@@ -1543,6 +1544,7 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
                     ...(student.registrationNo ? [{ studentId: student.registrationNo }, { student_id: student.registrationNo }] : [])
                 ]
             }).toArray();
+            marks = await onlyPublished(db, marks);
         }
 
         const exams = await db.collection('exams').find({}).toArray();
@@ -1888,11 +1890,16 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'classId and mainExamId are required' });
         }
         const examSet = [String(payload.mainExamId), ...(Array.isArray(payload.additionalExamIds) ? payload.additionalExamIds.map((id: any) => String(id)) : [])].filter(Boolean);
+        // Report cards only from PUBLISHED results (Exams → Manage Exams → Publish results).
+        const pubView = await publishedView(db);
+        if (pubView.statusOf(String(payload.mainExamId), String(payload.classV2Id || payload.classId || '') || undefined, payload.className) !== 'Published') {
+            return res.status(409).json({ message: `This exam's results for ${payload.className || 'this class'} are not published yet. Publish them first under Exams → Manage Exams.` });
+        }
         // SNAPSHOT: freeze the marks AS THEY ARE NOW so the generated report card is
         // stable — later edits to exam_marks don't change it until regenerated.
-        const frozenMarks = await db.collection('exam_marks').find({ examId: { $in: examSet } })
-            .project({ studentId: 1, examId: 1, subjectId: 1, subjectName: 1, marksObtained: 1, totalMarks: 1, className: 1 })
-            .toArray().catch(() => []);
+        const frozenMarks = (await db.collection('exam_marks').find({ examId: { $in: examSet } })
+            .project({ studentId: 1, examId: 1, subjectId: 1, subjectName: 1, marksObtained: 1, totalMarks: 1, className: 1, classId: 1, classIdAtTime: 1, classAtTime: 1 })
+            .toArray().catch(() => [])).filter(pubView.ok);
         const generation = {
             classId: String(payload.classId),
             classV2Id: payload.classV2Id ? String(payload.classV2Id) : null,

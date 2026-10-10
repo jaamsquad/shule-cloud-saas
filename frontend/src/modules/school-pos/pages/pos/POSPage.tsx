@@ -7,7 +7,7 @@ import { useCartStore } from '../../stores/cartStore'
 import CartPanel from '../../components/pos/CartPanel'
 import ReceiptModal from '../../components/pos/ReceiptModal'
 import {
-  Search, ArrowLeft, Tag, Layers, RefreshCw, AlertTriangle, X
+  Search, ArrowLeft, Tag, Layers, RefreshCw, AlertTriangle, X, Shirt, BookOpen, Trophy, ShoppingBag
 } from 'lucide-react'
 
 interface Variant { id: string; size: string | null; color: string | null; stock: number; price: number }
@@ -154,11 +154,12 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (p: Product,
         {product.imageUrl ? (
           <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
         ) : (
-          <span className="text-3xl select-none">
-            {product.category.name.includes('Uniform') ? '👕' :
-             product.category.name.includes('Stationary') || product.category.name.includes('Stationery') ? '📚' :
-             product.category.name.includes('Sport') ? '⚽' : '🛍️'}
-          </span>
+          (() => {
+            const CategoryIcon = product.category.name.includes('Uniform') ? Shirt :
+              product.category.name.includes('Stationary') || product.category.name.includes('Stationery') ? BookOpen :
+              product.category.name.includes('Sport') ? Trophy : ShoppingBag
+            return <CategoryIcon className="w-8 h-8 text-slate-400" />
+          })()
         )}
       </div>
 

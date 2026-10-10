@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import posApi from '../../lib/posApi'
-import { Package, Plus, Minus, Search, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Package, Plus, Minus, Search, RefreshCw, AlertTriangle, X } from 'lucide-react'
 
 export default function POSInventory() {
   const queryClient = useQueryClient()
@@ -106,7 +106,7 @@ export default function POSInventory() {
                 <h2 className="text-base font-bold text-white">Adjust Stock</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{selectedVariant.productName} — {selectedVariant.size || selectedVariant.color || 'Default'}</p>
               </div>
-              <button onClick={() => setSelectedVariant(null)} className="text-gray-500 hover:text-white text-lg">✕</button>
+              <button onClick={() => setSelectedVariant(null)} className="text-gray-500 hover:text-white text-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="bg-gray-800 rounded-xl p-3 flex items-center gap-2">
               <Package size={16} className="text-indigo-400" />

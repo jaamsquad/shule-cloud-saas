@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Plus, Check, Loader2, GraduationCap, ChevronRight, CheckSquare, Square } from "lucide-react";
+import { ArrowLeft, Plus, Check, Loader2, GraduationCap, ChevronRight, CheckSquare, Square, AlertTriangle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
@@ -244,13 +244,13 @@ export default function NewExamPage() {
                                     <option value="">— Select Term —</option>
                                     {allTermsOrdered.map((t: any) => (
                                         <option key={t._id} value={t._id}>
-                                            {t.name} {t.yearObj?.year}{t.isActive ? " ★ Active" : ""}
+                                            {t.name} {t.yearObj?.year}{t.isActive ? " · Active" : ""}
                                         </option>
                                     ))}
                                 </select>
                             ) : (
                                 <div className="w-full h-11 px-4 border border-amber-200 rounded-xl text-sm font-bold text-amber-600 bg-amber-50 flex items-center gap-2">
-                                    ⚠ No active term — set one in Learning Periods
+                                    <AlertTriangle className="w-4 h-4" /> No active term — set one in Learning Periods
                                 </div>
                             )}
                         </Field>
@@ -297,10 +297,8 @@ export default function NewExamPage() {
                                 {["Draft","Active","Archived"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </Field>
-                        <Field label="Publish Status">
-                            <select value={form.publishStatus} onChange={f("publishStatus")} className={selectCls}>
-                                {["Unpublished","Published"].map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                        <Field label="Results">
+                            <p className="text-xs text-slate-500 leading-snug pt-1">Results are published per class under <a href="/exams/manage" className="font-bold underline text-[#534AB7]">Exams → Manage Exams</a> once marks are in. Until then they don't show on merit lists, analytics, report cards or portals.</p>
                         </Field>
                     </div>
 

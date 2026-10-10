@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, isValidElement } from "react";
 import {
     Search, Printer, Download, Home, User, Award, GraduationCap,
-    Loader2, ChevronDown, BarChart3, BookOpen, Mail
+    Loader2, ChevronDown, BarChart3, BookOpen, Mail, CheckCircle2, XCircle, Check
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -587,11 +587,13 @@ export default function ResultCard() {
                                         { label: "Exam", value: selectedExam.examName || selectedExam.name || "—" },
                                         { label: "Exam Date", value: examDate },
                                         { label: "Curriculum", value: curriculumName },
-                                        { label: "Overall Result", value: overall >= passMark ? "✅ PASSED" : "❌ FAILED" },
+                                        { label: "Overall Result", value: overall >= passMark
+                                            ? <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-4 h-4 text-slate-500" />PASSED</span>
+                                            : <span className="inline-flex items-center gap-1"><XCircle className="w-4 h-4 text-slate-500" />FAILED</span> },
                                     ].map(item => (
                                         <div key={item.label}>
                                             <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5">{item.label}</p>
-                                            <p className="text-sm font-black text-slate-800">{String(item.value)}</p>
+                                            <p className="text-sm font-black text-slate-800">{isValidElement(item.value) ? item.value : String(item.value)}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -706,7 +708,7 @@ export default function ResultCard() {
                                                     {totalMaxAll > 0 ? Math.round((totalObtained / totalMaxAll) * 100) : 0}%
                                                 </td>
                                                 <td className="px-4 py-3 text-center"><span className="font-black text-yellow-400 text-lg">{overallGrade}</span></td>
-                                                <td className="px-4 py-3 font-black rounded-br-xl">{overall >= passMark ? "✅" : "❌"} {overallStatus}</td>
+                                                <td className="px-4 py-3 font-black rounded-br-xl"><span className="inline-flex items-center gap-1.5">{overall >= passMark ? <CheckCircle2 className="w-4 h-4 text-white" /> : <XCircle className="w-4 h-4 text-white" />} {overallStatus}</span></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -749,7 +751,7 @@ export default function ResultCard() {
                                                         <div className="space-y-1.5">
                                                             <button onClick={() => setSelectedInternalIds(new Set())}
                                                                 className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold border transition-all ${selectedInternalIds.size === 0 ? "border-[#5C67F2] bg-[#5C67F2]/5 text-[#5C67F2]" : "border-gray-100 hover:bg-gray-50 text-gray-600"}`}>
-                                                                ✓ All internal exams from this term
+                                                                <Check className="w-3.5 h-3.5 inline mr-1 align-[-2px]" />All internal exams from this term
                                                             </button>
                                                             {availableInternalExams.map((e: any) => {
                                                                 const eid = e._id?.toString();

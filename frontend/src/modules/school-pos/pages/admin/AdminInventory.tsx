@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'sonner'
 import api from '@/lib/api'
 import {
-  Plus, RefreshCw, Layers, ArrowRightLeft, Loader2
+  Plus, RefreshCw, Layers, ArrowRightLeft, Loader2, X
 } from 'lucide-react'
 
 export default function AdminInventory() {
@@ -209,7 +209,7 @@ export default function AdminInventory() {
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <Plus size={16} /> Bulk Stock Receiving
               </h2>
-              <button onClick={() => setBulkModal(false)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setBulkModal(false)} className="text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">

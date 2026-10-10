@@ -11,6 +11,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from './mongodb';
 import { signToken, publicAppUrl } from './verifyDocs';
 import { gradingFrom, summariseStudent, classStatsOf, subjectNamesOf } from './reportCardCalc';
+import { onlyPublished } from './examPublish';
 
 const oid = (v: any) => { try { return new ObjectId(String(v)); } catch { return null; } };
 const idForms = (v: any) => { const s = String(v ?? ''); const o = oid(s); return o ? [s, o] : [s]; };
@@ -63,7 +64,7 @@ export async function printableReports(db: Db, req: Request, sid: string, examId
     const exams: Record<string, any> = {};
     for (const examId of examIds) {
         const exam: any = await db.collection('exams').findOne({ _id: (oid(examId) || examId) as any }).catch(() => null);
-        const allMarks: any[] = await db.collection('exam_marks').find({ examId: { $in: idForms(examId) } }).toArray().catch(() => []);
+        const allMarks: any[] = await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: idForms(examId) } }).toArray().catch(() => []));
         const studentMarks = allMarks.filter(m => String(m.studentId) === String(student._id) || (!m.studentId && m.studentName === studentName));
         if (!studentMarks.length) continue;
         const subjectNames = classSubjectNames.length ? classSubjectNames : [...new Set(allMarks.map(m => m.subjectName).filter(Boolean))] as string[];

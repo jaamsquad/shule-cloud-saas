@@ -526,7 +526,7 @@ export default function TransportManagement({ tab }: { tab: "zones" | "new" | "e
                                                     onChange={(la, ln) => { setStop(i, "lat", la.toFixed(6)); setStop(i, "lng", ln.toFixed(6)); }}
                                                 />
                                                 <button type="button" onClick={() => removeStop(i)}
-                                                    className="h-10 w-8 flex items-center justify-center text-slate-300 hover:text-rose-500">✕</button>
+                                                    className="h-10 w-8 flex items-center justify-center text-slate-300 hover:text-rose-500"><X className="w-4 h-4" /></button>
                                             </div>
                                         ))}
                                     </div>

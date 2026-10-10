@@ -38,7 +38,7 @@ export function useUsernameCheck(
                 });
                 if (r.data.available) {
                     setStatus("available");
-                    setMessage("Username is available ✓");
+                    setMessage("Username is available");
                 } else {
                     setStatus("taken");
                     setMessage(r.data.message || "Username is already taken");

@@ -2,6 +2,8 @@
  * Certificate designs (landscape A4). Each is plain HTML + CSS so it prints and saves as PDF without any
  * image files, and takes the school's logo, the student's name, the wording, the signatories and a QR code.
  */
+import { GraduationCap, Mail, DoorOpen, RefreshCw, Medal, Trophy, Handshake, BookOpen, Star, CalendarCheck, Flower2, Shield, type LucideIcon } from "lucide-react";
+
 export interface CertData {
     style: string; title: string; subtitle?: string; name: string; body: string; date: string;
     signatories: { name: string; title: string }[]; certNo: string; qr: string;
@@ -17,19 +19,19 @@ export const CERT_STYLES: { key: string; label: string; accent: string; note: st
     { key: "stripes", label: "Bright Stripes", accent: "#f5a30a", note: "Colourful stripes, award badge" },
 ];
 
-export const CERT_TYPES: { key: string; label: string; icon: string; subtitle: string; needsTransfer?: boolean }[] = [
-    { key: "graduation", label: "Graduation", icon: "🎓", subtitle: "OF GRADUATION" },
-    { key: "recommendation", label: "Recommendation", icon: "✉️", subtitle: "LETTER OF RECOMMENDATION" },
-    { key: "leaving", label: "Leaving Certificate", icon: "🚪", subtitle: "SCHOOL LEAVING" },
-    { key: "transfer", label: "Transfer Certificate", icon: "🔁", subtitle: "OF TRANSFER", needsTransfer: true },
-    { key: "sports", label: "Sports", icon: "🏅", subtitle: "OF SPORTING EXCELLENCE" },
-    { key: "achievement", label: "Achievement", icon: "🏆", subtitle: "OF ACHIEVEMENT" },
-    { key: "participation", label: "Participation", icon: "🤝", subtitle: "OF PARTICIPATION" },
-    { key: "academic", label: "Academic Excellence", icon: "📚", subtitle: "OF ACADEMIC EXCELLENCE" },
-    { key: "conduct", label: "Good Conduct", icon: "🌟", subtitle: "OF GOOD CONDUCT" },
-    { key: "attendance", label: "Perfect Attendance", icon: "📅", subtitle: "OF PERFECT ATTENDANCE" },
-    { key: "appreciation", label: "Appreciation", icon: "💐", subtitle: "OF APPRECIATION" },
-    { key: "character", label: "Character Certificate", icon: "🛡️", subtitle: "OF CHARACTER" },
+export const CERT_TYPES: { key: string; label: string; icon: LucideIcon; subtitle: string; needsTransfer?: boolean }[] = [
+    { key: "graduation", label: "Graduation", icon: GraduationCap, subtitle: "OF GRADUATION" },
+    { key: "recommendation", label: "Recommendation", icon: Mail, subtitle: "LETTER OF RECOMMENDATION" },
+    { key: "leaving", label: "Leaving Certificate", icon: DoorOpen, subtitle: "SCHOOL LEAVING" },
+    { key: "transfer", label: "Transfer Certificate", icon: RefreshCw, subtitle: "OF TRANSFER", needsTransfer: true },
+    { key: "sports", label: "Sports", icon: Medal, subtitle: "OF SPORTING EXCELLENCE" },
+    { key: "achievement", label: "Achievement", icon: Trophy, subtitle: "OF ACHIEVEMENT" },
+    { key: "participation", label: "Participation", icon: Handshake, subtitle: "OF PARTICIPATION" },
+    { key: "academic", label: "Academic Excellence", icon: BookOpen, subtitle: "OF ACADEMIC EXCELLENCE" },
+    { key: "conduct", label: "Good Conduct", icon: Star, subtitle: "OF GOOD CONDUCT" },
+    { key: "attendance", label: "Perfect Attendance", icon: CalendarCheck, subtitle: "OF PERFECT ATTENDANCE" },
+    { key: "appreciation", label: "Appreciation", icon: Flower2, subtitle: "OF APPRECIATION" },
+    { key: "character", label: "Character Certificate", icon: Shield, subtitle: "OF CHARACTER" },
 ];
 
 const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -131,7 +133,7 @@ function ornate(d: CertData) {
       .wm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:260px;color:#dc5a62;opacity:.05;font-weight:900;font-family:Georgia,serif}
       .content{left:120px;right:120px;top:84px;bottom:84px}.title{font-family:Arial,sans-serif}.school{font-size:30px;font-weight:800;text-transform:none;letter-spacing:0}
       .name{font-family:Arial,sans-serif;font-weight:800;text-decoration:underline;font-size:32px}.grant{font-family:${SCRIPT};font-size:26px;font-weight:400}`,
-      `<div class="ring"></div><div class="ringin"></div><div class="ringin2"></div><div class="k k1"></div><div class="k k2"></div><div class="k k3"></div><div class="k k4"></div><div class="wm">✦</div>
+      `<div class="ring"></div><div class="ringin"></div><div class="ringin2"></div><div class="k k1"></div><div class="k k2"></div><div class="k k3"></div><div class="k k4"></div><div class="wm"><svg width="220" height="220" viewBox="0 0 24 24" style="display:block"><path d="M12 0C13 8 16 11 24 12C16 13 13 16 12 24C11 16 8 13 0 12C8 11 11 8 12 0Z" fill="currentColor"/></svg></div>
        <div class="content">${p.head}${p.titleBlock}${p.grant}<div style="text-align:center">${p.name}</div>${p.body}${p.footer}</div>`);
 }
 
@@ -156,7 +158,7 @@ function waves(d: CertData) {
 function stripes(d: CertData) {
     const p = parts(d, { nameColor: "#f5a30a", titleColor: "#12119a", text: "#12119a", lineColor: "#12119a", titleSize: 62, nameLine: "linear-gradient(90deg,#f6d02f,#f1642e)" });
     const pill = (c: string, l: number, t: number, w: number, r: number) => `<div style="position:absolute;left:${l}px;top:${t}px;width:${w}px;height:74px;border-radius:40px;background:${c};transform:rotate(${r}deg)"></div>`;
-    const badge = `<svg width="150" height="190" viewBox="0 0 150 190"><path d="M45 130l-15 58 45-24 45 24-15-58z" fill="#f08a24"/><path d="M75 4l12 12 17-4 7 16 17 4-2 18 14 12-10 15 6 17-16 8-1 18-18-1-12 13-16-9-16 9-12-13-18 1-1-18-16-8 6-17-10-15 14-12-2-18 17-4 7-16 17 4z" fill="#f4b73a"/><circle cx="75" cy="88" r="52" fill="none" stroke="#fff" stroke-width="3"/><text x="75" y="80" font-size="22" font-weight="900" text-anchor="middle" fill="#fff">BEST</text><text x="75" y="106" font-size="22" font-weight="900" text-anchor="middle" fill="#fff">AWARD</text><text x="75" y="62" font-size="11" text-anchor="middle" fill="#fff">★ ★ ★</text></svg>`;
+    const badge = `<svg width="150" height="190" viewBox="0 0 150 190"><path d="M45 130l-15 58 45-24 45 24-15-58z" fill="#f08a24"/><path d="M75 4l12 12 17-4 7 16 17 4-2 18 14 12-10 15 6 17-16 8-1 18-18-1-12 13-16-9-16 9-12-13-18 1-1-18-16-8 6-17-10-15 14-12-2-18 17-4 7-16 17 4z" fill="#f4b73a"/><circle cx="75" cy="88" r="52" fill="none" stroke="#fff" stroke-width="3"/><text x="75" y="80" font-size="22" font-weight="900" text-anchor="middle" fill="#fff">BEST</text><text x="75" y="106" font-size="22" font-weight="900" text-anchor="middle" fill="#fff">AWARD</text><polygon points="63.0,53.0 64.2,56.3 67.8,56.5 65.0,58.6 65.9,62.0 63.0,60.1 60.1,62.0 61.0,58.6 58.2,56.5 61.8,56.3" fill="#fff"/><polygon points="75.0,53.0 76.2,56.3 79.8,56.5 77.0,58.6 77.9,62.0 75.0,60.1 72.1,62.0 73.0,58.6 70.2,56.5 73.8,56.3" fill="#fff"/><polygon points="87.0,53.0 88.2,56.3 91.8,56.5 89.0,58.6 89.9,62.0 87.0,60.1 84.1,62.0 85.0,58.6 82.2,56.5 85.8,56.3" fill="#fff"/></svg>`;
     return wrap(`
       .content{left:265px;right:265px;top:40px;bottom:60px}.title{letter-spacing:1px}.subtitle{font-style:normal;font-family:Arial,sans-serif;color:#d11fb7 !important}
       .foot{left:-70px;right:-70px}.bd{position:absolute;right:250px;top:415px;z-index:6;transform:scale(.8);transform-origin:top right}`,
