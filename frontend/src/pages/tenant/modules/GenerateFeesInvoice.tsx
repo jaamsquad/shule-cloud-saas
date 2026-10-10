@@ -1,325 +1,205 @@
-import { useState, useEffect } from "react";
-import { 
-    Home, Search, Calendar, Landmark, User, Users, 
-    ArrowRight, Printer, Loader2, Check, AlertCircle,
-    ChevronDown, CreditCard, Building2, Receipt, FileText,
-    Eye, ShieldAlert, RefreshCw
-} from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FeesPage } from "@/components/fees/FeesUI";
-import { Layers as LayersPageIcon } from "lucide-react";
+import {
+    Layers, CheckCircle2, AlertTriangle, Loader2, RefreshCw, Play, Users, Receipt, ChevronDown, ChevronUp, Settings2, CalendarClock, Mail,
+} from "lucide-react";
+import api from "@/lib/api";
+import { FeesPage, FCard, FStat, FBadge, FButton, FField, FInput, FModal, FEmpty, FLoading, money, Tone } from "@/components/fees/FeesUI";
+import { useTerms, TermPicker } from "@/components/fees/TermPicker";
+
+// Generate term invoices for whole classes. Each learner is billed from the fee structure
+// set for THEIR class and THIS term (never another term's), with transport by zone and
+// tuition by class — the same rules as "Per Student".
+
+const jobTone = (s: string): Tone => (s === "COMPLETED" ? "emerald" : s === "FAILED" ? "rose" : s === "RUNNING" || s === "PENDING" ? "indigo" : "slate");
+const in14 = () => new Date(Date.now() + 14 * 864e5).toISOString().split("T")[0];
+
+function JobCard({ job }: { job: any }) {
+    const [open, setOpen] = useState(false);
+    const errs: any[] = job.errors || [];
+    const running = job.status === "RUNNING" || job.status === "PENDING";
+    return (
+        <div className="rounded-xl border border-slate-100 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800">{[job.term_label, job.year_label].filter(Boolean).join(" · ") || "Term run"}</p>
+                    <p className="text-xs text-slate-500 truncate" title={(job.class_ids || []).join(", ")}>{(job.class_ids || []).join(", ")}</p>
+                </div>
+                <FBadge tone={jobTone(job.status)}>{running && <Loader2 className="w-3 h-3 animate-spin" />}{job.status?.toLowerCase()}</FBadge>
+            </div>
+            <div>
+                <div className="flex justify-between text-[11px] text-slate-400 mb-1"><span>{job.processed_count || 0} of {job.total_count || 0} learners</span><span>{job.progress || 0}%</span></div>
+                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full rounded-full transition-all ${job.status === "FAILED" ? "bg-rose-500" : job.status === "COMPLETED" ? "bg-emerald-500" : "bg-[#5C67F2]"}`} style={{ width: `${job.progress || 0}%` }} /></div>
+            </div>
+            <div className="grid grid-cols-4 gap-1 text-center">
+                {[["Created", job.created_count ?? (job.status === "COMPLETED" ? job.total_count : 0), "text-emerald-600"], ["Skipped", job.skipped_count || 0, "text-slate-600"], ["Replaced", job.replaced_count || 0, "text-amber-600"], ["Problems", job.failed_count ?? errs.length, errs.length ? "text-rose-600" : "text-slate-600"]].map(([l, v, c]) => (
+                    <div key={l as string} className="rounded-lg bg-slate-50 py-1.5"><p className={`text-sm font-extrabold ${c}`}>{v as any}</p><p className="text-[10px] text-slate-400">{l}</p></div>
+                ))}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>{new Date(job.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{job.duration_ms ? ` · ${(job.duration_ms / 1000).toFixed(1)}s` : ""}</span>
+                {job.total_billed > 0 && <span className="font-semibold text-slate-600">Billed {money(job.total_billed)}</span>}
+            </div>
+            {errs.length > 0 && (
+                <div>
+                    <button onClick={() => setOpen(o => !o)} className="text-xs font-semibold text-rose-600 flex items-center gap-1">{open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />} {errs.length} learner(s) not invoiced</button>
+                    {open && (
+                        <div className="mt-2 max-h-48 overflow-y-auto space-y-1">
+                            {errs.map((e, i) => <p key={i} className="text-[11px] text-slate-600"><b>{e.student_name || "—"}</b>{e.class_name ? ` (${e.class_name})` : ""}: {e.message}</p>)}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function GenerateFeesInvoice() {
-    const [academicYearId, setAcademicYearId] = useState("");
-    const [semesterId, setSemesterId] = useState("");
-    const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
-    const [dueDate, setDueDate] = useState(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-    const [fineAmount, setFineAmount] = useState("200");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [dupInfo, setDupInfo] = useState<{ totalStudents: number; existing: number } | null>(null);
+    const qc = useQueryClient();
+    const t = useTerms();
+    const [selected, setSelected] = useState<string[]>([]);
+    const [dueDate, setDueDate] = useState(in14());
+    const [fine, setFine] = useState("0");
+    const [notify, setNotify] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [dup, setDup] = useState<{ totalStudents: number; existing: number } | null>(null);
 
-    const queryClient = useQueryClient();
-
-    // Fetch periods
-    // Academic years & terms come from the academic system (v2), which is where
-    // they are actually created. (The legacy "periods" collection is only filled
-    // when a term is marked current, so it can't be relied on here.)
-    const { data: academicYears = [] } = useQuery({
-        queryKey: ["v2_academic_years"],
-        queryFn: async () => { const r = await api.get("/v2/academic-years"); return Array.isArray(r.data) ? r.data : (r.data?.data || []); },
+    const { data: cov, isLoading: loadingCov, refetch: refetchCov } = useQuery<any>({
+        queryKey: ["term_coverage", t.yearId, t.termId], enabled: !!t.yearId && !!t.termId,
+        queryFn: async () => (await api.get("/schools/default/fees/term-coverage", { params: { academic_year_id: t.yearId, semester_id: t.termId } })).data?.data,
     });
-    const { data: allTerms = [] } = useQuery({
-        queryKey: ["v2_terms"],
-        queryFn: async () => { const r = await api.get("/v2/terms"); return Array.isArray(r.data) ? r.data : (r.data?.data || []); },
-    });
-
-    const termsForYear = allTerms.filter((t: any) => String(t.academicYearId) === String(academicYearId));
-
-    // Default to the active (or first) year and its active/first term.
-    useEffect(() => {
-        if (!academicYearId && academicYears.length > 0) {
-            const y = academicYears.find((y: any) => y.isActive) || academicYears[0];
-            setAcademicYearId(String(y._id));
-        }
-    }, [academicYears, academicYearId]);
-
-    useEffect(() => {
-        if (academicYearId && termsForYear.length > 0 && !termsForYear.some((t: any) => String(t._id) === String(semesterId))) {
-            const t = termsForYear.find((t: any) => t.isActive) || termsForYear[0];
-            setSemesterId(String(t._id));
-        }
-    }, [academicYearId, allTerms]); // eslint-disable-line
-
-    // Fetch classes
-    const { data: classes = [] } = useQuery({
-        queryKey: ["academics_classes"],
-        queryFn: async () => {
-            const r = await api.get("/academics/classes");
-            return r.data;
-        }
-    });
-
-    // Fetch invoice jobs
-    const { data: jobsRes, isLoading: loadingJobs, refetch: refetchJobs } = useQuery({
+    const rows: any[] = cov?.classes || [];
+    const { data: jobs = [], refetch: refetchJobs } = useQuery<any[]>({
         queryKey: ["invoice_generation_jobs"],
-        queryFn: async () => {
-            const r = await api.get("/schools/default/fees/invoice-jobs");
-            return r.data;
-        },
-        refetchInterval: 3000 // Poll every 3 seconds for active job progress!
+        queryFn: async () => (await api.get("/schools/default/fees/invoice-jobs")).data?.data || [],
+        refetchInterval: q => ((q.state.data as any[] | undefined)?.some(j => j.status === "RUNNING" || j.status === "PENDING") ? 2000 : false),
     });
+    const anyRunning = jobs.some(j => j.status === "RUNNING" || j.status === "PENDING");
+    useEffect(() => { if (!anyRunning) { refetchCov(); qc.invalidateQueries({ queryKey: ["generated_invoices"] }); } }, [anyRunning]); // eslint-disable-line
+    useEffect(() => { setSelected([]); }, [t.yearId, t.termId]);
 
-    const jobs = jobsRes?.data || [];
+    const ready = rows.filter(r => r.structure && r.students > 0);
+    const chosen = rows.filter(r => selected.includes(r.className));
+    const sum = useMemo(() => chosen.reduce((m, r) => {
+        const todo = Math.max(0, r.students - r.invoiced);
+        m.learners += r.students; m.todo += r.structure ? todo : 0; m.problems += r.structure ? 0 : r.students;
+        m.amount += r.structure ? todo * (r.structure.total || 0) : 0;
+        return m;
+    }, { learners: 0, todo: 0, problems: 0, amount: 0 }), [chosen]);
+    const toggle = (c: string) => setSelected(s => s.includes(c) ? s.filter(x => x !== c) : [...s, c]);
 
-    const handleToggleClass = (classId: string) => {
-        setSelectedClasses(prev => 
-            prev.includes(classId) 
-            ? prev.filter(id => id !== classId)
-            : [...prev, classId]
-        );
-    };
-
-    const handleSelectAllClasses = () => {
-        if (selectedClasses.length === classes.length) {
-            setSelectedClasses([]);
-        } else {
-            setSelectedClasses(classes.map((c: any) => c.name || c.levelName));
-        }
-    };
-
-    const runJob = async (mode: "skip" | "overwrite") => {
-        setIsSubmitting(true);
-        setDupInfo(null);
+    const run = async (mode: "skip" | "overwrite") => {
+        setBusy(true); setDup(null);
         try {
-            await api.post("/schools/default/fees/invoice-jobs", {
-                academic_year_id: academicYearId, semester_id: semesterId,
-                class_ids: selectedClasses, due_date: dueDate, fine_amount: parseFloat(fineAmount) || 0, mode,
-            });
-            toast.success(`Invoice generation started (${mode === "overwrite" ? "rewriting duplicates" : "skipping duplicates"})`);
-            setSelectedClasses([]);
-            setTimeout(refetchJobs, 800);
-        } catch (err: any) {
-            toast.error(err.response?.data?.errors?.[0]?.message || "Failed to start generation job");
-        } finally {
-            setIsSubmitting(false);
-        }
+            await api.post("/schools/default/fees/invoice-jobs", { academic_year_id: t.yearId, semester_id: t.termId, class_ids: selected, due_date: dueDate, fine_amount: parseFloat(fine) || 0, mode, notify_parents: notify });
+            toast.success(`Generating invoices for ${t.label} — progress shows on the right.`);
+            setSelected([]); refetchJobs();
+        } catch (e: any) { toast.error(e.response?.data?.errors?.[0]?.message || "Could not start"); }
+        finally { setBusy(false); }
     };
-
-    const handleTriggerGenerationJob = async () => {
-        if (selectedClasses.length === 0) { toast.error("Please select at least one class"); return; }
-        setIsSubmitting(true);
+    const start = async () => {
+        if (!selected.length) return toast.error("Tick at least one class");
+        setBusy(true);
         try {
-            // Pre-check: any students already invoiced for this term?
-            const r = await api.post("/schools/default/fees/invoice-jobs/precheck", {
-                academic_year_id: academicYearId, semester_id: semesterId, class_ids: selectedClasses,
-            });
+            const r = await api.post("/schools/default/fees/invoice-jobs/precheck", { academic_year_id: t.yearId, semester_id: t.termId, class_ids: selected });
             const info = r.data?.data || { totalStudents: 0, existing: 0 };
-            setIsSubmitting(false);
-            if (info.existing > 0) { setDupInfo(info); return; }   // show skip/overwrite modal
-            await runJob("skip");
-        } catch (err: any) {
-            setIsSubmitting(false);
-            toast.error(err.response?.data?.errors?.[0]?.message || "Failed to check existing invoices");
-        }
+            setBusy(false);
+            if (info.existing > 0) return setDup(info);
+            run("skip");
+        } catch (e: any) { setBusy(false); toast.error(e.response?.data?.errors?.[0]?.message || "Could not check existing invoices"); }
     };
 
     return (
-        <FeesPage title="Generate Invoices" subtitle="Create term invoices for whole classes in one go — they run in the background and parents are notified." icon={LayersPageIcon}>
-
-            <div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left Panel: Generation Job configuration */}
-                    <div className="lg:col-span-2 space-y-6">
-                        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-[#5C67F2] to-amber-500" />
-                            
-                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
-                                Configure New Generation Run
-                            </h3>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                                {/* Academic Year */}
-                                <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Academic Year*</div>
-                                    {academicYears.length === 0 ? (
-                                        <a href="/academics/periods" className="flex items-center justify-between w-full h-11 px-4 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-700">
-                                            No academic year — create one <span className="underline">in Learning Periods →</span>
-                                        </a>
-                                    ) : (
-                                        <select value={academicYearId} onChange={e => { setAcademicYearId(e.target.value); setSemesterId(""); }}
-                                            className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2]">
-                                            {academicYears.map((y: any) => (
-                                                <option key={y._id} value={y._id}>{y.name || `Academic Year ${y.year}`}{y.isActive ? " (Current)" : ""}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                </div>
-
-                                {/* Semester */}
-                                <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Semester / Term*</div>
-                                    <select value={semesterId} onChange={e => setSemesterId(e.target.value)} disabled={termsForYear.length === 0}
-                                        className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#5C67F2] disabled:bg-slate-100 disabled:text-slate-400">
-                                        {termsForYear.length === 0 ? (
-                                            <option value="">No terms for this year</option>
-                                        ) : termsForYear.map((t: any) => (
-                                            <option key={t._id} value={t._id}>{t.name}{t.isActive ? " (Current)" : ""}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Due Date */}
-                                <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Invoice Due Date*</div>
-                                    <input
-                                        type="date"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"
-                                    />
-                                </div>
-
-                                {/* Fine Amount */}
-                                <div className="relative group">
-                                    <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Overdue Fine (KSh)</div>
-                                    <input
-                                        type="number"
-                                        value={fineAmount}
-                                        onChange={(e) => setFineAmount(e.target.value)}
-                                        className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"
-                                        placeholder="200"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Class Selection Pills/Grid */}
-                            <div className="space-y-3 mb-8">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Select Target Classes ({selectedClasses.length} selected)*</p>
-                                    <button 
-                                        onClick={handleSelectAllClasses}
-                                        className="text-[9px] font-black text-[#5C67F2] uppercase tracking-widest hover:underline"
-                                    >
-                                        {selectedClasses.length === classes.length ? "Deselect All" : "Select All"}
-                                    </button>
-                                </div>
-
-                                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50 max-h-64 overflow-y-auto">
-                                    {classes.map((c: any) => {
-                                        const label = c.name || c.levelName;
-                                        const isSelected = selectedClasses.includes(label);
-                                        return (
-                                            <label key={c._id} onClick={() => handleToggleClass(label)}
-                                                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-xs font-bold uppercase transition-colors ${isSelected ? "bg-indigo-50/50 text-[#5C67F2]" : "text-slate-600 hover:bg-slate-50"}`}>
-                                                <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "border-slate-300"}`}>
-                                                    {isSelected && <Check className="w-3 h-3" />}
-                                                </span>
-                                                {label}
-                                            </label>
-                                        );
-                                    })}
-                                    {classes.length === 0 && <p className="px-4 py-6 text-center text-[10px] text-slate-400 uppercase font-bold">No classes found</p>}
-                                </div>
-                            </div>
-
-                            {/* Trigger Job Action */}
-                            <button
-                                onClick={handleTriggerGenerationJob}
-                                disabled={isSubmitting || selectedClasses.length === 0}
-                                className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-40 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
-                            >
-                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                                Start Invoice Generation Job
-                            </button>
-                        </div>
+        <FeesPage wide title="Generate Invoices" icon={Layers}
+            subtitle="Bill whole classes for a term. Each learner gets the fee structure set for their class and that term."
+            actions={<TermPicker t={t} />}>
+            <div className="grid xl:grid-cols-[1fr_380px] gap-5">
+                <div className="space-y-5">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <FStat label="Classes ready" value={`${ready.length}/${rows.length}`} icon={CheckCircle2} tone="emerald" loading={loadingCov} hint="have a fee structure" />
+                        <FStat label="Learners" value={rows.reduce((s, r) => s + r.students, 0)} icon={Users} loading={loadingCov} hint="active in all classes" />
+                        <FStat label="Already invoiced" value={rows.reduce((s, r) => s + r.invoiced, 0)} icon={Receipt} tone="sky" loading={loadingCov} hint={t.label} />
+                        <FStat label="Need a structure" value={rows.filter(r => !r.structure && r.students > 0).length} icon={AlertTriangle} tone={rows.some(r => !r.structure && r.students > 0) ? "rose" : "slate"} loading={loadingCov} hint="classes with learners" />
                     </div>
 
-                    {/* Right Panel: Active/Recent Background jobs status */}
-                    <div className="lg:col-span-1 space-y-6">
-                        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-full min-h-[400px]">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                    Background Job Logs
-                                </h3>
-                                <button 
-                                    onClick={() => refetchJobs()}
-                                    className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
-                                >
-                                    <RefreshCw className="w-3.5 h-3.5" />
-                                </button>
+                    <FCard title="1 · Choose classes" subtitle={t.label ? `Fee structures for ${t.label}` : "Pick a term"} icon={Users} bodyClassName="p-0"
+                        actions={<div className="flex gap-1.5">
+                            <FButton size="sm" variant="ghost" onClick={() => setSelected(ready.filter(r => r.invoiced < r.students).map(r => r.className))}>Select not invoiced</FButton>
+                            <FButton size="sm" variant="ghost" onClick={() => setSelected(selected.length ? [] : ready.map(r => r.className))}>{selected.length ? "Clear" : "Select all ready"}</FButton>
+                        </div>}>
+                        {loadingCov || t.loading ? <FLoading /> : !rows.length ? <FEmpty icon={Users} title="No classes yet" hint={<Link to="/classes" className="text-[#5C67F2] underline">Create classes</Link>} /> : (
+                            <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto">
+                                {rows.map(r => {
+                                    const on = selected.includes(r.className);
+                                    const pct = r.students ? Math.round((r.invoiced / r.students) * 100) : 0;
+                                    const disabled = !r.students;
+                                    return (
+                                        <label key={r.className} className={`flex items-center gap-3 px-5 py-3 ${disabled ? "opacity-50" : "cursor-pointer hover:bg-slate-50/70"} ${on ? "bg-indigo-50/50" : ""}`}>
+                                            <input type="checkbox" disabled={disabled} checked={on} onChange={() => toggle(r.className)} className="w-4 h-4 accent-[#5C67F2]" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-semibold text-slate-800">{r.className}</p>
+                                                {r.structure
+                                                    ? <p className="text-xs text-slate-500 truncate">{r.structure.name} · <b className="text-slate-700">{money(r.structure.total)}</b> <span className="text-slate-400">· {r.structure.how}</span></p>
+                                                    : <p className="text-xs text-rose-600 font-medium">{r.students ? r.problem : "No active learners"} {r.students > 0 && <Link to="/settings/fees-structure" className="underline" onClick={e => e.stopPropagation()}>Set one up</Link>}</p>}
+                                            </div>
+                                            <div className="w-36 shrink-0 hidden sm:block">
+                                                <div className="flex justify-between text-[11px] text-slate-500 mb-1"><span>{r.invoiced}/{r.students} invoiced</span><span>{pct}%</span></div>
+                                                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : "bg-[#5C67F2]"}`} style={{ width: `${pct}%` }} /></div>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
                             </div>
+                        )}
+                    </FCard>
 
-                            <div className="space-y-6 flex-1 overflow-y-auto max-h-[450px] pr-2 custom-scrollbar">
-                                {jobs.map((job: any) => (
-                                    <div key={job.id} className="p-4 border border-slate-50 hover:border-slate-100 rounded-2xl bg-slate-50/50 space-y-3">
-                                        <div className="flex items-center justify-between text-[9px] font-black uppercase">
-                                            <span className="text-slate-500">Job: {job.id.slice(-6).toUpperCase()}</span>
-                                            <span className={`px-2 py-0.5 rounded-full border ${
-                                                job.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600 border-emerald-250' :
-                                                job.status === 'RUNNING' ? 'bg-indigo-100 text-[#5C67F2] border-indigo-200 animate-pulse' :
-                                                'bg-slate-105 text-slate-600 border-slate-200'
-                                            }`}>
-                                                {job.status}
-                                            </span>
-                                        </div>
-
-                                        <div className="text-[10px] font-bold text-slate-700 uppercase space-y-1">
-                                            <p>Period: {job.semester_id} ({job.academic_year_id})</p>
-                                            <p>Classes: {job.class_ids.join(", ")}</p>
-                                        </div>
-
-                                        {/* Progress Bar */}
-                                        <div className="space-y-1">
-                                            <div className="flex items-center justify-between text-[9px] font-black text-slate-400">
-                                                <span>Progress</span>
-                                                <span>{job.progress}% ({job.processed_count}/{job.total_count})</span>
-                                            </div>
-                                            <div className="w-full h-1.5 bg-slate-100 border border-slate-200 rounded-full overflow-hidden">
-                                                <div 
-                                                    className={`h-full rounded-full transition-all duration-300 ${job.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-[#5C67F2]'}`}
-                                                    style={{ width: `${job.progress}%` }}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {job.status === 'COMPLETED' && (
-                                            <div className="text-[8px] font-black text-emerald-600 uppercase flex items-center justify-between pt-1 border-t border-slate-200/40">
-                                                <span>Duration: {job.duration_ms ? `${(job.duration_ms / 1000).toFixed(1)}s` : 'N/A'}</span>
-                                                <span>{job.total_count} Invoices Generated</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-
-                                {jobs.length === 0 && (
-                                    <div className="text-center py-16 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                                        No generation runs recorded
-                                    </div>
-                                )}
-                            </div>
+                    <FCard title="2 · Invoice settings" icon={Settings2}>
+                        <div className="grid sm:grid-cols-3 gap-4">
+                            <FField label="Due date" required><FInput type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></FField>
+                            <FField label="Overdue fine (KSh)" hint="Recorded on the invoice"><FInput type="number" min={0} value={fine} onChange={e => setFine(e.target.value)} /></FField>
+                            <label className="flex items-start gap-2.5 rounded-xl border border-slate-200 p-3 cursor-pointer self-end">
+                                <input type="checkbox" className="mt-0.5" checked={notify} onChange={e => setNotify(e.target.checked)} />
+                                <span><span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email parents</span><span className="text-xs text-slate-500">Send each invoice to the parent's email</span></span>
+                            </label>
                         </div>
-                    </div>
+                        <div className="mt-5 rounded-xl bg-slate-50 border border-slate-100 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="text-sm text-slate-600">
+                                {selected.length ? <>
+                                    <b className="text-slate-800">{sum.todo}</b> new invoice{sum.todo === 1 ? "" : "s"} for <b className="text-slate-800">{selected.length}</b> class{selected.length === 1 ? "" : "es"} · about <b className="text-slate-800">{money(sum.amount)}</b>
+                                    {sum.problems > 0 && <p className="text-xs text-rose-600 mt-0.5">{sum.problems} learner(s) in classes without a structure will be listed as problems.</p>}
+                                    <p className="text-xs text-slate-400 mt-0.5">Scholarships and carried-over credit are applied automatically.</p>
+                                </> : "Tick the classes to bill."}
+                            </div>
+                            <FButton icon={Play} loading={busy} disabled={!selected.length || !t.termId || anyRunning} onClick={start}>
+                                {anyRunning ? "A run is in progress…" : `Generate for ${t.term?.name || "term"}`}
+                            </FButton>
+                        </div>
+                    </FCard>
                 </div>
+
+                <FCard title="Runs" subtitle="Progress and results" icon={CalendarClock} actions={<FButton size="sm" variant="ghost" icon={RefreshCw} onClick={() => refetchJobs()} />}>
+                    {!jobs.length ? <FEmpty icon={CalendarClock} title="No runs yet" hint="Each class-wide run shows here with what it created." /> : (
+                        <div className="space-y-3 max-h-[780px] overflow-y-auto pr-1">{jobs.map(j => <JobCard key={j.id || j._id} job={j} />)}</div>
+                    )}
+                </FCard>
             </div>
 
-            {/* Duplicate handling modal */}
-            {dupInfo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setDupInfo(null)}>
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4"><AlertCircle className="w-7 h-7 text-amber-500" /></div>
-                        <h3 className="text-lg font-black text-slate-800">Existing invoices found</h3>
-                        <p className="text-sm text-slate-500 mt-1 mb-6"><b className="text-slate-700">{dupInfo.existing}</b> of {dupInfo.totalStudents} students already have an invoice for this term. How should we handle them?</p>
-                        <div className="space-y-2.5">
-                            <button onClick={() => runJob("skip")} disabled={isSubmitting} className="w-full h-12 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl">Skip existing — invoice only the rest</button>
-                            <button onClick={() => runJob("overwrite")} disabled={isSubmitting} className="w-full h-12 bg-white border-2 border-rose-200 text-rose-600 hover:bg-rose-50 font-black text-xs uppercase tracking-widest rounded-xl">Rewrite — replace existing invoices</button>
-                            <button onClick={() => setDupInfo(null)} className="w-full h-10 text-slate-400 hover:text-slate-600 font-bold text-xs uppercase tracking-widest">Cancel</button>
-                        </div>
-                    </div>
+            <FModal open={!!dup} onClose={() => setDup(null)} title="Some learners already have this term's invoice"
+                subtitle={dup ? `${dup.existing} of ${dup.totalStudents} learners in the chosen classes are already invoiced for ${t.label}.` : ""}
+                footer={<FButton variant="secondary" onClick={() => setDup(null)}>Cancel</FButton>}>
+                <div className="space-y-3">
+                    <button onClick={() => run("skip")} disabled={busy} className="w-full text-left rounded-xl border-2 border-[#5C67F2] bg-indigo-50/50 p-4">
+                        <p className="text-sm font-bold text-slate-800">Skip them — invoice only the rest (recommended)</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Existing invoices stay exactly as they are.</p>
+                    </button>
+                    <button onClick={() => { if (confirm("Replace existing unpaid invoices for this term?")) run("overwrite"); }} disabled={busy} className="w-full text-left rounded-xl border border-rose-200 p-4 hover:bg-rose-50">
+                        <p className="text-sm font-bold text-rose-700">Replace them with fresh invoices</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Old invoices are voided. Any invoice that already has a payment is never replaced.</p>
+                    </button>
                 </div>
-            )}
+            </FModal>
         </FeesPage>
     );
 }
