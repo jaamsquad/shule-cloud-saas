@@ -317,8 +317,6 @@ import ExamMarks from "./pages/tenant/modules/academics/exams/ExamMarks";
 import ResultCard from "./pages/tenant/modules/academics/exams/ResultCard";
 import ClassReportCards from "./pages/tenant/modules/academics/exams/ClassReportCards";
 import NewExamPage from "./pages/tenant/modules/academics/exams/NewExamPage";
-import GenerateReportCards from "./pages/tenant/modules/academics/exams/GenerateReportCards";
-import ViewGeneratedReportCards from "./pages/tenant/modules/academics/exams/ViewGeneratedReportCards";
 import ReportCardSettings from "./pages/tenant/modules/academics/exams/ReportCardSettings";
 import ScholarSheetPage from "./pages/tenant/modules/academics/exams/ScholarSheetPage";
 import OnlineExamBuilder from "./pages/tenant/modules/academics/exams/OnlineExamBuilder";
@@ -807,8 +805,8 @@ const App = () => {
               <Route path="/exams/skills" element={<SkillReports />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
-              <Route path="/exams/generate-reports" element={<GenerateReportCards />} />
-              <Route path="/exams/generated-reports" element={<ViewGeneratedReportCards />} />
+              <Route path="/exams/generate-reports" element={<Navigate to="/exams/scholar-sheet" replace />} />
+              <Route path="/exams/generated-reports" element={<Navigate to="/exams/scholar-sheet" replace />} />
               <Route path="/exams/report-card-settings" element={<ReportCardSettings />} />
               <Route path="/exams/edit/:id" element={<NewExamPage />} />
               <Route path="/exams/:id/rankings" element={<ExamRankings />} />

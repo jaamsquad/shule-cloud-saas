@@ -27,7 +27,7 @@ const CARDS: { key: string; title: string; desc: string; icon: typeof ListOrdere
     { key: "merit", title: "Merit List", desc: "Student ranking, grade breakdown and class grade summary", icon: ListOrdered, view: "merit", tint: "#f1f5f9" },
     { key: "analysis", title: "Analysis Report", desc: "Full exam analysis: subjects, streams, gender, top students", icon: LineChart, view: "analysis", tint: "#f1f5f9" },
     { key: "transcripts", title: "Transcripts", desc: "Each learner's results across past exams, with QR, signature and stamp", icon: ScrollText, view: "transcripts", tint: "#f1f5f9" },
-    { key: "reports", title: "Report Forms", desc: "Student or whole-class report cards", icon: FileText, to: "/exams/generate-reports", tint: "#f1f5f9" },
+    { key: "reports", title: "Report Forms", desc: "Student or whole-class report cards", icon: FileText, to: "/exams/scholar-sheet", tint: "#f1f5f9" },
     { key: "score", title: "Score Sheet", desc: "Blank marks sheet for teachers to fill", icon: Sheet, to: "/exams/blank-award-list", tint: "#f1f5f9" },
     { key: "class", title: "Class List", desc: "Print the list of students in a class", icon: Users, to: "/students/print", tint: "#f1f5f9" },
     { key: "attendance", title: "Attendance Reports", desc: "Class-wise attendance report", icon: CalendarCheck, to: "/attendance/reports/class-wise", tint: "#f1f5f9" },

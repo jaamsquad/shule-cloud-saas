@@ -108,11 +108,17 @@ async function setStatus(req: Request, res: Response, status: 'Published' | 'Unp
         }
         const filter: any = { examId, ...(classId ? { classId } : { classKey: levelKey(className) }) };
         const by = actorOf(req);
+        // Publishing may also lock marks entry for this exam ("avoid teachers uploading marks
+        // again"); unpublishing always unlocks it so the mistake can be fixed and republished.
+        const locked = status === 'Published' ? !!req.body?.lock : false;
         await d.collection(PUBLICATIONS).updateOne(filter, {
-            $set: { examId, classId: classId || null, className, classKey: levelKey(className), status, by, at: new Date() },
-            $push: { history: { status, by, at: new Date() } } as any,
+            $set: { examId, classId: classId || null, className, classKey: levelKey(className), status, by, at: new Date(), locked },
+            $push: { history: { status, by, at: new Date(), locked } } as any,
         }, { upsert: true });
-        res.json({ message: status === 'Published' ? `Results published for ${className || 'the class'}` : `Results unpublished for ${className || 'the class'}`, status });
+        res.json({
+            message: `${status === 'Published' ? `Results published for ${className || 'the class'}` : `Results unpublished for ${className || 'the class'}`}${locked ? ' — marks entry locked for this exam.' : ''}`,
+            status, locked,
+        });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 }
 

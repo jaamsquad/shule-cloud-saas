@@ -17,7 +17,7 @@ import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef }
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
-import { onlyPublished } from '../lib/examPublish';
+import { onlyPublished, lockedExamIds } from '../lib/examPublish';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
 
 const router = Router();
@@ -310,9 +310,9 @@ router.get('/academics/exams', async (req, res, next) => {
     if (isAdminRole(role)) return c.getItems('exams')(req, res);
     try {
         const db = getRequestDb(req);
-        const win = await marksWindow(db);
+        const [win, locked] = await Promise.all([marksWindow(db), lockedExamIds(db)]);
         const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
-        res.json(exams.filter((e: any) => examInWindow(e, win)));
+        res.json(exams.filter((e: any) => examInWindow(e, win) && !locked.has(String(e._id))));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.get('/academics/marks-window', async (req, res) => {
@@ -337,8 +337,6 @@ const marksWindowGuard = async (req: any, res: any, next: any) => {
     try {
         if (isAdminRole(req.tenantContext?.user?.role)) return next();
         const db = getRequestDb(req);
-        const win = await marksWindow(db);
-        if (!win) return next();
         const ids = new Set<string>();
         const body = req.body || {};
         if (Array.isArray(body.entries)) body.entries.forEach((e: any) => e?.examId && ids.add(String(e.examId)));
@@ -347,6 +345,12 @@ const marksWindowGuard = async (req: any, res: any, next: any) => {
             const m: any = await db.collection('exam_marks').findOne({ _id: (ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : req.params.id) as any }).catch(() => null);
             if (m?.examId) ids.add(String(m.examId));
         }
+        const locked = ids.size ? await lockedExamIds(db) : null;
+        for (const id of ids) {
+            if (locked?.has(id)) return res.status(423).json({ message: 'Results for this exam have been published and locked. Ask an administrator to unpublish it before marks can be changed.', code: 'EXAM_LOCKED' });
+        }
+        const win = await marksWindow(db);
+        if (!win) return next();
         for (const id of ids) {
             const exam = await db.collection('exams').findOne({ _id: (ObjectId.isValid(id) ? new ObjectId(id) : id) as any }).catch(() => null);
             if (exam && !examInWindow(exam, win)) return res.status(403).json({ message: WINDOW_MESSAGE(win), code: 'EXAM_OUTSIDE_TERM' });

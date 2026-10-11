@@ -70,3 +70,13 @@ export async function onlyPublished<T = any>(db: Db, marks: T[]): Promise<T[]> {
     const v = await publishedView(db);
     return marks.filter(v.ok);
 }
+
+/**
+ * Exam ids an admin chose to LOCK when publishing ("avoid teachers uploading marks again for
+ * this exam"): no non-admin may record marks for them, and they drop off a teacher's marks-
+ * entry picker. Admins can still unpublish or edit to fix a mistake.
+ */
+export async function lockedExamIds(db: Db): Promise<Set<string>> {
+    const pubs = await db.collection(PUBLICATIONS).find({ locked: true }).toArray().catch(() => [] as any[]);
+    return new Set(pubs.map((p: any) => String(p.examId)));
+}
