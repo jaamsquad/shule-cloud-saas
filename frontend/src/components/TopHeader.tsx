@@ -1,7 +1,7 @@
 import AfeyLauncher from "./afey/AfeyLauncher";
 import { useState, useEffect, useRef } from "react";
 import {
-    Menu, Search, Maximize, MessageSquare, Bell,
+    Menu, Search, Maximize, Bell,
     ChevronDown, GraduationCap, Settings, Building2, Lock,
     LayoutGrid, User, Users, BookOpen, FileText, X
 } from "lucide-react";
@@ -237,9 +237,6 @@ export default function TopHeader({ onMenuClick }: { onMenuClick?: () => void })
                         </button>
                     )}
                     <AfeyLauncher tone={isDark ? "dark" : "light"} />
-                    <button className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
-                        <MessageSquare className="w-6 h-6" strokeWidth={1.5} />
-                    </button>
                     <div className="relative">
                         <button onClick={() => setNotifOpen(o => !o)} className={`relative ${textSecondary} ${hoverSecondary} transition-colors`}>
                             <Bell className="w-6 h-6" strokeWidth={1.5} />
