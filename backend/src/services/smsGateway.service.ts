@@ -6,6 +6,10 @@
  *   - Africa's Talking  (HTTP API — services/africasTalking.service.ts)
  *   - Talksasa          (HTTP API — services/talksasa.service.ts)
  *   - an Android phone running our gateway app, sending via its SIM
+ *   - ShuleCloud's own shared Talksasa gateway (owner portal → Communications →
+ *     platform Talksasa token), used only when a school hasn't set up any of the
+ *     above — so SMS works out of the box, billed against the school's own wallet
+ *     exactly like any other gateway.
  *
  * For the device provider we queue jobs in the tenant's `sms_jobs` collection
  * and push them to connected devices over Socket.IO (with polling as fallback).
@@ -27,10 +31,11 @@ export type SmsProvider = 'device' | 'api';
 
 // The gateways a school can send through. Each is switched on in its own place
 // (Integrations page for the two APIs, Communications → Devices for phones) and the
-// order they are tried in is the school's `priority`.
-export type SmsProviderKey = 'africas_talking' | 'talksasa' | 'device';
-export const SMS_PROVIDER_NAMES: Record<SmsProviderKey, string> = { africas_talking: "Africa's Talking", talksasa: 'Talksasa', device: 'Android phone (SIM)' };
-const DEFAULT_ORDER: SmsProviderKey[] = ['africas_talking', 'talksasa', 'device'];
+// order they are tried in is the school's `priority`. `platform` is always last —
+// it's the shared ShuleCloud gateway, used only when nothing else is ready.
+export type SmsProviderKey = 'africas_talking' | 'talksasa' | 'device' | 'platform';
+export const SMS_PROVIDER_NAMES: Record<SmsProviderKey, string> = { africas_talking: "Africa's Talking", talksasa: 'Talksasa', device: 'Android phone (SIM)', platform: 'ShuleCloud shared gateway' };
+const DEFAULT_ORDER: SmsProviderKey[] = ['africas_talking', 'talksasa', 'device', 'platform'];
 
 const room = (schoolId: string) => `sms:${schoolId}`;
 
@@ -51,11 +56,12 @@ export interface ProviderState {
 
 /** Which gateways are set up + switched on, and the order the school wants them tried. */
 export const getProviderStates = async (db: Db) => {
-    const [s, ts, at, pairedDevices]: any[] = await Promise.all([
+    const [s, ts, at, pairedDevices, platform]: any[] = await Promise.all([
         db.collection('sms_settings').findOne({ _id: 'sms' as any }).catch(() => null),
         db.collection('integration_settings').findOne({ integration: 'talksasa' }).catch(() => null),
         db.collection('integration_settings').findOne({ integration: 'africas_talking' }).catch(() => null),
         db.collection('sms_devices').countDocuments({ paired: true, revoked: { $ne: true } }).catch(() => 0),
+        (async () => { try { const { getMetaDb } = await import('../lib/mongodb'); return getMetaDb().collection('platform_settings').findOne({}); } catch { return null; } })(),
     ]);
     const legacy = s?.apiConfig || {};   // older setups kept the API credentials on sms_settings
 
@@ -72,10 +78,17 @@ export const getProviderStates = async (db: Db) => {
 
     const deviceEnabled = s?.deviceEnabled !== false;
 
+    // Owner portal's shared Talksasa gateway (Communications → platform token) — always "ready"
+    // once the owner has set a token, so a school can send SMS without configuring its own
+    // provider. It only gets used when nothing else in the priority order is ready (see order below).
+    const platformToken = platform?.talksasa?.apiToken || process.env.TALKSASA_TOKEN || '';
+    const platformCfg = platformToken ? { apiToken: String(platformToken).trim(), senderId: platform?.talksasa?.senderId || 'SHULECLOUD' } : null;
+
     const states: Record<SmsProviderKey, ProviderState> = {
         africas_talking: { key: 'africas_talking', name: SMS_PROVIDER_NAMES.africas_talking, configured: atConfigured, enabled: atEnabled, ready: atConfigured && atEnabled, config: atCfg },
         talksasa: { key: 'talksasa', name: SMS_PROVIDER_NAMES.talksasa, configured: !!tsCfg, enabled: tsEnabled, ready: !!tsCfg && tsEnabled, config: tsCfg },
         device: { key: 'device', name: SMS_PROVIDER_NAMES.device, configured: pairedDevices > 0, enabled: deviceEnabled, ready: pairedDevices > 0 && deviceEnabled },
+        platform: { key: 'platform', name: SMS_PROVIDER_NAMES.platform, configured: !!platformCfg, enabled: !!platformCfg, ready: !!platformCfg, config: platformCfg },
     };
     const priority = normalizePriority(s?.priority);
     const order = priority.filter(k => states[k].ready);   // the gateways that will actually be tried, in order
@@ -193,11 +206,11 @@ async function sendViaAfricasTalking(db: Db, cfg: AtConfig, jobs: DueJob[], mess
     return retry;
 }
 
-async function sendViaTalksasa(db: Db, cfg: { apiToken: string; senderId?: string }, jobs: DueJob[], message: string, sum: DispatchSummary): Promise<DueJob[]> {
+async function sendViaTalksasa(db: Db, cfg: { apiToken: string; senderId?: string }, jobs: DueJob[], message: string, sum: DispatchSummary, providerLabel: 'talksasa' | 'platform' = 'talksasa'): Promise<DueJob[]> {
     const { talksasaSend } = await import('./talksasa.service');
     const r = await talksasaSend(cfg, jobs.map(j => j.phone), message);
     if (r.ok) {
-        await markJobs(db, jobs, { status: 'sent', provider: 'talksasa', error: null });
+        await markJobs(db, jobs, { status: 'sent', provider: providerLabel, error: null });
         sum.sent += jobs.length; jobs.forEach(j => sum.results.push({ phone: j.phone, ok: true }));
         return [];
     }
@@ -249,8 +262,8 @@ export const dispatchJobs = async (db: Db, schoolId: string, jobs: DueJob[]): Pr
                 break;
             }
             const before = sum.sent;
-            pending = key === 'africas_talking'
-                ? await sendViaAfricasTalking(db, states.africas_talking.config, pending, message, sum)
+            pending = key === 'africas_talking' ? await sendViaAfricasTalking(db, states.africas_talking.config, pending, message, sum)
+                : key === 'platform' ? await sendViaTalksasa(db, states.platform.config, pending, message, sum, 'platform')
                 : await sendViaTalksasa(db, states.talksasa.config, pending, message, sum);
             if (sum.sent > before && !sum.provider) sum.provider = key;
         }

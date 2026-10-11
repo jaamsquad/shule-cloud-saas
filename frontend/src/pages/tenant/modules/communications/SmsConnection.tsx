@@ -40,7 +40,7 @@ export default function SmsConnection({ onOpenDashboard }: { onOpenDashboard?: (
   const isApi = data?.provider === "api";
 
   const statCards = [
-    { label: "Available", value: bal?.configured ? (typeof bal.balance === "object" ? "—" : (bal.balance ?? "—")) : (isApi ? "—" : "Unlimited"), icon: MessageSquare, color: PURPLE, sub: bal?.configured ? (bal.vendor === "africas_talking" ? "Africa's Talking credit" : "Talksasa SMS units") : (isApi ? "Depends on API balance" : "Uses your SIM bundle") },
+    { label: "Available", value: bal?.configured ? (typeof bal.balance === "object" ? "—" : (bal.balance ?? "—")) : (isApi ? "—" : "Unlimited"), icon: MessageSquare, color: PURPLE, sub: bal?.vendor === "platform" ? "SMS Credits wallet (shared gateway)" : bal?.configured ? (bal.vendor === "africas_talking" ? "Africa's Talking credit" : "Talksasa SMS units") : (isApi ? "Depends on API balance" : "Uses your SIM bundle") },
     { label: "Sent", value: stats.sentToday ?? 0, icon: CheckCircle2, color: "#16a34a" },
     { label: "Pending", value: (stats.queued ?? 0) + (stats.sending ?? 0), icon: Inbox, color: "#d97706" },
     { label: "Failed", value: stats.failed ?? 0, icon: XCircle, color: "#dc2626" },
