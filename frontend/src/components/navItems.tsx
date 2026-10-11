@@ -437,6 +437,7 @@ export const navItems: NavItem[] = [
       { label: "Rules & Regulations", path: "/settings/rules" },
       { label: "Registration Numbers", path: "/settings/numbering" },
       { label: "Grading Templates", path: "/settings/grading-templates" },
+      { label: "Subject Paper Ratios", path: "/academics/subject-papers" },
       { label: "Curriculum Settings", path: "/settings/curriculum" },
       { label: "Report Card Templates", path: "/settings/report-templates" },
       { label: "Theme & Language", path: "/settings/theme" },

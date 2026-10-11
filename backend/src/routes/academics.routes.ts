@@ -506,6 +506,19 @@ router.post('/academics/subjects',   c.createItem('subjects'));
 router.patch('/academics/subjects/:id',  c.updateItem('subjects'));
 router.delete('/academics/subjects/:id', disableSubject);
 
+// ─── Subject Papers (e.g. Paper 1, Paper 2) ─────────────────────────────────
+// A subject can be split into weighted papers (Paper 1, Paper 2, Kar 1, ...),
+// each with its own max score ("out of") and ratio used to combine them.
+router.get('/subject-papers',              c.getItems('subject_papers'));
+router.post('/subject-papers',             c.createItem('subject_papers'));
+router.patch('/subject-papers/:id',        c.updateItem('subject_papers'));
+router.delete('/subject-papers/:id',       c.deleteItem('subject_papers'));
+
+router.get('/academics/subject-papers',    c.getItems('subject_papers'));
+router.post('/academics/subject-papers',   c.createItem('subject_papers'));
+router.patch('/academics/subject-papers/:id',  c.updateItem('subject_papers'));
+router.delete('/academics/subject-papers/:id', c.deleteItem('subject_papers'));
+
 // ─── Grades ──────────────────────────────────────────────────────────────────
 router.get('/grades',              c.getItems('grades'));
 router.post('/grades',             c.createItem('grades'));

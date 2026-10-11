@@ -335,6 +335,7 @@ import Strands from "./pages/tenant/modules/Strands";
 import GradingPresets from "./pages/tenant/modules/academics/GradingPresets";
 import GradingCriteria from "./pages/tenant/modules/academics/GradingCriteria";
 import ExamTypes from "./pages/tenant/modules/academics/ExamTypes";
+import SubjectPapers from "./pages/tenant/modules/academics/SubjectPapers";
 import SubjectGroups from "./pages/tenant/modules/academics/SubjectGroups";
 import Curricula from "./pages/tenant/modules/academics/Curricula";
 import Grades from "./pages/tenant/modules/academics/Grades";
@@ -774,6 +775,7 @@ const App = () => {
               <Route path="/academics/grading-criteria" element={<GradingCriteria />} />
               <Route path="/academics/grades" element={<Grades />} />
               <Route path="/academics/exam-types" element={<ExamTypes />} />
+              <Route path="/academics/subject-papers" element={<SubjectPapers />} />
               <Route path="/academics/subject-groups" element={<SubjectGroups />} />
               <Route path="/academics/curricula" element={<Curricula />} />
               <Route path="/academics/audit-trails" element={<PlaceholderPage title="Audit Trails" subtitle="Track all academic changes" />} />
