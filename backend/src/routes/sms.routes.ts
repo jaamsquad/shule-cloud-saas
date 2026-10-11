@@ -28,6 +28,8 @@ import {
 import { resolvePhones } from '../services/communications.service';
 import { atBalance } from '../services/africasTalking.service';
 import { enforceCrud } from '../lib/permissions';
+import { getSmsPolicy, saveSmsPolicy, canComposeSms, queueForApproval } from '../lib/smsPolicy';
+import { isAdminRole } from '../lib/examWindow';
 
 const router = Router();
 const oid = (s?: string) => { try { return s ? new ObjectId(s) : undefined; } catch { return undefined; } };
@@ -86,8 +88,20 @@ router.post('/communications/sms/send', async (req, res) => {
         numbers = Array.from(new Set(numbers.filter(Boolean)));
         if (numbers.length === 0) return res.status(400).json({ message: 'No recipients with phone numbers were found' });
 
+        const actor = (req as any).tenantContext?.user as { staffId: string | null; role: string; name: string } | null;
+        const policy = await getSmsPolicy(db);
+        if (!canComposeSms(policy, actor)) return res.status(403).json({ message: 'You are not allowed to send SMS. Ask your admin to grant access under Communication settings.' });
+        if (policy.approvalRequired && !(actor && isAdminRole(actor.role))) {
+            const pending = await queueForApproval(db, {
+                message, numbers, audience: audList.join(',') || null,
+                scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+                requestedBy: { staffId: actor?.staffId || null, name: actor?.name || 'Staff', role: actor?.role || '' },
+            });
+            return res.json({ pendingApproval: true, id: pending.id, message: 'Submitted for admin approval before sending.' });
+        }
+
         const result: any = await queueSms(db, schoolId(req), numbers, message, {
-            audience: audList.join(',') || undefined, createdBy: (req as any).user?.id,
+            audience: audList.join(',') || undefined, createdBy: actor?.staffId || undefined,
             scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         });
         if (failedOutright(result)) return res.status(502).json({ ...result, message: result.error || 'The SMS could not be sent.' });
@@ -108,6 +122,53 @@ router.post('/communications/sms/test', async (req, res) => {
         const onlineDevices = result.provider === 'device' ? await db.collection('sms_devices').countDocuments({ revoked: { $ne: true }, online: true }) : undefined;
         res.json({ ...result, ...(onlineDevices !== undefined ? { onlineDevices } : {}) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ─── Who can send SMS, and whether a send needs approval first ───────────────
+
+router.get('/communications/sms/policy', async (req, res) => {
+    const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+    res.json(await getSmsPolicy(db));
+});
+
+router.put('/communications/sms/policy', enforceCrud('communications', 'update'), async (req, res) => {
+    const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+    const { allowedStaffIds, approvalRequired } = req.body || {};
+    const patch: any = {};
+    if (allowedStaffIds !== undefined) patch.allowedStaffIds = Array.isArray(allowedStaffIds) ? allowedStaffIds.map(String) : [];
+    if (approvalRequired !== undefined) patch.approvalRequired = !!approvalRequired;
+    res.json(await saveSmsPolicy(db, patch));
+});
+
+// Pending SMS awaiting admin (or reporting-officer) approval before they're sent.
+router.get('/communications/sms/approvals', async (req, res) => {
+    const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+    const status = String(req.query.status || 'pending');
+    const rows = await db.collection('sms_approvals').find(status === 'all' ? {} : { status }).sort({ createdAt: -1 }).toArray();
+    res.json(rows);
+});
+
+router.post('/communications/sms/approvals/:id/approve', enforceCrud('communications', 'update'), async (req, res) => {
+    try {
+        const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+        const row: any = await db.collection('sms_approvals').findOne({ _id: oid(req.params.id) });
+        if (!row) return res.status(404).json({ message: 'Not found' });
+        if (row.status !== 'pending') return res.status(400).json({ message: `Already ${row.status}` });
+        const actor = (req as any).tenantContext?.user;
+        const result: any = await queueSms(db, schoolId(req), row.numbers, row.message, {
+            audience: row.audience || undefined, createdBy: row.requestedBy?.staffId || undefined, scheduledAt: row.scheduledAt || null,
+        });
+        await db.collection('sms_approvals').updateOne({ _id: row._id }, { $set: { status: 'approved', decidedAt: new Date(), decidedBy: actor?.name || 'Admin' } });
+        res.json({ message: 'Approved and sent', result });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+router.post('/communications/sms/approvals/:id/reject', enforceCrud('communications', 'update'), async (req, res) => {
+    const db = tdb(req); if (!db) return res.status(400).json({ message: 'No tenant' });
+    const actor = (req as any).tenantContext?.user;
+    const result = await db.collection('sms_approvals').updateOne({ _id: oid(req.params.id), status: 'pending' }, { $set: { status: 'rejected', decidedAt: new Date(), decidedBy: actor?.name || 'Admin' } });
+    if (!result.matchedCount) return res.status(404).json({ message: 'Not found or already decided' });
+    res.json({ message: 'Rejected' });
 });
 
 // ─── Results SMS: list sources + send per-student results ────────────────────

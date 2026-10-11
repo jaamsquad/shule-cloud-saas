@@ -7,6 +7,7 @@ import { sms } from "@/lib/smsApi";
 import SmsDevices from "./SmsDevices";
 import SmsConnection from "./SmsConnection";
 import SmsResults from "./SmsResults";
+import SmsApprovals from "./SmsApprovals";
 import { ContactPicker, type Contact } from "./ContactPicker";
 import TemplatePicker, { openPlaceholders } from "@/components/comm/TemplatePicker";
 
@@ -30,7 +31,7 @@ export default function BulkSMS() {
     const [selectedClass, setSelectedClass] = useState("");
     const [scheduledAt, setScheduledAt] = useState("");
     const [isSending, setIsSending] = useState(false);
-    const [tab, setTab] = useState<"connection" | "compose" | "results" | "history" | "devices">("connection");
+    const [tab, setTab] = useState<"connection" | "compose" | "results" | "history" | "devices" | "approvals">("connection");
 
     const { data: classes = [] } = useQuery({ queryKey: ["classes"], queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; } });
     const { data: students = [] } = useQuery({ queryKey: ["students"], queryFn: async () => { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : []; } });
@@ -64,7 +65,9 @@ export default function BulkSMS() {
                 ? [person!.phone!]
                 : (selectedGroups.includes("class_specific") ? classNumbers() : []);
             const res = await sms.send({ message: message.trim(), audiences, to, scheduledAt: scheduledAt || null });
-            if (res.provider === "device") {
+            if (res.pendingApproval) {
+                toast.success(res.message || "Submitted for admin approval before sending.");
+            } else if (res.provider === "device") {
                 toast.success(scheduledAt ? `Scheduled ${res.queued} message(s)` : `Queued ${res.queued} message(s) to your connected phone${res.onlineDevices === 0 ? " — no phone is online yet" : ""}`);
             } else {
                 toast.success(`API gateway: ${res.sent || 0} sent, ${res.failed || 0} failed`);
@@ -95,7 +98,7 @@ export default function BulkSMS() {
                 </div>
 
                 <div className="flex gap-2 mb-6 flex-wrap">
-                    {[{ key: "connection", label: "Connection" }, { key: "compose", label: "Compose" }, { key: "results", label: "Send Results" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }].map(t => (
+                    {[{ key: "connection", label: "Connection" }, { key: "compose", label: "Compose" }, { key: "results", label: "Send Results" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }, { key: "approvals", label: "Approvals" }].map(t => (
                         <button key={t.key} onClick={() => setTab(t.key as any)} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${tab === t.key ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
                             {t.label}
                         </button>
@@ -107,6 +110,8 @@ export default function BulkSMS() {
                 {tab === "results" && <SmsResults />}
 
                 {tab === "devices" && <SmsDevices />}
+
+                {tab === "approvals" && <SmsApprovals />}
 
                 {tab === "compose" && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
