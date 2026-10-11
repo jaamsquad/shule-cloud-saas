@@ -504,6 +504,7 @@ const App = () => {
             {/* what a certificate / report-card QR code opens */}
             <Route path="/:school/certificate/verify/online/:certId" element={<VerifyDoc kind="certificate" />} />
             <Route path="/:school/report/verify/online/:token" element={<VerifyDoc kind="report" />} />
+            <Route path="/:school/paper/verify/online/:token" element={<VerifyDoc kind="paper" />} />
             <Route path="/:school/result/:examCode/:resultId/:studentId" element={<ResultOnline />} />   {/* shareable invoice / quotation / contract */}
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<Activate />} />

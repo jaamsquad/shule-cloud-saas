@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowDown, ArrowUp, FileCheck2, FolderOpen, Loader2, Pencil, Plus, Printer, RefreshCw, Save, Shuffle, Trash2, Wand2, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, FileCheck2, FolderOpen, Loader2, Pencil, Plus, Printer, RefreshCw, Save, Shuffle, Trash2, Users, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
-import { DEFAULT_NUMBERING, Numbering, Paper, PaperSection, paperHtml, paperTotal, questionMarks, questionNumbers, mainLabel } from "@/lib/paperNumbering";
+import { DEFAULT_NUMBERING, Numbering, Paper, PaperHeader, PaperSection, paperHtml, paperTotal, questionMarks, questionNumbers, mainLabel } from "@/lib/paperNumbering";
+import { paperQr } from "@/lib/paperQr";
 import { QPShell, Panel, Label, inp, useQPSubjects, useQPPaperClasses, useQPChapters, QuestionBody, QuestionEditor, QQuestion, TypeBadge, DiffBadge, TYPES } from "./qpShared";
 
 const DEFAULT_RULES = [
@@ -64,8 +65,10 @@ export default function PaperBuilder() {
     const [shortages, setShortages] = useState<string[]>([]);
     const [busy, setBusy] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [printing, setPrinting] = useState(false);
     const [editQ, setEditQ] = useState<{ s: number; q: number } | null>(null);
     const [showSaved, setShowSaved] = useState(false);
+    const [perStudent, setPerStudent] = useState(false);
 
     const subj = subjects.find((s: any) => s.key === subject);
     // the paper is for a grade or one of its streams (Grade 1 North); questions come from that grade only
@@ -79,6 +82,17 @@ export default function PaperBuilder() {
     const total = paperTotal(sections);
     const nums = questionNumbers(sections, numbering);
     const allIds = sections.flatMap(s => s.questions.map(q => q._id)).filter(Boolean) as string[];
+
+    const { data: allStudents = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => { try { const r = await api.get("/students"); return Array.isArray(r.data) ? r.data : r.data?.data || []; } catch { return []; } } });
+    const classStudents = useMemo(() => {
+        if (!cls) return [];
+        return allStudents.filter((s: any) => [s.studentClass, s.currentClass, s.className].some(c => String(c || "").trim().toLowerCase() === cls.name.toLowerCase()));
+    }, [allStudents, cls]);
+
+    const studentCopyInfo = (s: any) => ({
+        studentName: s.studentName || s.name || `${s.firstName || ""} ${s.lastName || ""}`.trim() || "Student",
+        admNo: s.registrationNo || s.admNo || "",
+    });
 
     const generate = async () => {
         if (!subj) { toast.error("Choose a subject"); return; }
@@ -122,10 +136,26 @@ export default function PaperBuilder() {
             toast.success("Paper saved"); qc.invalidateQueries({ queryKey: ["qp_papers"] });
         } catch (e: any) { toast.error(e?.response?.data?.message || "Could not save"); } finally { setSaving(false); }
     };
-    const print = (answers: boolean) => {
+    const print = async (answers: boolean) => {
         if (!sections.some(s => s.questions.length)) { toast.error("Generate the paper first"); return; }
-        const h = paperHtml(paper, answers).replace("</body>", "<script>window.onload=()=>setTimeout(()=>window.print(),300)</script></body>");
-        outputHtmlDoc(`${subj?.name || "Paper"} ${title}${answers ? " - marking scheme" : ""}`, h, { fileName: `${subj?.name || "paper"}-${answers ? "marking-scheme" : "paper"}` });
+        const qrBase = { paperId: paperId || undefined, title, subject: subj?.name, className: cls?.name };
+        setPrinting(true);
+        try {
+            let h: string;
+            if (!answers && perStudent && classStudents.length) {
+                const copies: PaperHeader[] = await Promise.all(classStudents.map(async (s: any) => {
+                    const { studentName, admNo } = studentCopyInfo(s);
+                    const qr = await paperQr({ ...qrBase, studentName, admNo });
+                    return { ...paper.header, studentName, admNo, qr };
+                }));
+                h = paperHtml(paper, false, copies);
+            } else {
+                const qr = !answers ? await paperQr(qrBase) : "";
+                h = paperHtml({ ...paper, header: { ...paper.header, qr } }, answers);
+            }
+            h = h.replace("</body>", "<script>window.onload=()=>setTimeout(()=>window.print(),300)</script></body>");
+            outputHtmlDoc(`${subj?.name || "Paper"} ${title}${answers ? " - marking scheme" : ""}`, h, { fileName: `${subj?.name || "paper"}-${answers ? "marking-scheme" : "paper"}` });
+        } finally { setPrinting(false); }
     };
 
     // open a saved paper (?id=)
@@ -200,6 +230,11 @@ export default function PaperBuilder() {
                                 <div><Label>Time allowed</Label><input value={duration} onChange={e => setDuration(e.target.value)} className={inp} /></div>
                             </div>
                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700"><input type="checkbox" checked={candidate} onChange={e => setCandidate(e.target.checked)} className="w-4 h-4 accent-indigo-600" /> Name / Adm No / Class lines</label>
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                <input type="checkbox" checked={perStudent} onChange={e => setPerStudent(e.target.checked)} className="w-4 h-4 accent-indigo-600" />
+                                <Users className="w-3.5 h-3.5 text-slate-400" /> Print each student's own copy (name, adm no. &amp; faint traceable watermark)
+                            </label>
+                            {perStudent && cls && <p className="text-[10px] text-slate-400 -mt-1">{classStudents.length} student{classStudents.length === 1 ? "" : "s"} in {cls.name} will each get their own copy.</p>}
                             <div>
                                 <Label>Instructions to candidates</Label>
                                 <div className="space-y-1.5">{rules.map((r, i) => (
@@ -232,8 +267,8 @@ export default function PaperBuilder() {
                         <span className="text-sm font-black text-slate-700">{sections.reduce((a, s) => a + s.questions.length, 0)} questions · {total} marks</span>
                         <div className="ml-auto flex flex-wrap gap-2">
                             <button onClick={shuffle} disabled={!sections.length} className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 disabled:opacity-40"><Shuffle className="w-3.5 h-3.5" /> Shuffle</button>
-                            <button onClick={() => print(true)} disabled={!sections.length} className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 disabled:opacity-40"><FileCheck2 className="w-3.5 h-3.5" /> Marking scheme</button>
-                            <button onClick={() => print(false)} disabled={!sections.length} className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 disabled:opacity-40"><Printer className="w-3.5 h-3.5" /> Print / PDF</button>
+                            <button onClick={() => print(true)} disabled={!sections.length || printing} className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 disabled:opacity-40"><FileCheck2 className="w-3.5 h-3.5" /> Marking scheme</button>
+                            <button onClick={() => print(false)} disabled={!sections.length || printing} className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center gap-1.5 disabled:opacity-40">{printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />} Print / PDF</button>
                             <button onClick={save} disabled={saving || !sections.length} className="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-40">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {paperId ? "Save changes" : "Save paper"}</button>
                         </div>
                     </div>

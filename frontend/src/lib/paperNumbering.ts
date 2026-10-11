@@ -70,7 +70,14 @@ export function marksLabel(m: number | null | undefined, style: MarksStyle): str
 export interface PaperPart { label?: string; text: string; marks: number | null; parts?: PaperPart[] }
 export interface PaperQuestion { _id?: string; text: string; marks: number | null; type?: string; parts?: PaperPart[]; options?: { label?: string; text: string }[]; answer?: string; markingScheme?: string; images?: string[] }
 export interface PaperSection { name: string; instructions?: string; questions: PaperQuestion[] }
-export interface PaperHeader { school?: string; logo?: string; title?: string; subject?: string; className?: string; duration?: string; term?: string; date?: string; showCandidateFields?: boolean }
+export interface PaperHeader {
+    school?: string; logo?: string; title?: string; subject?: string; className?: string; duration?: string; term?: string; date?: string; showCandidateFields?: boolean;
+    /** One learner's own copy: name/admission no. are pre-filled instead of blank lines, and their
+     * admission no. is woven into a faint watermark across the page (traces a leaked copy back to them). */
+    studentName?: string; admNo?: string;
+    /** Data-URL image — "scan to verify this paper with the school" (see lib/paperQr). */
+    qr?: string;
+}
 export interface Paper { header: PaperHeader; rules: string[]; numbering: Numbering; sections: PaperSection[] }
 
 /** Question numbers for every question, in order, following the numbering settings. */
@@ -88,8 +95,21 @@ export const paperTotal = (sections: PaperSection[]) => sections.reduce((a, s) =
 const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 const lines = (marks: number | null | undefined, on: boolean) => on ? `<div class="lines">${'<div class="ln"></div>'.repeat(Math.min(14, Math.max(2, Math.round((marks || 1) * 1.5))))}</div>` : "";
 
-/** The paper as a full A4 document. withAnswers → the marking scheme. */
-export function paperHtml(p: Paper, withAnswers = false): string {
+/** A faint tiled admission-no. watermark — a texture, not a stamp, so it isn't noticed at a glance,
+ * but a leaked copy can still be traced back to the student it was printed for. */
+function admNoWatermarkUrl(admNo: string): string {
+    const t = esc(admNo);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="140">
+      <text x="0" y="70" transform="rotate(-28 110 70)" font-family="Arial,sans-serif" font-size="18" fill="#000" fill-opacity="0.045" text-anchor="middle">${t}</text>
+    </svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/** The paper as a full A4 document. withAnswers → the marking scheme.
+ * copies, when given a non-empty list, prints one page per entry (each with its own
+ * candidate details / QR / watermark) instead of the single generic page from p.header —
+ * used to hand every student their own, individually traceable copy of the same paper. */
+export function paperHtml(p: Paper, withAnswers = false, copies?: PaperHeader[]): string {
     const n = p.numbering;
     const nums = questionNumbers(p.sections, n);
     const total = paperTotal(p.sections);
@@ -110,12 +130,37 @@ export function paperHtml(p: Paper, withAnswers = false): string {
             ${withAnswers && (q.answer || q.markingScheme) ? `<div class="ans"><b>Answer:</b> ${esc(q.answer || "")}${q.markingScheme ? `<div>${esc(q.markingScheme).replace(/\n/g, "<br/>")}</div>` : ""}</div>` : ""}
             ${withAnswers && !q.answer && !q.markingScheme ? `<div class="ans muted">No answer saved for this question.</div>` : ""}
           </div></div>`).join("")}`).join("");
-    const cand = h.showCandidateFields !== false && !withAnswers ? `<table class="cand"><tr><td>Name: ______________________________</td><td>Adm No: __________</td></tr><tr><td>Class: ____________</td><td>Signature: __________</td></tr></table>` : "";
+    const pageFor = (ph: PaperHeader): string => {
+        const candFilled = !withAnswers && (ph.studentName || ph.admNo);
+        const cand = ph.showCandidateFields !== false && !withAnswers ? `<table class="cand"><tr><td>Name: ${candFilled ? `<b>${esc(ph.studentName || "")}</b>` : "______________________________"}</td><td>Adm No: ${candFilled ? `<b>${esc(ph.admNo || "")}</b>` : "__________"}</td></tr><tr><td>Class: ${ph.className ? `<b>${esc(ph.className)}</b>` : "____________"}</td><td>Signature: __________</td></tr></table>` : "";
+        const qr = !withAnswers && ph.qr ? `<div class="qr"><img src="${esc(ph.qr)}" alt=""/><span>Scan to verify</span></div>` : "";
+        const wmLogo = ph.logo ? `<div class="wm wm-logo" style="background-image:url('${esc(ph.logo)}')"></div>` : "";
+        const wmAdm = !withAnswers && ph.admNo ? `<div class="wm wm-adm" style="background-image:url('${admNoWatermarkUrl(ph.admNo)}')"></div>` : "";
+        return `<div class="sheet">
+      ${wmLogo}${wmAdm}
+      <div class="head">${qr}${ph.logo ? `<img src="${esc(ph.logo)}" alt=""/>` : ""}<div class="school">${esc(ph.school || "")}</div>
+        <div class="title">${esc(ph.title || "")}${withAnswers ? " — MARKING SCHEME" : ""}</div>
+        <div class="meta"><span>${esc([ph.subject, ph.className].filter(Boolean).join(" · "))}</span><span>${esc(ph.term || "")}</span><span>${ph.duration ? `Time: ${esc(ph.duration)}` : ""}</span></div></div>
+      ${cand}
+      ${p.rules.length && !withAnswers ? `<div class="rules"><h4>Instructions to candidates</h4><ol>${p.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ol></div>` : ""}
+      <div class="meta" style="margin-bottom:6px"><span></span><span>Total: ${total} marks</span></div>
+      ${body}
+      <div class="foot">${withAnswers ? "End of marking scheme" : "— End of paper —"}</div>
+    </div>`;
+    };
+    const pages = copies && copies.length ? copies.map(pageFor).join("") : pageFor(h);
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(h.title || "Question paper")}</title><style>
       @page{size:A4;margin:16mm 15mm}
       body{font-family:"Times New Roman",Georgia,serif;color:#111;font-size:12.5pt;line-height:1.45;margin:0}
+      .sheet{position:relative}.sheet + .sheet{page-break-before:always}
+      .wm{position:absolute;inset:0;pointer-events:none;z-index:0}
+      .wm-logo{background-repeat:no-repeat;background-position:center;background-size:55% auto;opacity:.05}
+      .wm-adm{background-repeat:repeat;background-size:220px 140px}
+      .head,.cand,.rules,.meta,.sec,.sec-ins,.q,.foot{position:relative;z-index:1}
       .head{text-align:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px}
       .head img{height:64px;margin-bottom:4px}
+      .qr{position:absolute;top:0;right:0;text-align:center;font-size:7pt;line-height:1.2}
+      .qr img{width:54px;height:54px;display:block;margin:0 auto}
       .school{font-size:17pt;font-weight:bold;text-transform:uppercase;letter-spacing:.5px}
       .title{font-size:13.5pt;font-weight:bold;margin-top:2px;text-transform:uppercase}
       .meta{display:flex;justify-content:space-between;font-weight:bold;margin-top:6px;font-size:11.5pt}
@@ -132,13 +177,6 @@ export function paperHtml(p: Paper, withAnswers = false): string {
       .ans{margin-top:4px;padding:4px 8px;background:#f1f5f9;border-left:3px solid #2E7D32;font-size:11pt}.ans.muted{color:#94a3b8;border-color:#cbd5e1}
       .foot{text-align:center;font-size:10pt;margin-top:18px;color:#444}
     </style></head><body>
-      <div class="head">${h.logo ? `<img src="${esc(h.logo)}" alt=""/>` : ""}<div class="school">${esc(h.school || "")}</div>
-        <div class="title">${esc(h.title || "")}${withAnswers ? " — MARKING SCHEME" : ""}</div>
-        <div class="meta"><span>${esc([h.subject, h.className].filter(Boolean).join(" · "))}</span><span>${esc(h.term || "")}</span><span>${h.duration ? `Time: ${esc(h.duration)}` : ""}</span></div></div>
-      ${cand}
-      ${p.rules.length && !withAnswers ? `<div class="rules"><h4>Instructions to candidates</h4><ol>${p.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ol></div>` : ""}
-      <div class="meta" style="margin-bottom:6px"><span></span><span>Total: ${total} marks</span></div>
-      ${body}
-      <div class="foot">${withAnswers ? "End of marking scheme" : "— End of paper —"}</div>
+      ${pages}
     </body></html>`;
 }
