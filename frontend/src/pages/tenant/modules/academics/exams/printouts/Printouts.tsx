@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-    ListOrdered, LineChart, ScrollText, FileText, Sheet, Users, CalendarCheck, Award, ArrowLeft, Printer, Download, Loader2, Upload, Wand2,
+    ListOrdered, LineChart, ScrollText, FileText, Sheet, Users, CalendarCheck, Award, ArrowLeft, Printer, Download, Loader2, Upload, Wand2, BookOpenCheck,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useSchoolBrand } from "@/lib/printDoc";
@@ -32,6 +32,7 @@ const CARDS: { key: string; title: string; desc: string; icon: typeof ListOrdere
     { key: "class", title: "Class List", desc: "Print the list of students in a class", icon: Users, to: "/students/print", tint: "#f1f5f9" },
     { key: "attendance", title: "Attendance Reports", desc: "Class-wise attendance report", icon: CalendarCheck, to: "/attendance/reports/class-wise", tint: "#f1f5f9" },
     { key: "certificates", title: "Certificates", desc: "Leaving and other student certificates", icon: Award, to: "/certificates/generate", tint: "#f1f5f9" },
+    { key: "school-rules", title: "School Rules", desc: "Edit once, print the school's rules of conduct", icon: BookOpenCheck, to: "/exams/school-rules", tint: "#f1f5f9" },
 ];
 
 export default function Printouts() {

@@ -322,6 +322,7 @@ import ScholarSheetPage from "./pages/tenant/modules/academics/exams/ScholarShee
 import OnlineExamBuilder from "./pages/tenant/modules/academics/exams/OnlineExamBuilder";
 import ManageExams from "./pages/tenant/modules/academics/exams/ManageExams";
 import ExamPrintouts from "./pages/tenant/modules/academics/exams/printouts/Printouts";
+import SchoolRules from "./pages/tenant/modules/academics/exams/printouts/SchoolRules";
 import ExamAnalytics from "./pages/tenant/modules/academics/exams/Analytics";
 import ExamDetail from "./pages/tenant/modules/academics/exams/ExamDetail";
 import ExamRankings from "./pages/tenant/modules/academics/exams/ExamRankings";
@@ -823,6 +824,7 @@ const App = () => {
               <Route path="/exams/schedule" element={<ExamSchedule />} />
               <Route path="/exams/date-sheet" element={<DateSheet />} />
               <Route path="/exams/blank-award-list" element={<BlankAwardList />} />
+              <Route path="/exams/school-rules" element={<SchoolRules />} />
 
               {/* Communications */}
               <Route path="/communications" element={<Announcements />} />
