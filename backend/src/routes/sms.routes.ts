@@ -401,6 +401,9 @@ router.get('/communications/sms/balance', async (req, res) => {
             const b = await talksasaBalance({ apiToken: states.talksasa.config.apiToken });
             return res.json({ configured: true, vendor: 'talksasa', balance: b.balance, raw: b.raw, topupUrl: 'https://bulksms.talksasa.com' });
         }
+        // The shared ShuleCloud gateway has no per-school account balance to show —
+        // what matters to the school is its own SMS wallet (Communications → SMS Credits).
+        if (first === 'platform') return res.json({ configured: true, vendor: 'platform', shared: true, message: "Sending through ShuleCloud's shared gateway — check your SMS wallet balance under SMS Credits." });
         res.json({ configured: false, message: 'No SMS API is switched on.' });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
