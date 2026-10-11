@@ -194,6 +194,9 @@ export const updateItem = (collectionName: string) => async (req: Request, res: 
         const { id } = req.params;
         const data = { ...req.body, updatedAt: new Date() };
         delete data._id;
+        // A subject's name is locked to its catalog entry (Subjects → Subjects we offer) —
+        // only its code/short code/classification may be edited here.
+        if (collectionName === 'subjects') delete data.name;
 
         if (collectionName === 'exams') {
             const { type, term, academicYear } = req.body;

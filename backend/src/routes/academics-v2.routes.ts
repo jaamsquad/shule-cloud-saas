@@ -21,6 +21,7 @@ import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope'
 import { canonicalStatus } from '../lib/studentStatus';
 import { resolveGrading, makeGradingCache } from '../lib/grading';
 import { resolveStaffPermissions, permsToModules } from '../lib/permissions';
+import { syncCurrentTerm } from '../modules/cbc/cbcTerm';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 const router = Router();
@@ -42,6 +43,7 @@ const auditLog = async (db: any, action: string, collection: string, docId: stri
 router.get('/v2/academic-years', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await syncCurrentTerm(db).catch(() => {});
         const years = await db.collection('academic_years').find({ deletedAt: { $exists: false } }).sort({ year: -1 }).toArray();
         res.json(years);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -63,16 +65,13 @@ router.post('/v2/academic-years', async (req, res) => {
 router.patch('/v2/academic-years/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { name, startDate, endDate, isActive } = req.body;
+        // Which year is "active" is never set by hand — see syncCurrentTerm (lib/cbcTerm):
+        // it's computed from each term's start date and advances on its own.
+        const { name, startDate, endDate } = req.body;
         const update: any = { updatedAt: now() };
         if (name !== undefined) update.name = name;
         if (startDate !== undefined) update.startDate = startDate;
         if (endDate !== undefined) update.endDate = endDate;
-        if (isActive !== undefined) {
-            // Only one year can be active
-            if (isActive) await db.collection('academic_years').updateMany({}, { $set: { isActive: false } });
-            update.isActive = isActive;
-        }
         await db.collection('academic_years').updateOne({ _id: toOid(req.params.id) }, { $set: update });
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -93,6 +92,7 @@ router.delete('/v2/academic-years/:id', async (req, res) => {
 router.get('/v2/terms', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await syncCurrentTerm(db).catch(() => {});
         const query: any = { deletedAt: { $exists: false } };
         if (req.query.academicYearId) query.academicYearId = req.query.academicYearId.toString();
         const terms = await db.collection('terms').find(query).sort({ termNumber: 1 }).toArray();
@@ -116,26 +116,11 @@ router.post('/v2/terms', async (req, res) => {
 router.patch('/v2/terms/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        // Which term is "active" is never set by hand — see syncCurrentTerm (lib/cbcTerm):
+        // it's computed from each term's start date and advances on its own. Editing a term's
+        // dates here naturally re-triggers that computation next time it's read.
         const update: any = { updatedAt: now() };
         ['name', 'termNumber', 'startDate', 'endDate', 'type'].forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
-
-        if (req.body.isActive !== undefined) {
-            if (req.body.isActive) {
-                // Deactivate ALL terms first — only one term can be active system-wide
-                await db.collection('terms').updateMany({}, { $set: { isActive: false } });
-                // Also find and activate the year that owns this term
-                const term = await db.collection('terms').findOne({ _id: toOid(req.params.id) });
-                if (term?.academicYearId) {
-                    await db.collection('academic_years').updateMany({}, { $set: { isActive: false } });
-                    await db.collection('academic_years').updateOne(
-                        { _id: toOid(term.academicYearId) },
-                        { $set: { isActive: true, updatedAt: now() } }
-                    );
-                }
-            }
-            update.isActive = req.body.isActive;
-        }
-
         await db.collection('terms').updateOne({ _id: toOid(req.params.id) }, { $set: update });
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

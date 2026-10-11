@@ -18,9 +18,10 @@ export default function AllSubjects() {
         queryFn: async () => { const r = await api.get("/academics/subjects"); return r.data; },
     });
 
+    // Name is never sent — it's locked to the built-in catalog entry (Subjects → Subjects we offer).
     const updateMutation = useMutation({
-        mutationFn: (data: { id: string; name: string; code: string; shortCode: string; category: string }) =>
-            api.patch(`/academics/subjects/${data.id}`, { name: data.name, code: data.code, shortCode: data.shortCode, category: data.category }),
+        mutationFn: (data: { id: string; code: string; shortCode: string; category: string }) =>
+            api.patch(`/academics/subjects/${data.id}`, { code: data.code, shortCode: data.shortCode, category: data.category }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects"] });
             toast.success("Subject node updated successfully!");
@@ -31,10 +32,8 @@ export default function AllSubjects() {
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!editingSubject?.name.trim()) return;
         updateMutation.mutate({
             id: editingSubject._id,
-            name: editingSubject.name.trim(),
             code: editingSubject.code?.trim() || "",
             shortCode: (editingSubject.shortCode || "").trim().toUpperCase(),
             category: editingSubject.category || "Core",
@@ -191,18 +190,18 @@ export default function AllSubjects() {
                         </div>
 
                         <form onSubmit={handleUpdate} className="space-y-6 relative z-10">
-                            {/* Subject Name */}
+                            {/* Subject Name — locked; it's picked from the built-in catalog under
+                                Subjects → Subjects we offer, not renamed here. */}
                             <div className="relative group">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md shadow-indigo-100 uppercase">
-                                    Subject Name*
+                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md uppercase">
+                                    Subject Name
                                 </div>
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g. Mathematics"
+                                <input
+                                    type="text"
                                     value={editingSubject.name}
-                                    onChange={e => setEditingSubject({...editingSubject, name: e.target.value})}
-                                    required
-                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-slate-50/50 font-bold text-sm transition-all focus:bg-white focus:shadow-inner"
+                                    disabled
+                                    title="The subject name comes from the built-in catalog (Subjects → Subjects we offer) and can't be changed here."
+                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl text-slate-500 bg-slate-100 font-bold text-sm cursor-not-allowed"
                                 />
                             </div>
 
