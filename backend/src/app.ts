@@ -14,6 +14,7 @@ import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import examPublishRoutes from './routes/examPublish.routes';
+import studentAnalysisRoutes from './routes/studentAnalysis.routes';
 import examPrintoutsRoutes from './routes/examPrintouts.routes';
 import curriculumCatalogRoutes from './routes/curriculumCatalog.routes';
 import dashboardsRoutes from './routes/dashboards.routes';
@@ -352,6 +353,7 @@ app.use('/api/v1', dashboardsRoutes);   // dashboard switcher: 8-4-4 exam overvi
 app.use('/api/v1', curriculumCatalogRoutes);   // Subjects we offer, CBE pathways, CBC learning areas
 app.use('/api/v1', examPrintoutsRoutes);   // Exams → Printouts: merit list, analysis, transcripts
 app.use('/api/v1', examPublishRoutes);   // Exams → Manage Exams: publish / unpublish results
+app.use('/api/v1', studentAnalysisRoutes); // Student profile → Analysis (published results) + targets
 app.use('/api/v1', messagingRoutes);
 app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
