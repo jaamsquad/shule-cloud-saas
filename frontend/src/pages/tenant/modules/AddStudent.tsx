@@ -253,6 +253,18 @@ export default function AddStudent() {
     const [previewFile, setPreviewFile] = useState("");
     const [importing, setImporting] = useState(false);
     const closeImport = () => { setShowImportModal(false); setPreviewRows(null); setPreviewFile(""); };
+    // Put every row without a (recognised) class — or all rows — into one class + stream at once
+    const [bulkClassId, setBulkClassId] = useState("");
+    const [bulkStreamId, setBulkStreamId] = useState("");
+    const [bulkAll, setBulkAll] = useState(false);
+    const applyBulkClass = () => {
+        const cls = v2Classes.find((c: any) => String(c._id) === bulkClassId); if (!cls) return;
+        const st = v2AllStreams.find((x: any) => String(x._id) === bulkStreamId);
+        const full = st ? (st.fullName || `${cls.name} ${st.name}`) : cls.name;
+        const n = (previewRows || []).filter(r => bulkAll || !resolveClass(r.studentClass)).length;
+        setPreviewRows(rs => rs ? rs.map(r => (bulkAll || !resolveClass(r.studentClass) ? { ...r, studentClass: full } : r)) : rs);
+        toast.success(`${n} student${n === 1 ? "" : "s"} put in ${full}`);
+    };
     const updatePreviewRow = (i: number, patch: any) => setPreviewRows(rs => rs ? rs.map((r, j) => j === i ? { ...r, ...patch } : r) : rs);
 
     // Match the typed class ("Form 1 East" / "Form 1") to the school's real class + stream.
@@ -695,6 +707,27 @@ export default function AddStudent() {
                                 {errorCount > 0 && <span className="px-3 py-1 rounded-full bg-red-50 text-red-600">{errorCount} with errors — will be skipped</span>}
                                 {autoReg && <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600">Blank registration numbers are generated automatically</span>}
                             </div>
+
+                            {/* Assign a class to rows that have none */}
+                            {(() => {
+                                const missing = previewRows.filter(r => !resolveClass(r.studentClass)).length;
+                                const streamsOf = v2AllStreams.filter((x: any) => String(x.classId) === bulkClassId);
+                                return (
+                                    <div className="mx-6 mb-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+                                        <span className="font-bold text-slate-700 mr-1">{missing ? `${missing} row${missing === 1 ? " has" : "s have"} no class (or one we couldn't find).` : "Every row has a class."} Put {bulkAll ? "all rows" : "them"} in:</span>
+                                        <select value={bulkClassId} onChange={e => { setBulkClassId(e.target.value); setBulkStreamId(""); }} className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-xs">
+                                            <option value="">Class…</option>
+                                            {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                        </select>
+                                        <select value={bulkStreamId} onChange={e => setBulkStreamId(e.target.value)} disabled={!bulkClassId} className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-xs disabled:bg-slate-100">
+                                            <option value="">{streamsOf.length ? "No stream" : "—"}</option>
+                                            {streamsOf.map((x: any) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                                        </select>
+                                        <label className="flex items-center gap-1.5 text-slate-600"><input type="checkbox" checked={bulkAll} onChange={e => setBulkAll(e.target.checked)} className="w-3.5 h-3.5" /> all rows</label>
+                                        <button type="button" onClick={applyBulkClass} disabled={!bulkClassId || (!missing && !bulkAll)} className="h-9 px-4 rounded-lg bg-slate-900 text-white font-bold disabled:opacity-40">Apply</button>
+                                    </div>
+                                );
+                            })()}
 
                             {/* Table */}
                             <div className="px-6 overflow-auto max-h-[52vh]">
