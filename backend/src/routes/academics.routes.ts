@@ -638,6 +638,30 @@ router.put('/settings/numbering', enforceCrud('settings', 'update'), async (req,
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// ─── School rules (Exams → Printouts → School Rules) ─────────────────────────
+// A short free-text list the school keeps once and prints whenever needed —
+// handbook-style rules of conduct, not tied to any one exam or class.
+const DEFAULT_SCHOOL_RULES = [
+    'All learners must be in full, correct school uniform at all times.',
+    'Punctuality is mandatory — be on the school compound before the first bell.',
+    'Respect for teachers, staff, fellow learners and school property is expected at all times.',
+    'Any form of bullying, dishonesty or dangerous behaviour will not be tolerated.',
+    'Mobile phones and other electronic devices are not allowed on the school compound unless authorised.',
+];
+router.get('/school-rules', async (req, res) => {
+    try {
+        const doc = await getRequestDb(req).collection('school_rules').findOne({ _id: 'rules' as any });
+        res.json({ rules: Array.isArray(doc?.rules) ? doc!.rules : DEFAULT_SCHOOL_RULES });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/school-rules', enforceCrud('settings', 'update'), async (req, res) => {
+    try {
+        const rules = (Array.isArray(req.body?.rules) ? req.body.rules : []).map((r: any) => String(r ?? '').trim().slice(0, 400)).filter(Boolean).slice(0, 60);
+        await getRequestDb(req).collection('school_rules').updateOne({ _id: 'rules' as any }, { $set: { rules, updatedAt: new Date() } }, { upsert: true });
+        res.json({ ok: true, rules });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
 // See lib/studentStatus.ts: Transferred / Graduated students are taken out of their class
 // (the class they left is kept), and Active puts them back.
