@@ -177,7 +177,7 @@ export default function Subjects() {
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-gray-500 font-bold text-[11px] uppercase tracking-tight">Name</Label>
-                                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="h-10 border-gray-200 rounded-sm focus-visible:ring-[#10b981]" placeholder="English" />
+                                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} disabled={!!editing} title={editing ? "The subject name can't be changed once created." : undefined} className="h-10 border-gray-200 rounded-sm focus-visible:ring-[#10b981] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed" placeholder="English" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-gray-500 font-bold text-[11px] uppercase tracking-tight">Abbreviation</Label>
