@@ -105,7 +105,6 @@ export default function ClassesStreamsPage() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {canEdit && (<>
-                                            <button onClick={e => { e.stopPropagation(); setEditClassId(c._id); setClassForm({ name: c.name, code: c.code || "", level: String(c.level), curriculumType: c.curriculumType || "844", capacity: String(c.capacity), nextClassId: c.nextClassId || "", isFinal: !!c.isFinal }); setShowClassModal(true); }} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100"><Pencil className="w-3.5 h-3.5" /></button>
                                             {confirmDelete?.id === c._id ? (
                                                 <><button onClick={e => { e.stopPropagation(); delMut.mutate({ id: c._id, type: "class" }); }} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
                                                 <button onClick={e => { e.stopPropagation(); setConfirmDelete(null); }} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>

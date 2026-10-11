@@ -899,6 +899,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
         if (!filled.length) { toast.error("Add at least one student with a name and class."); return; }
         setSaving(true);
         let ok = 0, fail = 0;
+        let lastError = "";
         for (const r of filled) {
             try {
                 const cls = classes.find((c: any) => String(c._id) === String(r.classId));
@@ -924,11 +925,11 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
                     lastPasswordReset: new Date().toISOString(),
                 });
                 ok++;
-            } catch { fail++; }
+            } catch (e: any) { fail++; lastError = e?.response?.data?.message || lastError; }
         }
         setSaving(false);
         if (ok) toast.success(`Admitted ${ok} student${ok > 1 ? "s" : ""}${fail ? ` · ${fail} failed` : ""}.`);
-        else toast.error("Could not admit students.");
+        else toast.error(lastError || "Could not admit students.");
         if (ok) { setRows([blank(), blank(), blank()]); onDone(); onOpenChange(false); }
     };
 

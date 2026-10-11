@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
-import { getMetaDb, subdomainToDbName } from '../lib/mongodb';
+import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { generateUniqueSchoolId } from '../lib/schoolId';
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
 import { notifyOwner } from '../services/ownerNotify.service';
+import { creditSmsWallet, getSmsPricing } from '../services/smsWallet.service';
 
 // Use meta db for onboarding (Tenant / User / Plan collections)
 const getDb = () => getMetaDb();
@@ -265,6 +266,15 @@ export const activateTenant = async (req: Request, res: Response) => {
         if (!tenant.emailVerified) return res.status(400).json({ message: 'Verify your email first.' });
         if (String(tenant.activationCode || '').toUpperCase() !== String(code).trim().toUpperCase()) return res.status(400).json({ message: 'Invalid activation code' });
         await db.collection('Tenant').updateOne({ _id: tenant._id }, { $set: { status: 'active', activatedAt: new Date(), updatedAt: new Date() } });
+
+        // Welcome bonus: free SMS credits for the new school, once.
+        if (tenant.databaseName) {
+            try {
+                const pricing = await getSmsPricing();
+                await creditSmsWallet(getTenantDb(tenant.databaseName), pricing.welcomeBonus, { source: 'Welcome Bonus', description: 'Free SMS credits for joining ShuleCloud' });
+            } catch (e: any) { console.error('[onboard] welcome SMS bonus failed:', e.message); }
+        }
+
         return res.json({ ok: true, subdomain: tenant.subdomain });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };

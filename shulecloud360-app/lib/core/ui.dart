@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_icon.dart';
 import 'theme.dart';
 
 /// The blue curved header every main screen starts with: menu or back on the left,

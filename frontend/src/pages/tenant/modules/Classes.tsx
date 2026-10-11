@@ -332,6 +332,10 @@ export default function Classes() {
                     <a href="/academic-system/classes" className="h-8 px-4 bg-indigo-50 hover:bg-indigo-100 text-[#5C67F2] border border-indigo-100 font-black text-[9px] uppercase rounded-xl flex items-center gap-1.5 transition-all">
                         <Layers className="w-3.5 h-3.5" /> Manage V2
                     </a>
+                    <button onClick={() => navigate("/classes/offered")}
+                        className="h-8 px-4 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 font-black text-[9px] uppercase rounded-xl flex items-center gap-1.5 transition-all">
+                        Classes We Offer
+                    </button>
                     <button onClick={() => navigate("/classes/new")}
                         className="h-8 px-4 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black text-[9px] uppercase rounded-xl flex items-center gap-1.5 transition-all shadow-sm">
                         <Plus className="w-3.5 h-3.5" /> New Class

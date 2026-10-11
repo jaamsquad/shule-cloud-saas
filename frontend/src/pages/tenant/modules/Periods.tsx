@@ -18,6 +18,21 @@ import { toast } from "sonner";
 
 const emptyYear = { year: new Date().getFullYear().toString(), name: "", startDate: "", endDate: "", numTerms: 3, termType: "term", holidayWeeks: 2 };
 const emptyTerm = { name: "", termNumber: "1", startDate: "", endDate: "", type: "term" };
+// Terms are always "Term 1", "Term 2"… — hard-coded, never freely renamed.
+const termLabel = (n: string | number) => `Term ${n}`;
+
+/**
+ * Same dates every year until the admin changes them for that specific year: shift last
+ * year's term dates forward by the gap between the years (keeping month/day), so a new
+ * academic year starts out identical to the previous one instead of being recomputed.
+ */
+function carryForwardTerms(prevYearTerms: any[], prevYear: number, newYear: number): { name: string; startDate: string; endDate: string; termNumber: number; type: string }[] {
+    const yearsOn = newYear - prevYear;
+    const shift = (d: string) => { if (!d) return d; const dt = new Date(d); dt.setFullYear(dt.getFullYear() + yearsOn); return dt.toISOString().split("T")[0]; };
+    return [...prevYearTerms]
+        .sort((a, b) => Number(a.termNumber || 1) - Number(b.termNumber || 1))
+        .map(t => ({ name: termLabel(t.termNumber || 1), startDate: shift(t.startDate), endDate: shift(t.endDate), termNumber: Number(t.termNumber) || 1, type: "term" }));
+}
 
 // Auto-compute term date ranges given a year range and term count
 function autoTermDates(startDate: string, endDate: string, numTerms: number, holidayWeeks: number, termType: string): { name: string; startDate: string; endDate: string; termNumber: number; type: string }[] {
@@ -53,14 +68,6 @@ function autoTermDates(startDate: string, endDate: string, numTerms: number, hol
     }
     return terms;
 }
-
-const TERM_TYPES = [
-    { value: "term",      label: "Term" },
-    { value: "semester",  label: "Semester" },
-    { value: "quarter",   label: "Quarter" },
-    { value: "trimester", label: "Trimester" },
-    { value: "custom",    label: "Custom" },
-];
 
 export default function Periods() {
     const qc = useQueryClient();
@@ -695,8 +702,17 @@ export default function Periods() {
 
             {/* ── Academic Year Modal ──────────────────────────────────────── */}
             {showYearModal && (() => {
+                // Repeat last year's term dates (same month/day) when a previous year exists;
+                // otherwise fall back to splitting the year evenly. Either way the admin can
+                // still edit a term's dates afterwards — that counts as changing it for this year.
+                const prevYear = !editYearId && yearForm.year
+                    ? [...years].filter((y: any) => Number(y.year) < Number(yearForm.year)).sort((a: any, b: any) => Number(b.year) - Number(a.year))[0]
+                    : null;
+                const prevYearTerms = prevYear ? getTermsForYear(prevYear._id) : [];
                 const generatedTerms = !editYearId
-                    ? autoTermDates(yearForm.startDate, yearForm.endDate, yearForm.numTerms, yearForm.holidayWeeks, yearForm.termType)
+                    ? (prevYearTerms.length > 0
+                        ? carryForwardTerms(prevYearTerms, Number(prevYear.year), Number(yearForm.year))
+                        : autoTermDates(yearForm.startDate, yearForm.endDate, yearForm.numTerms, yearForm.holidayWeeks, "term"))
                     : [];
                 const canPreview = generatedTerms.length > 0;
 
@@ -753,48 +769,48 @@ export default function Periods() {
                                     <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Wand2 className="w-4 h-4 text-[#5C67F2]" />
-                                            <p className="text-xs font-black text-[#5C67F2] uppercase tracking-wide">Auto-generate Terms</p>
-                                            {curriculumSettings?.curriculumId && (
+                                            <p className="text-xs font-black text-[#5C67F2] uppercase tracking-wide">
+                                                {prevYearTerms.length > 0 ? "Repeats last year's term dates" : "Auto-generate Terms"}
+                                            </p>
+                                            {curriculumSettings?.curriculumId && !prevYearTerms.length && (
                                                 <span className="text-[9px] font-bold text-indigo-400 bg-indigo-100 px-2 py-0.5 rounded-full">
                                                     {curriculumSettings.curriculumId} default: {defaultTermCount} terms
                                                 </span>
                                             )}
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <div className="relative">
-                                                <div className="absolute -top-2.5 left-3 bg-indigo-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black z-10">Number of Terms</div>
-                                                <div className="flex border border-indigo-200 rounded-xl overflow-hidden bg-white">
-                                                    {[2,3,4].map(n => (
-                                                        <button key={n} type="button" onClick={() => setYearForm(f => ({ ...f, numTerms: n }))}
-                                                            className={`flex-1 py-2 text-xs font-black transition-all ${yearForm.numTerms === n ? "bg-[#5C67F2] text-white" : "text-gray-500 hover:bg-indigo-50"}`}>
-                                                            {n}
-                                                        </button>
-                                                    ))}
+                                        {prevYearTerms.length > 0 ? (
+                                            <p className="text-[10px] text-indigo-500 font-medium">
+                                                Same Term 1/2/3 dates as {prevYear?.name || prevYear?.year} (shifted to {yearForm.year}). Edit a term afterwards to change it just for this year.
+                                            </p>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="relative">
+                                                    <div className="absolute -top-2.5 left-3 bg-indigo-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black z-10">Number of Terms</div>
+                                                    <div className="flex border border-indigo-200 rounded-xl overflow-hidden bg-white">
+                                                        {[2,3,4].map(n => (
+                                                            <button key={n} type="button" onClick={() => setYearForm(f => ({ ...f, numTerms: n }))}
+                                                                className={`flex-1 py-2 text-xs font-black transition-all ${yearForm.numTerms === n ? "bg-[#5C67F2] text-white" : "text-gray-500 hover:bg-indigo-50"}`}>
+                                                                {n}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="relative">
+                                                    <div className="absolute -top-2.5 left-3 bg-indigo-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black z-10">Holiday Weeks</div>
+                                                    <div className="flex border border-indigo-200 rounded-xl overflow-hidden bg-white">
+                                                        {[1,2,3,4].map(n => (
+                                                            <button key={n} type="button" onClick={() => setYearForm(f => ({ ...f, holidayWeeks: n }))}
+                                                                className={`flex-1 py-2 text-xs font-black transition-all ${yearForm.holidayWeeks === n ? "bg-indigo-600 text-white" : "text-gray-500 hover:bg-indigo-50"}`}>
+                                                                {n}w
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="relative">
-                                                <div className="absolute -top-2.5 left-3 bg-indigo-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black z-10">Type</div>
-                                                <select value={yearForm.termType}
-                                                    onChange={e => setYearForm(f => ({ ...f, termType: e.target.value }))}
-                                                    className="w-full h-10 px-3 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:border-[#5C67F2]">
-                                                    {TERM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="relative">
-                                                <div className="absolute -top-2.5 left-3 bg-indigo-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black z-10">Holiday Weeks</div>
-                                                <div className="flex border border-indigo-200 rounded-xl overflow-hidden bg-white">
-                                                    {[1,2,3,4].map(n => (
-                                                        <button key={n} type="button" onClick={() => setYearForm(f => ({ ...f, holidayWeeks: n }))}
-                                                            className={`flex-1 py-2 text-xs font-black transition-all ${yearForm.holidayWeeks === n ? "bg-indigo-600 text-white" : "text-gray-500 hover:bg-indigo-50"}`}>
-                                                            {n}w
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
+                                        )}
 
-                                        {/* Auto-generated preview */}
+                                        {/* Preview */}
                                         {canPreview ? (
                                             <div className="space-y-1.5 mt-1">
                                                 <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500">Preview — {generatedTerms.length} terms will be created:</p>
@@ -807,7 +823,7 @@ export default function Periods() {
                                             </div>
                                         ) : (
                                             <p className="text-[10px] text-indigo-400 font-medium text-center py-2">
-                                                Set start and end dates above to preview auto-generated terms
+                                                Set start and end dates above to preview the terms
                                             </p>
                                         )}
                                     </div>
@@ -848,23 +864,15 @@ export default function Periods() {
                             </div>
                             <div className="space-y-5">
                                 <div className="relative">
-                                    <div className="absolute -top-2.5 left-4 bg-gray-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10 uppercase">Term Name* (e.g. Term 1, Semester 2)</div>
-                                    <input type="text" value={termForm.name} onChange={e => setTermForm({ ...termForm, name: e.target.value })}
-                                        className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-bold text-gray-700" />
+                                    <div className="absolute -top-2.5 left-4 bg-gray-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10 uppercase">Term</div>
+                                    <div className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl flex items-center text-sm font-bold text-gray-700">
+                                        {termLabel(termForm.termNumber || "1")}
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="relative">
-                                        <div className="absolute -top-2.5 left-3 bg-gray-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10 uppercase">Type</div>
-                                        <select value={termForm.type} onChange={e => setTermForm({ ...termForm, type: e.target.value })}
-                                            className="w-full h-11 px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-bold text-gray-700">
-                                            {TERM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute -top-2.5 left-3 bg-gray-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10 uppercase">Number</div>
-                                        <input type="number" value={termForm.termNumber} onChange={e => setTermForm({ ...termForm, termNumber: e.target.value })}
-                                            className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-bold text-gray-700 text-center" />
-                                    </div>
+                                <div className="relative">
+                                    <div className="absolute -top-2.5 left-3 bg-gray-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10 uppercase">Number</div>
+                                    <input type="number" min={1} value={termForm.termNumber} onChange={e => setTermForm({ ...termForm, termNumber: e.target.value })}
+                                        className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-bold text-gray-700 text-center" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     {[{ l: "Start Date", f: "startDate" }, { l: "End Date", f: "endDate" }].map(f => (
@@ -880,8 +888,8 @@ export default function Periods() {
                                 <button onClick={() => setShowTermModal(false)} className="flex-1 h-11 border border-gray-200 text-gray-500 font-bold text-sm rounded-xl hover:bg-gray-50 transition-all">Cancel</button>
                                 <button
                                     onClick={() => {
-                                        if (!termForm.name) { toast.error("Term name is required"); return; }
-                                        termMut.mutate({ ...termForm, academicYearId: termParentYearId, termNumber: Number(termForm.termNumber) });
+                                        if (!termForm.termNumber) { toast.error("Term number is required"); return; }
+                                        termMut.mutate({ ...termForm, name: termLabel(termForm.termNumber), type: "term", academicYearId: termParentYearId, termNumber: Number(termForm.termNumber) });
                                     }}
                                     disabled={termMut.isPending}
                                     className="flex-1 h-11 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50">

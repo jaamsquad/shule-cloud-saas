@@ -323,8 +323,11 @@ export async function disabledAppsFor(tenantId?: string | null): Promise<string[
     if (hit && Date.now() - hit.at < 30_000) return hit.apps;
     let apps: string[] = [];
     try {
-        const t: any = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(tenantId) }, { projection: { disabledApps: 1 } });
+        const t: any = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(tenantId) }, { projection: { disabledApps: 1, schoolType: 1 } });
         apps = (Array.isArray(t?.disabledApps) ? t.disabledApps.map(String) : []).filter((a: string) => APP_MODULES[a] && !CORE_APPS.includes(a));
+        // Boarding (hostel) only makes sense for a Boarding or Mixed school — a Day school
+        // never runs hostels, so hide the app automatically rather than making the admin do it.
+        if (t?.schoolType === 'Day' && !apps.includes('boarding')) apps.push('boarding');
     } catch { /* treat as none */ }
     disabledCache.set(tenantId, { at: Date.now(), apps });
     return apps;

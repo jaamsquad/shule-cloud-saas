@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X } from "lucide-react";
+import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import OwnerAiCard from "@/components/owner/OwnerAiCard";
@@ -44,6 +44,19 @@ export default function OwnerSettings() {
         <div><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
             <input type={type} value={mp[k] ?? ""} onChange={(e) => setMp((p: any) => ({ ...p, [k]: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
     );
+
+    // SMS pricing — how many SMS 1 KSH buys, and the free welcome bonus for a new school
+    const { data: smsPricing } = useQuery({
+        queryKey: ["owner_sms_pricing"],
+        queryFn: async () => { try { return (await api.get("/owner/sms-pricing")).data; } catch { return {}; } },
+    });
+    const [sp, setSp] = useState<any>({ smsPerKsh: 2, welcomeBonus: 200 });
+    useEffect(() => { if (smsPricing) setSp((p: any) => ({ ...p, ...smsPricing })); }, [smsPricing]);
+    const saveSmsPricing = useMutation({
+        mutationFn: async () => api.post("/owner/sms-pricing", sp),
+        onSuccess: () => { toast.success("SMS pricing saved"); qc.invalidateQueries({ queryKey: ["owner_sms_pricing"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     // Platform Jitsi / JaaS (Live Classes) — one account shared by all schools
     const { data: meetingCfg } = useQuery({
@@ -151,6 +164,26 @@ export default function OwnerSettings() {
                     <div className="col-span-2">{mpField("callbackBase", "Callback Base URL (e.g. https://api.shulecloud.com/api/v1)")}</div>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-3">Production STK endpoint: <code>https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest</code> (used automatically when Environment = Production).</p>
+            </div>
+
+            {/* SMS pricing — ratio + welcome bonus */}
+            <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4" style={{ color: PRIMARY }} /> SMS Credits Pricing</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Schools buy SMS credits via STK push to the platform M-PESA above, and get a free welcome bonus when they're activated.</p>
+                    </div>
+                    <button onClick={() => saveSmsPricing.mutate()} disabled={saveSmsPricing.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveSmsPricing.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">SMS per 1 KSH</label>
+                        <input type="number" min={0.1} step="0.1" value={sp.smsPerKsh} onChange={(e) => setSp((p: any) => ({ ...p, smsPerKsh: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} />
+                    </div>
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Welcome Bonus (free SMS on activation)</label>
+                        <input type="number" min={0} value={sp.welcomeBonus} onChange={(e) => setSp((p: any) => ({ ...p, welcomeBonus: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} />
+                    </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3">e.g. at {sp.smsPerKsh} SMS per KSH, KSH 100 buys {Math.floor(Number(sp.smsPerKsh || 0) * 100)} SMS credits.</p>
             </div>
 
             {/* Platform Live Classes (Jitsi / 8x8 JaaS) — shared by all schools */}

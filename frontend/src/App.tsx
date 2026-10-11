@@ -103,6 +103,7 @@ import ManageFamilies from "./pages/tenant/modules/ManageFamilies";
 import NewFamily from "./pages/tenant/modules/NewFamily";
 import Classes from "./pages/tenant/modules/Classes";
 import NewClass from "./pages/tenant/modules/NewClass";
+import ClassesOffered from "./pages/tenant/modules/classes/ClassesOffered";
 import ClassDetail from "./pages/tenant/modules/ClassDetail";
 import Promotions from "./pages/tenant/modules/Promotions";
 import Staff from "./pages/tenant/modules/Staff";
@@ -175,6 +176,7 @@ import LiveClassSettings from "./pages/tenant/modules/liveclass/LiveClassSetting
 import MeetingRoom from "./pages/tenant/modules/liveclass/MeetingRoom";
 import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
+import SmsCredits from "./pages/tenant/modules/communications/SmsCredits";
 import ParentMessaging from "./pages/tenant/modules/communications/ParentMessaging";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
 import Meetings from "./pages/tenant/modules/communications/Meetings";
@@ -334,6 +336,7 @@ import Strands from "./pages/tenant/modules/Strands";
 import GradingPresets from "./pages/tenant/modules/academics/GradingPresets";
 import GradingCriteria from "./pages/tenant/modules/academics/GradingCriteria";
 import ExamTypes from "./pages/tenant/modules/academics/ExamTypes";
+import SubjectPapers from "./pages/tenant/modules/academics/SubjectPapers";
 import SubjectGroups from "./pages/tenant/modules/academics/SubjectGroups";
 import Curricula from "./pages/tenant/modules/academics/Curricula";
 import Grades from "./pages/tenant/modules/academics/Grades";
@@ -668,6 +671,7 @@ const App = () => {
               {/* Classes */}
               <Route path="/classes" element={<Classes />} />
               <Route path="/classes/new" element={<NewClass />} />
+              <Route path="/classes/offered" element={<ClassesOffered />} />
               <Route path="/classes/room/:streamId" element={<ClassRoster />} />
               <Route path="/classes/:id" element={<ClassDetail />} />
               <Route path="/classes/streams" element={<Classes />} />
@@ -772,6 +776,7 @@ const App = () => {
               <Route path="/academics/grading-criteria" element={<GradingCriteria />} />
               <Route path="/academics/grades" element={<Grades />} />
               <Route path="/academics/exam-types" element={<ExamTypes />} />
+              <Route path="/academics/subject-papers" element={<SubjectPapers />} />
               <Route path="/academics/subject-groups" element={<SubjectGroups />} />
               <Route path="/academics/curricula" element={<Curricula />} />
               <Route path="/academics/audit-trails" element={<PlaceholderPage title="Audit Trails" subtitle="Track all academic changes" />} />
@@ -825,6 +830,7 @@ const App = () => {
               <Route path="/communications/meetings" element={<Meetings />} />
               <Route path="/communications/templates" element={<MessageTemplates />} />
               <Route path="/communications/sms" element={<BulkSMS />} />
+              <Route path="/communications/sms-credits" element={<SmsCredits />} />
               <Route path="/communications/parent-messages" element={<ParentMessaging />} />
               <Route path="/communications/email" element={<ChannelComposer channel="email" />} />
               <Route path="/communications/whatsapp" element={<ChannelComposer channel="whatsapp" />} />

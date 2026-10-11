@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
     Plus, ArrowLeft, Loader2, GraduationCap, Check, Trash2, Pencil,
-    Settings, X, ChevronRight
+    Settings, X, ChevronRight, ListChecks
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -17,10 +17,11 @@ export default function NewClass() {
     const qc = useQueryClient();
 
     // ── Class builder state ────────────────────────────────────────────────
-    const [gradeInput, setGradeInput]   = useState("");
+    // Grade/level is picked from the grades the school has enabled under Classes → Classes we
+    // offer (catalog-driven) — only the stream name stays free text.
+    const [gradeId, setGradeId]         = useState("");
     const [streamInput, setStreamInput] = useState("");
     const [capacity, setCapacity]       = useState("40");
-    const [curriculum, setCurriculum]   = useState("CBC");
     const [teacherId, setTeacherId]     = useState("");
     const [isSaving, setIsSaving]       = useState(false);
     // Subjects done by this class (built-in list; ticking one the school doesn't offer yet adds it)
@@ -32,7 +33,6 @@ export default function NewClass() {
     // ── Stream template manager state ──────────────────────────────────────
     const [showTemplateManager, setShowTemplateManager] = useState(false);
     const [newStreamName, setNewStreamName] = useState("");
-    const [newGradeName, setNewGradeName]   = useState("");
 
     // ── Queries ────────────────────────────────────────────────────────────
     const { data: streamTemplates = [] } = useQuery<any[]>({
@@ -40,15 +40,15 @@ export default function NewClass() {
         queryFn: async () => (await api.get("/stream_templates")).data || [],
     });
 
-    const { data: gradeTemplates = [] } = useQuery<any[]>({
-        queryKey: ["grade_templates"],
-        queryFn: async () => (await api.get("/grade_templates")).data || [],
-    });
-
     const { data: existingGrades = [] } = useQuery<any[]>({
         queryKey: ["v2_classes"],
         queryFn: async () => (await api.get("/v2/classes")).data || [],
     });
+    // Only grades the school has enabled (Classes we offer) — legacy records with no
+    // `offered` field are treated as enabled so classes created before this change still work.
+    const offeredGrades = existingGrades
+        .filter((g: any) => g.offered !== false)
+        .sort((a: any, b: any) => (a.level || 0) - (b.level || 0) || String(a.name).localeCompare(String(b.name)));
 
     const { data: existingStreams = [] } = useQuery<any[]>({
         queryKey: ["v2_streams"],
@@ -66,16 +66,12 @@ export default function NewClass() {
         ? dbStreamNames
         : DEFAULT_STREAMS;
 
-    // Grade chips: DB templates + existing v2 classes
-    const dbGradeNames: string[] = gradeTemplates.map((t: any) => t.name).filter(Boolean);
-    const v2GradeNames: string[] = existingGrades.map((g: any) => g.name).filter(Boolean);
-    const gradeChips: string[] = [...new Set([...dbGradeNames, ...v2GradeNames])];
-
     const teachers = staff.filter((s: any) =>
         s.isTeachingStaff || s.designation?.toLowerCase().includes("teacher") || s.role?.toLowerCase().includes("teacher")
     );
 
-    const gradeVal  = gradeInput.trim();
+    const selectedGrade = offeredGrades.find((g: any) => (g._id || g.id) === gradeId);
+    const gradeVal  = selectedGrade?.name || "";
     const streamVal = streamInput.trim();
     const preview   = gradeVal && streamVal ? `${gradeVal} ${streamVal}` : "";
 
@@ -95,39 +91,17 @@ export default function NewClass() {
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["stream_templates"] }); toast.success("Removed"); },
     });
 
-    const addGradeTpl = useMutation({
-        mutationFn: (name: string) => api.post("/grade_templates", { name }),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ["grade_templates"] }); setNewGradeName(""); toast.success("Grade name added"); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
-    });
-
-    const deleteGradeTpl = useMutation({
-        mutationFn: (id: string) => api.delete(`/grade_templates/${id}`),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ["grade_templates"] }); toast.success("Removed"); },
-    });
-
     // ── Create class ───────────────────────────────────────────────────────
     const handleCreate = async () => {
-        if (!gradeVal) { toast.error("Grade/Level name is required"); return; }
+        if (!selectedGrade) { toast.error("Pick a grade/level"); return; }
         if (!streamVal) { toast.error("Stream name is required"); return; }
         if (alreadyExists) { toast.error(`"${preview}" already exists`); return; }
 
         setIsSaving(true);
         try {
-            // 1. Find or create v2 grade
-            let cls = existingGrades.find((c: any) => c.name.toLowerCase() === gradeVal.toLowerCase());
-            if (!cls) {
-                const res = await api.post("/v2/classes", {
-                    name: gradeVal,
-                    code: gradeVal.replace(/\s+/g, "").toUpperCase().slice(0, 6),
-                    level: Number(gradeVal.replace(/\D/g, "") || 1),
-                    curriculumType: curriculum,
-                    capacity: Number(capacity),
-                });
-                cls = res.data;
-            }
+            const cls = selectedGrade;
 
-            // 2. Create v2 stream
+            // Create v2 stream
             await api.post("/v2/streams", {
                 classId: cls._id || cls.id,
                 name: streamVal,
@@ -204,7 +178,7 @@ export default function NewClass() {
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                        <div className="grid grid-cols-1 gap-0 divide-y divide-gray-100">
                             {/* Stream templates */}
                             <div className="p-5">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-purple-600 mb-3">Stream Names</p>
@@ -233,39 +207,6 @@ export default function NewClass() {
                                         onClick={() => { if (newStreamName.trim()) addStreamTpl.mutate(newStreamName.trim()); }}
                                         disabled={!newStreamName.trim() || addStreamTpl.isPending}
                                         className="h-9 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg disabled:opacity-50 transition-all flex items-center gap-1">
-                                        <Plus className="w-3.5 h-3.5" /> Add
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Grade templates */}
-                            <div className="p-5">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Grade / Level Names</p>
-                                <div className="flex flex-wrap gap-2 mb-4 min-h-[36px]">
-                                    {gradeTemplates.length === 0 ? (
-                                        <p className="text-[10px] text-gray-400 font-medium italic">No templates yet — type any grade when creating</p>
-                                    ) : gradeTemplates.map((t: any) => (
-                                        <span key={t._id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-black rounded-xl">
-                                            {t.name}
-                                            <button onClick={() => deleteGradeTpl.mutate(t._id)} className="text-blue-400 hover:text-red-500 transition-colors">
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </span>
-                                    ))}
-                                </div>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={newGradeName}
-                                        onChange={e => setNewGradeName(e.target.value)}
-                                        onKeyDown={e => { if (e.key === "Enter" && newGradeName.trim()) addGradeTpl.mutate(newGradeName.trim()); }}
-                                        placeholder="e.g. Grade 1, Form 1, Year 7…"
-                                        className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 focus:outline-none focus:border-blue-400"
-                                    />
-                                    <button
-                                        onClick={() => { if (newGradeName.trim()) addGradeTpl.mutate(newGradeName.trim()); }}
-                                        disabled={!newGradeName.trim() || addGradeTpl.isPending}
-                                        className="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg disabled:opacity-50 transition-all flex items-center gap-1">
                                         <Plus className="w-3.5 h-3.5" /> Add
                                     </button>
                                 </div>
@@ -320,29 +261,34 @@ export default function NewClass() {
                     <div className="px-6 py-5 space-y-6">
                         {/* Step 1: Grade */}
                         <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-black">1</div>
-                                <p className="text-xs font-black text-gray-700 uppercase tracking-wide">Grade / Level</p>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-black">1</div>
+                                    <p className="text-xs font-black text-gray-700 uppercase tracking-wide">Grade / Level</p>
+                                </div>
+                                <button onClick={() => navigate("/classes/offered")}
+                                    className="text-[10px] font-bold text-gray-400 hover:text-[#5C67F2] flex items-center gap-1 transition-colors">
+                                    <ListChecks className="w-3 h-3" /> Classes we offer
+                                </button>
                             </div>
 
-                            {gradeChips.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                    {gradeChips.map(g => (
-                                        <button key={g} type="button" onClick={() => setGradeInput(g === gradeInput ? "" : g)}
-                                            className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all ${
-                                                gradeInput === g
-                                                    ? "bg-blue-600 border-blue-600 text-white"
-                                                    : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                                            }`}>
-                                            {g}
-                                        </button>
-                                    ))}
+                            {offeredGrades.length === 0 ? (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                                    No grades enabled yet.{" "}
+                                    <button type="button" onClick={() => navigate("/classes/offered")} className="underline">
+                                        Enable the grades your school runs
+                                    </button>{" "}
+                                    before creating a class.
                                 </div>
+                            ) : (
+                                <select value={gradeId} onChange={e => setGradeId(e.target.value)}
+                                    className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 text-sm font-bold text-gray-700 transition-all">
+                                    <option value="">— Select a grade/level —</option>
+                                    {offeredGrades.map((g: any) => (
+                                        <option key={g._id || g.id} value={g._id || g.id}>{g.name}</option>
+                                    ))}
+                                </select>
                             )}
-
-                            <input type="text" value={gradeInput} onChange={e => setGradeInput(e.target.value)}
-                                placeholder={gradeChips.length > 0 ? "Or type a custom grade…" : "e.g. Grade 1, Form 2, Class 4, Year 6…"}
-                                className="w-full h-11 px-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-400 text-sm font-bold text-gray-700 placeholder-gray-300 transition-all" />
                         </div>
 
                         {/* Step 2: Stream */}
@@ -390,13 +336,9 @@ export default function NewClass() {
                                 </div>
                                 <div className="relative">
                                     <div className="absolute -top-2.5 left-3 bg-gray-700 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10">Curriculum</div>
-                                    <select value={curriculum} onChange={e => setCurriculum(e.target.value)}
-                                        className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-gray-700">
-                                        <option value="CBC">CBC</option>
-                                        <option value="844">8-4-4</option>
-                                        <option value="Cambridge">Cambridge</option>
-                                        <option value="IGCSE">IGCSE</option>
-                                    </select>
+                                    <div className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center text-xs font-bold text-gray-700">
+                                        {selectedGrade?.curriculumType || "—"}
+                                    </div>
                                 </div>
                                 <div className="relative col-span-2">
                                     <div className="absolute -top-2.5 left-3 bg-gray-700 text-white text-[8px] px-2 py-0.5 rounded-full font-black z-10">Class Teacher (optional)</div>

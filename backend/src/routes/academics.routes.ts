@@ -471,6 +471,22 @@ router.patch('/academics/subject-groups/:id',      c.updateItem('subject_groups'
 router.delete('/academics/subject-groups/:id',     c.deleteItem('subject_groups'));
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
+// Subjects are disabled, never deleted — removing one would silently blank past marks/classes
+// that reference it. DELETE now just hides it, same as unticking it in Subjects we offer.
+const disableSubject = async (req: Request, res: any) => {
+    try {
+        const db = getRequestDb(req);
+        const { id } = req.params;
+        const idCandidates: any[] = [id];
+        try { idCandidates.push(new ObjectId(id)); } catch { /* not a valid ObjectId — string only */ }
+        const result = await db.collection('subjects').updateOne({ _id: { $in: idCandidates } }, { $set: { offered: false } });
+        if (!result.matchedCount) return res.status(404).json({ message: 'Subject not found' });
+        res.json({ message: 'Subject disabled' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error disabling subject', error });
+    }
+};
+
 // Subjects a school no longer offers (Subjects → Subjects we offer) are hidden from pickers;
 // ?all=1 lists every subject (with history), any other query keeps the generic filters.
 router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
@@ -482,12 +498,26 @@ router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
 router.get('/subjects',              c.getItems('subjects'));
 router.post('/subjects',             c.createItem('subjects'));
 router.patch('/subjects/:id',        c.updateItem('subjects'));
-router.delete('/subjects/:id',       c.deleteItem('subjects'));
+// Subjects are never deleted — use Subjects → Subjects we offer to disable one instead.
+router.delete('/subjects/:id',       disableSubject);
 
 router.get('/academics/subjects',    c.getItems('subjects'));
 router.post('/academics/subjects',   c.createItem('subjects'));
 router.patch('/academics/subjects/:id',  c.updateItem('subjects'));
-router.delete('/academics/subjects/:id', c.deleteItem('subjects'));
+router.delete('/academics/subjects/:id', disableSubject);
+
+// ─── Subject Papers (e.g. Paper 1, Paper 2) ─────────────────────────────────
+// A subject can be split into weighted papers (Paper 1, Paper 2, Kar 1, ...),
+// each with its own max score ("out of") and ratio used to combine them.
+router.get('/subject-papers',              c.getItems('subject_papers'));
+router.post('/subject-papers',             c.createItem('subject_papers'));
+router.patch('/subject-papers/:id',        c.updateItem('subject_papers'));
+router.delete('/subject-papers/:id',       c.deleteItem('subject_papers'));
+
+router.get('/academics/subject-papers',    c.getItems('subject_papers'));
+router.post('/academics/subject-papers',   c.createItem('subject_papers'));
+router.patch('/academics/subject-papers/:id',  c.updateItem('subject_papers'));
+router.delete('/academics/subject-papers/:id', c.deleteItem('subject_papers'));
 
 // ─── Grades ──────────────────────────────────────────────────────────────────
 router.get('/grades',              c.getItems('grades'));
@@ -853,8 +883,18 @@ const COLLECTION_MODULE: Record<string, string> = {
 });
 
 // Tuition per class, optionally a different price per term (Fees → Class Tuition) — lib/classTuition.
+// Tuition is priced by TERM NUMBER (hard-coded Term 1/2/3, same every year), not by a specific
+// year's term document — callers may still pass a real term's id (termId) for convenience and
+// it's resolved to that term's number here.
+async function resolveTermNumber(db: any, req: any): Promise<string> {
+    if (req.query?.termNumber || req.body?.termNumber) return String(req.query?.termNumber || req.body?.termNumber);
+    const termId = String(req.query?.termId || req.body?.termId || '');
+    if (!termId) return '';
+    try { const t = await db.collection('terms').findOne({ _id: new ObjectId(termId) }); return t?.termNumber ? String(t.termNumber) : ''; }
+    catch { return ''; }
+}
 router.get('/fees/class-tuition', async (req, res) => {
-    try { res.json({ classes: await getClassTuition(getRequestDb(req), String(req.query.termId || '')) }); }
+    try { res.json({ classes: await getClassTuition(getRequestDb(req), await resolveTermNumber(getRequestDb(req), req)) }); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
@@ -862,20 +902,20 @@ router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res
         const amounts = req.body?.amounts;
         if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
         const by = (req as any).tenantContext?.user?.name || undefined;
-        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, String(req.body?.termId || '')) });
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, await resolveTermNumber(getRequestDb(req), req)) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.get('/fees/class-tuition/grid', async (req, res) => {
-    try { res.json(await getTuitionGrid(getRequestDb(req), String(req.query.yearId || ''))); }
+    try { res.json(await getTuitionGrid(getRequestDb(req))); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.put('/fees/class-tuition/grid', enforceCrud('fees', 'update'), async (req, res) => {
     try {
         const cells = req.body?.cells;
-        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termId, amount }' });
+        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termNumber, amount }' });
         const by = (req as any).tenantContext?.user?.name || undefined;
         await saveTuitionCells(getRequestDb(req), cells, by);
-        res.json(await getTuitionGrid(getRequestDb(req), String(req.body?.yearId || '')));
+        res.json(await getTuitionGrid(getRequestDb(req)));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 // Money received in a period, one row per receipt with its source and payment mode

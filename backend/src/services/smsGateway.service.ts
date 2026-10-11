@@ -214,6 +214,17 @@ async function sendViaTalksasa(db: Db, cfg: { apiToken: string; senderId?: strin
 export const dispatchJobs = async (db: Db, schoolId: string, jobs: DueJob[]): Promise<DispatchSummary> => {
     const sum: DispatchSummary = { sent: 0, failed: 0, provider: null, results: [], notes: [] };
     if (!jobs.length) return sum;
+
+    // Each recipient costs one SMS credit from the school's wallet, however it's ultimately sent.
+    try {
+        const { debitSmsWallet } = await import('./smsWallet.service');
+        await debitSmsWallet(db, jobs.length, { source: 'SMS Send', description: `${jobs.length} message(s) sent` });
+    } catch (e: any) {
+        const error = e.message || 'Not enough SMS credits.';
+        await markJobs(db, jobs, { status: 'failed', error });
+        return { ...sum, failed: jobs.length, error, results: jobs.map(j => ({ phone: j.phone, ok: false, error })) };
+    }
+
     const { states, order } = await getProviderStates(db);
 
     if (!order.length) {

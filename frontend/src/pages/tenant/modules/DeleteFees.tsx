@@ -246,9 +246,9 @@ export default function DeleteFees() {
                                                     <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight mt-0.5">{inv.admission_no} · {inv.studentClass || 'N/A'}</p>
                                                 </td>
                                                 <td className="py-4 px-6 text-right font-black">
-                                                    <p className="text-slate-800">Due: {inv.total_due.toLocaleString()}</p>
-                                                    <p className="text-emerald-500 text-[10px] font-bold">Paid: {inv.amount_paid.toLocaleString()}</p>
-                                                    {inv.balance > 0 && <p className="text-red-500 text-[10px] font-bold">Bal: {inv.balance.toLocaleString()}</p>}
+                                                    <p className="text-slate-800">Due: {Number(inv.total_due || 0).toLocaleString()}</p>
+                                                    <p className="text-emerald-500 text-[10px] font-bold">Paid: {Number(inv.amount_paid || 0).toLocaleString()}</p>
+                                                    {inv.balance > 0 && <p className="text-red-500 text-[10px] font-bold">Bal: {Number(inv.balance || 0).toLocaleString()}</p>}
                                                 </td>
                                                 <td className="py-4 px-6 text-center">
                                                     <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
@@ -331,7 +331,7 @@ export default function DeleteFees() {
                                                 <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight mt-0.5">{pay.admission_no} · {pay.class_name}</p>
                                             </td>
                                             <td className="py-4 px-6 text-right font-black text-sm text-slate-800">
-                                                KSh {pay.amount.toLocaleString()}
+                                                KSh {Number(pay.amount || 0).toLocaleString()}
                                             </td>
                                             <td className="py-4 px-6 text-center">
                                                 <span className="px-3 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-slate-600 uppercase">{pay.method}</span>
@@ -414,7 +414,7 @@ export default function DeleteFees() {
                                                 {log.student_name}
                                             </td>
                                             <td className="py-4 px-6 text-right font-black text-slate-800">
-                                                KSh {log.amount.toLocaleString()}
+                                                KSh {Number(log.amount || 0).toLocaleString()}
                                             </td>
                                             <td className="py-4 px-6 text-slate-600 italic">
                                                 {log.reason || 'No description provided'}
