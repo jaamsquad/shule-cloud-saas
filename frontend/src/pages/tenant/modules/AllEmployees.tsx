@@ -24,6 +24,7 @@ export default function AllEmployees() {
     const [search, setSearch] = useState("");
     const [sortBy, setSortBy] = useState("name_asc");
     const [roleFilter, setRoleFilter] = useState("");   // "" = every role
+    const [categoryFilter, setCategoryFilter] = useState<"" | "Teaching" | "Non-Teaching">("");
 
     // When the employee was added to the system: createdAt, or the time baked into the record id for older records.
     const registeredAt = (e: any): number => {
@@ -34,6 +35,12 @@ export default function AllEmployees() {
     };
     const nameOf = (e: any) => String(e.name || e.employeeName || "");
     const roleOf = (e: any) => String(e.designation || "Staff");
+    // Explicit isTeachingStaff flag wins; otherwise infer from role/designation (mirrors Teachers.tsx).
+    const isTeaching = (e: any): boolean => {
+        if (typeof e.isTeachingStaff === "boolean") return e.isTeachingStaff;
+        const TEACH = /teacher|teaching assistant|instructor/i;
+        return TEACH.test(e.designation || "") || (Array.isArray(e.roles) && e.roles.some((r: any) => TEACH.test(String(r))));
+    };
 
     // the roles that actually exist among the school's employees, with how many hold each
     const roles = useMemo(() => {
@@ -47,6 +54,7 @@ export default function AllEmployees() {
         const byName = (a: any, b: any) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" });
         return staff
             .filter((e: any) => !roleFilter || roleOf(e) === roleFilter)
+            .filter((e: any) => !categoryFilter || isTeaching(e) === (categoryFilter === "Teaching"))
             .filter((e: any) => !q || `${nameOf(e)} ${roleOf(e)} ${e.email || ""} ${e.phone || ""}`.toLowerCase().includes(q))
             .sort((a: any, b: any) => {
                 switch (sortBy) {
@@ -63,7 +71,7 @@ export default function AllEmployees() {
                     default: return byName(a, b);
                 }
             });
-    }, [staff, search, sortBy, roleFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [staff, search, sortBy, roleFilter, categoryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
     const [editingEmployee, setEditingEmployee] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({
         employeeName: "",
@@ -152,6 +160,12 @@ export default function AllEmployees() {
                         <button onClick={() => setView("list")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> List</button>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
+                        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value as any)}
+                            className="h-11 px-4 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm font-medium bg-white cursor-pointer">
+                            <option value="">Teaching &amp; Non-Teaching</option>
+                            <option value="Teaching">Teaching Staff ({staff.filter((e: any) => isTeaching(e)).length})</option>
+                            <option value="Non-Teaching">Non-Teaching Staff ({staff.filter((e: any) => !isTeaching(e)).length})</option>
+                        </select>
                         <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
                             className="h-11 px-4 border border-[#5C67F2]/30 rounded-full focus:outline-none focus:border-[#5C67F2] text-gray-700 text-sm font-medium bg-white cursor-pointer">
                             <option value="">All roles ({staff.length})</option>

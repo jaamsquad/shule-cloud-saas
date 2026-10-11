@@ -34,10 +34,15 @@ const mapSheetRow = (raw: any) => {
     const item: Record<string, any> = {};
     Object.entries(raw || {}).forEach(([k, v]) => { item[keyOf(k)] = v; });
     const pick = (...keys: string[]) => { for (const k of keys) { const v = item[keyOf(k)]; if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim(); } return ""; };
+    // Like pick(), but keeps the cell's original type (Date / number) instead of stringifying —
+    // for date columns, which toIsoDate() needs to see as-is.
+    const pickRaw = (...keys: string[]) => { for (const k of keys) { const v = item[keyOf(k)]; if (v !== undefined && v !== null && String(v).trim() !== "") return v; } return undefined; };
     const father = { phone: pick("Father Phone", "Father Mobile", "fatherPhone"), email: pick("Father Email", "fatherEmail") };
     const mother = { phone: pick("Mother Phone", "Mother Mobile", "motherPhone"), email: pick("Mother Email", "motherEmail") };
     const primaryPhone = pick("PRIMARY_PHONE", "Guardian Phone", "Parent Phone");
-    const guardianName = pick("GUARDIAN_NAME", "Guardian Name", "Guardian", "Parent Name");
+    const guardianName = pick("GUARDIAN_NAME", "Guardian Name", "Guardian's Name", "Guardian", "Parent Name");
+    const guardianEmail = pick("GUARDIAN_EMAIL", "Guardian Email", "Guardian's Email");
+    const dayScholarFlag = pick("IS DAY SCHOLAR", "Is Day Scholar", "Day Scholar", "Boarding Status", "Residence");
     // "GRADE/FORM" + "STREAM" → "Form 3 North"; a single "Class" column is used as is
     const grade = pick("Class", "GRADE/FORM", "Grade", "Form", "studentClass");
     const stream = pick("STREAM", "Stream");
@@ -49,22 +54,25 @@ const mapSheetRow = (raw: any) => {
         admNo: pick("Admission No", "ADMNO", "Adm No", "admNo"),
         studentClass,
         gender: toGender(pick("Gender", "Sex")),
-        dob: toIsoDate(raw["Date of Birth"] ?? raw["DATE_OF_BIRTH"] ?? raw["DOB"] ?? raw.dob),
+        dob: toIsoDate(pickRaw("Date of Birth", "DATE_OF_BIRTH", "DOB", "dob")),
         email: pick("Email", "Student Email"),
         phone: pick("Phone", "Mobile"),
-        address: pick("Address", "Postal Address"),
+        address: pick("Address", "Postal Address", "Home Address"),
+        county: pick("County"),
+        house: pick("House"),
+        boarding: dayScholarFlag ? (/^(yes|y|true|day)/i.test(dayScholarFlag) ? "Day Scholar" : "Boarder") : "",
         bloodGroup: pick("Blood Group"),
         religion: pick("Religion"),
         nationality: pick("Nationality"),
         previousSchool: pick("Previous School", "PREVIOUS_SCHOOL"),
         primarySchool: pick("PRIMARY_SCHOOL", "Primary School"),
         transportZone: pick("Transport Zone"),
-        admissionDate: toIsoDate(raw["Admission Date"] ?? raw["DATE_OF_ADMISSION"] ?? raw.admissionDate) || new Date().toISOString().split("T")[0],
+        admissionDate: toIsoDate(pickRaw("Admission Date", "DATE_OF_ADMISSION", "Date of Admission", "admissionDate")) || new Date().toISOString().split("T")[0],
         // national / exam numbers and other details
         upi: pick("UPI", "UPI Number", "NEMIS UPI"),
         shaNumber: pick("SHA", "SHA Number", "NHIF", "NHIF Number"),
         indexNumber: pick("INDEX NUMBER", "Index No", "KCSE Index"),
-        birthCertNo: pick("BIRTH_CERT_NUMBER", "Birth Certificate No", "Birth Cert No"),
+        birthCertNo: pick("BIRTH_CERT_NUMBER", "Birth Certificate No", "Birth Cert No", "Birth Certificate Number"),
         placeOfBirth: pick("PLACE_OF_BIRTH", "Place of Birth"),
         enrollmentForm: pick("ENROLLMENT_FORM", "Enrollment Form", "Entry Class"),
         entryPosition: pick("ENTRY_POSITION", "Entry Position"),
@@ -86,6 +94,7 @@ const mapSheetRow = (raw: any) => {
         motherOccupation: pick("Mother Occupation"),
         motherEmail: mother.email,
         guardianName,
+        guardianEmail,
         guardianRelation: pick("GUARDIAN_RELATION", "Guardian Relation", "Relationship"),
         guardianPhone: primaryPhone,
         parentPhone2: pick("PRIMARY_PHONE_2"),
@@ -93,7 +102,7 @@ const mapSheetRow = (raw: any) => {
         secondaryPhone2: pick("SECONDARY_PHONE_2"),
         // General parent contact (used by receipts / result emails / SMS)
         parentName: guardianName || pick("Father Name") || pick("Mother Name"),
-        parentEmail: father.email || mother.email || pick("Parent Email"),
+        parentEmail: father.email || mother.email || guardianEmail || pick("Parent Email"),
         parentPhone: father.phone || mother.phone || primaryPhone || pick("SECONDARY_PHONE"),
         status: pick("Status") || "Active",
         balance: Number(pick("Balance")) || 0,
@@ -368,7 +377,8 @@ export default function AddStudent() {
                     { header: "Gender", options: ["Male", "Female"] },
                     { header: "Date of Birth", text: true, hint: "YYYY-MM-DD" },
                     { header: "Email" }, { header: "Phone", text: true },
-                    { header: "Address", width: 28 },
+                    { header: "Address", width: 28 }, { header: "County", width: 18 }, { header: "House", width: 16 },
+                    { header: "Is Day Scholar", options: ["Yes", "No"], hint: "Yes = Day Scholar, No = Boarder." },
                     { header: "Blood Group", options: bloodGroups },
                     { header: "Religion", options: ["Christianity", "Islam", "Hinduism", "Other"], strict: false },
                     { header: "Nationality" }, { header: "Previous School", width: 24 }, { header: "Transport Zone" },
@@ -377,7 +387,7 @@ export default function AddStudent() {
                     { header: "Index Number", text: true, hint: "KCSE / KJSEA index number." }, { header: "Birth Certificate No", text: true }, { header: "Place of Birth" },
                     { header: "Enrollment Form", hint: "Class the student joined in." }, { header: "Entry Position", text: true },
                     { header: "KCPE Year", text: true }, { header: "KCPE Score", text: true }, { header: "KCPE Index", text: true }, { header: "KCPE Grade" }, { header: "Primary School", width: 24 },
-                    { header: "Guardian Name", width: 22 }, { header: "Guardian Relation", options: ["Father", "Mother", "Guardian", "Uncle", "Aunt", "Grandparent", "Sibling", "Other"], strict: false }, { header: "Guardian Phone", text: true }, { header: "Secondary Phone", text: true },
+                    { header: "Guardian Name", width: 22 }, { header: "Guardian Relation", options: ["Father", "Mother", "Guardian", "Uncle", "Aunt", "Grandparent", "Sibling", "Other"], strict: false }, { header: "Guardian Phone", text: true }, { header: "Guardian Email" }, { header: "Secondary Phone", text: true },
                     { header: "Comments", width: 28 },
                     { header: "Father Name", width: 22 }, { header: "Father National ID", text: true }, { header: "Father Phone", text: true }, { header: "Father Occupation" }, { header: "Father Email" },
                     { header: "Mother Name", width: 22 }, { header: "Mother National ID", text: true }, { header: "Mother Phone", text: true }, { header: "Mother Occupation" }, { header: "Mother Email" },
