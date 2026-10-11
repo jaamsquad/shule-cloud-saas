@@ -1,8 +1,9 @@
 /**
  * Class tuition fees: each class's usual termly tuition, and — when it differs — its own
- * price for Term 1, Term 2 or Term 3 of the chosen year. A blank term cell means that term
- * charges the usual tuition. Used on Fees → Class Tuition and in the Fee Particulars /
- * Fee Structure pop-ups. Server: /fees/class-tuition/grid (backend lib/classTuition).
+ * price for Term 1, Term 2 or Term 3. Terms are hard-coded and repeat every year, so there's
+ * no year to pick — a price set for a term applies every year until changed. A blank term
+ * cell means that term charges the usual tuition. Used on Fees → Class Tuition and in the
+ * Fee Particulars / Fee Structure pop-ups. Server: /fees/class-tuition/grid (lib/classTuition).
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,20 +14,16 @@ import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
 
 type Grid = { terms: { _id: string; name: string; isActive?: boolean }[]; classes: { classId: string; className: string; usual: number | null; byTerm: Record<string, number> }[] };
-const key = (classId: string, termId: string) => `${classId}|${termId}`;
+const key = (classId: string, termNumber: string) => `${classId}|${termNumber}`;
 const cellInp = "w-full h-9 pl-9 pr-2 bg-white border border-slate-200 rounded-lg outline-none focus:border-[#5C67F2] text-xs font-black text-slate-700 text-right disabled:bg-slate-50";
 
 export default function ClassTuitionGrid({ onSaved, compact }: { onSaved?: () => void; compact?: boolean }) {
     const qc = useQueryClient();
     const canEdit = useModuleCrud("fees").canUpdate;
-    const { data: years = [] } = useQuery<any[]>({ queryKey: ["v2_academic_years_fs"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
-    const [yearId, setYearId] = useState("");
-    useEffect(() => { if (!yearId && years.length) setYearId(String((years.find((y: any) => y.isActive) || years[0])._id)); }, [years, yearId]);
 
     const { data: grid, isLoading } = useQuery<Grid>({
-        queryKey: ["class_tuition_grid", yearId],
-        enabled: !!yearId || years.length === 0,
-        queryFn: async () => (await api.get("/fees/class-tuition/grid", { params: { yearId } })).data,
+        queryKey: ["class_tuition_grid"],
+        queryFn: async () => (await api.get("/fees/class-tuition/grid")).data,
     });
     const [draft, setDraft] = useState<Record<string, string>>({});
     const [busy, setBusy] = useState(false);
@@ -51,9 +48,9 @@ export default function ClassTuitionGrid({ onSaved, compact }: { onSaved?: () =>
         if (!changed.length) { onSaved?.(); return; }
         setBusy(true);
         try {
-            const cells = changed.map(k => { const [classId, termId] = k.split("|"); return { classId, termId, amount: draft[k] === "" ? null : Number(draft[k]) }; });
-            const r = (await api.put("/fees/class-tuition/grid", { cells, yearId })).data;
-            qc.setQueryData(["class_tuition_grid", yearId], r);
+            const cells = changed.map(k => { const [classId, termNumber] = k.split("|"); return { classId, termNumber, amount: draft[k] === "" ? null : Number(draft[k]) }; });
+            const r = (await api.put("/fees/class-tuition/grid", { cells })).data;
+            qc.setQueryData(["class_tuition_grid"], r);
             qc.invalidateQueries({ queryKey: ["class_tuition"] });
             qc.invalidateQueries({ queryKey: ["fee_particulars"] });
             toast.success("Class tuition fees saved");
@@ -65,10 +62,6 @@ export default function ClassTuitionGrid({ onSaved, compact }: { onSaved?: () =>
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-                <select value={yearId} onChange={e => setYearId(e.target.value)} className="h-10 px-3 border border-slate-200 rounded-xl text-xs font-black text-slate-700 bg-white">
-                    {years.map((y: any) => <option key={y._id} value={String(y._id)}>{y.year || y.name}{y.isActive ? " (Current)" : ""}</option>)}
-                    {years.length === 0 && <option value="">All years</option>}
-                </select>
                 <p className="text-[11px] font-semibold text-slate-500 flex-1 min-w-[220px]">
                     <b>Usual tuition</b> is charged every term. Type a price under a term only where that term is different — leave it blank to use the usual.
                 </p>
@@ -125,7 +118,7 @@ export default function ClassTuitionGrid({ onSaved, compact }: { onSaved?: () =>
                 </div>
             )}
             {grid && terms.length === 0 && grid.classes.length > 0 && (
-                <p className="text-[11px] font-bold text-slate-400">No terms set up for this year — <Link to="/academic-system/years" className="text-[#5C67F2] underline">add terms</Link> to give a term its own price.</p>
+                <p className="text-[11px] font-bold text-slate-400">No terms set up yet — <Link to="/academic-system/years" className="text-[#5C67F2] underline">add terms</Link> to give a term its own price.</p>
             )}
             <div className="flex items-center justify-end gap-3">
                 {!canEdit && <span className="mr-auto text-[11px] font-bold text-slate-400">You can view these amounts; changing them needs Fees edit permission.</span>}

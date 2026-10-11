@@ -870,8 +870,18 @@ const COLLECTION_MODULE: Record<string, string> = {
 });
 
 // Tuition per class, optionally a different price per term (Fees → Class Tuition) — lib/classTuition.
+// Tuition is priced by TERM NUMBER (hard-coded Term 1/2/3, same every year), not by a specific
+// year's term document — callers may still pass a real term's id (termId) for convenience and
+// it's resolved to that term's number here.
+async function resolveTermNumber(db: any, req: any): Promise<string> {
+    if (req.query?.termNumber || req.body?.termNumber) return String(req.query?.termNumber || req.body?.termNumber);
+    const termId = String(req.query?.termId || req.body?.termId || '');
+    if (!termId) return '';
+    try { const t = await db.collection('terms').findOne({ _id: new ObjectId(termId) }); return t?.termNumber ? String(t.termNumber) : ''; }
+    catch { return ''; }
+}
 router.get('/fees/class-tuition', async (req, res) => {
-    try { res.json({ classes: await getClassTuition(getRequestDb(req), String(req.query.termId || '')) }); }
+    try { res.json({ classes: await getClassTuition(getRequestDb(req), await resolveTermNumber(getRequestDb(req), req)) }); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
@@ -879,20 +889,20 @@ router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res
         const amounts = req.body?.amounts;
         if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
         const by = (req as any).tenantContext?.user?.name || undefined;
-        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, String(req.body?.termId || '')) });
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, await resolveTermNumber(getRequestDb(req), req)) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.get('/fees/class-tuition/grid', async (req, res) => {
-    try { res.json(await getTuitionGrid(getRequestDb(req), String(req.query.yearId || ''))); }
+    try { res.json(await getTuitionGrid(getRequestDb(req))); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.put('/fees/class-tuition/grid', enforceCrud('fees', 'update'), async (req, res) => {
     try {
         const cells = req.body?.cells;
-        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termId, amount }' });
+        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termNumber, amount }' });
         const by = (req as any).tenantContext?.user?.name || undefined;
         await saveTuitionCells(getRequestDb(req), cells, by);
-        res.json(await getTuitionGrid(getRequestDb(req), String(req.body?.yearId || '')));
+        res.json(await getTuitionGrid(getRequestDb(req)));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 // Money received in a period, one row per receipt with its source and payment mode

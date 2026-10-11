@@ -53,10 +53,14 @@ export async function loadTermContext(db: any, yearId: string, termId: string): 
     const particulars: any[] = [];
     for (const g of particularGroups) for (const p of (g.particulars || [])) if (p?.label) particulars.push(p);
     // per-class tuition saved by class (lib/classTuition) wins over the copy kept by class name;
-    // this term's own price wins over the class's usual tuition
+    // this term's own price (matched by TERM NUMBER — tuition isn't year-specific) wins over
+    // the class's usual tuition. Older rows saved against a specific term's id still match it.
     if (tuitionRows.length) {
         const byClass: Record<string, any> = {};
-        const ordered = [...tuitionRows.filter(r => !sid(r.termId)), ...tuitionRows.filter(r => sid(r.termId) && sid(r.termId) === sid(termId))];
+        const termNumber = sid(term?.termNumber);
+        const isUsual = (r: any) => !r.termNumber && !sid(r.termId);
+        const isThisTerm = (r: any) => (r.termNumber ? sid(r.termNumber) === termNumber : sid(r.termId) === sid(termId)) && (!!r.termNumber || !!sid(r.termId));
+        const ordered = [...tuitionRows.filter(isUsual), ...tuitionRows.filter(isThisTerm)];
         for (const r of ordered) { const name = classNameById.get(sid(r.classId)) || r.className; if (name) byClass[name] = r.amount; }
         for (let i = 0; i < particulars.length; i++) {
             if (isTuition(particulars[i].label)) particulars[i] = { ...particulars[i], classAmounts: { ...(particulars[i].classAmounts || {}), ...byClass } };
