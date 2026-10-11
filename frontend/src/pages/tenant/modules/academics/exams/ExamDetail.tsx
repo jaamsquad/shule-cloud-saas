@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { useGradingForClasses } from "@/lib/grading";
 
 const TABS = [
     { id: "overview",   label: "Overview",         icon: BarChart3 },
@@ -14,7 +15,6 @@ const TABS = [
 ];
 
 function pct(obtained: number, max: number) { return max > 0 ? Math.round((obtained / max) * 100) : 0; }
-function grade(p: number) { if (p>=80) return "A"; if (p>=70) return "B+"; if (p>=60) return "B"; if (p>=50) return "C+"; if (p>=40) return "C"; if (p>=33) return "D"; return "F"; }
 function gColor(p: number) { return p>=70?"text-emerald-600":p>=50?"text-amber-600":"text-red-500"; }
 
 export default function ExamDetail() {
@@ -69,6 +69,17 @@ export default function ExamDetail() {
         ...new Set(allMarks.map((m: any) => m.className || m.studentClass || m.class).filter(Boolean))
     ], [allMarks]);
 
+    // Configured grading per class in this exam (class template → class/school criteria → settings).
+    const markClasses = useMemo(() => {
+        const seen = new Map<string, { classId?: string; className?: string }>();
+        allMarks.forEach(m => { const c = { classId: m.classId ? String(m.classId) : undefined, className: m.className || m.studentClass || m.class || undefined }; seen.set(`${c.classId || ""}|${c.className || ""}`, c); });
+        return [...seen.values()];
+    }, [allMarks]);
+    const gradingFor = useGradingForClasses(markClasses);
+    // Exam-wide figures (overall, per subject, per teacher): the exam's class when it has one, else the school scale.
+    const examGrading = markClasses.length === 1 ? gradingFor(markClasses[0].classId, markClasses[0].className) : gradingFor();
+    const gradeOfClass = (cls: string) => gradingFor(allMarks.find(m => (m.className || m.studentClass || m.class) === cls)?.classId, cls);
+
     // Per-student totals
     const perStudent = useMemo(() => {
         return allStudentIds.map(sid => {
@@ -83,10 +94,10 @@ export default function ExamDetail() {
                 admNo: student?.admNo || student?.registrationNo || "—",
                 class: student?.studentClass || sMarks[0]?.className || sMarks[0]?.studentClass || sMarks[0]?.class || "—",
                 photo: student?.avatar || student?.studentPhoto || null,
-                obtained, max: maxM, pct: p, grade: grade(p), marks: sMarks,
+                obtained, max: maxM, pct: p, grade: gradingFor(sMarks[0]?.classId ? String(sMarks[0].classId) : undefined, sMarks[0]?.className || sMarks[0]?.studentClass || sMarks[0]?.class || student?.studentClass).grade(p), marks: sMarks,
             };
         }).sort((a, b) => b.pct - a.pct);
-    }, [allStudentIds, allMarks, studentMap]);
+    }, [allStudentIds, allMarks, studentMap, gradingFor]);
 
     // Per-class analytics
     const perClass = useMemo(() => {
@@ -95,9 +106,10 @@ export default function ExamDetail() {
             if (!clsStudents.length) return null;
             const avg = Math.round(clsStudents.reduce((s, x) => s + x.pct, 0) / clsStudents.length);
             const passCount = clsStudents.filter(s => s.pct >= 50).length;
-            return { class: cls, students: clsStudents.length, avg, passCount, failCount: clsStudents.length - passCount, grade: grade(avg) };
+            return { class: cls, students: clsStudents.length, avg, passCount, failCount: clsStudents.length - passCount, grade: gradeOfClass(cls).grade(avg) };
         }).filter(Boolean).sort((a: any, b: any) => b.avg - a.avg);
-    }, [classNames, perStudent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [classNames, perStudent, gradingFor]);
 
     // Per-subject analytics
     const perSubject = useMemo(() => {
@@ -109,9 +121,9 @@ export default function ExamDetail() {
             const passCount = subMarks.filter((m: any) => pct(Number(m.marksObtained), Number(m.totalMarks)) >= 50).length;
             const highest = Math.max(...subMarks.map((m: any) => Number(m.marksObtained) || 0));
             const lowest  = Math.min(...subMarks.filter((m: any) => m.marksObtained !== null).map((m: any) => Number(m.marksObtained) || 0));
-            return { subject: subName, entries: subMarks.length, avg, passCount, failCount: subMarks.length - passCount, highest, lowest, grade: grade(avg) };
+            return { subject: subName, entries: subMarks.length, avg, passCount, failCount: subMarks.length - passCount, highest, lowest, grade: examGrading.grade(avg) };
         }).sort((a, b) => b.avg - a.avg);
-    }, [uniqueSubjectNames, allMarks]);
+    }, [uniqueSubjectNames, allMarks, examGrading]);
 
     // Per-teacher analytics (teachers assigned via staff.specializedSubjects matching subject names)
     const perTeacher = useMemo(() => {
@@ -132,11 +144,11 @@ export default function ExamDetail() {
                 return {
                     name: teacher.employeeName || teacher.name || "—",
                     subjects: tSubjects.join(", ") || "—",
-                    entries: tMarks.length, avg, grade: grade(avg),
+                    entries: tMarks.length, avg, grade: examGrading.grade(avg),
                     passCount: tMarks.filter((m: any) => pct(Number(m.marksObtained), Number(m.totalMarks)) >= 50).length,
                 };
             }).filter(Boolean).sort((a: any, b: any) => b.avg - a.avg);
-    }, [staff, allMarks, subjects]);
+    }, [staff, allMarks, subjects, examGrading]);
 
     // ── Print ranking sheet ────────────────────────────────────────────────────
     const printRanking = (cls: string) => {
@@ -261,7 +273,7 @@ export default function ExamDetail() {
                             <p className="text-[9px] font-bold text-white/60 uppercase">Pass</p>
                         </div>
                         <div className="bg-white/10 rounded-2xl px-4 py-3 text-center min-w-[80px]">
-                            <p className="text-lg font-black">{grade(overall)}</p>
+                            <p className="text-lg font-black">{examGrading.grade(overall)}</p>
                             <p className="text-[9px] font-bold text-white/60 uppercase">Grade</p>
                         </div>
                     </div>
@@ -293,7 +305,7 @@ export default function ExamDetail() {
                                     { label: "Total Students Examined", value: perStudent.length },
                                     { label: "Students Passed", value: `${perStudent.filter(s => s.pct >= 50).length} (${perStudent.length ? Math.round(perStudent.filter(s => s.pct >= 50).length / perStudent.length * 100) : 0}%)` },
                                     { label: "Students Failed",  value: `${perStudent.filter(s => s.pct < 50).length}` },
-                                    { label: "School Average",   value: `${overall}% (${grade(overall)})` },
+                                    { label: "School Average",   value: `${overall}% (${examGrading.grade(overall)})` },
                                     { label: "Highest Score",    value: perStudent[0] ? `${perStudent[0].pct}% — ${perStudent[0].name}` : "—" },
                                     { label: "Classes Examined", value: classNames.length },
                                     { label: "Subjects Covered", value: uniqueSubjectNames.length },

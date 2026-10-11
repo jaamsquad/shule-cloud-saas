@@ -6,6 +6,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { API_ORIGIN } from "@/lib/config";
+import { useGrading } from "@/lib/grading";
 
 const pApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 pApi.interceptors.request.use(cfg => {
@@ -14,10 +15,6 @@ pApi.interceptors.request.use(cfg => {
     return cfg;
 });
 
-function grade(p: number) {
-    if (p >= 80) return "A"; if (p >= 70) return "B+"; if (p >= 60) return "B";
-    if (p >= 50) return "C+"; if (p >= 40) return "C"; if (p >= 33) return "D"; return "F";
-}
 function gc(p: number) { return p >= 70 ? "text-emerald-400" : p >= 50 ? "text-amber-400" : "text-rose-400"; }
 
 type Tab = "home" | "performance" | "fees" | "notices";
@@ -40,6 +37,10 @@ export default function ParentPortalDashboard() {
         queryFn: async () => { const r = await pApi.get("/auth/parent-portal/student"); return r.data; },
         enabled: !!studentId,
     });
+
+    // The school's configured grading for the child's class (fetched with the portal token).
+    const grading = useGrading(student?.classId, student?.class || student?.studentClass || parent?.student?.class, pApi);
+    const grade = (p: number) => grading.grade(p);
 
     const { data: examResults = [], isLoading: loadExams } = useQuery({
         queryKey: ["pp_exams"],

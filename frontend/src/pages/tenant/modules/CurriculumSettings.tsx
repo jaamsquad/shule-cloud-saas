@@ -192,6 +192,9 @@ export default function CurriculumSettings() {
                     from: Number(g.min) || 0,
                     upto: Number(g.max) || 0,
                     status: g.label || (Number(g.min) >= Number(data.passMark ?? 50) ? "PASS" : "FAIL"),
+                    ...(g.points !== undefined && g.points !== "" && !isNaN(Number(g.points)) ? { points: Number(g.points) } : {}),
+                    remark: g.label || g.remark || "",
+                    label: g.label || "",
                 }));
                 const existing = await api.get("/grading_criteria");
                 const cur = Array.isArray(existing.data) ? existing.data[0] : null;
@@ -203,6 +206,7 @@ export default function CurriculumSettings() {
         onSuccess: (res) => {
             qc.invalidateQueries({ queryKey: ["curriculum_settings"] });
             qc.invalidateQueries({ queryKey: ["grading_criteria"] });
+            qc.invalidateQueries({ queryKey: ["grading_resolve"] });
             if (!settingsId) setSettingsId(res.data?.id || res.data?._id);
             toast.success("Curriculum settings saved");
             setIsDirty(false);

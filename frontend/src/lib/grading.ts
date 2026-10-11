@@ -7,7 +7,8 @@
  *   const g = useGrading(classId, className);   g.gradeOf(67).grade → "B"; g.gradeOf(67).points → 9
  *   const g = await fetchGrading(classId, className);   (outside React, e.g. print builders)
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import api from "@/lib/api";
 
 export type GradeBand = { grade: string; from: number; upto: number; points: number; remark: string };
@@ -44,11 +45,41 @@ const make = (scale: GradeBand[], source: string, ready: boolean): Grading => ({
     meanGrade: mp => meanGradeFromScale(scale, mp),
 });
 
-const load = async (classId?: string, className?: string) => (await api.get("/grading/resolve", { params: { ...(classId ? { classId } : {}), ...(className ? { className } : {}) } })).data as { scale: GradeBand[]; source: string };
+// `client` lets the student/parent portals call with their own axios instance (portal token).
+type HttpClient = { get: (url: string, cfg?: { params?: Record<string, string> }) => Promise<{ data: unknown }> };
+const load = async (classId?: string, className?: string, client: HttpClient = api) => (await client.get("/grading/resolve", { params: { ...(classId ? { classId } : {}), ...(className ? { className } : {}) } })).data as { scale: GradeBand[]; source: string };
 
-export function useGrading(classId?: string | null, className?: string | null): Grading {
-    const { data } = useQuery({ queryKey: ["grading_resolve", classId || "", className || ""], queryFn: () => load(classId || undefined, className || undefined), staleTime: 5 * 60_000 });
+export function useGrading(classId?: string | null, className?: string | null, client?: HttpClient): Grading {
+    const { data } = useQuery({ queryKey: ["grading_resolve", classId || "", className || "", ...(client ? ["portal"] : [])], queryFn: () => load(classId || undefined, className || undefined, client), staleTime: 5 * 60_000 });
     return make(data?.scale?.length ? data.scale : DEFAULT_SCALE, data?.source || "default", !!data);
+}
+
+/**
+ * Configured grading for several classes at once (screens listing students from more than one class).
+ *   const gradingFor = useGradingForClasses([{ classId, className }, ...]);
+ *   gradingFor(student.classId, student.className).gradeOf(pct)
+ * Unknown classes fall back to the school-level scale.
+ */
+export function useGradingForClasses(classes: Array<{ classId?: string | null; className?: string | null }>): (classId?: string | null, className?: string | null) => Grading {
+    const keyOf = (id?: string | null, name?: string | null) => `${id || ""}|${name || ""}`;
+    const uniq = new Map<string, { classId: string; className: string }>();
+    uniq.set("|", { classId: "", className: "" });   // school-level fallback
+    for (const c of classes) if (c && (c.classId || c.className)) uniq.set(keyOf(c.classId, c.className), { classId: c.classId || "", className: c.className || "" });
+    const list = [...uniq.entries()];
+    const results = useQueries({
+        queries: list.map(([, c]) => ({ queryKey: ["grading_resolve", c.classId, c.className], queryFn: () => load(c.classId || undefined, c.className || undefined), staleTime: 5 * 60_000 })),
+    });
+    // Stable between renders until a scale loads, so callers can list it in useMemo deps.
+    const sig = list.map(([k], i) => `${k}:${results[i]?.dataUpdatedAt || 0}`).join(",");
+    return useMemo(() => {
+        const byKey = new Map<string, Grading>();
+        list.forEach(([k], i) => { const d = results[i]?.data; byKey.set(k, make(d?.scale?.length ? d.scale : DEFAULT_SCALE, d?.source || "default", !!d)); });
+        const school = byKey.get("|")!;
+        const byName = new Map<string, Grading>();
+        list.forEach(([k, c]) => { if (c.className && !byName.has(c.className)) byName.set(c.className, byKey.get(k)!); });
+        return (classId?: string | null, className?: string | null) => byKey.get(keyOf(classId, className)) || (className ? byName.get(className) : undefined) || school;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sig]);
 }
 
 export async function fetchGrading(classId?: string, className?: string): Promise<Grading> {

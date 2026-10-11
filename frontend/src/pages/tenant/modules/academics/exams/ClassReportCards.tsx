@@ -8,10 +8,11 @@ import { RenderPrintTemplate } from "./PrintTemplates";
 import { openPrintDoc } from "@/lib/pdfDoc";
 import { reportQr } from "@/lib/reportQr";
 import { flushSync } from "react-dom";
-import { gradingFrom, gradeFor, statusFor, colorFor, summariseStudent, classStatsOf } from "@/lib/reportCardCalc";
+import { gradingFrom, statusFor, colorFor, summariseStudent, classStatsOf, type GradeBand } from "@/lib/reportCardCalc";
+import { useGrading } from "@/lib/grading";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function useGradingFns() {
+function useGradingFns(classId?: string, className?: string) {
     const { data: curriculumSettings } = useQuery<any>({
         queryKey: ["curriculum_settings"],
         queryFn: async () => { const r = await api.get("/curriculum_settings"); return Array.isArray(r.data) ? r.data[0] : null; },
@@ -20,11 +21,18 @@ function useGradingFns() {
         queryKey: ["grading_criteria"],
         queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
     });
+    // The configured grading for this class (class template → class/school criteria → settings).
+    const grading = useGrading(classId, className);
 
-    // shared with the student & parent portals (lib/reportCardCalc)
-    const { scale, passMark } = useMemo(() => gradingFrom(curriculumSettings, gradingConfig), [curriculumSettings, gradingConfig]);
-    const getGrade = (pct: number) => gradeFor(scale, pct);
-    const getStatus = (pct: number) => statusFor(scale, passMark, pct);
+    // Pass mark as before; the scale is the resolved one, in the shape the layouts expect.
+    const { passMark } = useMemo(() => gradingFrom(curriculumSettings, gradingConfig), [curriculumSettings, gradingConfig]);
+    const scale: GradeBand[] = useMemo(() => {
+        const colors = new Map<string, string>(((curriculumSettings?.gradingScale || []) as Array<{ grade: string; color?: string }>).filter(g => g?.color).map(g => [String(g.grade), String(g.color)]));
+        return grading.scale.map(g => ({ grade: g.grade, min: g.from, max: g.upto, label: g.remark, points: g.points, ...(colors.get(g.grade) ? { color: colors.get(g.grade) } : {}) }));
+    }, [grading.scale, curriculumSettings]);
+    // gapless lookup (a %, e.g. 79.5, between two bands still gets the lower band's grade)
+    const getGrade = (pct: number) => grading.grade(pct);
+    const getStatus = (pct: number) => grading.gradeOf(pct).remark || statusFor(scale, passMark, pct);
     const getColor = (pct: number) => colorFor(scale, passMark, pct);
 
     return { getGrade, getStatus, getColor, passMark, scale, curriculumId: curriculumSettings?.curriculumId };
@@ -50,7 +58,7 @@ export default function ClassReportCards() {
     };
     const printAllRef = useRef<HTMLDivElement>(null);
 
-    const { getGrade, getStatus, getColor, passMark, scale } = useGradingFns();
+    const { getGrade, getStatus, getColor, passMark, scale } = useGradingFns(selectedClass?._id, selectedClass?.levelName || selectedClass?.name);
     const navigate = useNavigate();
 
     // ── Queries ────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Printer, Filter, ChevronDown, TrendingUp, TrendingDown, BarChart3, Users, BookOpen, Trophy } from "lucide-react";
 import api from "@/lib/api";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { useGradingForClasses, type Grading } from "@/lib/grading";
 
 // ── Math helpers ────────────────────────────────────────────────────────────
 const mean = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
@@ -45,19 +46,10 @@ const assignRank = <T,>(arr: T[], key: (x: T) => number, rankProp: string): (T &
 };
 
 // ── Grade helpers ────────────────────────────────────────────────────────────
-function computeGrade(pct: number, scale: any[]): { grade: string; points: number; label: string } {
-    if (scale.length > 0) {
-        const sorted = [...scale].sort((a, b) => b.min - a.min);
-        const match = sorted.find(g => pct >= g.min && pct <= g.max);
-        if (match) return { grade: match.grade, points: match.points ?? 1, label: match.label || "" };
-    }
-    if (pct >= 80) return { grade: "A",  points: 12, label: "Excellent" };
-    if (pct >= 70) return { grade: "B+", points: 10, label: "Very Good" };
-    if (pct >= 60) return { grade: "B",  points: 8,  label: "Good" };
-    if (pct >= 50) return { grade: "C+", points: 6,  label: "Average" };
-    if (pct >= 40) return { grade: "C",  points: 4,  label: "Below Average" };
-    if (pct >= 33) return { grade: "D",  points: 2,  label: "Poor" };
-    return { grade: "E", points: 1, label: "Fail" };
+// Grade, points and remark from the configured grading scale for the student's class.
+function computeGrade(pct: number, g: Grading): { grade: string; points: number; label: string } {
+    const band = g.gradeOf(pct);
+    return { grade: band.grade, points: band.points, label: band.remark || "" };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -75,7 +67,13 @@ export default function ExamRankings() {
     const { data: tenantProfile } = useQuery<any>({ queryKey: ["tenant_profile_global"], queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
     const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
 
-    const gradingScale: any[] = useMemo(() => curriculumSettings?.gradingScale || [], [curriculumSettings]);
+    // Configured grading per class in this exam (class template → class/school criteria → settings).
+    const markClasses = useMemo(() => {
+        const seen = new Map<string, { classId?: string; className?: string }>();
+        allMarks.forEach(m => { const c = { classId: m.classId ? String(m.classId) : undefined, className: m.className || m.studentClass || undefined }; seen.set(`${c.classId || ""}|${c.className || ""}`, c); });
+        return [...seen.values()];
+    }, [allMarks]);
+    const gradingFor = useGradingForClasses(markClasses);
     const passMark: number = curriculumSettings?.passMark ?? 50;
 
     const studentMap = useMemo(() => { const m = new Map<string, any>(); students.forEach((s: any) => m.set(s._id?.toString(), s)); return m; }, [students]);
@@ -108,6 +106,7 @@ export default function ExamRankings() {
             const admNo  = student?.admNo || student?.registrationNo || "—";
             const cls    = student?.studentClass || sMarks[0]?.className || sMarks[0]?.studentClass || "—";
             const photo  = student?.avatar || student?.studentPhoto || null;
+            const grading = gradingFor(sMarks[0]?.classId ? String(sMarks[0].classId) : undefined, sMarks[0]?.className || sMarks[0]?.studentClass || (cls !== "—" ? cls : undefined));
 
             // #1 Subject totals (marks per subject)
             const subjectTotals: Record<string, { obtained: number; max: number; pct: number; grade: string; points: number; label: string }> = {};
@@ -117,7 +116,7 @@ export default function ExamRankings() {
                     const obtained = Number(subMark.marksObtained) || 0;
                     const max      = Number(subMark.totalMarks) || 100;
                     const pct      = max > 0 ? Math.round((obtained / max) * 100) : 0;
-                    const { grade, points, label } = computeGrade(pct, gradingScale);
+                    const { grade, points, label } = computeGrade(pct, grading);
                     subjectTotals[sub] = { obtained, max, pct, grade, points, label };
                 }
             });
@@ -136,7 +135,7 @@ export default function ExamRankings() {
             const subjectCount  = Object.keys(subjectTotals).length;
             const totalPoints   = Object.values(subjectTotals).reduce((s, v) => s + v.points, 0);
             const gpa           = subjectCount > 0 ? Math.round((totalPoints / subjectCount) * 100) / 100 : 0;
-            const meanGradeInfo = computeGrade(totalPct, gradingScale);
+            const meanGradeInfo = computeGrade(totalPct, grading);
 
             // #12 Previous exam improvement
             const prevStudentMarks = prevMarks.filter((m: any) => m.studentId?.toString() === sid);
@@ -176,7 +175,7 @@ export default function ExamRankings() {
         });
 
         return withSubjectPos;
-    }, [allStudentIds, allMarks, studentMap, uniqueSubjects, gradingScale, prevMarks]);
+    }, [allStudentIds, allMarks, studentMap, uniqueSubjects, gradingFor, prevMarks]);
 
     const filtered = useMemo(() =>
         filterClass ? analytics.filter(s => s.cls === filterClass) : analytics,
