@@ -19,6 +19,7 @@ import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
 import { onlyPublished, lockedExamIds } from '../lib/examPublish';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { papersForSubject, combinePapers, SubjectPaperDef } from '../lib/subjectPapers';
 
 const router = Router();
 
