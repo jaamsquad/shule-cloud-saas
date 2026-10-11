@@ -75,7 +75,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       onTap: () => _details(s, name),
       child: Row(children: [
-        CircleAvatar(radius: 20, backgroundColor: C.brand.withValues(alpha: 0.1), child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(color: C.brandDark, fontWeight: FontWeight.w800))),
+        CircleAvatar(radius: 20, backgroundColor: C.iconSoft, child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(color: C.iconInk, fontWeight: FontWeight.w800))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name.isEmpty ? 'Learner' : name, style: const TextStyle(fontWeight: FontWeight.w700, color: C.ink)),

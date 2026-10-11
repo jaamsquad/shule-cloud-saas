@@ -40,7 +40,7 @@ class TeacherClassesScreen extends ConsumerWidget {
                           Text('${r['className'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w700, color: C.ink)),
                           Text('${r['subjectName'] ?? 'Class'}', style: const TextStyle(color: C.slate500, fontSize: 12.5)),
                         ])),
-                        Badge2('${r['studentCount'] ?? 0} learners', C.brand),
+                        Badge2('${r['studentCount'] ?? 0} learners', C.slate600),
                       ]),
                     );
                   },

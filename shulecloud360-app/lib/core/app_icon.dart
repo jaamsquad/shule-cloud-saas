@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
+import 'theme.dart';
 
-/// A phone-style app icon: a rounded tile in the app's colour with a soft
-/// highlight, a white glyph and a coloured shadow.
+/// A phone-style app icon: a white rounded tile with a thin grey edge and a
+/// plain black line glyph. Icons are grey and white everywhere in the app, so
+/// `color` is kept for callers but no longer tints anything.
 class AppIcon extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double size;
   final bool locked, dim;
-  const AppIcon({super.key, required this.icon, required this.color, this.size = 56, this.locked = false, this.dim = false});
+  const AppIcon({super.key, required this.icon, this.color = C.iconTile, this.size = 56, this.locked = false, this.dim = false});
 
   @override
   Widget build(BuildContext context) {
-    final hsl = HSLColor.fromColor(color);
-    final light = hsl.withLightness((hsl.lightness + 0.12).clamp(0.0, 0.85)).toColor();
-    final dark = hsl.withLightness((hsl.lightness - 0.1).clamp(0.08, 1.0)).toColor();
     final r = size * 0.28;
     return Stack(clipBehavior: Clip.none, children: [
       Opacity(
@@ -21,22 +20,12 @@ class AppIcon extends StatelessWidget {
         child: Container(
           width: size, height: size,
           decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(r),
-            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [light, dark]),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.32), blurRadius: size * 0.22, offset: Offset(0, size * 0.1))],
+            border: Border.all(color: C.slate200),
+            boxShadow: [BoxShadow(color: C.ink.withValues(alpha: 0.06), blurRadius: size * 0.18, offset: Offset(0, size * 0.07))],
           ),
-          child: Stack(children: [
-            // glossy top highlight
-            Positioned(
-              left: 0, right: 0, top: 0, height: size * 0.5,
-              child: DecoratedBox(decoration: BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(r)),
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.white.withValues(alpha: 0.22), Colors.white.withValues(alpha: 0)]),
-              )),
-            ),
-            Center(child: Icon(icon, color: Colors.white, size: size * 0.5)),
-          ]),
+          child: Center(child: Icon(lineIcon(icon), color: C.iconInk, size: size * 0.52)),
         ),
       ),
       if (locked)
@@ -44,13 +33,17 @@ class AppIcon extends StatelessWidget {
           right: -4, top: -4,
           child: Container(
             width: size * 0.38, height: size * 0.38,
-            decoration: BoxDecoration(color: const Color(0xFFF59E0B), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-            child: Icon(Icons.lock_rounded, size: size * 0.2, color: Colors.white),
+            decoration: BoxDecoration(color: C.slate500, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+            child: Icon(Icons.lock_outline_rounded, size: size * 0.2, color: Colors.white),
           ),
         ),
     ]);
   }
 }
+
+/// Icons are chosen as outlined (line art) where they are written, so this is
+/// just a readable marker at the places that draw a big icon.
+IconData lineIcon(IconData i) => i;
 
 /// An icon for a page, picked from words in its name ("Generate Fees Invoice" → receipt).
 IconData pageIcon(String label) {

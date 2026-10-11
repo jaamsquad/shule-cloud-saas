@@ -75,7 +75,7 @@ class _SideMenu extends ConsumerWidget {
         return ListTile(
           dense: true, leading: Icon(g.icon, size: 20, color: C.slate400),
           title: Text(g.name, style: const TextStyle(fontSize: 14, color: C.slate400, fontWeight: FontWeight.w500)),
-          trailing: const Icon(Icons.lock_rounded, size: 15, color: C.amber),
+          trailing: const Icon(Icons.lock_outline_rounded, size: 15, color: C.slate400),
           onTap: () => messenger.showSnackBar(const SnackBar(content: Text('This module is not included in your plan, contact for more @ 0726151104'))),
         );
       }
@@ -105,7 +105,7 @@ class _SideMenu extends ConsumerWidget {
             decoration: BoxDecoration(gradient: const LinearGradient(colors: [C.sky, C.blue]), borderRadius: BorderRadius.circular(18)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(children: [
-                Avatar(name: s?.name ?? '', size: 46, color: C.blue),
+                Avatar(name: s?.name ?? '', size: 46),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(s?.name ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),

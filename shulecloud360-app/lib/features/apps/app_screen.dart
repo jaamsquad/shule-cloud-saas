@@ -65,7 +65,7 @@ class _AppScreenState extends ConsumerState<AppScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(color: Colors.white.withValues(alpha: starred ? 0.95 : 0.18), borderRadius: BorderRadius.circular(20)),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded, size: 16, color: starred ? const Color(0xFFF59E0B) : Colors.white),
+                Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded, size: 16, color: starred ? C.slate600 : Colors.white),
                 const SizedBox(width: 4),
                 Text(starred ? 'Starred' : 'Star', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: starred ? C.slate700 : Colors.white)),
               ]),
@@ -118,10 +118,10 @@ class _Locked extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFDE68A))),
+        decoration: BoxDecoration(color: C.iconSoft, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.slate200)),
         child: const Row(children: [
-          Icon(Icons.lock_rounded, color: C.amber, size: 20), SizedBox(width: 10),
-          Expanded(child: Text('This app is not in your school\'s plan. Contact ShuleCloud on 0726151104.', style: TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.w600, fontSize: 13))),
+          Icon(Icons.lock_outline_rounded, color: C.slate500, size: 20), SizedBox(width: 10),
+          Expanded(child: Text('This app is not in your school\'s plan. Contact ShuleCloud on 0726151104.', style: TextStyle(color: C.slate700, fontWeight: FontWeight.w600, fontSize: 13))),
         ]),
       );
 }

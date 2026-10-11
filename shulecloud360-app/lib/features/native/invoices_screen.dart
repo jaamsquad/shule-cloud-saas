@@ -64,7 +64,7 @@ class _InvoicesScreenState extends ConsumerState<InvoicesScreen> {
                       child: ChoiceChip(
                         label: Text('${t.$2} ${t.$1 == 'ALL' ? (counts['ALL'] ?? '') : t.$1 == 'UNPAID' ? ((counts['UNPAID'] ?? 0) + (counts['OVERDUE'] ?? 0)) : (counts[t.$1] ?? '')}'),
                         selected: _status == t.$1, onSelected: (_) { _status = t.$1; _load(); },
-                        selectedColor: C.brand.withValues(alpha: 0.14), side: const BorderSide(color: C.slate200),
+                        selectedColor: C.iconSoft, side: const BorderSide(color: C.slate200),
                       ),
                     ),
                   ]),

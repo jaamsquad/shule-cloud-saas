@@ -114,7 +114,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 class NoticeCard extends StatelessWidget {
   final Notice notice;
   const NoticeCard({super.key, required this.notice});
-  static const _colors = [Color(0xFF2F7BF5), Color(0xFF10B981), Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFF8B5CF6), Color(0xFF0EA5E9)];
+  static const _colors = [C.iconTile, C.slate700, C.slate600, C.slate800];   // grey avatars — no colour
 
   @override
   Widget build(BuildContext context) {
