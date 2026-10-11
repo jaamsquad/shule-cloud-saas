@@ -16,6 +16,14 @@ export async function papersForSubject(db: Db, subjectId: string): Promise<Subje
     return rows.map(r => ({ _id: String(r._id), subjectId: String(r.subjectId), label: String(r.label || ''), outOf: Number(r.outOf) || 100, ratio: Number(r.ratio) || 1 }));
 }
 
+/** The teacher portal identifies a subject by name, not id — resolve it first (subject_papers
+ * is keyed by subjectId). Returns [] if no subject with that name is on file. */
+export async function papersForSubjectName(db: Db, subjectName: string): Promise<SubjectPaperDef[]> {
+    if (!subjectName) return [];
+    const subj: any = await db.collection('subjects').findOne({ $or: [{ name: subjectName }, { subjectName }] }).catch(() => null);
+    return subj ? papersForSubject(db, String(subj._id)) : [];
+}
+
 /** Combine per-paper scores (keyed by paper _id) into one subject score out of 100.
  * Only papers that have been scored so far count, so the combined score updates as each
  * paper comes in and settles once all configured papers are scored. Returns null if
