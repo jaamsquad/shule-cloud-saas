@@ -41,8 +41,8 @@ export default function ManageExams() {
 
     const refresh = () => { qc.invalidateQueries({ queryKey: ["exam_publishing"] }); qc.invalidateQueries({ queryKey: ["exam_publishing_years"] }); qc.invalidateQueries({ queryKey: ["an_exams"] }); };
     const act = useMutation({
-        mutationFn: async ({ kind, exam, row }: { kind: "publish" | "unpublish" | "delete-results"; exam: ExamRow; row: ClassRow }) =>
-            (await api.post(`/exam-publishing/${exam._id}/${kind}`, { classId: row.classId, className: row.className })).data,
+        mutationFn: async ({ kind, exam, row, lock }: { kind: "publish" | "unpublish" | "delete-results"; exam: ExamRow; row: ClassRow; lock?: boolean }) =>
+            (await api.post(`/exam-publishing/${exam._id}/${kind}`, { classId: row.classId, className: row.className, ...(lock !== undefined ? { lock } : {}) })).data,
         onMutate: ({ exam, row }) => setBusy(`${exam._id}|${row.classId || row.className}`),
         onSuccess: (d: { message?: string }) => { toast.success(d.message || "Done"); refresh(); },
         onError: (e: { response?: { data?: { message?: string } } }) => toast.error(e?.response?.data?.message || "Could not do that"),
@@ -51,6 +51,10 @@ export default function ManageExams() {
     const confirmDelete = (exam: ExamRow, row: ClassRow) => {
         const typed = window.prompt(`Delete ALL ${row.marks} marks of ${exam.title} for ${row.className}? This cannot be undone.\n\nType DELETE to confirm.`);
         if (typed === "DELETE") act.mutate({ kind: "delete-results", exam, row });
+    };
+    const confirmPublish = (exam: ExamRow, row: ClassRow) => {
+        const lock = window.confirm(`Publish results for ${exam.title} — ${row.className}?\n\nLock marks entry for this exam too, so teachers can't upload marks again?\n\nOK = publish and lock · Cancel = publish only`);
+        act.mutate({ kind: "publish", exam, row, lock });
     };
 
     const actionsFor = (exam: ExamRow, row: ClassRow, align: string) => {
@@ -62,7 +66,7 @@ export default function ManageExams() {
                                                                         {canEdit && (pub ? (
                                                                             <button disabled={!!busy} onClick={() => act.mutate({ kind: "unpublish", exam, row })} className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 bg-white text-amber-700 disabled:opacity-50" style={border}><Undo2 className="w-3.5 h-3.5" /> Unpublish</button>
                                                                         ) : (
-                                                                            <button disabled={!!busy} onClick={() => act.mutate({ kind: "publish", exam, row })} className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 text-white disabled:opacity-50" style={{ background: ACCENT }}><Send className="w-3.5 h-3.5" /> Publish results</button>
+                                                                            <button disabled={!!busy} onClick={() => confirmPublish(exam, row)} className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 text-white disabled:opacity-50" style={{ background: ACCENT }}><Send className="w-3.5 h-3.5" /> Publish results</button>
                                                                         ))}
                                                                         <button disabled={!pub} title={pub ? "" : "Publish first"} onClick={() => nav(`/exams/analytics?exam=${exam._id}&class=${encodeURIComponent(row.className)}`)} className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 bg-white disabled:opacity-40" style={{ ...border, color: INK }}><BarChart3 className="w-3.5 h-3.5" /> Analyse</button>
                                                                         <button disabled={!pub} title={pub ? "" : "Publish first"} onClick={() => nav(`/exams/printouts?exam=${exam._id}&class=${encodeURIComponent(row.className)}`)} className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 bg-white disabled:opacity-40" style={{ ...border, color: INK }}><Printer className="w-3.5 h-3.5" /> Print</button>
