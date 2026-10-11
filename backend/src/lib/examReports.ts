@@ -11,6 +11,7 @@ import { buildExamResults } from '../routes/analytics.routes';
 import { levelKey, publishedView } from './examPublish';
 import { formatExamName } from './examName';
 import { catalogMatch } from './subjectCatalog';
+import { resolveGrading, meanGradeFromScale } from './grading';
 
 const num = (v: any) => Number(v) || 0;
 const r2 = (n: number, d = 2) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
@@ -23,8 +24,7 @@ const genderLabel = (g: any) => (isGirl(g) ? 'Female' : isBoy(g) ? 'Male' : '');
 export type RankBy = 'points' | 'marks';
 
 function gradeOfPoints(scale: any[], mp: number) {
-    for (const s of scale) if (mp >= num(s.points) - 0.5) return s.grade;
-    return scale[scale.length - 1]?.grade || '-';
+    return meanGradeFromScale(scale, mp);
 }
 /** Competition ranking (1,2,2,4). `key` higher = better. */
 function rankMap<T>(items: T[], key: (x: T) => number[], id: (x: T) => string) {
@@ -46,8 +46,11 @@ async function examsInOrder(db: Db) {
 
 /** Rows of one exam for one class level (published only). */
 async function levelRows(db: Db, examId: string, level: string) {
-    const { rows, scale } = await buildExamResults(db, examId);
-    return { rows: rows.filter((r: any) => levelKey(r.className) === levelKey(level)), scale };
+    const { rows } = await buildExamResults(db, examId);
+    const mine = rows.filter((r: any) => levelKey(r.className) === levelKey(level));
+    // The class level's configured grading (its template, else the school scale).
+    const scale = (await resolveGrading(db, undefined, level || mine[0]?.className)).scale;
+    return { rows: mine, scale };
 }
 
 async function teacherLookup(db: Db, level: string) {

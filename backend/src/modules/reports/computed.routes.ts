@@ -9,12 +9,16 @@
 import { Router, Request } from 'express';
 import { getMetaDb } from '../../lib/mongodb';
 import { onlyPublished } from '../../lib/examPublish';
+import { resolveGrading, makeGradingCache, GradeBand } from '../../lib/grading';
 
 const router = Router();
 const db = (req: Request) => (req as any).tenantDb || getMetaDb();
 const num = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const ksh = (n: number) => `KSh ${Math.round(n).toLocaleString()}`;
-const gradeOf = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'E';
+// Grades always come from the configured grading system (class template → class
+// criteria → global criteria → curriculum settings → default). School-wide
+// aggregates use the school scale; per-class figures use that class's scale.
+const schoolGrading = (req: Request) => resolveGrading(db(req));
 
 // Real exam marks live in `exam_marks` (studentId/subjectId/subjectName/examId/
 // marksObtained/totalMarks). They don't carry className, so enrich each mark with
@@ -53,9 +57,10 @@ const marks = async (req: Request) => {
 router.get('/reports/computed/subject-performance', async (req, res) => {
     try {
         const all = await marks(req);
+        const { gradeOf } = await schoolGrading(req);
         const bySub: Record<string, { sum: number; n: number }> = {};
         all.forEach((m: any) => { const k = m.subjectName || 'Unknown'; const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0); (bySub[k] ||= { sum: 0, n: 0 }); bySub[k].sum += pct; bySub[k].n++; });
-        const rows = Object.entries(bySub).map(([subject, v]) => ({ subject, average: Math.round(v.sum / v.n * 10) / 10, entries: v.n, grade: gradeOf(v.sum / v.n) })).sort((a, b) => b.average - a.average);
+        const rows = Object.entries(bySub).map(([subject, v]) => ({ subject, average: Math.round(v.sum / v.n * 10) / 10, entries: v.n, grade: gradeOf(v.sum / v.n).grade })).sort((a, b) => b.average - a.average);
         res.json({ title: 'Subject Performance', columns: [{ key: 'subject', label: 'Subject' }, { key: 'average', label: 'Mean %' }, { key: 'grade', label: 'Grade' }, { key: 'entries', label: 'Entries' }], rows, chart: { type: 'bar', data: rows.map(r => ({ name: r.subject, value: r.average })) } });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -65,7 +70,8 @@ router.get('/reports/computed/class-performance', async (req, res) => {
         const all = await marks(req);
         const byClass: Record<string, { sum: number; n: number }> = {};
         all.forEach((m: any) => { const k = m.className || 'Unknown'; const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0); (byClass[k] ||= { sum: 0, n: 0 }); byClass[k].sum += pct; byClass[k].n++; });
-        const rows = Object.entries(byClass).map(([cls, v]) => ({ class: cls, mean: Math.round(v.sum / v.n * 10) / 10, grade: gradeOf(v.sum / v.n), entries: v.n })).sort((a, b) => b.mean - a.mean);
+        const gradingFor = makeGradingCache(db(req));
+        const rows = (await Promise.all(Object.entries(byClass).map(async ([cls, v]) => ({ class: cls, mean: Math.round(v.sum / v.n * 10) / 10, grade: (await gradingFor(undefined, cls)).gradeOf(v.sum / v.n).grade, entries: v.n })))).sort((a, b) => b.mean - a.mean);
         res.json({ title: 'Class Performance', columns: [{ key: 'class', label: 'Class' }, { key: 'mean', label: 'Mean %' }, { key: 'grade', label: 'Grade' }, { key: 'entries', label: 'Entries' }], rows, chart: { type: 'bar', data: rows.map(r => ({ name: r.class, value: r.mean })) } });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -73,8 +79,18 @@ router.get('/reports/computed/class-performance', async (req, res) => {
 router.get('/reports/computed/grade-distribution', async (req, res) => {
     try {
         const all = await marks(req);
-        const dist: Record<string, number> = { A: 0, 'B+': 0, B: 0, 'C+': 0, C: 0, D: 0, E: 0 };
-        all.forEach((m: any) => { const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0); dist[m.grade || gradeOf(pct)] = (dist[m.grade || gradeOf(pct)] || 0) + 1; });
+        // Buckets follow the school's configured scale (best → worst); each mark is
+        // graded with its own class's scale.
+        const school = await schoolGrading(req);
+        const gradingFor = makeGradingCache(db(req));
+        const dist: Record<string, number> = {};
+        school.scale.forEach(b => { if (!(b.grade in dist)) dist[b.grade] = 0; });
+        for (const m of all as any[]) {
+            const hasPct = m.percentage != null || num(m.totalMarks) > 0;
+            const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0);
+            const g = hasPct ? (await gradingFor(undefined, m.className)).gradeOf(num(pct)).grade : (m.grade || school.gradeOf(0).grade);
+            dist[g] = (dist[g] || 0) + 1;
+        }
         const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
         const rows = Object.entries(dist).map(([grade, count]) => ({ grade, count, percent: `${Math.round(count / total * 100)}%` }));
         res.json({ title: 'Grade Distribution', cards: [{ label: 'Total Entries', value: total }], columns: [{ key: 'grade', label: 'Grade' }, { key: 'count', label: 'Count' }, { key: 'percent', label: 'Share' }], rows, chart: { type: 'pie', data: rows.map(r => ({ name: r.grade, value: r.count })) } });
@@ -96,11 +112,9 @@ router.get('/reports/computed/mark-sheets', async (req, res) => {
         const classDoc = await db(req).collection('classes').findOne({ _id: (() => { try { return new (require('mongodb').ObjectId)(classId); } catch { return classId; } })() }).catch(() => null);
         const className = classDoc?.name || classDoc?.levelName || classDoc?.className || '';
 
-        // The class's own grading scale, else the global one.
-        const gradeRec = await db(req).collection('grading_criteria').findOne({ classId }).catch(() => null)
-            || await db(req).collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null);
-        const bands = ((gradeRec?.grades || []) as any[]).map(g => ({ grade: g.grade, from: Number(g.from ?? 0), upto: Number(g.upto ?? 100) }));
-        const gradeFor = (pct: number) => bands.length ? (bands.find(b => pct >= b.from && pct <= b.upto)?.grade || gradeOf(pct)) : gradeOf(pct);
+        // The class's configured grading (template → class criteria → global → …).
+        const grading = await resolveGrading(db(req), classId, className || undefined);
+        const gradeFor = (pct: number) => grading.gradeOf(pct).grade;
 
         // Marks for this exam, scoped to the class's students.
         const all = (await marks(req)).filter((m: any) =>
@@ -116,10 +130,13 @@ router.get('/reports/computed/mark-sheets', async (req, res) => {
 router.get('/reports/computed/cbc-competency', async (req, res) => {
     try {
         const all = await marks(req);
-        const LV = (pct: number) => pct >= 80 ? 'Exceeding (4)' : pct >= 60 ? 'Meeting (3)' : pct >= 40 ? 'Approaching (2)' : 'Below (1)';
+        // Competency level = the band of the learner's class scale (e.g. EE/ME/AE/BE
+        // on a CBC scale), labelled with the band's remark and points.
+        const gradingFor = makeGradingCache(db(req));
+        const LV = (b: GradeBand) => `${b.grade}${b.remark && b.remark !== b.grade ? ` - ${b.remark}` : ''}${b.points ? ` (${b.points})` : ''}`;
         const byStudent: Record<string, { name: string; cls: string; sum: number; n: number }> = {};
         all.forEach((m: any) => { const k = m.studentId || m.studentName; const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0); (byStudent[k] ||= { name: m.studentName, cls: m.className || '', sum: 0, n: 0 }); byStudent[k].sum += pct; byStudent[k].n++; });
-        const rows = Object.values(byStudent).map(s => { const avg = s.n ? s.sum / s.n : 0; return { student: s.name, class: s.cls, average: Math.round(avg * 10) / 10, competency: LV(avg) }; }).sort((a, b) => b.average - a.average);
+        const rows = (await Promise.all(Object.values(byStudent).map(async s => { const avg = s.n ? s.sum / s.n : 0; return { student: s.name, class: s.cls, average: Math.round(avg * 10) / 10, competency: LV((await gradingFor(undefined, s.cls || undefined)).gradeOf(avg)) }; }))).sort((a, b) => b.average - a.average);
         res.json({ title: 'CBC Competency Report', columns: [{ key: 'student', label: 'Learner' }, { key: 'class', label: 'Grade' }, { key: 'average', label: 'Mean %' }, { key: 'competency', label: 'Competency Level' }], rows });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -127,9 +144,10 @@ router.get('/reports/computed/cbc-competency', async (req, res) => {
 router.get('/reports/computed/mean-score-trends', async (req, res) => {
     try {
         const all = await marks(req);
+        const { gradeOf } = await schoolGrading(req);
         const byExam: Record<string, { sum: number; n: number }> = {};
         all.forEach((m: any) => { const k = m.examName || m.examId || 'Exam'; const pct = m.percentage ?? (num(m.totalMarks) ? num(m.marksObtained) / num(m.totalMarks) * 100 : 0); (byExam[k] ||= { sum: 0, n: 0 }); byExam[k].sum += pct; byExam[k].n++; });
-        const rows = Object.entries(byExam).map(([exam, v]) => ({ exam, mean: Math.round(v.sum / v.n * 10) / 10, grade: gradeOf(v.sum / v.n) }));
+        const rows = Object.entries(byExam).map(([exam, v]) => ({ exam, mean: Math.round(v.sum / v.n * 10) / 10, grade: gradeOf(v.sum / v.n).grade }));
         res.json({ title: 'Mean Score Trends', columns: [{ key: 'exam', label: 'Exam' }, { key: 'mean', label: 'Mean %' }, { key: 'grade', label: 'Grade' }], rows, chart: { type: 'line', data: rows.map(r => ({ name: r.exam, value: r.mean })) } });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

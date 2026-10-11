@@ -19,6 +19,7 @@ import { ObjectId } from 'mongodb';
 import { loadCurricula, canonicalCode } from '../lib/curriculum';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { canonicalStatus } from '../lib/studentStatus';
+import { resolveGrading, makeGradingCache } from '../lib/grading';
 import { resolveStaffPermissions, permsToModules } from '../lib/permissions';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
@@ -562,10 +563,11 @@ router.post('/v2/marks', async (req, res) => {
         const enrollment = await db.collection('student_enrollments').findOne({ _id: toOid(enrollmentId) });
         if (!enrollment) return res.status(404).json({ message: 'Enrollment not found' });
 
-        // Auto-calculate grade if not provided
+        // Auto-calculate grade if not provided — from the class's configured grading.
         const pct = totalMarks > 0 ? (Number(marksObtained) / Number(totalMarks)) * 100 : 0;
-        const autoGrade = grade || (pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'F');
-        const autoPoints = points || (pct >= 80 ? 4.0 : pct >= 70 ? 3.5 : pct >= 60 ? 3.0 : pct >= 50 ? 2.5 : pct >= 40 ? 2.0 : pct >= 33 ? 1.0 : 0.0);
+        const band = (await resolveGrading(db, enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined)).gradeOf(pct);
+        const autoGrade = grade || band.grade;
+        const autoPoints = points || band.points;
 
         const doc = {
             studentId, studentName: enrollment.studentName,
@@ -603,6 +605,7 @@ router.post('/v2/marks/bulk', async (req, res) => {
         if (!Array.isArray(marks) || !marks.length) return res.status(400).json({ message: 'marks array required' });
 
         let saved = 0; let skipped = 0;
+        const gradingFor = makeGradingCache(db);
         for (const mark of marks) {
             try {
                 const exam = await db.collection('v2_exams').findOne({ _id: toOid(mark.examId) });
@@ -612,8 +615,10 @@ router.post('/v2/marks/bulk', async (req, res) => {
                 if (!enrollment) { skipped++; continue; }
 
                 const pct = mark.totalMarks > 0 ? (Number(mark.marksObtained) / Number(mark.totalMarks)) * 100 : 0;
-                const g = pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'F';
-                const p = pct >= 80 ? 4.0 : pct >= 70 ? 3.5 : pct >= 60 ? 3.0 : pct >= 50 ? 2.5 : pct >= 40 ? 2.0 : pct >= 33 ? 1.0 : 0.0;
+                // Grade + points from the class's configured grading.
+                const band = (await gradingFor(enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined)).gradeOf(pct);
+                const g = band.grade;
+                const p = band.points;
 
                 const doc = { ...mark, percentage: Math.round(pct * 100) / 100, grade: mark.grade || g, points: mark.points || p, academicYearId: enrollment.academicYearId, classId: enrollment.classId, streamId: enrollment.streamId, isApproved: false, isLocked: false, updatedAt: now() };
 
@@ -682,11 +687,16 @@ router.get('/v2/rankings', async (req, res) => {
             studentMap[m.studentId].totalOutOf += m.totalMarks;
         });
 
-        const rankings = Object.values(studentMap).map((s: any) => ({
-            ...s,
-            average: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0,
-            meanGrade: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) >= 0.8 ? 'A' : (s.totalMarks / s.totalOutOf) >= 0.7 ? 'B+' : (s.totalMarks / s.totalOutOf) >= 0.6 ? 'B' : (s.totalMarks / s.totalOutOf) >= 0.5 ? 'C+' : (s.totalMarks / s.totalOutOf) >= 0.4 ? 'C' : 'D' : 'F',
-        })).sort((a: any, b: any) => b.totalMarks - a.totalMarks).map((s: any, i: number) => ({ ...s, position: i + 1 }));
+        // Mean grade from each student's class grading (template → class → global → …).
+        const gradingFor = makeGradingCache(db);
+        const rankings = (await Promise.all(Object.values(studentMap).map(async (s: any) => {
+            const grading = await gradingFor(s.classId ? String(s.classId) : undefined, s.className || undefined);
+            return {
+                ...s,
+                average: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0,
+                meanGrade: grading.gradeOf(s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0).grade,
+            };
+        }))).sort((a: any, b: any) => b.totalMarks - a.totalMarks).map((s: any, i: number) => ({ ...s, position: i + 1 }));
 
         res.json({ total: rankings.length, rankings });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -838,7 +848,8 @@ router.get('/v2/report-card/:enrollmentId', async (req, res) => {
         const overallMarks  = scoredSubjects.reduce((sum: number, s: any) => sum + (s.totalMarks  || 0), 0);
         const overallOutOf  = scoredSubjects.reduce((sum: number, s: any) => sum + (s.totalOutOf  || 0), 0);
         const overallPct    = overallOutOf > 0 ? (overallMarks / overallOutOf) * 100 : 0;
-        const meanGrade     = overallPct >= 80 ? 'A' : overallPct >= 70 ? 'B+' : overallPct >= 60 ? 'B' : overallPct >= 50 ? 'C+' : overallPct >= 40 ? 'C' : overallPct > 0 ? 'D' : '—';
+        const grading       = await resolveGrading(db, enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined);
+        const meanGrade     = overallOutOf > 0 ? grading.gradeOf(overallPct).grade : '—';
 
         const savedCard = await db.collection('v2_report_cards').findOne({ enrollmentId });
 

@@ -20,6 +20,7 @@ import { Db, ObjectId } from 'mongodb';
 import crypto from 'crypto';
 import { notifyDevices } from './smsSocket';
 import { atSendSms, AtConfig } from './africasTalking.service';
+import { makeGradingCache } from '../lib/grading';
 
 // 'api' = any HTTP gateway (Africa's Talking, Talksasa); 'device' = a paired Android phone.
 export type SmsProvider = 'device' | 'api';
@@ -338,7 +339,6 @@ export const deviceStats = async (db: Db, schoolId: string) => {
 export { room as smsRoom };
 
 // ─── Result-message builder (shared by SMS + WhatsApp results) ────────────────
-const gradeFor = (score: number) => score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : score >= 50 ? 'D' : 'E';
 const studentPhone = (s: any) => s.parentPhone || s.fatherPhone || s.motherPhone || s.guardianPhone || s.phone;
 const studentName = (s: any) => s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student';
 const CBC_LABEL: Record<string, string> = { EE: 'Exceeding Expectation', ME: 'Meeting Expectation', AE: 'Approaching Expectation', BE: 'Below Expectation' };
@@ -374,12 +374,22 @@ export const buildResultMessages = async (
         const marks = await db.collection('marks').find({ examId: id }).toArray();
         const byStudent: Record<string, any[]> = {};
         marks.forEach((m: any) => { (byStudent[m.studentId] ||= []).push(m); });
+        // Grade with the learner's class grading (template → class → global → …),
+        // on the PERCENTAGE (marks / out-of), not the raw mark.
+        const gradingFor = makeGradingCache(db);
+        const examMax = Number((exam as any)?.totalMarks ?? (exam as any)?.total_marks ?? (exam as any)?.outOf ?? 0) || 0;
+        const pctOf = (m: any) => {
+            const raw = Number(m.marks || m.score || 0);
+            const max = Number(m.totalMarks ?? m.maxMarks ?? m.outOf ?? m.total_marks ?? 0) || examMax;
+            return max > 0 ? raw / max * 100 : raw;
+        };
         for (const [sid, ms] of Object.entries(byStudent)) {
             const st = byId[sid]; if (!st || !passesFilter(st)) continue; const phone = studentPhone(st); if (!phone) continue;
-            const total = ms.reduce((t, m) => t + Number(m.marks || m.score || 0), 0);
+            const grading = await gradingFor(st.classId ? String(st.classId) : undefined, st.studentClass || st.currentClass || st.className || undefined);
+            const total = ms.reduce((t, m) => t + pctOf(m), 0);
             const avg = ms.length ? Math.round(total / ms.length) : 0;
-            const lines = ms.map(m => `${m.subjectName || 'Subj'}:${Number(m.marks || m.score || 0)}(${gradeFor(Number(m.marks || m.score || 0))})`).join(', ');
-            out.push({ phone, text: `${pre}${studentName(st)} — ${exam?.name || 'Exam'} results. ${lines}. Mean: ${avg}% (${gradeFor(avg)}).` });
+            const lines = ms.map(m => `${m.subjectName || 'Subj'}:${Number(m.marks || m.score || 0)}(${grading.gradeOf(pctOf(m)).grade})`).join(', ');
+            out.push({ phone, text: `${pre}${studentName(st)} — ${exam?.name || 'Exam'} results. ${lines}. Mean: ${avg}% (${grading.gradeOf(avg).grade}).` });
         }
     } else if (type === 'classTest') {
         const test = await db.collection('class_tests').findOne({ _id: oid(id) });

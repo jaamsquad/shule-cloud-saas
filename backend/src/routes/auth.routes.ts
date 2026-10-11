@@ -18,6 +18,7 @@ import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
 import { onlyPublished } from '../lib/examPublish';
+import { resolveGrading, Grading } from '../lib/grading';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -1319,40 +1320,25 @@ const templateFamily = (id?: string, curriculum?: string): Family => {
     return c === 'cbc' ? 'CBC' : c === 'cambridge' ? 'Cambridge' : c === 'ib' ? 'IB' : 'KCSE';
 };
 
-// Returns { grade, points, level } appropriate to the chosen curriculum.
-const gradeFor = (family: Family, percent: number): { grade: string; points: number; level: string } => {
+// Grade / points / level come from the student's CONFIGURED grading (class template →
+// class criteria → global criteria → curriculum settings → default). The curriculum
+// family only decides how points aggregate (KCSE totals subject points).
+const gradeFor = (grading: Grading, percent: number): { grade: string; points: number; level: string } => {
     const p = Math.max(0, Math.min(100, percent));
-    if (family === 'CBC') {
-        const level = p >= 80 ? 'EE' : p >= 60 ? 'ME' : p >= 40 ? 'AE' : 'BE';
-        return { grade: level, points: 0, level };
-    }
-    if (family === 'Cambridge') {
-        const grade = p >= 90 ? 'A*' : p >= 80 ? 'A' : p >= 70 ? 'B' : p >= 60 ? 'C' : p >= 50 ? 'D' : p >= 40 ? 'E' : p >= 30 ? 'F' : p >= 20 ? 'G' : 'U';
-        return { grade, points: 0, level: grade };
-    }
-    if (family === 'IB') {
-        const pts = p >= 85 ? 7 : p >= 75 ? 6 : p >= 65 ? 5 : p >= 50 ? 4 : p >= 40 ? 3 : p >= 30 ? 2 : 1;
-        return { grade: String(pts), points: pts, level: String(pts) };
-    }
-    // KCSE / 8-4-4 — 12-point scale
-    const table: [number, string, number][] = [
-        [80, 'A', 12], [75, 'A-', 11], [70, 'B+', 10], [65, 'B', 9], [60, 'B-', 8],
-        [55, 'C+', 7], [50, 'C', 6], [45, 'C-', 5], [40, 'D+', 4], [35, 'D', 3], [30, 'D-', 2], [0, 'E', 1],
-    ];
-    const row = table.find(([min]) => p >= min) || table[table.length - 1];
-    return { grade: row[1], points: row[2], level: row[1] };
+    const band = grading.gradeOf(p);
+    return { grade: band.grade, points: band.points, level: band.grade };
 };
 
-// Decorate grouped exam results with family-specific grade / points / level.
-const decorateResults = (results: any[], family: Family) =>
+// Decorate grouped exam results with grade / points / level from the configured scale.
+const decorateResults = (results: any[], family: Family, grading: Grading) =>
     results.map(exam => {
         const subjects = (exam.subjects || []).map((s: any) => {
             const percent = s.outOf > 0 ? (s.marks / s.outOf) * 100 : 0;
-            const g = gradeFor(family, percent);
-            return { ...s, percent: Math.round(percent * 10) / 10, grade: s.grade || g.grade, points: g.points, level: g.level };
+            const g = gradeFor(grading, percent);
+            return { ...s, percent: Math.round(percent * 10) / 10, grade: s.outOf > 0 ? g.grade : (s.grade || g.grade), points: g.points, level: g.level };
         });
         const meanPercent = exam.average || 0;
-        const mean = gradeFor(family, meanPercent);
+        const mean = gradeFor(grading, meanPercent);
         const totalPoints = subjects.reduce((sum: number, s: any) => sum + (s.points || 0), 0);
         return { ...exam, subjects, meanGrade: mean.grade, meanLevel: mean.level, points: family === 'KCSE' ? totalPoints : mean.points };
     });
@@ -1793,7 +1779,8 @@ const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?:
     const curriculumId = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
     const family = templateFamily(tenant?.reportTemplate, curriculumId);
 
-    const all = decorateResults(await buildExamResults(db, sid), family);
+    const grading = await resolveGrading(db, student?.classId ? String(student.classId) : undefined, String(student?.studentClass || student?.currentClass || student?.className || '') || undefined);
+    const all = decorateResults(await buildExamResults(db, sid), family, grading);
     const terms = Array.from(new Set(all.map((r: any) => r.term).filter(Boolean)));
     const selectedTerm = req.query.term ? String(req.query.term) : (terms[0] || '');
     const results = selectedTerm ? all.filter((r: any) => r.term === selectedTerm) : all;
@@ -3069,12 +3056,14 @@ router.post('/staff-portal/cbc/assess', authed(async (req, res, db, decoded) => 
     const activity: any = b.activityId ? await db.collection('cbc_activities').findOne({ _id: safeObjId(b.activityId)! }).catch(() => null) : null;
     const maxMarks = Number(activity?.maxMarks || b.maxMarks || 0);
     const cur = await cbcCurrentTerm(db).catch(() => null);
+    // Marks → level uses the class's configured grading scale (e.g. a CBC EE/ME/AE/BE template).
+    const grading = await resolveGrading(db, b.classId ? String(b.classId) : undefined, className || undefined);
     const ops = records.filter(r => r.studentId && (r.level || r.marks != null && r.marks !== '')).map(r => {
         // If only marks given, derive the level band; if only level given, keep it.
         let level = r.level;
         if (!level && r.marks != null && r.marks !== '' && maxMarks > 0) {
             const pct = (Number(r.marks) / maxMarks) * 100;
-            level = pct >= 80 ? 'EE' : pct >= 60 ? 'ME' : pct >= 40 ? 'AE' : 'BE';
+            level = grading.gradeOf(pct).grade;
         }
         return {
             updateOne: {

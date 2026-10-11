@@ -12,6 +12,7 @@ import { getMetaDb } from './mongodb';
 import { signToken, publicAppUrl } from './verifyDocs';
 import { gradingFrom, summariseStudent, classStatsOf, subjectNamesOf } from './reportCardCalc';
 import { onlyPublished } from './examPublish';
+import { resolveGrading } from './grading';
 
 const oid = (v: any) => { try { return new ObjectId(String(v)); } catch { return null; } };
 const idForms = (v: any) => { const s = String(v ?? ''); const o = oid(s); return o ? [s, o] : [s]; };
@@ -21,10 +22,21 @@ export async function printableReports(db: Db, req: Request, sid: string, examId
     const tenant: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) as any }).catch(() => null) : null;
     const curriculumSettings = await db.collection('curriculum_settings').findOne({}).catch(() => null);
     const gradingConfig = await db.collection('grading_criteria').findOne({}).catch(() => null);
-    const { scale, passMark } = gradingFrom(curriculumSettings, gradingConfig);
+    const { scale: legacyScale, passMark } = gradingFrom(curriculumSettings, gradingConfig);
 
     const student: any = await db.collection('students').findOne({ _id: oid(sid) as any }).catch(() => null);
     if (!student) return null;
+    // The learner's CLASS grading (template → class criteria → global → curriculum → default),
+    // in the report-card shape. Bands are made contiguous so every whole % lands in one.
+    const resolved = await resolveGrading(db, student.classId ? String(student.classId) : undefined, String(student.studentClass || student.currentClass || '') || undefined);
+    const colorOf = (g: string) => (legacyScale.find((b: any) => b.grade === g) as any)?.color;
+    const scale = resolved.scale.map((b, i, arr) => ({
+        grade: b.grade,
+        min: i === arr.length - 1 ? Math.min(b.from, 0) : b.from,
+        max: i === 0 ? Math.max(b.upto, 100) : Math.max(b.upto, arr[i - 1].from - 1),
+        label: b.remark || undefined,
+        ...(colorOf(b.grade) ? { color: colorOf(b.grade) } : {}),
+    }));
     const templateId = String(tenant?.reportTemplate || 'annual_exam');
     const school = {
         name: tenant?.name || tenant?.instituteName || 'School',

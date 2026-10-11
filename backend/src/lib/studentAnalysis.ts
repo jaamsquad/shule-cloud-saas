@@ -13,6 +13,7 @@ import { buildExamResults } from '../routes/analytics.routes';
 import { levelKey, publishedView } from './examPublish';
 import { formatExamName } from './examName';
 import { catalogMatch } from './subjectCatalog';
+import { resolveGrading } from './grading';
 
 const num = (v: any) => Number(v) || 0;
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -45,9 +46,11 @@ const codeOf = (name: string) => Number(catalogMatch(name)?.code) || 9999;
 /** This student's result in one exam, with positions and subject ranks within the class level. */
 async function examSnapshot(db: Db, examId: string, studentId: string, cache: Map<string, any>) {
     if (!cache.has(examId)) cache.set(examId, await buildExamResults(db, examId));
-    const { rows, scale } = cache.get(examId);
+    const { rows } = cache.get(examId);
     const me = rows.find((r: any) => r.studentId === studentId);
     if (!me) return null;
+    // The student's class grading (template → class → global → …), as used for their grades.
+    const scale = (await resolveGrading(db, undefined, me.className)).scale;
     const peers = rows.filter((r: any) => levelKey(r.className) === levelKey(me.className));
     const stream = peers.filter((r: any) => r.stream === me.stream);
     const key = (r: any) => [r.meanPoints, r.totalMarks];
