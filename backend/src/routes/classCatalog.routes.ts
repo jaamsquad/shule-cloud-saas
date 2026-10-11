@@ -23,16 +23,16 @@ async function schoolClasses(d: Db) {
 }
 
 // School Profile → School Level (Junior / Senior / All) narrows which CBC bands show up under
-// Classes we offer. 8-4-4 Forms are a separate curriculum and always show, whatever this is set to.
+// Classes we offer. Secondary (Senior School) carries both the outgoing 8-4-4 Forms and the
+// incoming CBC Senior School grades, so it always shows whatever this is set to.
 const CBC_JUNIOR_GROUPS = new Set(['Pre-Primary', 'Lower Primary', 'Upper Primary', 'Junior School (Grades 7-9)']);
-const CBC_SENIOR_GROUPS = new Set(['Senior School (Grades 10-12)']);
 async function allowedGroups(req: Request): Promise<Set<string> | null> {
     const tenantId = (req as any).tenantContext?.tenantId;
     if (!tenantId) return null;
     let level = '';
     try { const t: any = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenantId)) }, { projection: { schoolLevel: 1 } }); level = String(t?.schoolLevel || ''); } catch { /* unrestricted */ }
-    if (level === 'Junior') return new Set([...CBC_JUNIOR_GROUPS, 'Secondary (8-4-4)']);
-    if (level === 'Senior') return new Set([...CBC_SENIOR_GROUPS, 'Secondary (8-4-4)']);
+    if (level === 'Junior') return new Set([...CBC_JUNIOR_GROUPS, 'Secondary (Senior School)']);
+    if (level === 'Senior') return new Set(['Secondary (Senior School)']);
     return null;   // 'All' or unset: no filter
 }
 
