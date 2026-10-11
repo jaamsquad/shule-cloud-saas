@@ -1,11 +1,43 @@
 import { useMemo, useState } from "react";
-import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye, Check } from "lucide-react";
+import { Home, Plus, Search, Mail, Trash2, Edit, User, Loader2, Table, LayoutGrid, Eye, Check, Printer, Download, FileSpreadsheet, ChevronDown } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
+import { useSchoolBrand, printBranded, downloadBrandedPdf } from "@/lib/printDoc";
+
+const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+
+/** Columns the printed/exported staff list can carry (ticked ones are included; the choice is remembered on this device). */
+type PrintCol = { key: string; label: string; right?: boolean; cell: (e: any) => string };
+const PRINT_COLS: PrintCol[] = [
+    { key: "designation", label: "Designation", cell: e => e.designation || "Staff" },
+    { key: "phone", label: "Phone", cell: e => e.phone || "" },
+    { key: "email", label: "Email", cell: e => e.email || "" },
+    { key: "gender", label: "Gender", cell: e => e.gender || "" },
+    { key: "nationalId", label: "National ID", cell: e => e.nationalId || "" },
+    { key: "dob", label: "Date of Birth", cell: e => e.dob || "" },
+    { key: "joiningDate", label: "Date of Joining", cell: e => e.joiningDate || "" },
+    { key: "salary", label: "Salary (KES)", right: true, cell: e => e.salary ? String(e.salary) : "" },
+    { key: "department", label: "Department", cell: e => e.department || "" },
+    { key: "staffNo", label: "Employee No", cell: e => e.staffNo || "" },
+    { key: "address", label: "Address", cell: e => e.address || "" },
+    { key: "education", label: "Education", cell: e => e.education || "" },
+    { key: "experience", label: "Experience", cell: e => e.experience || "" },
+    { key: "religion", label: "Religion", cell: e => e.religion || "" },
+    { key: "bloodGroup", label: "Blood Group", cell: e => e.bloodGroup || "" },
+    { key: "fatherName", label: "Father / Spouse", cell: e => e.fatherName || "" },
+    { key: "kraPin", label: "KRA PIN", cell: e => e.kraPin || "" },
+    { key: "nssfNo", label: "NSSF No", cell: e => e.nssfNo || "" },
+    { key: "nhifNo", label: "NHIF / SHA No", cell: e => e.nhifNo || "" },
+    { key: "bankName", label: "Bank", cell: e => e.bankName || "" },
+    { key: "bankBranch", label: "Branch", cell: e => e.bankBranch || "" },
+    { key: "accountNo", label: "Account No", cell: e => e.accountNo || "" },
+];
+const DEFAULT_COLS = ["designation", "phone", "email", "gender"];
+const COLS_KEY = "staff_list_print_cols";
 
 // A small badge on staff cards for leadership roles — School Leadership (Principal, School
 // Administrator, ...) and Department Management (HOD, ...) — plus a loose fallback for
@@ -23,6 +55,7 @@ const badgeFor = (e: any): string | null => {
 
 export default function AllEmployees() {
     const navigate = useNavigate();
+    const school = useSchoolBrand();
     const { items: staff, isLoading, deleteItem, updateItem } = useItems("staff");
     const { items: subjects } = useItems("subjects");
 
@@ -87,6 +120,51 @@ export default function AllEmployees() {
                 }
             });
     }, [staff, search, sortBy, roleFilter, categoryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Custom print / PDF / Excel: pick which roles and which columns to include ──
+    const [printOpen, setPrintOpen] = useState(false);
+    const [cols, setCols] = useState<string[]>(() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || "null"); return Array.isArray(v) ? v : DEFAULT_COLS; } catch { return DEFAULT_COLS; } });
+    const toggleCol = (k: string) => setCols(c => { const next = c.includes(k) ? c.filter(x => x !== k) : [...c, k]; try { localStorage.setItem(COLS_KEY, JSON.stringify(next)); } catch { /* private mode */ } return next; });
+    // null = every role included; otherwise only the roles ticked.
+    const [roleSel, setRoleSel] = useState<Set<string> | null>(null);
+    const roleChecked = (r: string) => roleSel === null || roleSel.has(r);
+    const toggleRole = (r: string) => setRoleSel(sel => {
+        const base = new Set(sel === null ? roles.map(([rr]) => rr) : sel);
+        if (base.has(r)) base.delete(r); else base.add(r);
+        return base;
+    });
+
+    const buildExport = () => {
+        const use = PRINT_COLS.filter(c => cols.includes(c.key));
+        const byName = (a: any, b: any) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" });
+        const rows = staff.filter((e: any) => roleChecked(roleOf(e))).sort(byName);
+        return { use, rows };
+    };
+    const exportTitle = () => `Staff list${roleSel ? ` — ${[...roleSel].join(", ") || "no roles selected"}` : ""}`;
+    const printList = () => {
+        const { use, rows } = buildExport();
+        const head = use.map(c => `<th${c.right ? ' style="text-align:right"' : ""}>${c.label}</th>`).join("");
+        const body = `
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px">${rows.length} employee${rows.length === 1 ? "" : "s"} · ${roleSel ? `Roles: ${[...roleSel].join(", ") || "none selected"}` : "All roles"}</div>
+          <table><thead><tr><th>#</th><th>Name</th>${head}</tr></thead><tbody>
+          ${rows.map((e: any, i: number) => `<tr><td>${i + 1}</td><td>${esc(nameOf(e))}</td>${use.map(c => `<td${c.right ? ' style="text-align:right"' : ""}>${esc(c.cell(e))}</td>`).join("")}</tr>`).join("")}
+          </tbody></table>`;
+        return body;
+    };
+    const doPrint = () => { printBranded(school, exportTitle(), printList(), "#5C67F2"); setPrintOpen(false); };
+    const doPdf = () => { downloadBrandedPdf(school, exportTitle(), printList(), "#5C67F2"); setPrintOpen(false); };
+    const doExcel = async () => {
+        const { use, rows } = buildExport();
+        const { utils, writeFile } = await import("xlsx");
+        const headers = ["#", "Name", ...use.map(c => c.label)];
+        const data = rows.map((e: any, i: number) => [i + 1, nameOf(e), ...use.map(c => c.cell(e))]);
+        const ws = utils.aoa_to_sheet([headers, ...data]);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Staff");
+        writeFile(wb, "staff_list.xlsx");
+        setPrintOpen(false);
+    };
+
     const [editingEmployee, setEditingEmployee] = useState<any>(null);
     const [editForm, setEditForm] = useState<any>({
         employeeName: "",
@@ -170,9 +248,47 @@ export default function AllEmployees() {
                 
                 {/* Toolbar: view toggle + search */}
                 <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
-                    <div className="bg-white border border-gray-100 rounded-xl p-1 flex shadow-sm">
-                        <button onClick={() => setView("cards")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "cards" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-3.5 h-3.5" /> Cards</button>
-                        <button onClick={() => setView("list")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> List</button>
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white border border-gray-100 rounded-xl p-1 flex shadow-sm">
+                            <button onClick={() => setView("cards")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "cards" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><LayoutGrid className="w-3.5 h-3.5" /> Cards</button>
+                            <button onClick={() => setView("list")} className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><Table className="w-3.5 h-3.5" /> List</button>
+                        </div>
+                        <div className="relative">
+                            <button onClick={() => setPrintOpen(o => !o)} className="h-11 px-5 bg-white border border-gray-100 rounded-xl shadow-sm text-[11px] font-black uppercase tracking-wide text-slate-600 flex items-center gap-2">
+                                <Printer className="w-3.5 h-3.5" /> Print / Export <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            {printOpen && (
+                                <div className="absolute left-0 top-12 z-30 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-[11px] font-bold text-slate-500">Roles to include</div>
+                                        <button onClick={() => setRoleSel(null)} className="text-[10px] font-bold text-[#5C67F2]">All roles</button>
+                                    </div>
+                                    <div className="space-y-1.5 max-h-36 overflow-y-auto border-b border-slate-100 pb-3 mb-3">
+                                        {roles.map(([r, n]) => (
+                                            <label key={r} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                                <input type="checkbox" checked={roleChecked(r)} onChange={() => toggleRole(r)} className="w-4 h-4 accent-slate-800" />
+                                                {r} <span className="text-[10px] text-slate-400">({n})</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="text-[11px] font-bold text-slate-500 mb-2">Columns to include</div>
+                                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                        <label className="flex items-center gap-2 text-sm text-slate-400"><input type="checkbox" checked disabled className="w-4 h-4" /> # and Name</label>
+                                        {PRINT_COLS.map(c => (
+                                            <label key={c.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                                <input type="checkbox" checked={cols.includes(c.key)} onChange={() => toggleCol(c.key)} className="w-4 h-4 accent-slate-800" />
+                                                {c.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2 mt-3">
+                                        <button onClick={doPrint} className="flex-1 h-9 rounded-xl text-xs font-bold text-white bg-[#1f2937] flex items-center justify-center gap-1.5"><Printer className="w-3.5 h-3.5" /> Print</button>
+                                        <button onClick={doPdf} className="flex-1 h-9 rounded-xl text-xs font-bold text-white bg-[#5C67F2] flex items-center justify-center gap-1.5"><Download className="w-3.5 h-3.5" /> PDF</button>
+                                        <button onClick={doExcel} className="flex-1 h-9 rounded-xl text-xs font-bold text-white bg-emerald-600 flex items-center justify-center gap-1.5"><FileSpreadsheet className="w-3.5 h-3.5" /> Excel</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
                         <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value as any)}
