@@ -4,8 +4,12 @@
  * Resolution order for a class:
  *   1. The GRADING TEMPLATE assigned to the class (v2_classes.gradingTemplateId).
  *   2. A class-specific grading_criteria row.
- *   3. The global grading_criteria row.
- *   4. The built-in KCSE 12-point default.
+ *   3. The global grading_criteria row (rows without grades are skipped).
+ *   4. Curriculum Settings → grading scale (curriculum_settings.gradingScale).
+ *   5. The built-in KCSE 12-point default.
+ *
+ * Grades are matched by lower bound (highest "from" the score reaches), so a score
+ * between bands (e.g. 79.5 with bands 75-79 / 80-100) gets the band below, never E.
  *
  * The class is matched by its _id OR by NAME/level (a student may be keyed by class
  * text, not the v2 id). Report cards AND analytics both call this so grades are
@@ -29,22 +33,35 @@ const DEFAULT_SCALE: GradeBand[] = [
 ];
 
 function toBands(rec: any): GradeBand[] {
-    const raw = rec?.grades || rec?.gradingScale || [];
+    const raw = rec?.grades?.length ? rec.grades : rec?.gradingScale?.length ? rec.gradingScale : [];
     if (!raw.length) return DEFAULT_SCALE;
     return raw.map((g: any, i: number) => ({
         grade: g.grade ?? g.name ?? g.label ?? '',
-        from: N(g.from ?? g.minPercent ?? g.min),
-        upto: N(g.upto ?? g.maxPercent ?? g.max ?? 100),
+        from: N(g.from ?? g.minPercent ?? g.min ?? g.min_percent),
+        upto: N(g.upto ?? g.maxPercent ?? g.max ?? g.max_percent ?? 100),
         points: N(g.points ?? g.point ?? (raw.length - i)),
         remark: g.remark ?? g.status ?? g.label ?? '',
-    })).sort((a: GradeBand, b: GradeBand) => b.upto - a.upto);
+    })).sort((a: GradeBand, b: GradeBand) => b.from - a.from || b.upto - a.upto);
 }
+
+/** The band a percentage falls in: the highest band whose lower bound it reaches. */
+export function gradeFromScale(scale: GradeBand[], pct: number): GradeBand {
+    const p = Number(pct) || 0;
+    return scale.find(s => p >= s.from) || scale[scale.length - 1];
+}
+/** Mean grade from mean points (nearest band at or below, with the usual .5 rounding). */
+export function meanGradeFromScale(scale: GradeBand[], meanPoints: number): string {
+    const byPts = [...scale].sort((a, b) => b.points - a.points);
+    for (const s of byPts) if (meanPoints >= s.points - 0.5) return s.grade;
+    return byPts[byPts.length - 1]?.grade || '-';
+}
+export { DEFAULT_SCALE };
 
 export interface Grading {
     scale: GradeBand[];
     gradeOf: (pct: number) => GradeBand;
     meanGrade: (meanPoints: number) => string;
-    source: 'template' | 'class' | 'global' | 'default';
+    source: 'template' | 'class' | 'global' | 'curriculum' | 'default';
     templateName?: string;
 }
 
@@ -74,14 +91,19 @@ export async function resolveGrading(database: Db, classId?: string, className?:
         const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
         if (tOid) { const t = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null); if (t) { rec = t; source = 'template'; templateName = t.name; } }
     }
-    // 2) Class-specific grading_criteria.
-    if (!rec && classId) { const c = await database.collection('grading_criteria').findOne({ classId }).catch(() => null); if (c) { rec = c; source = 'class'; } }
-    // 3) Global grading_criteria.
-    if (!rec) { const g = await database.collection('grading_criteria').findOne({}).catch(() => null); if (g) { rec = g; source = 'global'; } }
+    // 2) Class-specific grading_criteria (with grades).
+    const hasGrades = (r: any) => Array.isArray(r?.grades) && r.grades.length > 0;
+    const rows: any[] = rec ? [] : await database.collection('grading_criteria').find({}).toArray().catch(() => []);
+    const clsIds = [classId, cls?._id ? String(cls._id) : ''].filter(Boolean).map(String);
+    if (!rec) { const c = rows.find(r => r.classId && clsIds.includes(String(r.classId)) && hasGrades(r)); if (c) { rec = c; source = 'class'; } }
+    // 3) Global grading_criteria (the first row with grades and no class).
+    if (!rec) { const g = rows.find(r => !r.classId && hasGrades(r)); if (g) { rec = g; source = 'global'; } }
+    // 4) Curriculum Settings scale.
+    if (!rec) { const cs: any = await database.collection('curriculum_settings').findOne({}).catch(() => null); if (cs?.gradingScale?.length) { rec = cs; source = 'curriculum'; } }
 
     const scale = toBands(rec);
-    const gradeOf = (pct: number) => scale.find(s => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
-    const meanGrade = (mp: number) => { let best = scale[scale.length - 1]; for (const s of scale) { if (mp >= s.points - 0.5) { best = s; break; } } return best?.grade || '-'; };
+    const gradeOf = (pct: number) => gradeFromScale(scale, pct);
+    const meanGrade = (mp: number) => meanGradeFromScale(scale, mp);
     return { scale, gradeOf, meanGrade, source, templateName };
 }
 
