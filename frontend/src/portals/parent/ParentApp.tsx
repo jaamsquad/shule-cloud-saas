@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import ParentLogin from "./ParentLogin";
+import ToMainLogin from "../ToMainLogin";
 import ParentLayout from "./ParentLayout";
 import ParentDashboard from "./pages/ParentDashboard";
 import ParentResults from "./pages/ParentResults";
@@ -18,7 +18,7 @@ import { parentApi } from "./parentApi";
 export default function ParentApp() {
     return (
         <Routes>
-            <Route path="/login" element={<ParentLogin />} />
+            <Route path="/login" element={<ToMainLogin tokenKey="parent_token" />} />
             <Route element={<ParentLayout />}>
                 <Route path="/" element={<ParentDashboard />} />
                 <Route path="/results" element={<ParentResults />} />

@@ -80,8 +80,8 @@ class HelpScreen extends StatelessWidget {
           ])),
           const SizedBox(height: 10),
           Panel(padding: EdgeInsets.zero, child: Column(children: [
-            ListTile(leading: const Icon(Icons.call_outlined, color: C.green), title: const Text('Call support'), subtitle: const Text('0726 151 104'), onTap: () => launchUrl(Uri.parse('tel:${AppConfig.supportPhone}'))),
-            ListTile(leading: const Icon(Icons.mail_outline, color: Color(0xFF0284C7)), title: const Text('Email'), subtitle: const Text(AppConfig.supportEmail), onTap: () => launchUrl(Uri.parse('mailto:${AppConfig.supportEmail}'))),
+            ListTile(leading: const Icon(Icons.call_outlined, color: C.iconInk), title: const Text('Call support'), subtitle: const Text('0726 151 104'), onTap: () => launchUrl(Uri.parse('tel:${AppConfig.supportPhone}'))),
+            ListTile(leading: const Icon(Icons.mail_outline, color: C.iconInk), title: const Text('Email'), subtitle: const Text(AppConfig.supportEmail), onTap: () => launchUrl(Uri.parse('mailto:${AppConfig.supportEmail}'))),
           ])),
         ]),
       );

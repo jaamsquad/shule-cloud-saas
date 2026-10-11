@@ -26,7 +26,7 @@ export default function ParentPortalDashboard() {
 
     useEffect(() => {
         const info = localStorage.getItem("parent_info");
-        if (!info || !localStorage.getItem("parent_token")) { navigate("/parent-portal"); return; }
+        if (!info || !localStorage.getItem("parent_token")) { navigate("/login"); return; }
         setParent(JSON.parse(info));
     }, [navigate]);
 
@@ -78,7 +78,7 @@ export default function ParentPortalDashboard() {
     const outstanding = invoices.reduce((s: number, i: any) => s + Math.max(0, Number(i.balance || i.outstanding || 0)), 0);
     const trendData = [...examResults].reverse().map((e: any) => ({ name: e.examName?.slice(0, 10), Avg: Number(e.average.toFixed(1)) }));
 
-    const handleLogout = () => { localStorage.removeItem("parent_token"); localStorage.removeItem("parent_info"); toast.success("Logged out"); navigate("/parent-portal"); };
+    const handleLogout = () => { localStorage.removeItem("parent_token"); localStorage.removeItem("parent_info"); toast.success("Logged out"); navigate("/login"); };
 
     if (!parent) return null;
 

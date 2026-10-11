@@ -63,14 +63,14 @@ class _AppSheet extends ConsumerWidget {
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
                 onPressed: () { ref.read(appListsProvider.notifier).toggleStar(app.key); Navigator.pop(context); },
-                icon: Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded, color: const Color(0xFFF59E0B)),
+                icon: Icon(starred ? Icons.star_rounded : Icons.star_outline_rounded, color: C.slate500),
                 label: Text(starred ? 'Unstar' : 'Star'),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: app.color),
+                style: FilledButton.styleFrom(backgroundColor: C.iconTile),
                 onPressed: app.locked ? null : () { final router = GoRouter.of(context); Navigator.pop(context); router.go('/apps/${app.key}'); },
                 icon: const Icon(Icons.arrow_forward_rounded), label: const Text('Open'),
               ),

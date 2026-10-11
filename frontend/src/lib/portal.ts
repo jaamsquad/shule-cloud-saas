@@ -88,5 +88,14 @@ export function makePortalApi(tokenKey: string, basePath: string = "/auth") {
         if (sub) cfg.headers["x-tenant-subdomain"] = sub;
         return cfg;
     });
+    // An expired or rejected portal session goes to the school's one login page.
+    inst.interceptors.response.use(r => r, err => {
+        if (err?.response?.status === 401) {
+            localStorage.removeItem(tokenKey);
+            localStorage.removeItem("active_portal");
+            if (window.location.pathname !== "/login") window.location.href = "/login?session=expired";
+        }
+        return Promise.reject(err);
+    });
     return inst;
 }

@@ -41,12 +41,12 @@ class StatTile extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String? hint;
-  const StatTile({super.key, required this.label, required this.value, required this.icon, this.color = C.brand, this.hint});
+  const StatTile({super.key, required this.label, required this.value, required this.icon, this.color = C.iconInk, this.hint});
   @override
   Widget build(BuildContext context) => Panel(
         padding: const EdgeInsets.all(14),
         child: Row(children: [
-          Container(width: 38, height: 38, decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: color, size: 20)),
+          Container(width: 38, height: 38, decoration: BoxDecoration(color: C.iconSoft, borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: C.iconInk, size: 20)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

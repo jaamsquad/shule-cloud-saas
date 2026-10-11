@@ -134,7 +134,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                 if (_msgs.isEmpty) ...[
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFEAF2FF), Color(0xFFF3EEFF)]), borderRadius: BorderRadius.circular(18)),
+                    decoration: BoxDecoration(color: C.iconSoft, borderRadius: BorderRadius.circular(18), border: Border.all(color: C.slate200)),
                     child: const Row(children: [
                       DuoIcon(icon: Icons.smart_toy_outlined, color: C.blue, size: 38),
                       SizedBox(width: 12),
@@ -154,7 +154,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: C.slate200)),
                             child: Row(children: [
-                              const Icon(Icons.auto_awesome_rounded, size: 16, color: C.blue), const SizedBox(width: 10),
+                              const Icon(Icons.auto_awesome_outlined, size: 16, color: C.iconInk), const SizedBox(width: 10),
                               Expanded(child: Text(q, style: const TextStyle(fontWeight: FontWeight.w700, color: C.slate700))),
                               const Icon(Icons.north_east_rounded, size: 16, color: C.slate400),
                             ]),
@@ -263,7 +263,7 @@ class _DataCard extends StatelessWidget {
           boxShadow: [BoxShadow(color: const Color(0xFF1E3A8A).withValues(alpha: 0.07), blurRadius: 12, offset: const Offset(0, 4))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.insights_rounded, size: 16, color: C.blue), const SizedBox(width: 6),
+          const Icon(Icons.insights_outlined, size: 16, color: C.iconInk), const SizedBox(width: 6),
           Expanded(child: Text((c['title'] ?? 'School data').toString().toUpperCase(), style: const TextStyle(fontSize: 11, letterSpacing: 0.6, fontWeight: FontWeight.w800, color: C.slate500))),
         ]),
         if (stat != null) Padding(

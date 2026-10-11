@@ -109,25 +109,18 @@ class HeaderTabs extends StatelessWidget {
       );
 }
 
-/// A line icon with a colour blob behind it — the illustrated look of the reference tiles.
+/// A plain line icon, drawn in near-black on the card — no colour, no blobs.
+/// `color` is kept so existing callers compile, but every icon is grey/black.
 class DuoIcon extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double size;
-  const DuoIcon({super.key, required this.icon, required this.color, this.size = 44});
+  const DuoIcon({super.key, required this.icon, this.color = C.iconInk, this.size = 44});
   @override
-  Widget build(BuildContext context) {
-    final hsl = HSLColor.fromColor(color);
-    final accent = hsl.withHue((hsl.hue + 40) % 360).withLightness(0.62).toColor();
-    return SizedBox(
-      width: size * 1.25, height: size * 1.15,
-      child: Stack(alignment: Alignment.center, children: [
-        Positioned(right: 0, bottom: 0, child: Container(width: size * 0.78, height: size * 0.78, decoration: BoxDecoration(color: color.withValues(alpha: 0.16), shape: BoxShape.circle))),
-        Positioned(left: size * 0.05, top: size * 0.02, child: Container(width: size * 0.32, height: size * 0.32, decoration: BoxDecoration(color: accent.withValues(alpha: 0.35), shape: BoxShape.circle))),
-        Icon(icon, size: size, color: HSLColor.fromColor(color).withLightness((hsl.lightness - 0.08).clamp(0.2, 0.6)).toColor()),
-      ]),
-    );
-  }
+  Widget build(BuildContext context) => SizedBox(
+        width: size * 1.25, height: size * 1.15,
+        child: Center(child: Icon(lineIcon(icon), size: size, color: C.iconInk)),
+      );
 }
 
 /// White rounded dashboard tile: big illustrated icon, label underneath, optional red badge.
@@ -171,15 +164,15 @@ class FeatureTile extends StatelessWidget {
                 Positioned(
                   right: 8, top: 8,
                   child: badge!.isEmpty
-                      ? Container(width: 10, height: 10, decoration: const BoxDecoration(color: Color(0xFFFF5A5F), shape: BoxShape.circle))
+                      ? Container(width: 10, height: 10, decoration: const BoxDecoration(color: C.slate500, shape: BoxShape.circle))
                       : Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(color: const Color(0xFFFF5A5F), borderRadius: BorderRadius.circular(8)),
+                          decoration: BoxDecoration(color: C.iconTile, borderRadius: BorderRadius.circular(8)),
                           child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
                         ),
                 ),
-              if (locked) const Positioned(right: 8, top: 8, child: Icon(Icons.lock_rounded, size: 15, color: C.amber)),
-              if (starred && !locked) const Positioned(left: 8, top: 8, child: Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B))),
+              if (locked) const Positioned(right: 8, top: 8, child: Icon(Icons.lock_rounded, size: 15, color: C.slate400)),
+              if (starred && !locked) const Positioned(left: 8, top: 8, child: Icon(Icons.star_rounded, size: 16, color: C.slate400)),
             ]),
           ),
         ),
@@ -224,7 +217,7 @@ class ProgressRing extends StatelessWidget {
   final String? caption;
   final Color color;
   final double size;
-  const ProgressRing({super.key, required this.value, required this.center, this.caption, this.color = C.blue, this.size = 92});
+  const ProgressRing({super.key, required this.value, required this.center, this.caption, this.color = C.iconTile, this.size = 92});
   @override
   Widget build(BuildContext context) => SizedBox(
         width: size, height: size,
@@ -265,7 +258,7 @@ class Avatar extends StatelessWidget {
   final String? photo;
   final double size;
   final Color color;
-  const Avatar({super.key, required this.name, this.photo, this.size = 48, this.color = C.blue});
+  const Avatar({super.key, required this.name, this.photo, this.size = 48, this.color = C.iconTile});
   @override
   Widget build(BuildContext context) {
     final p = name.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).toList();

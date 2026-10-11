@@ -100,7 +100,7 @@ export default function ManageLogin() {
                         className="flex items-center gap-2 h-8 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all">
                         Parent Login Mgmt
                     </a>
-                    <a href="/student-portal" target="_blank" rel="noopener noreferrer"
+                    <a href="/login" target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-2 h-8 px-4 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100">
                         <Key className="w-3.5 h-3.5" /> Student Portal ↗
                     </a>

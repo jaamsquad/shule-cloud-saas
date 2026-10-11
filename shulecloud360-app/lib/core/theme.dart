@@ -21,6 +21,11 @@ class C {
   static const red = Color(0xFFE11D48);
   static const amber = Color(0xFFD97706);
 
+  // Icons and cards are grey & white — only the headers carry the school blue.
+  static const iconInk = Color(0xFF334155);    // glyph on a light tile
+  static const iconTile = Color(0xFF1F2937);   // dark neutral tile, white glyph
+  static const iconSoft = Color(0xFFF1F5F9);   // light grey tile / blob
+
   static Color hex(String h) {
     final s = h.replaceAll('#', '');
     return Color(int.parse(s.length == 6 ? 'FF$s' : s, radix: 16));
