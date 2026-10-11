@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolPricing, setSchoolEmailMode, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, getOwnerAuditLogs, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, getPlatformKra, setPlatformKra, testPlatformKra, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolPricing, setSchoolEmailMode, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, getOwnerAuditLogs, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformSmsPricing, setPlatformSmsPricing, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, getPlatformKra, setPlatformKra, testPlatformKra, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -83,6 +83,8 @@ router.post('/public-settings', setPublicSettings);
 // ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
 router.get('/mpesa-settings', getPlatformMpesa);
 router.post('/mpesa-settings', setPlatformMpesa);
+router.get('/sms-pricing', getPlatformSmsPricing);
+router.post('/sms-pricing', setPlatformSmsPricing);
 router.get('/meeting-settings', getPlatformMeeting);
 router.post('/meeting-settings', setPlatformMeeting);
 router.post('/meeting-settings/test', testPlatformMeeting);

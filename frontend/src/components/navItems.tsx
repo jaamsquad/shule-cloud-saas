@@ -414,6 +414,7 @@ export const navItems: NavItem[] = [
       { label: "SMS & Email Templates", path: "/communications/templates" },
       { label: "Message Parents", path: "/communications/parent-messages" },
       { label: "Bulk SMS", path: "/communications/sms" },
+      { label: "SMS Credits", path: "/communications/sms-credits" },
       { label: "Email Broadcast", path: "/communications/email" },
       { label: "WhatsApp Broadcast", path: "/communications/whatsapp" },
       { label: "WhatsApp Integration", path: "/communications/whatsapp-integration" },

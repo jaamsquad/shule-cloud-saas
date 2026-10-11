@@ -66,6 +66,7 @@ import accountingRoutes from './modules/accounting/accounting.routes';
 import requestsRoutes from './modules/requests/requests.routes';
 import blogRoutes from './routes/blog.routes';
 import smsRoutes from './routes/sms.routes';
+import smsWalletRoutes from './routes/smsWallet.routes';
 import liveClassRoutes from './modules/liveclass/liveclass.routes';
 import calendarRoutes from './routes/calendar.routes';
 import driverRoutes from './routes/driver.routes';
@@ -406,6 +407,7 @@ app.use('/api/v1', accountingRoutes);     // Accounting / General Ledger
 app.use('/api/v1', requestsRoutes);       // Request Management & Approval Workflow
 app.use('/api/v1', blogRoutes);           // Blog (super-owner admin + public)
 app.use('/api/v1', smsRoutes);            // SMS gateway (school admin + Android app)
+app.use('/api/v1', smsWalletRoutes);      // SMS credit wallet (balance, ratio, M-PESA top-up)
 app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton)
 app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1', driverRoutes);         // ShuleCloud Driver app (transport/GPS)

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { parseStkCallback, applyMpesaPayment, stkResultMessage } from '../services/mpesa.service';
 import { creditWallet } from '../services/wallet.service';
+import { creditSmsWallet } from '../services/smsWallet.service';
 import { handleBusinessCallback } from '../services/bizDocs.service';
 import { activateSubscription } from '../services/subscription.service';
 
@@ -57,7 +58,9 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
             );
             if (upd.modifiedCount > 0 && txn.tenantDbName) {
                 const tdb = getTenantDb(txn.tenantDbName);
-                if (txn.purpose === 'wallet') {
+                if (txn.purpose === 'sms') {
+                    await creditSmsWallet(tdb, txn.smsCount, { source: 'M-PESA', reference: m.mpesaReceiptNumber, description: `Topped up with KSH ${txn.amount}` });
+                } else if (txn.purpose === 'wallet') {
                     await creditWallet(tdb, txn.studentId, m.amount || txn.amount, { source: 'M-PESA', reference: m.mpesaReceiptNumber, by: 'mpesa' });
                 } else {
                     await applyMpesaPayment(tdb, {

@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { getDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { schoolPrice, cleanSchoolPricing, CYCLES, cycleOf } from '../lib/planPricing';
 import { EMAIL_MODES, platformSmtp, schoolSmtp, forgetTenantEmailCache } from '../lib/emailRouting';
+import { getSmsPricing, setSmsPricing } from '../services/smsWallet.service';
 
 // ─── Owner roles & permissions ───────────────────────────────────────────────
 // Roles available to owner-portal users and what each can do.
@@ -879,6 +880,17 @@ export const setPlatformMpesa = async (req: Request, res: Response) => {
         await getDb().collection('mpesa_settings').updateOne({}, { $set: set }, { upsert: true });
         return res.json({ ok: true });
     } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+// ─── SMS pricing — how many SMS 1 KSH buys, and the free welcome bonus ────────
+export const getPlatformSmsPricing = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try { return res.json(await getSmsPricing()); } catch (e: any) { return res.status(500).json({ message: e.message }); }
+};
+
+export const setPlatformSmsPricing = async (req: Request, res: Response) => {
+    if (!ownerClaims(req)) return res.status(401).json({ message: 'Unauthorized' });
+    try { return res.json(await setSmsPricing(req.body || {})); } catch (e: any) { return res.status(500).json({ message: e.message }); }
 };
 
 // ─── Platform Jitsi / JaaS (Live Classes) — one shared account for all schools ─
