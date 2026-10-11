@@ -13,6 +13,7 @@ import { Db, ObjectId } from 'mongodb';
 import { callerOf, getAiConfig, schoolAiEnabled } from '../lib/aiAssistant';
 import { afeyChat, canAct, runSmsAction, resolveTargets, fill } from '../lib/afey';
 import { getMetaDb } from '../lib/mongodb';
+import { resolveScope } from '../lib/dataScope';
 
 const router = Router();
 const tdb = (req: Request): Db | null => (req as any).tenantDb || null;
@@ -98,7 +99,8 @@ router.post('/afey/actions/:id/approve', async (req: Request, res: Response) => 
         const claim = await db.collection('afey_actions').updateOne({ _id: _id!, status: 'pending' }, { $set: { status: 'sending', message: a.message, approvedBy: c!.id, approvedAt: new Date() } });
         if (!claim.modifiedCount) return res.status(409).json({ message: 'This is already being sent.' });
         try {
-            const result = await runSmsAction(db, String((req as any).tenantContext?.tenantId || 'default'), a);
+            const scope = await resolveScope(req, db);
+            const result = await runSmsAction(db, String((req as any).tenantContext?.tenantId || 'default'), a, scope);
             const status = result.recipients && !result.queued && !result.sent ? 'failed' : 'done';
             await db.collection('afey_actions').updateOne({ _id: _id! }, { $set: { status, result, doneAt: new Date() } });
             res.json({ status, result, message: status === 'done' ? `Sent to ${result.recipients} recipient${result.recipients === 1 ? '' : 's'}.` : 'The SMS could not be sent. Check Communications → SMS settings.' });
@@ -122,7 +124,7 @@ router.post('/afey/actions/:id/preview', async (req: Request, res: Response) => 
     if (!canAct(c) || !db) return res.status(403).json({ message: 'Not allowed' });
     const a: any = await db.collection('afey_actions').findOne({ _id: oid(req.params.id) as any });
     if (!a) return res.status(404).json({ message: 'Action not found' });
-    const t = (await resolveTargets(db, a))[0];
+    const t = (await resolveTargets(db, a, await resolveScope(req, db)))[0];
     res.json({ text: t ? fill(String(req.body?.message || a.message), t.vars) : String(req.body?.message || a.message) });
 });
 
