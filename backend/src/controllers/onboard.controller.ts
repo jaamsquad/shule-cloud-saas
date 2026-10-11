@@ -273,6 +273,20 @@ export const activateTenant = async (req: Request, res: Response) => {
                 const pricing = await getSmsPricing();
                 await creditSmsWallet(getTenantDb(tenant.databaseName), pricing.welcomeBonus, { source: 'Welcome Bonus', description: 'Free SMS credits for joining ShuleCloud' });
             } catch (e: any) { console.error('[onboard] welcome SMS bonus failed:', e.message); }
+
+            // Give the registering admin a staff record too, so they show up in Staff / Teachers
+            // like any other team member rather than being an invisible meta-level login only.
+            try {
+                const tdb = getTenantDb(tenant.databaseName);
+                const adminUser = await db.collection('User').findOne({ tenantId: tenant._id, isSchoolAdmin: true });
+                if (adminUser && !(await tdb.collection('staff').findOne({ email: adminUser.email }))) {
+                    await tdb.collection('staff').insertOne({
+                        employeeName: adminUser.name, email: adminUser.email, phone: adminUser.phone || '',
+                        designation: 'School Administrator', isTeachingStaff: false, portalAccess: 'admin',
+                        status: 'Active', createdAt: new Date(),
+                    });
+                }
+            } catch (e: any) { console.error('[onboard] admin staff record failed:', e.message); }
         }
 
         return res.json({ ok: true, subdomain: tenant.subdomain });

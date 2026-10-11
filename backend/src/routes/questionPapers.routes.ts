@@ -18,6 +18,7 @@ import { enforceCrud } from '../lib/permissions';
 import { extractPaper, questionPlainText } from '../lib/paperExtract';
 import { levelKey } from '../lib/examPublish';
 import { matchScheme, aiAnswers } from '../lib/qpAnswers';
+import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -309,6 +310,21 @@ router.put('/qp/papers/:id', U, async (req, res) => {
 router.delete('/qp/papers/:id', D, async (req, res) => {
     try { const id = oid(req.params.id); if (id) await db(req).collection('question_papers').deleteOne({ _id: id }); res.json({ ok: true }); }
     catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// "Scan to verify" QR link for a printed paper — proves it was issued by this school, and
+// (when studentName/admNo are given) ties a specific printed copy to the student it went to.
+router.post('/qp/verify-link', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
+        const token = signToken({
+            p: str(b.paperId, 60), title: str(b.title, 200), subject: str(b.subject, 120),
+            className: str(b.className, 120), studentName: str(b.studentName, 120), admNo: str(b.admNo, 40),
+            at: Date.now(),
+        });
+        res.json({ url: `${publicAppUrl()}/${slug}/paper/verify/online/${token}` });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
 export default router;

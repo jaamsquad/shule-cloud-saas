@@ -353,6 +353,7 @@ app.use('/api/v1', academicsRoutes);
 app.use('/api/v1', analyticsRoutes);
 app.use('/api/v1', dashboardsRoutes);   // dashboard switcher: 8-4-4 exam overview, teacher subject classes
 app.use('/api/v1', curriculumCatalogRoutes);   // Subjects we offer, CBE pathways, CBC learning areas
+app.use('/api/v1', classCatalogRoutes);   // Classes we offer: built-in grade/level catalog
 app.use('/api/v1', examPrintoutsRoutes);   // Exams → Printouts: merit list, analysis, transcripts
 app.use('/api/v1', examPublishRoutes);   // Exams → Manage Exams: publish / unpublish results
 app.use('/api/v1', studentAnalysisRoutes); // Student profile → Analysis (published results) + targets

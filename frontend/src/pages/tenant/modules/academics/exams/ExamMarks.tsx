@@ -44,6 +44,7 @@ export default function ExamMarks() {
     const [selectedClass, setSelectedClass] = useState<any>(null);
     const [selectedStream, setSelectedStream] = useState<any>(null);   // v2 stream (East/South)
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
+    const [selectedPaper, setSelectedPaper] = useState<any>(null);
     const [entries, setEntries] = useState<MarkEntry[]>([]);
     const [search, setSearch] = useState("");
     const queryClient = useQueryClient();
@@ -111,8 +112,18 @@ export default function ExamMarks() {
         return base;
     })();
 
+    // A subject can be split into weighted papers (General Settings → Subject Paper Ratios);
+    // when it has any, a paper must be picked before marks entry — its "out of" then governs
+    // this sheet, and the subject's overall score is combined from the ratios automatically.
+    const { data: subjectPapers = [] } = useQuery<any[]>({
+        queryKey: ["subject_papers", selectedSubject?._id],
+        queryFn: async () => (await api.get("/academics/subject-papers", { params: { subjectId: selectedSubject._id } })).data,
+        enabled: !!selectedSubject,
+    });
+
     // Get the max marks for the selected subject from exam's subjectConfigs
     const subjectMaxMarks = (() => {
+        if (selectedPaper) return selectedPaper.outOf || 100;
         if (!selectedSubject || examSubjectConfigs.length === 0) return 100;
         const cfg = examSubjectConfigs.find(c =>
             c.subjectId === selectedSubject._id?.toString() ||
@@ -202,12 +213,15 @@ export default function ExamMarks() {
         const name = s.studentName || (s.firstName && s.lastName ? `${s.firstName} ${s.lastName}` : null) || s.fullName || s.name || s.admNo || "Student";
             const adm = s.admissionNumber || s.admNo || s.registrationNo || "—";
             const existing = existingMarks.find((m: any) => m.studentId === s._id);
-            if (existing) {
+            // When a paper is selected, enter/show that paper's own score, not the subject's
+            // already-combined one.
+            const paperScore = selectedPaper ? existing?.papers?.[selectedPaper._id] : null;
+            if (existing && (!selectedPaper || paperScore)) {
                 // Re-calculate grade using the configured scale when loading existing marks
-                const m = Number(existing.marksObtained);
-                const t = Number(existing.totalMarks) || 100;
+                const m = Number(selectedPaper ? paperScore.marksObtained : existing.marksObtained);
+                const t = Number(selectedPaper ? (paperScore.totalMarks || subjectMaxMarks) : existing.totalMarks) || 100;
                 const { grade, points, remarks } = autoGrade(m, t, grading);
-                return { ...existing, studentName: name, admNo: adm, grade, gradePoints: points, remarks };
+                return { ...existing, marksObtained: m, totalMarks: t, studentName: name, admNo: adm, grade, gradePoints: points, remarks };
             }
             return {
                 studentId: s._id, studentName: name, admNo: adm,
@@ -277,6 +291,7 @@ export default function ExamMarks() {
                 // Always store as number; 0 for absent
                 marksObtained: e.attendanceStatus === "Absent" ? 0 : Number(e.marksObtained),
                 totalMarks: Number(e.totalMarks) || 100,
+                ...(selectedPaper ? { paperId: selectedPaper._id, paperLabel: selectedPaper.label } : {}),
             }));
 
         if (toSave.length === 0) return toast.error("Enter at least one student's marks before saving.");
@@ -285,7 +300,7 @@ export default function ExamMarks() {
 
     const filtered = entries.filter(e => (e.studentName || "").toLowerCase().includes(search.toLowerCase()) || (e.admNo || "").toLowerCase().includes(search.toLowerCase()));
 
-    const setupReady = selectedExam && selectedClass && selectedSubject;
+    const setupReady = selectedExam && selectedClass && selectedSubject && (subjectPapers.length === 0 || selectedPaper);
 
     return (
         <div className="flex-1 bg-[#f3f4f6] min-h-screen flex flex-col overflow-y-auto pb-20">
@@ -391,7 +406,7 @@ export default function ExamMarks() {
                         <div className="relative">
                             <select
                                 value={selectedSubject?._id || ""}
-                                onChange={e => setSelectedSubject(subjects.find((o: any) => o._id === e.target.value) || null)}
+                                onChange={e => { setSelectedSubject(subjects.find((o: any) => o._id === e.target.value) || null); setSelectedPaper(null); setEntries([]); }}
                                 className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
                             >
                                 <option value="">— Select Subject —</option>
@@ -406,6 +421,20 @@ export default function ExamMarks() {
                     </div>
                 </div>
 
+                {selectedSubject && subjectPapers.length > 0 && (
+                    <div className="mb-8">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Which paper?</label>
+                        <div className="flex flex-wrap gap-2">
+                            {subjectPapers.map((p: any) => (
+                                <button key={p._id} onClick={() => { setSelectedPaper(p); setEntries([]); }}
+                                    className={`h-10 px-4 rounded-xl text-xs font-black ${selectedPaper?._id === p._id ? "bg-[#5C67F2] text-white" : "bg-white border border-gray-200 text-slate-600"}`}>
+                                    {p.label} <span className="opacity-70">/{p.outOf}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-2">Each paper is marked separately; the subject's overall score is combined automatically from the ratios set in General Settings.</p>
+                    </div>
+                )}
 
                 {setupReady && (
                     <div className="mb-4 flex items-center justify-between">
@@ -440,7 +469,7 @@ export default function ExamMarks() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <h3 className="font-black text-slate-700 text-sm">
-                                        {selectedExam?.examName} · {selectedClass?.name}{selectedStream ? ` ${selectedStream.name}` : ""} · {selectedSubject?.name}
+                                        {selectedExam?.examName} · {selectedClass?.name}{selectedStream ? ` ${selectedStream.name}` : ""} · {selectedSubject?.name}{selectedPaper ? ` (${selectedPaper.label})` : ""}
                                     </h3>
                                     <p className="text-xs text-slate-400 font-medium mt-0.5">
                                         {filtered.length} student(s) · Grades auto-calculated · Max marks: <strong className="text-[#5C67F2]">{subjectMaxMarks}</strong>

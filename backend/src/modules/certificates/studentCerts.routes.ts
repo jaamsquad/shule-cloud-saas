@@ -121,6 +121,22 @@ studentCertRouter.post('/reports/verify-link', async (req, res) => {
 // ═════════════════════════ public API ═════════════════════════
 export const publicVerifyRouter = Router();
 
+publicVerifyRouter.get('/paper/:school/:token', async (req, res) => {
+    try {
+        const found = await schoolFromSlug(req.params.school);
+        const data = found ? readToken<any>(req.params.token) : null;
+        if (!found || !data) return res.status(404).json({ valid: false, message: 'This verification link is invalid.' });
+        res.json({
+            valid: true, school: schoolBrand(found.tenant),
+            paper: {
+                title: data.title, subject: data.subject, className: data.className,
+                holder: data.studentName ? maskName(data.studentName) : '', registrationNo: data.admNo ? maskRef(data.admNo) : '',
+                issuedAt: data.at,
+            },
+        });
+    } catch (e: any) { res.status(500).json({ valid: false, message: e.message }); }
+});
+
 publicVerifyRouter.get('/certificate/:school/:certId', async (req, res) => {
     try {
         const found = await schoolFromSlug(req.params.school);

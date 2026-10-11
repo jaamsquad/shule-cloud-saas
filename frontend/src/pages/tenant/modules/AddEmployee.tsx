@@ -13,12 +13,17 @@ import { groupDashboardOptions } from "@/components/AppSidebar";
 import { useNumbering, NUMBERING_KEY } from "./NumberingSettings";
 
 // ── Excel column → staff field mapping ──────────────────────────────────────
+// "Employee Name" can also arrive split across Surname / First Name / Other Names
+// (e.g. TSC exports) — handled separately in handleFileUpload, combined when no
+// single name column is present.
 const EXCEL_COLUMNS: { header: string; field: string; required?: boolean }[] = [
-    { header: "Employee Name",       field: "employeeName",  required: true },
+    { header: "Employee Name",       field: "employeeName" },
     { header: "Mobile No",           field: "phone",         required: true },
     { header: "Email Address",       field: "email" },
-    { header: "Role / Designation",  field: "designation",   required: true },
+    { header: "Role / Designation",  field: "designation" },   // defaults from the Teaching/Non-Teaching choice if left blank
     { header: "National ID",         field: "nationalId" },
+    { header: "TSC Number",          field: "tscNumber" },
+    { header: "Username",            field: "portalUsername" },
     { header: "Date of Birth",       field: "dob" },
     { header: "Gender",              field: "gender" },
     { header: "Date of Joining",     field: "joiningDate" },
@@ -47,7 +52,7 @@ const STAFF_DROPDOWNS: Record<string, { options: string[]; strict?: boolean }> =
     "Education": { options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "PhD"], strict: false },
     "Bank Name": { options: ["Equity Bank", "KCB Bank", "Co-operative Bank", "Absa Bank", "Standard Chartered", "NCBA Bank", "Family Bank", "I&M Bank", "Stanbic Bank", "DTB", "M-Pesa"], strict: false },
 };
-const STAFF_TEXT = new Set(["Mobile No", "National ID", "Date of Birth", "Date of Joining", "KRA PIN", "NSSF Number", "NHIF Number", "Account Number", "Employee No"]);
+const STAFF_TEXT = new Set(["Mobile No", "National ID", "TSC Number", "Date of Birth", "Date of Joining", "KRA PIN", "NSSF Number", "NHIF Number", "Account Number", "Employee No"]);
 const STAFF_HINTS: Record<string, string> = {
     "Date of Birth": "YYYY-MM-DD", "Date of Joining": "YYYY-MM-DD", "Monthly Salary": "Number, e.g. 45000",
     "Mobile No": "e.g. +254712345678", "Employee No": "Leave blank to have it generated (when automatic numbering is on).",
@@ -80,6 +85,7 @@ export default function AddEmployee() {
     const [formData, setFormData] = useState({
         employeeName: "", fatherName: "", email: "", phone: "", dob: "",
         gender: "Male", designation: "", joiningDate: "", salary: "", address: "",
+        staffCategory: "" as "" | "Teaching" | "Non-Teaching",
         specializedSubjects: [] as string[],
         roles: [] as string[], portalAccess: "both", landingPage: "",
         experience: "", nationalId: "", religion: "", education: "", bloodGroup: "",
@@ -128,6 +134,9 @@ export default function AddEmployee() {
     const [importing, setImporting] = useState(false);
     const [importDone, setImportDone] = useState<{ success: number; failed: number } | null>(null);
     const [previewExpanded, setPreviewExpanded] = useState(true);
+    // Whether this whole uploaded batch is teaching or non-teaching staff — asked once per
+    // import since a sheet like "Teachers.xlsx" is normally all one or the other.
+    const [importCategory, setImportCategory] = useState<"Teaching" | "Non-Teaching" | "">("");
 
     const toggleSubject = (id: string) =>
         setFormData(prev => ({
@@ -156,6 +165,7 @@ export default function AddEmployee() {
             dob:                 existingStaff.dob?.split("T")[0] || "",
             gender:              existingStaff.gender || "Male",
             designation:         existingStaff.designation || "",
+            staffCategory:       existingStaff.isTeachingStaff === true ? "Teaching" : existingStaff.isTeachingStaff === false ? "Non-Teaching" : "",
             roles:               existingStaff.roles || (existingStaff.designation ? [existingStaff.designation] : []),
             portalAccess:        existingStaff.portalAccess || "both",
             landingPage:         existingStaff.landingPage || "",
@@ -195,15 +205,27 @@ export default function AddEmployee() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const { staffCategory, ...rest } = formData;
+        const payload = { ...rest, isTeachingStaff: staffCategory === "Teaching" };
         if (isEditMode) {
-            updateMut.mutate(formData);
+            updateMut.mutate(payload);
         } else {
-            createItem(formData, { onSuccess: () => { qc.invalidateQueries({ queryKey: NUMBERING_KEY }); navigate("/staff"); } });
+            createItem(payload, { onSuccess: () => { qc.invalidateQueries({ queryKey: NUMBERING_KEY }); navigate("/staff"); } });
         }
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => {
+            const next = { ...prev, [name]: value };
+            // Suggest Teaching/Non-Teaching from the role, but only before the admin has picked one themselves.
+            if (name === "designation" && !prev.staffCategory) {
+                const teaching = /teacher|teaching assistant|instructor/i.test(value);
+                next.staffCategory = teaching ? "Teaching" : (value ? "Non-Teaching" : "");
+            }
+            return next;
+        });
+    };
 
     // ── Parse uploaded Excel ──────────────────────────────────────────────
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,6 +254,11 @@ export default function AddEmployee() {
                     );
                     if (idx !== -1) colMap[c.field] = idx;
                 });
+                // Some exports (e.g. TSC staff lists) split the name across Surname / First Name /
+                // Other Names instead of one "Employee Name" column — find those too, for when
+                // "Employee Name" itself isn't present.
+                const nameColOf = (label: string) => fileHeaders.findIndex(h => h === label);
+                const surnameIdx = nameColOf("surname"), firstNameIdx = nameColOf("first name"), otherNamesIdx = nameColOf("other names");
 
                 const errors: string[] = [];
                 const rows = rawRows.slice(1).filter((r: any[]) => r.some(cell => cell !== "")).map((row: any[], rowIdx) => {
@@ -247,8 +274,14 @@ export default function AddEmployee() {
                         }
                         obj[c.field] = val;
                     });
+                    if (!obj.employeeName && (surnameIdx !== -1 || firstNameIdx !== -1 || otherNamesIdx !== -1)) {
+                        obj.employeeName = [firstNameIdx, otherNamesIdx, surnameIdx]
+                            .map(i => (i !== -1 ? String(row[i] ?? "").trim() : "")).filter(Boolean).join(" ");
+                    }
 
-                    // Validate required fields
+                    // Validate required fields ("Employee Name" is required but can come from
+                    // Surname/First Name/Other Names instead of its own column, so it's checked here).
+                    if (!obj.employeeName) errors.push(`Row ${rowIdx + 2}: "Employee Name" (or Surname/First Name) is required.`);
                     EXCEL_COLUMNS.filter(c => c.required).forEach(c => {
                         if (!obj[c.field]) errors.push(`Row ${rowIdx + 2}: "${c.header}" is required.`);
                     });
@@ -259,6 +292,7 @@ export default function AddEmployee() {
                 setParsedRows(rows);
                 setImportErrors(errors);
                 setImportDone(null);
+                setImportCategory("");
             } catch (err: any) {
                 setImportErrors([`Failed to parse file: ${err.message}`]);
                 setParsedRows([]);
@@ -270,16 +304,23 @@ export default function AddEmployee() {
     };
 
     const handleBulkImport = async () => {
-        if (parsedRows.length === 0) return;
+        if (parsedRows.length === 0 || !importCategory) return;
         setImporting(true);
+        // Every row in the batch is tagged with the Teaching / Non-Teaching choice made in the
+        // preview; a row with no Role/Designation of its own gets a sensible default from it.
+        const items = parsedRows.map(r => ({
+            ...r,
+            isTeachingStaff: importCategory === "Teaching",
+            designation: r.designation || (importCategory === "Teaching" ? "Teacher" : "Support Staff"),
+        }));
         let success = 0, failed = 0;
         // Use bulk endpoint if available, else fall back to sequential
         try {
-            const res = await api.post("/staff/bulk", { items: parsedRows });
-            success = res.data?.count || parsedRows.length;
+            const res = await api.post("/staff/bulk", { items });
+            success = res.data?.count || items.length;
         } catch (err: any) {
             // Fall back to one-by-one
-            for (const row of parsedRows) {
+            for (const row of items) {
                 try {
                     await api.post("/staff", row);
                     success++;
@@ -321,7 +362,7 @@ export default function AddEmployee() {
                     {/* Import button — only shown in create mode */}
                     {!isEditMode && (
                         <button
-                            onClick={() => { setShowImport(v => !v); setImportDone(null); setParsedRows([]); setImportErrors([]); }}
+                            onClick={() => { setShowImport(v => !v); setImportDone(null); setParsedRows([]); setImportErrors([]); setImportCategory(""); }}
                             className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${
                                 showImport
                                     ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -356,8 +397,8 @@ export default function AddEmployee() {
                             <ol className="text-xs text-blue-600 space-y-1 list-decimal list-inside">
                                 <li>Download the Excel template above.</li>
                                 <li>Fill in staff data — each row is one employee. Do not change the column headers.</li>
-                                <li>Required columns: <strong>Employee Name, Mobile No, Role / Designation</strong>.</li>
-                                <li>Upload the filled file below, review the preview, then click <strong>Import All</strong>.</li>
+                                <li>Required columns: <strong>Mobile No</strong>, plus either <strong>Employee Name</strong> or Surname/First Name. Role / Designation can be left blank.</li>
+                                <li>Upload the file, say whether this batch is <strong>Teaching</strong> or <strong>Non-Teaching</strong> staff, review the preview, then click <strong>Import All</strong>.</li>
                             </ol>
                         </div>
 
@@ -426,6 +467,19 @@ export default function AddEmployee() {
                         {/* Preview table */}
                         {parsedRows.length > 0 && !importDone && (
                             <div className="mt-6">
+                                {/* Asked once per batch — most sheets like this are all-teaching or all-support staff. */}
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-4">
+                                    <p className="text-xs font-bold text-indigo-700 mb-2">Are these {parsedRows.length} staff teaching or non-teaching?</p>
+                                    <div className="flex gap-2">
+                                        {(["Teaching", "Non-Teaching"] as const).map(c => (
+                                            <button key={c} type="button" onClick={() => setImportCategory(c)}
+                                                className={`h-10 px-5 rounded-full text-sm font-bold border transition-colors ${importCategory === c ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-gray-600 border-gray-200 hover:border-[#5C67F2]"}`}>
+                                                {c === "Teaching" ? "Teaching Staff" : "Non-Teaching Staff"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {!importCategory && <p className="text-[11px] text-indigo-500 mt-2">Choose one before importing — any row with no Role/Designation of its own gets a sensible default from it.</p>}
+                                </div>
                                 <div className="flex items-center justify-between mb-3">
                                     <button
                                         onClick={() => setPreviewExpanded(v => !v)}
@@ -435,13 +489,14 @@ export default function AddEmployee() {
                                         Preview — {parsedRows.length} row{parsedRows.length > 1 ? "s" : ""} detected
                                     </button>
                                     <div className="flex items-center gap-3">
-                                        <button onClick={() => { setParsedRows([]); setImportErrors([]); }}
+                                        <button onClick={() => { setParsedRows([]); setImportErrors([]); setImportCategory(""); }}
                                             className="text-xs text-gray-400 hover:text-red-500 font-bold flex items-center gap-1 transition-colors">
                                             <X className="w-3.5 h-3.5" /> Clear
                                         </button>
                                         <button
                                             onClick={handleBulkImport}
-                                            disabled={importing || importErrors.length > 0}
+                                            disabled={importing || importErrors.length > 0 || !importCategory}
+                                            title={!importCategory ? "Choose Teaching or Non-Teaching above first" : ""}
                                             className="flex items-center gap-2 px-6 py-2.5 bg-[#5C67F2] hover:bg-[#4a54c4] disabled:opacity-50 text-white font-bold text-sm rounded-full shadow-md transition-all"
                                         >
                                             {importing
@@ -531,6 +586,17 @@ export default function AddEmployee() {
                                     <InputField name="email" value={formData.email} onChange={handleChange} label="Email Address*" placeholder="email@school.com" required />
                                     <SelectField name="designation" value={formData.designation} onChange={handleChange} label="Employee Role*" placeholder="Select Role*" required
                                         options={roleOptions} />
+                                    <div className="relative">
+                                        <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[11px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">Staff Category*</div>
+                                        <div className="w-full h-12 border border-[#5C67F2]/40 rounded-full flex items-center gap-1 bg-white px-1.5">
+                                            {(["Teaching", "Non-Teaching"] as const).map(c => (
+                                                <button key={c} type="button" onClick={() => setFormData(p => ({ ...p, staffCategory: c }))}
+                                                    className={`flex-1 h-9 rounded-full text-xs font-bold transition-colors ${formData.staffCategory === c ? "bg-[#5C67F2] text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+                                                    {c === "Teaching" ? "Teaching" : "Non-Teaching"}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     {/* Reports To — first approver for this employee's requests. */}
                                     <div className="relative">
                                         <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[11px] px-3 py-1 rounded-full font-semibold tracking-wide z-10 shadow-sm">Reports To (Supervisor)</div>
@@ -686,7 +752,10 @@ export default function AddEmployee() {
                                     onClick={() => setFormData({
                                         employeeName: "", fatherName: "", email: "", phone: "", dob: "",
                                         gender: "Male", designation: "", joiningDate: "", salary: "", address: "",
+                                        staffCategory: "" as "" | "Teaching" | "Non-Teaching",
                                         specializedSubjects: [], experience: "", nationalId: "", religion: "",
+                                        roles: [], portalAccess: "both", landingPage: "", department: "", reportsTo: "",
+                                        dataAccess: { studentScope: "all", staffScope: "all" } as any,
                                         education: "", bloodGroup: "", kraPin: "", nssfNo: "", nhifNo: "",
                                         bankName: "", bankBranch: "", accountNo: "", staffNo: ""
                                     })}

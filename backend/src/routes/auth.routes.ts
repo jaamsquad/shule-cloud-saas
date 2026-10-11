@@ -19,6 +19,7 @@ import { signToken, publicAppUrl } from '../lib/verifyDocs';
 import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
 import { onlyPublished } from '../lib/examPublish';
 import { resolveGrading, Grading } from '../lib/grading';
+import { papersForSubjectName, combinePapers } from '../lib/subjectPapers';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -189,6 +190,16 @@ export async function userLoginPayload(user: any, username: string, ctx: { tenan
         if (staffInfo) {
             const d = (staffInfo.designation || '').toLowerCase();
             if (d.includes('teacher') || staffInfo.isTeachingStaff) role = 'teacher';
+        } else if (user.isSchoolAdmin) {
+            // Self-heal accounts registered before admins got a staff record of their own
+            // (see onboard.controller.ts) — gives them a Staff / Teachers list entry too.
+            const name = user.name || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || username.split('@')[0];
+            const r = await ctx.tenantDb.collection('staff').insertOne({
+                employeeName: name, email: username, phone: user.phone || '',
+                designation: 'School Administrator', isTeachingStaff: false, portalAccess: 'admin',
+                status: 'Active', createdAt: new Date(),
+            }).catch(() => null);
+            if (r) staffInfo = { _id: r.insertedId, employeeName: name };
         }
     } catch (_) {}
 
@@ -2077,33 +2088,41 @@ const assertAssigned = async (db: Db, decoded: any, className: string, subject?:
     return classTeacherOf.some(c => c.className === className) || assignments.some(a => a.className === className);
 };
 
-// Roster + existing marks for an exam+subject in a class.
+// Roster + existing marks for an exam+subject in a class. When the subject has papers
+// configured (General Settings → Subject Paper Ratios), `papers` lists them so the teacher
+// can pick one; pass `paperId` to see/edit that paper's own score instead of the subject's
+// combined one.
 router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     const className = String(req.query.className || '');
     const subject = String(req.query.subject || '');
     const examId = String(req.query.examId || '');
+    const paperId = String(req.query.paperId || '');
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
     if (examId) { const w = await examOpenForTeacher(db, examId); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const students = await studentsInClass(db, className);
-    // "Out Of" is determined by the exam's Total Marks setting.
+    const papers = await papersForSubjectName(db, subject);
+    const paper = paperId ? papers.find(p => p._id === paperId) : null;
+    // "Out Of" is the chosen paper's own max score, else the exam's Total Marks setting.
     const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
-    const examOutOf = Number(examDoc?.settings?.totalMarks) || 100;
+    const outOf = paper ? paper.outOf : (Number(examDoc?.settings?.totalMarks) || 100);
     const existing = examId ? await db.collection('exam_marks').find({ examId, subjectName: subject, className }).toArray() : [];
     const markMap: Record<string, any> = {};
     existing.forEach((m: any) => { markMap[String(m.studentId)] = m; });
-    res.json(students.map((s: any) => ({
-        studentId: String(s._id),
-        name: s.studentName,
-        registrationNo: s.registrationNo || s.admNo,
-        marks: markMap[String(s._id)]?.marksObtained ?? '',
-        outOf: examOutOf,
-    })));
+    res.json({
+        papers, outOf,
+        rows: students.map((s: any) => ({
+            studentId: String(s._id),
+            name: s.studentName,
+            registrationNo: s.registrationNo || s.admNo,
+            marks: paper ? (markMap[String(s._id)]?.papers?.[paperId]?.marksObtained ?? '') : (markMap[String(s._id)]?.marksObtained ?? ''),
+        })),
+    });
 }));
 
 router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
-    const { examId, examName, className, subject, term, outOf, marks } = req.body || {};
+    const { examId, examName, className, subject, term, outOf, marks, paperId, paperLabel } = req.body || {};
     if (!examId || !className || !subject || !Array.isArray(marks)) {
         return res.status(400).json({ message: 'examId, className, subject and marks are required' });
     }
@@ -2132,13 +2151,18 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         if (batch) return res.status(423).json({ message: `These marks are ${String(batch.status).toLowerCase()} by the HOD and can no longer be edited. Ask the HOD to unlock first.` });
     } catch { /* non-fatal */ }
     const total = Number(outOf || 100);
+    // A subject with configured papers (General Settings → Subject Paper Ratios) is scored
+    // one paper at a time; each save folds this paper's scores into the doc's `papers` map
+    // and recombines, weighted by ratio and normalised by each paper's own "out of".
+    const paperDefs = paperId ? await papersForSubjectName(db, subject) : [];
     // Read the CURRENT marks first so we can record exactly what changed — this
     // powers the "changes made after approval" trail the HOD sees on re-submission.
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
     const prevMarks = await db.collection('exam_marks')
         .find({ examId, subjectName: subject }).toArray().catch(() => []);
     const prevByStudent: Record<string, number | null> = {};
-    prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; });
+    const prevDocByStudent: Record<string, any> = {};
+    prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; prevDocByStudent[String(m.studentId)] = m; });
 
     let saved = 0;
     const changes: Array<{ studentId: string; from: number | null; to: number }> = [];
@@ -2149,12 +2173,19 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         if (before === undefined || Number(before) !== obtained) {
             changes.push({ studentId: String(m.studentId), from: before === undefined ? null : (before as number), to: obtained });
         }
+        let scoreSet: any = { marksObtained: obtained, totalMarks: total };
+        if (paperId) {
+            const papers = { ...(prevDocByStudent[String(m.studentId)]?.papers || {}) };
+            papers[paperId] = { marksObtained: obtained, totalMarks: total, label: paperLabel || '' };
+            const combined = combinePapers(papers, paperDefs) || { marksObtained: obtained, totalMarks: total };
+            scoreSet = { papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks };
+        }
         await db.collection('exam_marks').updateOne(
             { examId, subjectName: subject, studentId: String(m.studentId) },
             { $set: {
                 examId, examName: examName || 'Exam', term: term || '', className,
                 subjectName: subject, studentId: String(m.studentId),
-                marksObtained: obtained, totalMarks: total, markedBy: decoded.name, updatedAt: new Date(),
+                ...scoreSet, markedBy: decoded.name, updatedAt: new Date(),
             } },
             { upsert: true },
         );

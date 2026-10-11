@@ -19,6 +19,7 @@ import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
 import { onlyPublished, lockedExamIds } from '../lib/examPublish';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { papersForSubject, combinePapers, SubjectPaperDef } from '../lib/subjectPapers';
 
 const router = Router();
 
@@ -404,17 +405,42 @@ router.post('/academics/exam-marks/bulk', marksWindowGuard, async (req, res) => 
         const classByStudent: Record<string, { name: string; id: string }> = {};
         studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || '', id: String(s.classId || '') }; });
 
+        // Entries for a subject that has configured papers (General Settings → Subject Paper
+        // Ratios) carry a paperId instead of standing alone as the subject's score: fold each
+        // one into the doc's `papers` map and recombine, weighted by ratio and normalised by
+        // each paper's own "out of", so marksObtained/totalMarks always reflect every paper
+        // scored so far.
+        const paperEntries = entries.filter((e: any) => e.paperId && e.subjectId);
+        const papersBySubject = new Map<string, SubjectPaperDef[]>();
+        const existingBySubjectKey = new Map<string, any>();
+        if (paperEntries.length) {
+            const subjectIds = [...new Set(paperEntries.map((e: any) => String(e.subjectId)))];
+            await Promise.all(subjectIds.map(async (sid) => papersBySubject.set(sid, await papersForSubject(db, sid))));
+            const existing = await db.collection('exam_marks').find({
+                $or: paperEntries.map((e: any) => ({ studentId: e.studentId, subjectId: e.subjectId, examId: e.examId })),
+            }, { projection: { studentId: 1, subjectId: 1, examId: 1, papers: 1 } }).toArray().catch(() => []);
+            existing.forEach((d: any) => existingBySubjectKey.set(`${d.studentId}::${d.subjectId}::${d.examId}`, d));
+        }
+
         const ops = entries.map((entry: any) => {
             // Strip fields that must not appear in both $set and $setOnInsert (MongoDB conflict)
             const { _id, createdAt, __v, ...data } = entry;
             const cls = classByStudent[String(data.studentId)] || { name: data.className || '', id: '' };
+            let setData: any = { ...data, updatedAt: new Date() };
+            if (data.paperId) {
+                const key = `${data.studentId}::${data.subjectId}::${data.examId}`;
+                const papers = { ...(existingBySubjectKey.get(key)?.papers || {}) };
+                papers[data.paperId] = { marksObtained: Number(data.marksObtained) || 0, totalMarks: Number(data.totalMarks) || 0, label: data.paperLabel || '' };
+                const combined = combinePapers(papers, papersBySubject.get(String(data.subjectId)) || []) || { marksObtained: 0, totalMarks: 100 };
+                setData = { ...data, papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks, updatedAt: new Date() };
+            }
             return {
                 updateOne: {
                     filter: { studentId: data.studentId, subjectId: data.subjectId, examId: data.examId },
                     update: {
                         // classAtTime/academicYear set only on first insert, so re-saving
                         // marks never rewrites the historical class attribution.
-                        $set: { ...data, updatedAt: new Date() },
+                        $set: setData,
                         $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) },
                     },
                     upsert: true

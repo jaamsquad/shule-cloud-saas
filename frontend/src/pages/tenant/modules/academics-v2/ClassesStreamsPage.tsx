@@ -4,16 +4,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
-const emptyClass = { name: "", code: "", level: "1", curriculumType: "844", capacity: "40", nextClassId: "", isFinal: false };
 const emptyStream = { classId: "", name: "", capacity: "40", classTeacherId: "" };
 
 export default function ClassesStreamsPage() {
     const qc = useQueryClient();
-    const [showClassModal, setShowClassModal] = useState(false);
     const [showStreamModal, setShowStreamModal] = useState(false);
-    const [classForm, setClassForm] = useState(emptyClass);
     const [streamForm, setStreamForm] = useState(emptyStream);
-    const [editClassId, setEditClassId] = useState<string | null>(null);
     const [editStreamId, setEditStreamId] = useState<string | null>(null);
     const [selectedClass, setSelectedClass] = useState<any>(null);
     const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "class" | "stream" } | null>(null);
@@ -24,12 +20,6 @@ export default function ClassesStreamsPage() {
     // Curriculum options come from the backend registry (active curricula only), so
     // disabling a curriculum in settings removes it from the picker — no hardcoding.
     const { data: curricula = [] } = useQuery({ queryKey: ["curricula_active"], queryFn: async () => { const r = await api.get("/curricula/active"); return Array.isArray(r.data) ? r.data : []; } });
-
-    const classMut = useMutation({
-        mutationFn: (p: any) => editClassId ? api.patch(`/v2/classes/${editClassId}`, p) : api.post("/v2/classes", p),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_classes"] }); toast.success(editClassId ? "Class updated" : "Class created"); setShowClassModal(false); setClassForm(emptyClass); setEditClassId(null); },
-        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
-    });
 
     const streamMut = useMutation({
         mutationFn: (p: any) => editStreamId ? api.patch(`/v2/streams/${editStreamId}`, p) : api.post("/v2/streams", p),
@@ -57,13 +47,6 @@ export default function ClassesStreamsPage() {
                     <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
                     <span className="font-bold text-gray-600">Academic System</span><span className="text-gray-300">/</span>
                     <span className="font-semibold text-[#5C67F2]">Classes & Streams</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    {canEdit && (
-                    <button onClick={() => { setEditClassId(null); setClassForm(emptyClass); setShowClassModal(true); }} className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
-                        <Plus className="w-4 h-4" /> New Class
-                    </button>
-                    )}
                 </div>
             </div>
 
@@ -159,51 +142,6 @@ export default function ClassesStreamsPage() {
                     </div>
                 </div>
             </div>
-
-            {/* Class Modal */}
-            {showClassModal && (
-                <div className="fixed inset-0 bg-slate-900/40 z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white max-w-md w-full rounded-2xl border border-slate-200 shadow-xl relative">
-                        <div className="p-6">
-                            <div className="flex items-center justify-between mb-6"><h3 className="text-base font-semibold text-slate-900">{editClassId ? "Edit" : "New"} Class</h3><button onClick={() => setShowClassModal(false)} className="text-slate-400 hover:text-rose-500"><X className="w-5 h-5" /></button></div>
-                            <div className="grid grid-cols-2 gap-5">
-                                {[{ label: "Class Name*", field: "name", col: 2 }, { label: "Code (e.g. GR1)", field: "code" }, { label: "Level (1=lowest)", field: "level", type: "number" }, { label: "Capacity", field: "capacity", type: "number" }].map((f: any) => (
-                                    <div key={f.field} className={`relative ${f.col === 2 ? "col-span-2" : ""}`}>
-                                        <label className="block text-xs font-medium text-slate-500 mb-1.5">{f.label}</label>
-                                        <input type={f.type || "text"} value={(classForm as any)[f.field]} onChange={e => setClassForm({ ...classForm, [f.field]: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
-                                    </div>
-                                ))}
-                                <div className="relative col-span-2">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Curriculum Type</label>
-                                    <select value={classForm.curriculumType} onChange={e => setClassForm({ ...classForm, curriculumType: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
-                                        {curricula.length === 0
-                                            ? <><option value="844">8-4-4</option><option value="CBC">CBC (Competency-Based)</option></>
-                                            : curricula.map((c: any) => <option key={c.code} value={c.code}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="relative col-span-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Promotes to (automatic promotion)</label>
-                                    <select value={classForm.nextClassId} disabled={classForm.isFinal} onChange={e => setClassForm({ ...classForm, nextClassId: e.target.value })} className="w-full h-11 px-4 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700 disabled:opacity-50">
-                                        <option value="">Automatic — next by name / level</option>
-                                        {classes.filter((x: any) => x._id !== editClassId).sort((a: any, b: any) => a.level - b.level).map((x: any) => <option key={x._id} value={x._id}>{x.name}</option>)}
-                                    </select>
-                                    <label className="flex items-center gap-2 mt-2.5 text-xs font-medium text-slate-600 cursor-pointer">
-                                        <input type="checkbox" checked={classForm.isFinal} onChange={e => setClassForm({ ...classForm, isFinal: e.target.checked, nextClassId: e.target.checked ? "" : classForm.nextClassId })} />
-                                        Final class — learners graduate instead of moving up
-                                    </label>
-                                    <p className="text-[11px] text-slate-400 mt-1.5">Streams keep their name when promoted (East → East). A missing stream is created in the next class.</p>
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button onClick={() => setShowClassModal(false)} className="px-6 py-2.5 hover:bg-slate-100 text-slate-500 text-sm font-medium rounded-xl">Cancel</button>
-                                <button onClick={() => { if (!classForm.name) { toast.error("Class name required"); return; } classMut.mutate({ ...classForm, level: Number(classForm.level), capacity: Number(classForm.capacity), nextClassId: classForm.isFinal ? null : (classForm.nextClassId || null) }); }} disabled={classMut.isPending} className="px-6 py-2.5 bg-[#5C67F2] hover:bg-indigo-600 text-white text-sm font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-100">
-                                    {classMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{editClassId ? "Save" : "Create Class"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Stream Modal */}
             {showStreamModal && (

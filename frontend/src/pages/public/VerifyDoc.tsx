@@ -10,23 +10,24 @@ const fmt = (iso?: string) => { if (!iso) return "—"; const d = new Date(iso);
  * What a QR code opens:  /<school>/certificate/verify/online/<certificate no>   or   /<school>/report/verify/online/<token>
  * Says whether the document is genuine, with the basics (the holder's middle names are hidden).
  */
-export default function VerifyDoc({ kind }: { kind: "certificate" | "report" }) {
+export default function VerifyDoc({ kind }: { kind: "certificate" | "report" | "paper" }) {
     const { school = "", certId = "", token = "" } = useParams();
     const id = kind === "certificate" ? certId : token;
     const { data, isLoading, error } = useQuery<any>({
         queryKey: ["verify_doc", kind, school, id], retry: false,
         queryFn: async () => (await api.get(`/public/verify/${kind}/${encodeURIComponent(school)}/${encodeURIComponent(id)}`)).data,
     });
-    useEffect(() => { document.title = kind === "certificate" ? "Verify certificate — ShuleCloud" : "Verify report card — ShuleCloud"; }, [kind]);
+    useEffect(() => { document.title = kind === "certificate" ? "Verify certificate — ShuleCloud" : kind === "report" ? "Verify report card — ShuleCloud" : "Verify question paper — ShuleCloud"; }, [kind]);
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 animate-spin text-[#534AB7]" /></div>;
 
     const invalid = !!error || !data;
-    const c = data?.certificate, r = data?.report;
+    const c = data?.certificate, r = data?.report, p = data?.paper;
     const valid = !invalid && data.valid;
     const revoked = !invalid && kind === "certificate" && data.status === "revoked";
     const msg = (error as any)?.response?.data?.message || "We could not find this document.";
     const row = (k: string, v: any) => v ? <div className="flex justify-between gap-4 py-2 border-b border-slate-100 text-sm"><span className="text-slate-500">{k}</span><span className="font-bold text-slate-800 text-right">{v}</span></div> : null;
+    const kindLabel = kind === "certificate" ? "This certificate was issued by the school and is genuine." : kind === "report" ? "This report card was issued by the school and is genuine." : "This question paper was issued by the school and is genuine.";
 
     return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -34,7 +35,7 @@ export default function VerifyDoc({ kind }: { kind: "certificate" | "report" }) 
                 <div className={`px-6 py-7 text-center text-white ${valid ? "bg-emerald-600" : "bg-rose-600"}`}>
                     {valid ? <ShieldCheck className="w-14 h-14 mx-auto" /> : <ShieldX className="w-14 h-14 mx-auto" />}
                     <div className="text-2xl font-black mt-2 tracking-wide">{valid ? "VALID" : revoked ? "REVOKED" : "NOT VALID"}</div>
-                    <div className="text-sm opacity-90 mt-1">{valid ? (kind === "certificate" ? "This certificate was issued by the school and is genuine." : "This report card was issued by the school and is genuine.") : revoked ? "This certificate has been withdrawn by the school." : msg}</div>
+                    <div className="text-sm opacity-90 mt-1">{valid ? kindLabel : revoked ? "This certificate has been withdrawn by the school." : msg}</div>
                 </div>
 
                 {!invalid && (
@@ -56,6 +57,12 @@ export default function VerifyDoc({ kind }: { kind: "certificate" | "report" }) 
                             <>
                                 <div className="text-center my-4"><div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Report card</div><div className="text-xl font-black text-slate-800">{[r.exam, r.term, r.year].filter(Boolean).join(" · ") || "Academic report"}</div></div>
                                 {row("Student", r.holder)}{row("Registration no.", r.registrationNo)}{row("Class", r.className)}{row("Average", r.average != null ? `${r.average}%` : "")}{row("Grade", r.grade)}{row("Issued", fmt(r.issuedAt))}
+                            </>
+                        )}
+                        {kind === "paper" && p && (
+                            <>
+                                <div className="text-center my-4"><div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Question paper</div><div className="text-xl font-black text-slate-800">{p.title || "Exam paper"}</div></div>
+                                {row("Subject", p.subject)}{row("Class", p.className)}{row("Issued to", p.holder)}{row("Admission no.", p.registrationNo)}{row("Issued", fmt(p.issuedAt))}
                             </>
                         )}
                     </div>
