@@ -28,6 +28,7 @@ export default function InstituteProfile() {
         email: "",
         schoolType: "Day",            // Boarding | Day | Mixed
         genderComposition: "Mixed",   // Mixed | Boys | Girls
+        schoolLevel: "All",           // All | Junior | Senior
         principalSignature: "", schoolStamp: "", principalName: "", principalTitle: "Principal",
     });
 
@@ -44,6 +45,7 @@ export default function InstituteProfile() {
                 email: profileData.email || "",
                 schoolType: profileData.schoolType || "Day",
                 genderComposition: profileData.genderComposition || "Mixed",
+                schoolLevel: profileData.schoolLevel || "All",
                 principalSignature: profileData.principalSignature || "", schoolStamp: profileData.schoolStamp || "",
                 principalName: profileData.principalName || "", principalTitle: profileData.principalTitle || "Principal",
             });
@@ -75,6 +77,7 @@ export default function InstituteProfile() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tenant_profile_global"] });
+            queryClient.invalidateQueries({ queryKey: ["class_catalog"] });
             toast.success("Institute profile updated successfully");
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to update profile"),
@@ -259,6 +262,19 @@ export default function InstituteProfile() {
                             ]}
                             hint="Used as the default when admitting students."
                         />
+
+                        {/* School Level (CBC Junior / Senior school) */}
+                        <ProfileSelect
+                            label="School Level"
+                            value={formData.schoolLevel}
+                            onChange={(v: string) => setFormData({ ...formData, schoolLevel: v })}
+                            options={[
+                                { value: "All", label: "All levels (Pre-Primary – Senior School)" },
+                                { value: "Junior", label: "Junior school (Pre-Primary – Grade 9)" },
+                                { value: "Senior", label: "Senior school (Grade 10 – 12)" },
+                            ]}
+                            hint="Controls which grades show up under Classes → Classes we offer. 8-4-4 Forms always show regardless of this setting."
+                        />
                     </div>
 
                     {/* Signature & stamp — printed on admission letters, certificates and report cards */}
@@ -334,6 +350,7 @@ export default function InstituteProfile() {
                                     <InfoItem icon={Globe} label="Country" value={formData.country} />
                                     <InfoItem icon={Globe} label="School Type" value={{ Boarding: "Boarding School", Day: "Day School", Mixed: "Mixed (Boarding & Day)" }[formData.schoolType] || formData.schoolType} />
                                     <InfoItem icon={Globe} label="Gender" value={{ Mixed: "Mixed (Boys & Girls)", Boys: "Boys Only", Girls: "Girls Only" }[formData.genderComposition] || formData.genderComposition} />
+                                    <InfoItem icon={Globe} label="School Level" value={{ All: "All levels", Junior: "Junior school", Senior: "Senior school" }[formData.schoolLevel] || formData.schoolLevel} />
                                 </div>
                             </div>
                         </div>

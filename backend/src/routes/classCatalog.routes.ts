@@ -22,13 +22,28 @@ async function schoolClasses(d: Db) {
     return rows.map((c: any) => ({ ...c, catalogKey: c.catalogKey || classCatalogMatch(c.name)?.key || null }));
 }
 
+// School Profile → School Level (Junior / Senior / All) narrows which CBC bands show up under
+// Classes we offer. 8-4-4 Forms are a separate curriculum and always show, whatever this is set to.
+const CBC_JUNIOR_GROUPS = new Set(['Pre-Primary', 'Lower Primary', 'Upper Primary', 'Junior School (Grades 7-9)']);
+const CBC_SENIOR_GROUPS = new Set(['Senior School (Grades 10-12)']);
+async function allowedGroups(req: Request): Promise<Set<string> | null> {
+    const tenantId = (req as any).tenantContext?.tenantId;
+    if (!tenantId) return null;
+    let level = '';
+    try { const t: any = await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenantId)) }, { projection: { schoolLevel: 1 } }); level = String(t?.schoolLevel || ''); } catch { /* unrestricted */ }
+    if (level === 'Junior') return new Set([...CBC_JUNIOR_GROUPS, 'Secondary (8-4-4)']);
+    if (level === 'Senior') return new Set([...CBC_SENIOR_GROUPS, 'Secondary (8-4-4)']);
+    return null;   // 'All' or unset: no filter
+}
+
 router.get('/class-catalog', async (req, res) => {
     const d = db(req);
-    const mine = await schoolClasses(d);
+    const [mine, allowed] = await Promise.all([schoolClasses(d), allowedGroups(req)]);
     const byKey = new Map(mine.filter((c: any) => c.catalogKey).map((c: any) => [c.catalogKey, c]));
+    const catalog = allowed ? CLASS_CATALOG.filter(c => allowed.has(c.group)) : CLASS_CATALOG;
     res.json({
-        groups: CLASS_GROUPS,
-        classes: CLASS_CATALOG.map(c => {
+        groups: allowed ? CLASS_GROUPS.filter(g => allowed.has(g)) : CLASS_GROUPS,
+        classes: catalog.map(c => {
             const existing: any = byKey.get(c.key);
             return { ...c, offered: !!existing && existing.offered !== false, classId: existing ? String(existing._id) : null };
         }),
@@ -39,7 +54,7 @@ router.get('/class-catalog', async (req, res) => {
 router.put('/class-catalog/offered', enforceCrud('classes', 'update'), async (req, res) => {
     const d = db(req);
     const keys = new Set((req.body?.keys || []).map(String).filter((k: string) => catalogByKey.has(k)));
-    const mine = await schoolClasses(d);
+    const [mine, allowed] = await Promise.all([schoolClasses(d), allowedGroups(req)]);
     const byKey = new Map(mine.filter((c: any) => c.catalogKey).map((c: any) => [c.catalogKey, c]));
 
     const streamCounts = await d.collection('v2_streams').find({ deletedAt: { $exists: false } }, { projection: { classId: 1 } }).toArray().catch(() => []);
@@ -48,6 +63,7 @@ router.put('/class-catalog/offered', enforceCrud('classes', 'update'), async (re
 
     let added = 0, restored = 0, hidden = 0, removed = 0, blocked = 0;
     for (const c of CLASS_CATALOG) {
+        if (allowed && !allowed.has(c.group)) continue;   // outside the school's level — never created or touched
         const existing: any = byKey.get(c.key);
         if (keys.has(c.key)) {
             if (!existing) {
