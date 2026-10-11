@@ -36,7 +36,7 @@ function Change({ v }: { v: number | null | undefined }) {
 
 export default function Exam844Dashboard() {
     const nav = useNavigate();
-    const { data, isLoading } = useQuery<Overview>({ queryKey: ["dash_844"], queryFn: async () => (await api.get("/dashboard/exam-overview")).data });
+    const { data, isLoading } = useQuery<Overview>({ queryKey: ["dash_844"], queryFn: async () => (await api.get("/dashboard/exam-overview", { params: { curriculum: "844" } })).data });
     const withExam = (data?.levels || []).filter(l => l.exam);
     const [level, setLevel] = useState("");
     const [examId, setExamId] = useState("");
