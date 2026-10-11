@@ -5,6 +5,21 @@ import { useItems } from "@/hooks/useItems";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { SCHOOL_ROLE_GROUPS } from "@/lib/schoolRoles";
+
+// A small badge on staff cards for leadership roles — School Leadership (Principal, School
+// Administrator, ...) and Department Management (HOD, ...) — plus a loose fallback for
+// custom/legacy role strings a school typed in that aren't in the canonical list.
+const BADGE_ROLES = new Set([
+    ...(SCHOOL_ROLE_GROUPS.find(g => g.group === "School Leadership")?.roles || []),
+    ...(SCHOOL_ROLE_GROUPS.find(g => g.group === "Department Management")?.roles || []),
+]);
+const badgeFor = (e: any): string | null => {
+    const d = String(e.designation || "").trim();
+    if (!d) return null;
+    if (BADGE_ROLES.has(d)) return d;
+    return /admin|principal|head|director/i.test(d) ? d : null;
+};
 
 export default function AllEmployees() {
     const navigate = useNavigate();
@@ -218,7 +233,10 @@ export default function AllEmployees() {
                                                     <span className="font-bold text-slate-700">{employee.name || employee.employeeName}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-3 py-3 text-slate-500">{employee.designation || "Staff"}</td>
+                                            <td className="px-3 py-3 text-slate-500">
+                                                {employee.designation || "Staff"}
+                                                {badgeFor(employee) && <span className="ml-2 text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-500 text-white">{badgeFor(employee)}</span>}
+                                            </td>
                                             <td className="px-3 py-3 text-slate-500">{employee.email || "—"}</td>
                                             <td className="px-3 py-3 text-slate-500">{employee.phone || "—"}</td>
                                             <td className="px-5 py-3">
@@ -245,10 +263,15 @@ export default function AllEmployees() {
                     ) : (
                         visible.map((employee: any) => (
                             <div key={employee._id} className="w-56 h-64 bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center relative hover:shadow-md transition-shadow">
+                                {badgeFor(employee) && (
+                                    <span className="absolute top-3 left-3 max-w-[calc(100%-1.5rem)] truncate text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-amber-500 text-white shadow-sm z-20">
+                                        {badgeFor(employee)}
+                                    </span>
+                                )}
                                 <div className="w-20 h-20 bg-gray-100 rounded-full border-4 border-[#868DF4]/20 flex items-center justify-center overflow-hidden mb-4 relative z-10 text-[#5C67F2]">
                                     <User className="w-10 h-10" />
                                 </div>
-                                
+
                                 <h3 className="font-bold text-gray-800 text-sm tracking-tight text-center">{employee.name || employee.employeeName}</h3>
                                 <p className="text-xs text-gray-500 font-medium mb-6">{employee.designation || 'Staff'}</p>
 

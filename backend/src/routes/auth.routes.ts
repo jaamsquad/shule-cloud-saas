@@ -190,6 +190,16 @@ export async function userLoginPayload(user: any, username: string, ctx: { tenan
         if (staffInfo) {
             const d = (staffInfo.designation || '').toLowerCase();
             if (d.includes('teacher') || staffInfo.isTeachingStaff) role = 'teacher';
+        } else if (user.isSchoolAdmin) {
+            // Self-heal accounts registered before admins got a staff record of their own
+            // (see onboard.controller.ts) — gives them a Staff / Teachers list entry too.
+            const name = user.name || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || username.split('@')[0];
+            const r = await ctx.tenantDb.collection('staff').insertOne({
+                employeeName: name, email: username, phone: user.phone || '',
+                designation: 'School Administrator', isTeachingStaff: false, portalAccess: 'admin',
+                status: 'Active', createdAt: new Date(),
+            }).catch(() => null);
+            if (r) staffInfo = { _id: r.insertedId, employeeName: name };
         }
     } catch (_) {}
 
