@@ -103,6 +103,7 @@ import ManageFamilies from "./pages/tenant/modules/ManageFamilies";
 import NewFamily from "./pages/tenant/modules/NewFamily";
 import Classes from "./pages/tenant/modules/Classes";
 import NewClass from "./pages/tenant/modules/NewClass";
+import ClassesOffered from "./pages/tenant/modules/classes/ClassesOffered";
 import ClassDetail from "./pages/tenant/modules/ClassDetail";
 import Promotions from "./pages/tenant/modules/Promotions";
 import Staff from "./pages/tenant/modules/Staff";
@@ -668,6 +669,7 @@ const App = () => {
               {/* Classes */}
               <Route path="/classes" element={<Classes />} />
               <Route path="/classes/new" element={<NewClass />} />
+              <Route path="/classes/offered" element={<ClassesOffered />} />
               <Route path="/classes/room/:streamId" element={<ClassRoster />} />
               <Route path="/classes/:id" element={<ClassDetail />} />
               <Route path="/classes/streams" element={<Classes />} />

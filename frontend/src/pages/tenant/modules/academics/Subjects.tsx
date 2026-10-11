@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Bookmark, Edit, Trash2, ChevronRight, BookmarkIcon, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, Plus, Bookmark, Edit, EyeOff, ChevronRight, BookmarkIcon, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,11 +48,12 @@ export default function Subjects() {
         },
     });
 
-    const deleteMutation = useMutation({
+    // Subjects are never deleted — disabling hides them from pickers while keeping past records intact.
+    const disableMutation = useMutation({
         mutationFn: (id: string) => api.delete(`/academics/subjects/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects-list"] });
-            toast.success("Subject deleted from registry");
+            toast.success("Subject disabled");
         },
     });
 
@@ -131,9 +132,11 @@ export default function Subjects() {
                                             <Button onClick={() => handleEdit(item)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
                                                 <Edit className="w-3.5 h-3.5" /> Edit
                                             </Button>
-                                            <Button onClick={() => deleteMutation.mutate(item._id)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
-                                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                                            </Button>
+                                            {item.offered !== false && (
+                                                <Button onClick={() => disableMutation.mutate(item._id)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
+                                                    <EyeOff className="w-3.5 h-3.5" /> Disable
+                                                </Button>
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>

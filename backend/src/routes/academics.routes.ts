@@ -471,6 +471,22 @@ router.patch('/academics/subject-groups/:id',      c.updateItem('subject_groups'
 router.delete('/academics/subject-groups/:id',     c.deleteItem('subject_groups'));
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
+// Subjects are disabled, never deleted — removing one would silently blank past marks/classes
+// that reference it. DELETE now just hides it, same as unticking it in Subjects we offer.
+const disableSubject = async (req: Request, res: any) => {
+    try {
+        const db = getRequestDb(req);
+        const { id } = req.params;
+        const idCandidates: any[] = [id];
+        try { idCandidates.push(new ObjectId(id)); } catch { /* not a valid ObjectId — string only */ }
+        const result = await db.collection('subjects').updateOne({ _id: { $in: idCandidates } }, { $set: { offered: false } });
+        if (!result.matchedCount) return res.status(404).json({ message: 'Subject not found' });
+        res.json({ message: 'Subject disabled' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error disabling subject', error });
+    }
+};
+
 // Subjects a school no longer offers (Subjects → Subjects we offer) are hidden from pickers;
 // ?all=1 lists every subject (with history), any other query keeps the generic filters.
 router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
@@ -482,12 +498,13 @@ router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
 router.get('/subjects',              c.getItems('subjects'));
 router.post('/subjects',             c.createItem('subjects'));
 router.patch('/subjects/:id',        c.updateItem('subjects'));
-router.delete('/subjects/:id',       c.deleteItem('subjects'));
+// Subjects are never deleted — use Subjects → Subjects we offer to disable one instead.
+router.delete('/subjects/:id',       disableSubject);
 
 router.get('/academics/subjects',    c.getItems('subjects'));
 router.post('/academics/subjects',   c.createItem('subjects'));
 router.patch('/academics/subjects/:id',  c.updateItem('subjects'));
-router.delete('/academics/subjects/:id', c.deleteItem('subjects'));
+router.delete('/academics/subjects/:id', disableSubject);
 
 // ─── Grades ──────────────────────────────────────────────────────────────────
 router.get('/grades',              c.getItems('grades'));

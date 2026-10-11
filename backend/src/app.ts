@@ -17,6 +17,7 @@ import examPublishRoutes from './routes/examPublish.routes';
 import studentAnalysisRoutes from './routes/studentAnalysis.routes';
 import examPrintoutsRoutes from './routes/examPrintouts.routes';
 import curriculumCatalogRoutes from './routes/curriculumCatalog.routes';
+import classCatalogRoutes from './routes/classCatalog.routes';
 import dashboardsRoutes from './routes/dashboards.routes';
 import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
