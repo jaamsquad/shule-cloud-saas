@@ -180,7 +180,7 @@ export async function buildExamResults(database: Db, examId: string, opts: { inc
             adm: stu.registrationNo || stu.admNo || stu.admissionNo || '',
             stream,
             className,
-            kcpe: num(stu.kcpeMarks ?? stu.kcpe),
+            kcpe: num(stu.kcpeMarks ?? stu.kcpe ?? stu.kcpeScore),
             gender: String(stu.gender || stu.sex || '').trim(),
             subjects, totalMarks, totalPoints,
             meanPct: round(meanPct, 2), meanPoints: round(meanPoints, 2),

@@ -14,6 +14,7 @@ import { printTransferLetter, displayDate } from "./students/transferLetter";
 import CertificateModal from "./students/certificates/CertificateModal";
 import NemisDetailsCard from "./students/NemisDetailsCard";
 import StudentAnalysis from "./students/StudentAnalysis";
+import OtherDetailsCard from "./students/OtherDetailsCard";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -451,6 +452,7 @@ export default function StudentReport() {
 
                     {/* All NEMIS learner details — read-only, Edit to change */}
                     <NemisDetailsCard studentId={String(id)} canEdit={!!canUpdate} />
+                    <OtherDetailsCard student={student} canEdit={!!canUpdate} />
 
                     {/* Assigned Subjects List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">
