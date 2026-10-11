@@ -13,15 +13,12 @@ import StaffApp from "@/portals/staff/StaffApp";
 import ParentApp from "@/portals/parent/ParentApp";
 
 // Student Portal
-import StudentPortalLogin from "./pages/student-portal/StudentPortalLogin";
 import StudentPortalDashboard from "./pages/student-portal/StudentPortalDashboard";
 
 // Parent Portal
-import ParentPortalLogin from "./pages/parent-portal/ParentPortalLogin";
 import ParentPortalDashboard from "./pages/parent-portal/ParentPortalDashboard";
 
 // Staff Portal
-import StaffPortalLogin from "./pages/staff-portal/StaffPortalLogin";
 
 // Public pages
 import Landing from "./pages/public/Landing";
@@ -531,18 +528,15 @@ const App = () => {
               <Route path="/owner/billing" element={<OwnerBilling />} />
             </Route>
 
-            {/* Student Portal — standalone */}
-            <Route path="/student-portal" element={<StudentPortalLogin />} />
-            <Route path="/student-portal/login" element={<StudentPortalLogin />} />
+            {/* Everyone signs in on the school's one login page — the old portal
+                login addresses just send people there (bookmarks, printed slips). */}
+            <Route path="/student-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/student-portal/login" element={<Navigate to="/login" replace />} />
             <Route path="/student-portal/dashboard" element={<StudentPortalDashboard />} />
-
-            {/* Staff Portal — standalone login, redirects to main dashboard */}
-            <Route path="/staff-portal" element={<StaffPortalLogin />} />
-            <Route path="/staff-portal/login" element={<StaffPortalLogin />} />
-
-            {/* Parent Portal — standalone */}
-            <Route path="/parent-portal" element={<ParentPortalLogin />} />
-            <Route path="/parent-portal/login" element={<ParentPortalLogin />} />
+            <Route path="/staff-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/staff-portal/login" element={<Navigate to="/login" replace />} />
+            <Route path="/parent-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/parent-portal/login" element={<Navigate to="/login" replace />} />
             <Route path="/parent-portal/dashboard" element={<ParentPortalDashboard />} />
 
             {/* ORGANIZATION (multi-branch) — branded portal, guarded by org_token */}

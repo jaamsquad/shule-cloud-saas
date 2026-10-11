@@ -115,7 +115,7 @@ export default function ManageParentLogin() {
     };
 
     const copyPortalLink = () => {
-        const url = `${window.location.origin}/parent-portal`;
+        const url = `${window.location.origin}/login`;
         navigator.clipboard.writeText(url).then(() => {
             setCopied("link");
             toast.success("Parent portal link copied!");
@@ -126,7 +126,7 @@ export default function ManageParentLogin() {
     const copyCredentials = (student: any) => {
         const u = getDisplayValue(student, "username");
         const p = getDisplayValue(student, "password");
-        const text = `Parent Portal: ${window.location.origin}/parent-portal\nUsername: ${u}\nPassword: ${p}\nStudent: ${student.studentName}`;
+        const text = `Parent Portal: ${window.location.origin}/login\nUsername: ${u}\nPassword: ${p}\nStudent: ${student.studentName}`;
         navigator.clipboard.writeText(text).then(() => {
             setCopied(student._id);
             toast.success("Credentials copied to clipboard!");
@@ -150,7 +150,7 @@ export default function ManageParentLogin() {
                         {copied === "link" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         Copy Portal Link
                     </button>
-                    <a href="/parent-portal" target="_blank" rel="noopener noreferrer"
+                    <a href="/login" target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-2 h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-emerald-100">
                         <ExternalLink className="w-3.5 h-3.5" /> Open Parent Portal
                     </a>
@@ -164,7 +164,7 @@ export default function ManageParentLogin() {
                     <div>
                         <p className="text-xs font-black text-emerald-800 uppercase tracking-widest">How Parent Login Works</p>
                         <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                            Parents log in at <strong>/parent-portal</strong> using their username (defaults to phone number) and password.
+                            Parents log in at <strong>/login</strong> — the school’s one login page — using their username (defaults to phone number) and password.
                             Default password format: <code className="bg-emerald-100 px-1 rounded">parent@</code> + last 4 digits of parent phone.
                             E.g. phone 0712345678 → password <code className="bg-emerald-100 px-1 rounded">parent@5678</code>
                         </p>
@@ -389,7 +389,7 @@ export default function ManageParentLogin() {
                             {
                                 title: "Portal URL",
                                 desc: "Share this link with parents",
-                                example: `${window.location.origin}/parent-portal`,
+                                example: `${window.location.origin}/login`,
                                 color: "bg-indigo-50 border-indigo-100 text-indigo-700",
                             },
                         ].map(g => (

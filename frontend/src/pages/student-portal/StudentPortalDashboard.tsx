@@ -53,7 +53,7 @@ export default function StudentPortalDashboard() {
     useEffect(() => {
         const info = localStorage.getItem("student_info");
         const token = localStorage.getItem("student_token");
-        if (!info || !token) { navigate("/student-portal"); return; }
+        if (!info || !token) { navigate("/login"); return; }
         setStudent(JSON.parse(info));
     }, [navigate]);
 
@@ -106,7 +106,7 @@ export default function StudentPortalDashboard() {
         localStorage.removeItem("student_token");
         localStorage.removeItem("student_info");
         toast.success("Logged out");
-        navigate("/student-portal");
+        navigate("/login");
     };
 
     const payMutation = useMutation({

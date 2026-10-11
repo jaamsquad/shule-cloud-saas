@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import OwnerAiCard from "@/components/owner/OwnerAiCard";
 
 const PRIMARY = "#534AB7";
 
@@ -106,6 +107,9 @@ export default function OwnerSettings() {
 
     return (
         <div className="space-y-5">
+            {/* AI assistant (Groq) — the key every school's AI uses */}
+            <OwnerAiCard />
+
             {/* Public registration toggle */}
             <div className="bg-white rounded-xl p-5 flex items-center justify-between" style={{ border: "0.5px solid #e5e7eb" }}>
                 <div>

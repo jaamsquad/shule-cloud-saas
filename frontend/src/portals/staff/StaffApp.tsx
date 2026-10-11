@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import StaffLogin from "./StaffLogin";
+import ToMainLogin from "../ToMainLogin";
 import StaffLayout from "./StaffLayout";
 import StaffDashboard from "./pages/StaffDashboard";
 import MyClasses from "./pages/MyClasses";
@@ -23,7 +23,7 @@ import { staffApi, staffCalendarApi } from "./staffApi";
 export default function StaffApp() {
     return (
         <Routes>
-            <Route path="/login" element={<StaffLogin />} />
+            <Route path="/login" element={<ToMainLogin tokenKey="staff_token" />} />
             <Route path="/live/:meetingId" element={<LiveRoom />} />
             <Route element={<StaffLayout />}>
                 <Route path="/" element={<StaffDashboard />} />

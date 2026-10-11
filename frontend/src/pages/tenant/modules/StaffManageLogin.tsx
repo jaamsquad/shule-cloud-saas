@@ -94,7 +94,7 @@ export default function StaffManageLogin() {
                     <Home className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-500 font-medium text-sm">Manage Login</span>
                 </div>
-                <a href="/staff-portal" target="_blank" rel="noopener noreferrer"
+                <a href="/login" target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-2 h-9 px-4 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100">
                     <ExternalLink className="w-3.5 h-3.5" /> Open Staff Portal ↗
                 </a>
