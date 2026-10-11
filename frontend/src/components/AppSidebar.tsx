@@ -203,6 +203,10 @@ export default function AppSidebar() {
                         className={`overflow-hidden border-l ${isDark ? 'border-gray-800' : 'border-gray-200'} ml-[23px] mt-1 space-y-1 mb-2`}
                       >
                         {item.children.filter(child => {
+                          // A child locked by the school's plan is left out entirely, not
+                          // shown greyed-out — same as the Sections grid on its group page.
+                          if (isPlanLocked(child.planModule)) return false;
+
                           if (perms.isAdmin) return true;
                           const granted = perms.permissions || [];
                           const wildcard = granted.includes("*");
