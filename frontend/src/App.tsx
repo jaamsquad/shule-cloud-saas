@@ -114,7 +114,6 @@ import StaffIdCards from "./pages/tenant/modules/StaffIdCards";
 import Departments from "./pages/tenant/modules/Departments";
 import Subjects from "./pages/tenant/modules/Subjects";
 import AllSubjects from "./pages/tenant/modules/AllSubjects";
-import NewSubject from "./pages/tenant/modules/NewSubject";
 import SubjectsOffered from "./pages/tenant/modules/subjects/SubjectsOffered";
 import SubjectPathways from "./pages/tenant/modules/subjects/Pathways";
 import AssignSubjects from "./pages/tenant/modules/AssignSubjects";
@@ -683,7 +682,7 @@ const App = () => {
               {/* Subjects */}
               <Route path="/subjects" element={<Subjects />} />
               <Route path="/subjects/all" element={<AllSubjects />} />
-              <Route path="/subjects/new" element={<NewSubject />} />
+              <Route path="/subjects/new" element={<Navigate to="/subjects/offered" replace />} />
               <Route path="/subjects/offered" element={<SubjectsOffered />} />
               <Route path="/subjects/pathways" element={<SubjectPathways />} />
               <Route path="/subjects/assign" element={<AssignSubjects />} />
