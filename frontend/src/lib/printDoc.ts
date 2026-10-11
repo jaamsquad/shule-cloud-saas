@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { outputHtmlDoc } from "@/lib/pdfDoc";
+import { outputHtmlDoc, downloadHtmlAsPdf } from "@/lib/pdfDoc";
 
 export interface SchoolBrand { name: string; logo: string; address: string; phone: string; email: string; signature: string; stamp: string; signerName: string; signerTitle: string; }
 
@@ -22,13 +22,10 @@ export function useSchoolBrand(): SchoolBrand {
     };
 }
 
-/**
- * Open a print window with a branded school header (logo + name + contacts),
- * the report title, and the supplied body HTML. `accent` themes the header/table.
- */
-export function printBranded(school: SchoolBrand, title: string, bodyHtml: string, accent = "#1D4ED8") {
+/** The branded header/table document shared by printBranded() and downloadBrandedPdf(). */
+function brandedHtml(school: SchoolBrand, title: string, bodyHtml: string, accent: string): string {
     const contacts = [school.address, school.phone, school.email].filter(Boolean).join(" · ");
-    const html = `<!DOCTYPE html><html><head><title>${title}</title>
+    return `<!DOCTYPE html><html><head><title>${title}</title>
     <style>
       @page{margin:14mm}
       body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
@@ -53,6 +50,18 @@ export function printBranded(school: SchoolBrand, title: string, bodyHtml: strin
       <div class="ft">Printed ${new Date().toLocaleString("en-GB")}</div>
       <script>window.onload=()=>window.print()</script>
     </body></html>`;
+}
+
+/**
+ * Open a print window with a branded school header (logo + name + contacts),
+ * the report title, and the supplied body HTML. `accent` themes the header/table.
+ */
+export function printBranded(school: SchoolBrand, title: string, bodyHtml: string, accent = "#1D4ED8") {
     // Desktop → print window; mobile app → real PDF saved & opened.
-    void outputHtmlDoc(title, html, { fileName: title });
+    void outputHtmlDoc(title, brandedHtml(school, title, bodyHtml, accent), { fileName: title });
+}
+
+/** Same branded document as printBranded(), but always saved straight to a PDF file (an explicit "Download PDF" button). */
+export function downloadBrandedPdf(school: SchoolBrand, title: string, bodyHtml: string, accent = "#1D4ED8") {
+    void downloadHtmlAsPdf(title, brandedHtml(school, title, bodyHtml, accent), title);
 }
