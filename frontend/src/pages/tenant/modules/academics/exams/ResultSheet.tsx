@@ -5,24 +5,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-
-function autoGrade(
-    pct: number,
-    tiers?: Array<{ grade: string; from: number; upto: number; status: string }>
-): string {
-    if (tiers && tiers.length > 0) {
-        const sorted = [...tiers].sort((a, b) => b.from - a.from);
-        const match = sorted.find(t => pct >= t.from && pct <= t.upto);
-        if (match) return match.grade;
-    }
-    if (pct >= 80) return "A+";
-    if (pct >= 70) return "A";
-    if (pct >= 60) return "B+";
-    if (pct >= 50) return "B";
-    if (pct >= 40) return "C";
-    if (pct >= 33) return "D";
-    return "F";
-}
+import { useGrading } from "@/lib/grading";
 
 export default function ResultSheet() {
     const [selectedExam, setSelectedExam] = useState<any>(null);
@@ -34,8 +17,8 @@ export default function ResultSheet() {
     const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data });
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["classes"], queryFn: async () => (await api.get("/academics/classes")).data });
     const { data: periods = [] } = useQuery<any[]>({ queryKey: ["periods"], queryFn: async () => (await api.get("/academics/periods")).data });
-    const { data: gradingConfig } = useQuery<any>({ queryKey: ["grading_criteria"], queryFn: async () => (await api.get("/grading_criteria")).data?.[0] });
-    const gradeTiers: Array<{ grade: string; from: number; upto: number; status: string }> = gradingConfig?.grades || [];
+    // Configured grading for the selected class (class template → class/school criteria → settings).
+    const grading = useGrading(selectedClass?._id, selectedClass?.name || selectedClass?.className);
     const currentPeriod = periods.find((p: any) => p.isCurrent);
 
     const { data: marks = [], isLoading } = useQuery<any[]>({
@@ -64,7 +47,7 @@ export default function ResultSheet() {
     let rows = Object.values(studentMap).map((s: any) => ({
         ...s,
         pct: s.totalMax > 0 ? Math.round((s.totalObtained / s.totalMax) * 100) : 0,
-        grade: autoGrade(s.totalMax > 0 ? Math.round((s.totalObtained / s.totalMax) * 100) : 0, gradeTiers),
+        grade: grading.grade(s.totalMax > 0 ? Math.round((s.totalObtained / s.totalMax) * 100) : 0),
     }));
 
     // Rank

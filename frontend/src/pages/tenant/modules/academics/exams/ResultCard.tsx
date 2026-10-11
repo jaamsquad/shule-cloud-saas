@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { useGrading } from "@/lib/grading";
 import { RenderPrintTemplate } from "./PrintTemplates";
 import { openPrintDoc } from "@/lib/pdfDoc";
 import { reportQr } from "@/lib/reportQr";
@@ -160,41 +161,19 @@ export default function ResultCard() {
         enabled: !!selectedClass,
     });
 
-    // ── Resolved grading scale: per-class scale > curriculum > legacy > defaults ──
-    const gradingScale: Array<{ grade: string; min: number; max: number; label?: string; color?: string }> = (() => {
-        if (classScale?.grades?.length > 0) {
-            return classScale.grades.map((g: any) => ({ grade: g.grade, min: g.from, max: g.upto, label: g.remark }));
-        }
-        if (curriculumSettings?.gradingScale?.length > 0) {
-            return curriculumSettings.gradingScale.map((g: any) => ({ grade: g.grade, min: g.min, max: g.max, label: g.label, color: g.color }));
-        }
-        if (gradingConfig?.grades?.length > 0) {
-            return gradingConfig.grades.map((g: any) => ({ grade: g.grade, min: g.from, max: g.upto, label: g.status }));
-        }
-        return [];
+    // ── Configured grading for the student's class (class template → class/school criteria → settings) ──
+    const grading = useGrading(selectedStudent?.classId || selectedClass?._id, selectedStudent?.studentClass || selectedClass?.levelName || selectedClass?.name);
+    const gradingScale: Array<{ grade: string; min: number; max: number; label?: string; color?: string; points?: number }> = (() => {
+        const colors = new Map<string, string>(((curriculumSettings?.gradingScale || []) as Array<{ grade: string; color?: string }>).filter(g => g?.color).map(g => [String(g.grade), String(g.color)]));
+        return grading.scale.map(g => ({ grade: g.grade, min: g.from, max: g.upto, label: g.remark, points: g.points, ...(colors.get(g.grade) ? { color: colors.get(g.grade) } : {}) }));
     })();
 
     const passMark = classScale?.passMark ?? curriculumSettings?.passMark ?? gradingConfig?.passmark ?? 50;
 
-    // Helper: derive grade from percentage using resolved grading scale
-    const getGradeForPct = (pct: number): string => {
-        if (gradingScale.length > 0) {
-            const sorted = [...gradingScale].sort((a, b) => b.min - a.min);
-            const match = sorted.find(g => pct >= g.min && pct <= g.max);
-            if (match) return match.grade;
-        }
-        if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B";
-        if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F";
-    };
+    // Helper: derive grade from percentage using the configured scale
+    const getGradeForPct = (pct: number): string => grading.grade(pct);
 
-    const getStatusForPct = (pct: number): string => {
-        if (gradingScale.length > 0) {
-            const sorted = [...gradingScale].sort((a, b) => b.min - a.min);
-            const match = sorted.find(g => pct >= g.min && pct <= g.max);
-            if (match?.label) return match.label;
-        }
-        return pct >= passMark ? "Pass" : "Fail";
-    };
+    const getStatusForPct = (pct: number): string => grading.gradeOf(pct).remark || (pct >= passMark ? "Pass" : "Fail");
 
     const getGradeColor = (pct: number): string => {
         if (gradingScale.length > 0) {

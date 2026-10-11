@@ -4,6 +4,7 @@ import { Db, ObjectId } from 'mongodb';
 import { syncParentToStudents, syncStudentToParents } from '../services/parent-student-sync.service';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { applyAutoNumber } from '../lib/idNumbering';
+import { resolveGrading, meanGradeFromScale } from '../lib/grading';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -312,6 +313,8 @@ export const getExamReport = async (req: Request, res: Response) => {
         const marks = await db.collection('marks').find(query).toArray();
         const subjects = await db.collection('subjects').find({}).toArray();
 
+        // Mean grade from mean points on the school's configured grading scale.
+        const schoolScale = (await resolveGrading(db)).scale;
         const subjectAnalysis = subjects.map(sub => {
             const subMarks = marks.filter(m => m.subjectId.toString() === sub._id.toString());
             const entry = subMarks.length;
@@ -319,7 +322,7 @@ export const getExamReport = async (req: Request, res: Response) => {
             subMarks.forEach(m => { const g = m.grade || 'E'; distribution[g] = (distribution[g] || 0) + 1; });
             const totalPoints = subMarks.reduce((acc, m) => acc + (m.points || 0), 0);
             const ms = entry > 0 ? (totalPoints / entry).toFixed(2) : '0.00';
-            return { name: sub.name, entry, grades: distribution, ms, mg: entry > 0 ? 'B+' : '-', prev: (Number(ms) - 0.5).toFixed(2), dev: '+0.50' };
+            return { name: sub.name, entry, grades: distribution, ms, mg: entry > 0 ? meanGradeFromScale(schoolScale, Number(ms)) : '-', prev: (Number(ms) - 0.5).toFixed(2), dev: '+0.50' };
         });
 
         const staff = await db.collection('staff').find({ role: 'Teacher' }).toArray();

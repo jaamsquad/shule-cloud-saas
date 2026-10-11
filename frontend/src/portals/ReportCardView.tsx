@@ -7,6 +7,7 @@ import { PageTitle } from "./PortalShell";
 import { RenderPrintTemplate } from "@/pages/tenant/modules/academics/exams/PrintTemplates";
 import ScholarSheetReportCard from "@/pages/tenant/modules/academics/exams/ScholarSheetReportCard";
 import { gradeFor, statusFor } from "@/lib/reportCardCalc";
+import { gradeFromScale } from "@/lib/grading";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 type Family = "CBC" | "KCSE" | "Cambridge" | "IB";
@@ -151,6 +152,8 @@ function PrintableCard({ p, studentId, examId }: { p: any; studentId: string; ex
     };
 
     const scale = p.gradingScale || [];
+    // the school's configured scale as sent by the server, looked up without gaps (79.5 → the 75–79 band)
+    const bands = (scale as Array<{ grade: string; min?: number; max?: number; from?: number; upto?: number; points?: number; label?: string; remark?: string }>).map(g => ({ grade: g.grade, from: Number(g.min ?? g.from) || 0, upto: Number(g.max ?? g.upto) || 0, points: Number(g.points) || 0, remark: g.label || g.remark || "" }));
     return (
         <div className="mb-6">
             <div className="flex items-center justify-between gap-2 mb-2 print:hidden">
@@ -171,7 +174,7 @@ function PrintableCard({ p, studentId, examId }: { p: any; studentId: string; ex
                                 className={p.className} periodLabel={p.periodLabel} examName={p.examName} examDate={p.examDate}
                                 marks={p.marks} totalMax={p.totalMax} totalObtained={p.totalObtained}
                                 overall={p.overall} overallGrade={p.overallGrade} overallStatus={p.overallStatus}
-                                getGradeForPct={(x: number) => gradeFor(scale, x)} getStatusForPct={(x: number) => statusFor(scale, p.passMark ?? 50, x)}
+                                getGradeForPct={(x: number) => (scale.length ? gradeFromScale(bands, x).grade : gradeFor(scale, x))} getStatusForPct={(x: number) => statusFor(scale, p.passMark ?? 50, x)}
                                 passMark={p.passMark} gradingScale={scale} classStats={p.classStats}
                             />
                         )}

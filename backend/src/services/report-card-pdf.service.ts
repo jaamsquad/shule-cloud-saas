@@ -1,4 +1,5 @@
 import puppeteer, { Browser } from 'puppeteer';
+import { gradeFromScale, GradeBand } from '../lib/grading';
 
 export type Family = 'CBC' | 'KCSE' | 'Cambridge' | 'IB';
 // Older template ids carry the curriculum in their prefix (cbc_*, cam_*, ib_*). The newer layouts are
@@ -30,13 +31,17 @@ const familyGrade = (pct: number, family: Family): string => {
     }
 };
 
-const gradeFor = (pct: number, grading: any, family: Family): string => {
-    // Use the school's configured grading bands if present, else the family scheme.
+// The class's RESOLVED grading scale (lib/grading resolveGrading) when the caller passed one.
+const scaleOf = (d: { scale?: GradeBand[] }): GradeBand[] | null => (Array.isArray(d?.scale) && d.scale.length ? d.scale : null);
+
+const gradeFor = (pct: number, grading: any, family: Family, scale?: GradeBand[] | null): string => {
+    // The resolved class scale wins; else the passed grading row's bands; else the family scheme.
+    if (scale) return gradeFromScale(scale, pct).grade;
     const bands: any[] = grading?.grades || grading?.bands || [];
     if (Array.isArray(bands) && bands.length) {
         for (const b of bands) {
             const lo = Number(b.min ?? b.from ?? b.lower ?? 0);
-            const hi = Number(b.max ?? b.to ?? b.upper ?? 100);
+            const hi = Number(b.max ?? b.to ?? b.upto ?? b.upper ?? 100);
             if (pct >= lo && pct <= hi) return b.grade || b.name || b.symbol || familyGrade(pct, family);
         }
     }
@@ -44,7 +49,8 @@ const gradeFor = (pct: number, grading: any, family: Family): string => {
 };
 
 const GRADE_HEADER: Record<Family, string> = { CBC: 'Level', KCSE: 'Grade', Cambridge: 'Grade', IB: 'Level (1–7)' };
-const overallText = (pct: number, family: Family, passMark: number) => {
+const overallText = (pct: number, family: Family, passMark: number, scale?: GradeBand[] | null) => {
+    if (family === 'CBC' && scale) { const b = gradeFromScale(scale, pct); return b.remark || b.grade; }
     if (family === 'CBC') return pct >= 51 ? 'Meeting Expectation' : pct >= 26 ? 'Approaching Expectation' : 'Below Expectation';
     return pct >= passMark ? 'PASSED' : 'FAILED';
 };
@@ -53,6 +59,8 @@ export interface ReportCardData {
     school?: string; logo?: string | null; motto?: string; address?: string; template?: string; curriculum?: string;
     signature?: string | null; stamp?: string | null; signerName?: string | null; signerTitle?: string | null;   // principal's signature + school stamp
     student: any; exam: any; className?: string; marks: any[]; grading?: any;
+    /** The student's class grading scale (resolveGrading). When given, grades/remarks/key come from it. */
+    scale?: GradeBand[];
 }
 
 // The layouts a school can choose on Report Card Templates (same names as the on-screen ones).
@@ -73,7 +81,8 @@ function signRow(titles: string[], o: { signature?: string | null; stamp?: strin
         return `<div style="flex:1;text-align:center;font-size:12px;position:relative"><div style="height:32px;position:relative">${head && o.signature ? `<img src="${esc(o.signature)}" style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);max-height:44px;max-width:150px;object-fit:contain"/>` : ''}</div>${head && o.stamp ? `<img src="${esc(o.stamp)}" style="position:absolute;right:-6px;bottom:-6px;width:68px;height:68px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}<div style="border-top:1.5px solid #111;padding-top:4px">${head && o.signerName ? `${esc(o.signerName)}<br/>` : ''}${x}</div></div>`;
     }).join('')}</div>`;
 }
-const remark = (pct: number) => pct >= 80 ? 'EXCELLENT' : pct >= 70 ? 'V.GOOD' : pct >= 60 ? 'GOOD' : pct >= 50 ? 'AVERAGE' : 'POOR';
+const remark = (pct: number, scale?: GradeBand[] | null) => (scale ? gradeFromScale(scale, pct).remark : '') || remarkFallback(pct);
+const remarkFallback = (pct: number) => pct >= 80 ? 'EXCELLENT' : pct >= 70 ? 'V.GOOD' : pct >= 60 ? 'GOOD' : pct >= 50 ? 'AVERAGE' : 'POOR';
 
 // A plain bar chart of each subject's % (inline SVG so it prints from the PDF renderer)
 function barChartSvg(rows: { label: string; pct: number }[], title: string): string {
@@ -89,24 +98,27 @@ function barChartSvg(rows: { label: string; pct: number }[], title: string): str
 export function reportCardHtml(d: ReportCardData): string {
     const s = d.student || {};
     const family = familyOf(d.template, d.curriculum);
+    const scale = scaleOf(d);
     const tpl = looksFor(d.template);
     const look = LOOKS[tpl];
     const classic = tpl === 'scholarsheet';
 
     const subs = (d.marks || []).map((m: any) => {
         const obtained = Number(m.marksObtained || 0), outOf = Number(m.totalMarks || 100), pct = outOf ? (obtained / outOf) * 100 : 0;
-        return { name: String(m.subjectName || m.subject || 'Subject'), obtained, outOf, pct, grade: gradeFor(pct, d.grading, family) };
+        return { name: String(m.subjectName || m.subject || 'Subject'), obtained, outOf, pct, grade: gradeFor(pct, d.grading, family, scale) };
     });
     const totalObtained = subs.reduce((a, x) => a + x.obtained, 0);
     const totalOut = subs.reduce((a, x) => a + x.outOf, 0);
     const overallPct = totalOut ? (totalObtained / totalOut) * 100 : 0;
-    const overallGrade = gradeFor(overallPct, d.grading, family);
+    const overallGrade = gradeFor(overallPct, d.grading, family, scale);
     const passMark = Number(d.grading?.passMark) || 40;
-    const result = overallText(overallPct, family, passMark);
+    const result = overallText(overallPct, family, passMark, scale);
     const date = (x: any) => (x ? new Date(x).toLocaleDateString('en-GB') : '');
     const examName = String(d.exam?.examName || d.exam?.name || 'Exam');
     const gh = GRADE_HEADER[family];
-    const bands: { grade: string; lo: number; hi: number; label: string }[] = ((d.grading?.grades || d.grading?.bands || []) as any[])
+    const bands: { grade: string; lo: number; hi: number; label: string }[] = scale
+        ? scale.map(b => ({ grade: b.grade, lo: b.from, hi: b.upto, label: b.remark || '' })).filter(b => b.grade).sort((x, y) => y.lo - x.lo)
+        : ((d.grading?.grades || d.grading?.bands || []) as any[])
         .map(b => ({ grade: String(b.grade || b.name || b.symbol || ''), lo: Number(b.min ?? b.from ?? b.lower ?? 0), hi: Number(b.max ?? b.to ?? b.upto ?? b.upper ?? 100), label: String(b.status || b.label || '') }))
         .filter(b => b.grade).sort((x, y) => y.lo - x.lo);
     const boundaries = bands.map(b => `${esc(b.grade)} : ${b.hi} - ${b.lo}`).join(', ');
@@ -163,7 +175,7 @@ export function reportCardHtml(d: ReportCardData): string {
           <table style="width:100%;border-collapse:collapse;margin-top:4px"><tr><td style="border:1px solid #000;padding:3px 6px;font-size:12px">Name : <b>${esc(stu)}</b></td><td style="border:1px solid #000;padding:3px 6px;font-size:12px;width:170px">Adm No : <b>${esc(adm)}</b></td></tr></table>
           <table style="width:100%;border-collapse:collapse;margin-top:4px;text-align:center;font-size:12px"><tr style="font-weight:700">${['Total Marks', 'Mean Score', gh === 'Level' ? 'Overall Level' : 'Mean Grade'].map(h => `<td style="border:1px solid #000;padding:3px">${h}</td>`).join('')}</tr><tr>${[`${totalObtained}/${totalOut}`, mean.toFixed(1), esc(overallGrade)].map(v => `<td style="border:1px solid #000;padding:3px">${v}</td>`).join('')}</tr></table>
           <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr style="font-weight:700;text-align:center">${['Subject', 'Marks', gh, 'Remarks'].map((h, i) => `<td style="border:1px solid #000;padding:3px 5px;${i === 0 ? 'text-align:left' : ''}">${h}</td>`).join('')}</tr>
-          ${subs.map(x => `<tr><td style="border:1px solid #000;padding:3px 5px">${esc(x.name).toUpperCase()}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center">${x.obtained}/${x.outOf}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center;font-weight:700">${esc(x.grade)}</td><td style="border:1px solid #000;padding:3px 5px">${remark(x.pct)}</td></tr>`).join('') || `<tr><td colspan="4" style="border:1px solid #000;padding:10px;text-align:center">No marks recorded.</td></tr>`}</table>
+          ${subs.map(x => `<tr><td style="border:1px solid #000;padding:3px 5px">${esc(x.name).toUpperCase()}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center">${x.obtained}/${x.outOf}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center;font-weight:700">${esc(x.grade)}</td><td style="border:1px solid #000;padding:3px 5px">${esc(remark(x.pct, scale))}</td></tr>`).join('') || `<tr><td colspan="4" style="border:1px solid #000;padding:10px;text-align:center">No marks recorded.</td></tr>`}</table>
           ${chart}
           <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Class Teacher's Comments :</b></td><td style="border:1px solid #000;padding:5px;width:170px;vertical-align:bottom">Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Principal's Comments :</b></td><td style="border:1px solid #000;padding:5px;vertical-align:bottom;position:relative">${d.signature ? `<img src="${esc(d.signature)}" style="position:absolute;left:60px;bottom:2px;max-height:34px;max-width:110px;object-fit:contain"/>` : ''}${d.stamp ? `<img src="${esc(d.stamp)}" style="position:absolute;right:2px;top:-20px;width:58px;height:58px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:30px;vertical-align:top"><b>Report Seen By Parent/Guardian :</b> Date : ________</td><td style="border:1px solid #000;padding:5px">Result : <b>${esc(result)}</b></td></tr></table></div>`;
     } else {   // annual_exam (and any retired design)
@@ -228,6 +240,7 @@ const EMAIL_HEAD: Record<string, string> = { annual_exam: '#33357f', progress_re
 export function reportCardEmailHtml(d: ReportCardData): string {
     const s = d.student || {};
     const family = familyOf(d.template, d.curriculum);
+    const scale = scaleOf(d);
     const date = (x: any) => (x ? new Date(x).toLocaleDateString('en-GB') : '');
     const rows = (d.marks || []).map((m: any) => {
         const obtained = Number(m.marksObtained || 0);
@@ -237,15 +250,15 @@ export function reportCardEmailHtml(d: ReportCardData): string {
             <td style="padding:8px 10px;border:1px solid #e5e7eb;font-size:13px">${m.subjectName || m.subject || 'Subject'}</td>
             <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:center;font-size:13px">${obtained} / ${outOf}</td>
             <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:center;font-size:13px">${pct.toFixed(1)}%</td>
-            <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:center;font-weight:700;font-size:13px">${gradeFor(pct, d.grading, family)}</td>
+            <td style="padding:8px 10px;border:1px solid #e5e7eb;text-align:center;font-weight:700;font-size:13px">${gradeFor(pct, d.grading, family, scale)}</td>
         </tr>`;
     }).join('');
     const totalObtained = (d.marks || []).reduce((a: number, m: any) => a + Number(m.marksObtained || 0), 0);
     const totalOut = (d.marks || []).reduce((a: number, m: any) => a + Number(m.totalMarks || 100), 0);
     const overallPct = totalOut ? (totalObtained / totalOut) * 100 : 0;
     const passMark = Number(d.grading?.passMark) || 40;
-    const result = overallText(overallPct, family, passMark);
-    const passed = family === 'CBC' ? overallPct >= 51 : overallPct >= passMark;
+    const result = overallText(overallPct, family, passMark, scale);
+    const passed = family === 'CBC' && !scale ? overallPct >= 51 : overallPct >= passMark;
 
     return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#1f2937">
       <div style="background:${EMAIL_HEAD[looksFor(d.template)]};color:#fff;padding:18px 22px;border-radius:10px 10px 0 0">
@@ -277,7 +290,7 @@ export function reportCardEmailHtml(d: ReportCardData): string {
           <tr>
             <td style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700">Overall</div><div style="font-size:18px;font-weight:800;color:${EMAIL_HEAD[looksFor(d.template)]}">${overallPct.toFixed(1)}%</div></td>
             <td style="width:10px"></td>
-            <td style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700">${family === 'CBC' ? 'Level' : 'Grade'}</div><div style="font-size:18px;font-weight:800;color:${EMAIL_HEAD[looksFor(d.template)]}">${gradeFor(overallPct, d.grading, family)}</div></td>
+            <td style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700">${family === 'CBC' ? 'Level' : 'Grade'}</div><div style="font-size:18px;font-weight:800;color:${EMAIL_HEAD[looksFor(d.template)]}">${gradeFor(overallPct, d.grading, family, scale)}</div></td>
             <td style="width:10px"></td>
             <td style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;font-weight:700">Result</div><div style="font-size:16px;font-weight:800;color:${passed ? '#16a34a' : '#dc2626'}">${result}</div></td>
           </tr>

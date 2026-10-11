@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { useGradingForClasses } from "@/lib/grading";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,18 +20,6 @@ interface StudentRank {
     average: number;
     grade: string;
     rank: number;
-}
-
-// ─── Auto-grade helper ────────────────────────────────────────────────────────
-
-function calcGrade(pct: number): string {
-    if (pct >= 80) return "A";
-    if (pct >= 70) return "B+";
-    if (pct >= 60) return "B";
-    if (pct >= 50) return "C+";
-    if (pct >= 40) return "C";
-    if (pct >= 33) return "D";
-    return "F";
 }
 
 // ─── Print helper ─────────────────────────────────────────────────────────────
@@ -160,10 +149,13 @@ export default function ExamRankings() {
         }
     });
 
+    // Configured grading for each student's class (class template → class/school criteria → settings).
+    const gradingFor = useGradingForClasses(Object.values(studentMap).map(s => ({ classId: s.classId, className: s.className })));
+
     // Compute average + grade, then rank
     const allStudents: StudentRank[] = Object.values(studentMap).map(s => {
         const avg = s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0;
-        return { ...s, average: avg, grade: calcGrade(avg) };
+        return { ...s, average: avg, grade: gradingFor(s.classId, s.className).grade(avg) };
     }).sort((a, b) => b.totalMarks - a.totalMarks)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 

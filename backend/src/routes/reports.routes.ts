@@ -5,6 +5,7 @@ import { formatExamName } from '../lib/examName';
 import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum } from '../lib/curriculum';
 import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
 import { onlyPublished, publishedView } from '../lib/examPublish';
+import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -19,45 +20,18 @@ const router = Router();
 const N = (v: any) => Number(v) || 0;
 const RND = (n: number, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 
+// The class's grading = the single resolver in lib/grading (class template → class
+// grading_criteria → global grading_criteria → curriculum settings → default).
+// Only the built-in default keeps this report card's traditional remark wording.
+const DEFAULT_REMARKS: Record<string, string> = {
+    A: 'EXCELLENT', 'A-': 'V.GOOD', 'B+': 'GOOD', B: 'GOOD', 'B-': 'GOOD', 'C+': 'FAIR', C: 'FAIR',
+    'C-': 'C.AVERAGE', 'D+': 'AIM HIGHER', D: 'AIM HIGHER', 'D-': 'WEAK', E: 'PULL UP YOUR SOCKS',
+};
 async function loadGrading(database: Db, classId?: string, className?: string) {
-    const DEF = [
-        { grade: 'A', from: 80, upto: 100, points: 12, remark: 'EXCELLENT' }, { grade: 'A-', from: 75, upto: 79, points: 11, remark: 'V.GOOD' },
-        { grade: 'B+', from: 70, upto: 74, points: 10, remark: 'GOOD' }, { grade: 'B', from: 65, upto: 69, points: 9, remark: 'GOOD' },
-        { grade: 'B-', from: 60, upto: 64, points: 8, remark: 'GOOD' }, { grade: 'C+', from: 55, upto: 59, points: 7, remark: 'FAIR' },
-        { grade: 'C', from: 50, upto: 54, points: 6, remark: 'FAIR' }, { grade: 'C-', from: 45, upto: 49, points: 5, remark: 'C.AVERAGE' },
-        { grade: 'D+', from: 40, upto: 44, points: 4, remark: 'AIM HIGHER' }, { grade: 'D', from: 35, upto: 39, points: 3, remark: 'AIM HIGHER' },
-        { grade: 'D-', from: 30, upto: 34, points: 2, remark: 'WEAK' }, { grade: 'E', from: 0, upto: 29, points: 1, remark: 'PULL UP YOUR SOCKS' },
-    ];
-    // Resolution order: the class's assigned GRADING TEMPLATE → a class-specific
-    // grading_criteria → the global grading_criteria → built-in default.
-    let rec: any = null;
-    // Resolve the v2 class by its _id OR by NAME (a student may be keyed by class
-    // text, not the v2 id), then read the grading template assigned to it.
-    const nrm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const level = (s: string) => { const m = String(s || '').match(/(form|grade)\s*\d+/i); return m ? m[0] : String(s || ''); };
-    let cls: any = null;
-    if (classId) {
-        const clsOid = (() => { try { return new ObjectId(classId); } catch { return null; } })();
-        if (clsOid) cls = await database.collection('v2_classes').findOne({ _id: clsOid }).catch(() => null);
-    }
-    if (!cls && className) {
-        const v2 = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
-        const want = nrm(className); const wantLevel = nrm(level(className));
-        cls = v2.find((c: any) => nrm(c.name) === want || nrm(c.name) === wantLevel || nrm(level(c.name)) === wantLevel) || null;
-    }
-    if (cls?.gradingTemplateId) {
-        const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
-        if (tOid) rec = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null);
-    }
-    if (!rec && classId) rec = await database.collection('grading_criteria').findOne({ classId }).catch(() => null);
-    if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
-    const raw = (rec?.grades || rec?.gradingScale || []);
-    const scale = raw.length ? raw.map((g: any, i: number) => ({
-        grade: g.grade ?? g.name ?? '', from: N(g.from ?? g.minPercent ?? g.min), upto: N(g.upto ?? g.maxPercent ?? g.max ?? 100),
-        points: N(g.points ?? g.point ?? (raw.length - i)), remark: g.remark ?? g.status ?? g.label ?? '',
-    })).sort((a: any, b: any) => b.upto - a.upto) : DEF;
-    const gradeOf = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
-    const meanGrade = (mp: number) => { let best = scale[scale.length - 1]; for (const s of scale) { if (mp >= s.points - 0.5) { best = s; break; } } return best?.grade || '-'; };
+    const g = await resolveGrading(database, classId, className);
+    const scale = g.source === 'default' ? g.scale.map(b => ({ ...b, remark: DEFAULT_REMARKS[b.grade] ?? b.remark })) : g.scale;
+    const gradeOf = (pct: number) => gradeFromScale(scale, pct);
+    const meanGrade = (mp: number) => meanGradeFromScale(scale, mp);
     return { scale, gradeOf, meanGrade };
 }
 
@@ -901,13 +875,19 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             });
         }
 
-        const gradeFor = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E';
+        // Each student's subjects are graded with their CLASS's configured grading.
+        const gradingFor = makeGradingCache(db);
+        const gradingByStudent: Record<string, Awaited<ReturnType<typeof resolveGrading>>> = {};
+        for (const st of students as any[]) {
+            gradingByStudent[st._id.toString()] = await gradingFor(st.classId ? String(st.classId) : undefined, st.studentClass || st.className || st.currentClass || undefined);
+        }
 
         const reportCards = students.map((student: any) => {
             const sid = student._id.toString();
             const studentMarks = marks.filter((m: any) =>
                 String(m.studentId) === sid || m.studentId === student.admNo || m.studentId === student.registrationNo);
             const studentClassName = student.studentClass || student.className || student.currentClass || "General Class";
+            const grading = gradingByStudent[sid];
 
             // ONLY the subjects assigned to this student's class. Resolve by the
             // student's classId first, else by class name. No all-subjects fallback.
@@ -946,8 +926,8 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                     score: avgPct,
                     scoreDisplay: hasMark ? avgPct : "-",
                     perExam,
-                    grade: hasMark ? gradeFor(avgPct) : '-',
-                    remarks: hasMark ? (avgPct >= 70 ? "Excellent" : avgPct >= 50 ? "Good" : "Needs improvement") : "No marks entered",
+                    grade: hasMark ? grading.gradeOf(avgPct).grade : '-',
+                    remarks: hasMark ? (grading.gradeOf(avgPct).remark || (avgPct >= 70 ? "Excellent" : avgPct >= 50 ? "Good" : "Needs improvement")) : "No marks entered",
                 };
             });
 
@@ -1978,12 +1958,15 @@ async function yearlyDocForGeneration(req: Request, gen: any) {
     const db = getRequestDb(req);
     const tid = (req as any).tenantContext?.tenantId;
     const tenant: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }).catch(() => null) : null;
-    const grading: any = await db.collection('grading_criteria').findOne({}).catch(() => null);
-    const bands = ((grading?.grades || []) as any[]).map(b => ({ grade: String(b.grade || ''), lo: Number(b.from ?? 0), hi: Number(b.upto ?? 100) })).filter(b => b.grade);
+    // Grade boundaries = each learner's CLASS grading (template → class → global → …).
+    const gradingFor = makeGradingCache(db);
+    const bandsOf = async (y: any) => (await gradingFor((gen.classV2Id || gen.classId) ? String(gen.classV2Id || gen.classId) : undefined, y?.className || gen.className || undefined)).scale
+        .map(b => ({ grade: String(b.grade || ''), lo: b.from, hi: b.upto })).filter(b => b.grade);
     const { yearlyDocumentHtml } = require('../services/report-card-pdf.service');
     const address = [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', ');
     const list: any[] = gen.yearly?.students || [];
-    return { html: yearlyDocumentHtml(list.map(y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands }))), count: list.length };
+    const pages = await Promise.all(list.map(async y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands: await bandsOf(y) })));
+    return { html: yearlyDocumentHtml(pages), count: list.length };
 }
 router.get('/report_card_generations/:id/yearly-html', async (req: Request, res: Response) => {
     try {
@@ -2079,6 +2062,7 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
             </style>
         `;
 
+        const classScale = (await resolveGrading(db, String(classDoc._id), classDoc.levelName || classDoc.name || undefined)).scale;
         for (const student of students) {
             try {
                 // Fetch marks for this student
@@ -2099,7 +2083,9 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
                         },
                         exam: mainExam,
                         className: classDoc.levelName || classDoc.name,
-                        marks
+                        marks,
+                        // The class's configured grading scale.
+                        scale: classScale,
                     };
 
                     const html = reportCardHtml(reportData);

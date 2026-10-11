@@ -7,6 +7,7 @@ import { loadTerms, pickCurrent, termOption, TermInfo } from '../modules/cbc/cbc
 import { resultUrl, resultSnapshot, resultText } from '../lib/resultLink';
 import { yearlyStatus, yearlyFor, yearlyText } from '../lib/yearlyReport';
 import { onlyPublished } from '../lib/examPublish';
+import { makeGradingCache } from '../lib/grading';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -194,6 +195,9 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             const tid = (req as any).tenantContext?.tenantId;
             const tenant: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }).catch(() => null) : null;
             const grading = pdfSvc ? await database.collection('grading_criteria').findOne({}).catch(() => null) : null;
+            // Grades on the PDF follow the student's CLASS grading (template → class → global → …).
+            const gradingFor = makeGradingCache(database);
+            const scaleOf = async (st: any, clsName?: string) => (await gradingFor(st?.classId ? String(st.classId) : undefined, st?.studentClass || st?.currentClass || st?.className || clsName || undefined)).scale;
             const curriculum = pdfSvc ? String(((await database.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '') : '';
             const note = body ? `${body}\n\n` : '';
             const job = async ({ student: st, link }: { student: any; link: string }) => {
@@ -208,7 +212,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                             const text = `${greetingY}\n\n${note}${yearlyText(y)}\n${link ? `\nView the full report online:\n${link}\n` : ''}\nRegards,\n${schoolName || 'The School'}`;
                             await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                         } else {
-                            const bands = ((grading?.grades || []) as any[]).map(b => ({ grade: String(b.grade || ''), lo: Number(b.from ?? 0), hi: Number(b.upto ?? 100) })).filter(b => b.grade);
+                            const bands = (await scaleOf(st, y.className)).map(b => ({ grade: String(b.grade || ''), lo: b.from, hi: b.upto })).filter(b => b.grade);
                             const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.yearlyDocumentHtml([{ school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands }]));
                             const cell = (v: number | null) => `<td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center;font-size:13px">${v == null ? '—' : v + '%'}</td>`;
                             const table = `<table style="width:100%;border-collapse:collapse;margin:12px 0"><tr>${['Subject', 'Term 1', 'Term 2', 'Term 3', 'Year'].map(h => `<th style="background:#33357f;color:#fff;padding:7px 8px;font-size:11px;text-transform:uppercase">${h}</th>`).join('')}</tr>${y.subjects.map(x => `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-size:13px">${escHtml(x.name)}</td>${cell(x.t[0])}${cell(x.t[1])}${cell(x.t[2])}${cell(x.avg)}</tr>`).join('')}<tr style="font-weight:700"><td style="padding:6px 8px;border:1px solid #e5e7eb">Overall</td>${cell(y.termOverall[0])}${cell(y.termOverall[1])}${cell(y.termOverall[2])}${cell(y.yearAvg)}</tr></table>`;
@@ -227,7 +231,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                         await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                     } else {
                         const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
-                        const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading };
+                        const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading, scale: await scaleOf(st, snap.className) };
                         const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.reportCardHtml(data));
                         const intro = `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937">${escHtml(greeting)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;white-space:pre-wrap">${escHtml(body)}</p>` : ''}`;
                         const outro = link ? `<p style="font-family:Arial,sans-serif;font-size:13px">View the full result online: <a href="${escHtml(link)}">${escHtml(link)}</a></p>` : '';

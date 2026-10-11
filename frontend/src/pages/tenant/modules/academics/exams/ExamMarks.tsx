@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useGrading, type Grading } from "@/lib/grading";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -31,35 +32,11 @@ interface MarkEntry {
     attendanceStatus?: "Present" | "Absent" | "Sick";
 }
 
-// Dynamic grade calculator — uses saved tiers, sorted highest-first
-function autoGrade(
-    marks: number,
-    total: number,
-    tiers?: Array<{ grade: string; from: number; upto: number; status: string }>
-): { grade: string; points: number; remarks: string } {
+// Grade, points and remark from the configured grading scale for the class being entered.
+function autoGrade(marks: number, total: number, g: Grading): { grade: string; points: number; remarks: string } {
     const pct = total > 0 ? (marks / total) * 100 : 0;
-
-    // Use saved grading tiers if available
-    if (tiers && tiers.length > 0) {
-        const sorted = [...tiers].sort((a, b) => b.from - a.from);
-        const match = sorted.find(t => pct >= t.from && pct <= t.upto);
-        if (match) {
-            return {
-                grade: match.grade,
-                points: parseFloat((match.from / 25).toFixed(1)), // approximate points
-                remarks: match.status || (pct >= 50 ? "Pass" : "Fail")
-            };
-        }
-    }
-
-    // Hardcoded fallback
-    if (pct >= 80) return { grade: "A+", points: 4.0, remarks: "Excellent" };
-    if (pct >= 70) return { grade: "A",  points: 3.5, remarks: "Very Good" };
-    if (pct >= 60) return { grade: "B+", points: 3.0, remarks: "Good" };
-    if (pct >= 50) return { grade: "B",  points: 2.5, remarks: "Average" };
-    if (pct >= 40) return { grade: "C",  points: 2.0, remarks: "Below Average" };
-    if (pct >= 33) return { grade: "D",  points: 1.0, remarks: "Poor" };
-    return { grade: "F", points: 0.0, remarks: "Fail" };
+    const band = g.gradeOf(pct);
+    return { grade: band.grade, points: band.points, remarks: band.remark || "" };
 }
 
 export default function ExamMarks() {
@@ -149,13 +126,8 @@ export default function ExamMarks() {
         queryFn: async () => (await api.get("/students")).data,
     });
 
-    // Fetch grading tiers from the saved setting (same as MarksGrading.tsx settings page)
-    const { data: gradingConfig } = useQuery<any>({
-        queryKey: ["grading_criteria"],
-        queryFn: async () => (await api.get("/grading_criteria")).data?.[0],
-    });
-    const gradeTiers: Array<{ grade: string; from: number; upto: number; status: string }> =
-        gradingConfig?.grades || [];
+    // The configured grading for the class being entered (class template → class/school criteria → settings).
+    const grading = useGrading(selectedClass?._id, selectedClass?.name || selectedClass?.className);
 
 
     // Filter students for the selected class + stream. Match by v2 classId/streamId
@@ -231,10 +203,10 @@ export default function ExamMarks() {
             const adm = s.admissionNumber || s.admNo || s.registrationNo || "—";
             const existing = existingMarks.find((m: any) => m.studentId === s._id);
             if (existing) {
-                // Re-calculate grade using saved tiers when loading existing marks
+                // Re-calculate grade using the configured scale when loading existing marks
                 const m = Number(existing.marksObtained);
                 const t = Number(existing.totalMarks) || 100;
-                const { grade, points, remarks } = autoGrade(m, t, gradeTiers);
+                const { grade, points, remarks } = autoGrade(m, t, grading);
                 return { ...existing, studentName: name, admNo: adm, grade, gradePoints: points, remarks };
             }
             return {
@@ -276,7 +248,7 @@ export default function ExamMarks() {
                 const marks = field === "marksObtained" ? Number(value) : Number(updated[idx].marksObtained);
                 const total = field === "totalMarks" ? Number(value) : Number(updated[idx].totalMarks);
                 if (!isNaN(marks) && !isNaN(total) && total > 0) {
-                    const { grade, points, remarks } = autoGrade(marks, total, gradeTiers);
+                    const { grade, points, remarks } = autoGrade(marks, total, grading);
                     updated[idx].grade = grade;
                     updated[idx].gradePoints = points;
                     updated[idx].remarks = remarks;

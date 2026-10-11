@@ -8,25 +8,38 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { openPrintDoc } from "@/lib/pdfDoc";
+import { openPrintDoc, outputHtmlDoc } from "@/lib/pdfDoc";
+import QRCode from "qrcode";
+import { useSchoolBrand } from "@/lib/printDoc";
+import { CERT_STYLES, CERT_TYPES, certificateHtml, combineCertificates, defaultBody, CertData } from "./students/certificates/certStyles";
+import { PLACEHOLDER_QR } from "./students/certificates/CertificateModal";
+
+// The standard certificate uses the same designs as the student profile (students/certificates).
+// Leaving and Transfer have their own forms below, so they're not offered as types here.
+const STD_TYPES = CERT_TYPES.filter(t => t.key !== "transfer" && t.key !== "leaving");
+const WHOLE_TITLE: Record<string, string> = { recommendation: "LETTER OF RECOMMENDATION", character: "CHARACTER CERTIFICATE" };
+const studentNameOf = (r: any) => r.studentName || r.name || `${r.firstName || ""} ${r.lastName || ""}`.trim();
+const withPrint = (html: string) => html.replace("</body>", "<script>window.onload=()=>setTimeout(()=>window.print(),250)</script></body>");
 
 export default function GenerateCertificate() {
     const [mode, setMode] = useState<'STANDARD' | 'LEAVING' | 'TRANSFER'>('STANDARD');
     
     // Recipient state for standard
     const [recipientType, setRecipientType] = useState('STUDENT');
-    const [certType, setCertType] = useState('ACHIEVEMENT');
+    const [certType, setCertType] = useState('achievement');
+    const [style, setStyle] = useState('gold');
     
     // standard preview/form state
     const [previewData, setPreviewData] = useState({
-        title: "CERTIFICATE OF ACHIEVEMENT",
-        body: "This is proudly presented to acknowledge outstanding performance and dedication during the academic year.",
+        title: "CERTIFICATE",
+        subtitle: "OF ACHIEVEMENT",
+        body: defaultBody("achievement", { school: "the school", className: "", year: String(new Date().getFullYear()) }),
         recipient: "Student Name",
-        date: new Date().toLocaleDateString(),
-        sig1Name: "Principal Name",
-        sig1Desig: "School Principal",
-        sig2Name: "Teacher Name",
-        sig2Desig: "Class Teacher"
+        date: new Date().toISOString().slice(0, 10),
+        sig1Name: "",
+        sig1Desig: "Class Teacher",
+        sig2Name: "",
+        sig2Desig: "Principal"
     });
 
     // leaving state
@@ -113,6 +126,79 @@ export default function GenerateCertificate() {
         ? (classStudents[0]?.studentName || classStudents[0]?.name || "[Student Name]")
         : previewData.recipient;
 
+    const school = useSchoolBrand();
+    const sigs = [{ name: previewData.sig1Name, title: previewData.sig1Desig }, { name: previewData.sig2Name, title: previewData.sig2Desig }];
+    const certData = (name: string, over: Partial<CertData> = {}): CertData => ({
+        style, title: previewData.title, subtitle: previewData.subtitle, name, body: previewData.body, date: previewData.date,
+        signatories: sigs, certNo: "", qr: "", school: { name: school.name, logo: school.logo, address: school.address, signature: school.signature, stamp: school.stamp }, ...over,
+    });
+    // Picking a type fills in its heading and wording (as on the student profile)
+    const pickType = (key: string) => {
+        const t = CERT_TYPES.find(x => x.key === key)!;
+        const st = recipientType !== "EMPLOYEE" ? selectedRecipient : null;
+        setCertType(key);
+        setPreviewData(p => ({
+            ...p, title: WHOLE_TITLE[key] || "CERTIFICATE", subtitle: WHOLE_TITLE[key] ? "" : t.subtitle,
+            body: defaultBody(key, { school: school.name, className: st?.studentClass || st?.currentClass || "", gender: st?.gender, year: String(new Date().getFullYear()) }),
+        }));
+    };
+    const [issuing, setIssuing] = useState(false);
+    const [lastIssued, setLastIssued] = useState<{ key: string; docs: string[]; title: string } | null>(null);
+    const stdKey = JSON.stringify({ style, certType, previewData, recipientType, sel: selectedRecipient?._id, cls: selectedClassId });
+
+    /** Issue the standard certificate(s): students get a numbered certificate with a QR check (same as the
+     *  student profile); every certificate is also kept in Saved Certificates. Returns the printable pages. */
+    const issueStandard = async (): Promise<{ docs: string[]; title: string } | null> => {
+        if (lastIssued?.key === stdKey) return lastIssued;   // already issued — print the same ones again
+        if (recipientType === "CLASS" && !selectedClassId) { toast.error("Please select a class first"); return null; }
+        const targets: any[] = recipientType === "CLASS" ? classStudents : selectedRecipient ? [selectedRecipient] : [];
+        if (!targets.length) { toast.error(recipientType === "CLASS" ? "No students found in this class" : "Please search and select a recipient first"); return null; }
+        if (!previewData.body.trim()) { toast.error("Write what the certificate is awarded for."); return null; }
+        const isStudent = recipientType !== "EMPLOYEE";
+        setIssuing(true);
+        const docs: string[] = []; let failed = 0; let lastErr = "";
+        try {
+            for (const r of targets) {
+                const name = isStudent ? studentNameOf(r) : (r.employeeName || r.name || "");
+                try {
+                    let certNo = "", qr = "", verifyUrl = "";
+                    if (isStudent) {
+                        const c = (await api.post(`/students/${r._id}/certificates`, { type: certType, style, title: previewData.title, subtitle: previewData.subtitle, body: previewData.body, date: previewData.date, signatories: sigs })).data;
+                        certNo = c.certId; verifyUrl = c.verifyUrl;
+                        qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 240, errorCorrectionLevel: "M" });
+                    }
+                    await api.post("/certificates", {
+                        recipientName: name, recipientType: isStudent ? "STUDENT" : "EMPLOYEE", certificateType: certType.toUpperCase(),
+                        title: previewData.title, subtitle: previewData.subtitle, style, body: previewData.body, date: previewData.date,
+                        sig1Name: previewData.sig1Name, sig1Desig: previewData.sig1Desig, sig2Name: previewData.sig2Name, sig2Desig: previewData.sig2Desig,
+                        recipientId: r._id, ...(certNo ? { certId: certNo, verifyUrl } : {}),
+                    });
+                    docs.push(certificateHtml(certData(name, { certNo, qr })));
+                } catch (e: any) { failed++; lastErr = e?.response?.data?.message || lastErr; }
+            }
+        } finally { setIssuing(false); }
+        if (!docs.length) { toast.error(lastErr || "Could not issue the certificate"); return null; }
+        toast.success(docs.length === 1 ? "Certificate issued and saved" : `${docs.length} certificates issued and saved`);
+        if (failed) toast.error(`${failed} could not be issued${lastErr ? `: ${lastErr}` : ""}`);
+        const title = `${STD_TYPES.find(t => t.key === certType)?.label || "Certificate"}${targets.length === 1 ? ` - ${docs.length ? (isStudent ? studentNameOf(targets[0]) : targets[0].employeeName || targets[0].name) : ""}` : ""}`;
+        const out = { key: stdKey, docs, title };
+        setLastIssued(out);
+        return out;
+    };
+    const printStandard = async () => {
+        const r = await issueStandard(); if (!r) return;
+        outputHtmlDoc(r.title, withPrint(combineCertificates(r.docs)), { fileName: r.title });
+    };
+    const previewHtml = React.useMemo(() => certificateHtml(certData(previewName, { qr: PLACEHOLDER_QR, certNo: "CN-XXXXXXXXXX" })), // eslint-disable-line react-hooks/exhaustive-deps
+        [style, previewData, previewName, school.name, school.logo, school.signature, school.stamp]);
+    const previewBox = React.useRef<HTMLDivElement>(null);
+    const [previewScale, setPreviewScale] = useState(0.6);
+    React.useEffect(() => {
+        const el = previewBox.current; if (!el) return;
+        const ro = new ResizeObserver(() => setPreviewScale(Math.min(1, el.clientWidth / 1123)));
+        ro.observe(el); return () => ro.disconnect();
+    }, [mode]);
+
     const handleGenerate = async () => {
         if (mode === 'LEAVING') {
             if (!selectedRecipient) {
@@ -145,56 +231,7 @@ export default function GenerateCertificate() {
                 recipientId: selectedRecipient._id,
             });
         } else {
-            if (recipientType === "CLASS") {
-                if (!selectedClassId) {
-                    toast.error("Please select a class first");
-                    return;
-                }
-                if (classStudents.length === 0) {
-                    toast.error("No students found in this class");
-                    return;
-                }
-                toast.info(`Generating certificates for ${classStudents.length} students...`);
-                try {
-                    await Promise.all(classStudents.map(student => {
-                        const name = student.studentName || student.name;
-                        return api.post('/certificates', {
-                            recipientName: name,
-                            recipientType: "STUDENT",
-                            certificateType: certType,
-                            title: previewData.title,
-                            body: previewData.body,
-                            sig1Name: previewData.sig1Name,
-                            sig1Desig: previewData.sig1Desig,
-                            sig2Name: previewData.sig2Name,
-                            sig2Desig: previewData.sig2Desig,
-                            date: previewData.date,
-                            recipientId: student._id,
-                        });
-                    }));
-                    toast.success(`Successfully generated ${classStudents.length} certificates!`);
-                } catch (err: any) {
-                    toast.error("Some certificates failed to generate");
-                }
-            } else {
-                if (!selectedRecipient) {
-                    toast.error("Please search and select a recipient first");
-                    return;
-                }
-                createMutation.mutate({
-                    recipientName: previewData.recipient,
-                    recipientType,
-                    certificateType: certType,
-                    title: previewData.title,
-                    body: previewData.body,
-                    sig1Name: previewData.sig1Name,
-                    sig1Desig: previewData.sig1Desig,
-                    sig2Name: previewData.sig2Name,
-                    sig2Desig: previewData.sig2Desig,
-                    date: previewData.date,
-                    recipientId: selectedRecipient._id,
-                });
-            }
+            await issueStandard();
         }
     };
 
@@ -218,6 +255,7 @@ export default function GenerateCertificate() {
     const schoolLogo = tenantProfile?.logo || tenantProfile?.logoUrl || "";
 
     const handlePrintCurrent = () => {
+        if (mode === 'STANDARD') { printStandard(); return; }
         const accentColor = activeTemplate?.accent_color || '#1e3a8a';
         const logoHtml = schoolLogo
             ? `<img src="${schoolLogo}" style="height: 60px; object-fit: contain; margin-bottom: 8px;" />`
@@ -843,49 +881,68 @@ ${certsHtml}
                             <div className="space-y-4">
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-500 uppercase">Certificate Type</label>
-                                    <Select value={certType} onValueChange={setCertType}>
-                                        <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none font-bold text-slate-700"><SelectValue /></SelectTrigger>
-                                        <SelectContent className="rounded-xl">
-                                            <SelectItem value="ACHIEVEMENT" className="font-bold">Achievement</SelectItem>
-                                            <SelectItem value="COMPLETION" className="font-bold">Completion</SelectItem>
-                                            <SelectItem value="PARTICIPATION" className="font-bold">Participation</SelectItem>
-                                            <SelectItem value="MERIT" className="font-bold">Merit</SelectItem>
-                                            <SelectItem value="SPORTS" className="font-bold">Sports</SelectItem>
-                                            <SelectItem value="CUSTOM" className="font-bold">Custom</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {STD_TYPES.map(t => (
+                                            <button key={t.key} type="button" onClick={() => pickType(t.key)}
+                                                className={`p-2 rounded-xl border-2 text-center transition-all ${certType === t.key ? "border-slate-800 bg-slate-50" : "border-slate-100 hover:border-slate-300"}`}>
+                                                <t.icon className="w-5 h-5 mx-auto text-slate-500" />
+                                                <div className="text-[10px] font-bold text-slate-700 leading-tight mt-0.5">{t.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">Certificate Title</label>
-                                    <Input 
-                                        value={previewData.title} 
-                                        onChange={e => setPreviewData(p => ({...p, title: e.target.value}))} 
-                                        className="h-11 rounded-xl font-bold border-slate-200" 
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Design</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {CERT_STYLES.map(st => (
+                                            <button key={st.key} type="button" onClick={() => setStyle(st.key)} title={st.note}
+                                                className={`rounded-xl border-2 overflow-hidden transition-all ${style === st.key ? "border-slate-800 ring-2 ring-slate-800/10" : "border-slate-100 hover:border-slate-300"}`}>
+                                                <div className="h-14 relative overflow-hidden bg-white"><iframe title={st.key} srcDoc={certificateHtml({ style: st.key, title: "CERTIFICATE", subtitle: "", name: "Name", body: "", date: "", signatories: [], certNo: "", qr: "", school: { name: "" } })} className="absolute top-0 left-0 origin-top-left pointer-events-none border-0" style={{ width: 1123, height: 794, transform: "scale(0.1)" }} /></div>
+                                                <div className="text-[10px] font-bold text-slate-600 py-1">{st.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Title</label>
+                                        <Input value={previewData.title} onChange={e => setPreviewData(p => ({ ...p, title: e.target.value }))} className="h-11 rounded-xl font-bold border-slate-200" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Sub-title</label>
+                                        <Input value={previewData.subtitle} onChange={e => setPreviewData(p => ({ ...p, subtitle: e.target.value }))} className="h-11 rounded-xl font-bold border-slate-200" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Awarded for / wording</label>
+                                    <Textarea
+                                        value={previewData.body}
+                                        onChange={(e: any) => setPreviewData(p => ({ ...p, body: e.target.value }))}
+                                        className="min-h-[110px] rounded-xl font-medium border-slate-200 resize-none p-3 text-sm leading-relaxed"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">Body / Citation</label>
-                                    <Textarea 
-                                        value={previewData.body} 
-                                        onChange={(e: any) => setPreviewData(p => ({...p, body: e.target.value}))} 
-                                        className="min-h-[100px] rounded-xl font-medium border-slate-200 resize-none p-3 text-sm leading-relaxed" 
-                                    />
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Date</label>
+                                    <Input type="date" value={previewData.date} onChange={e => setPreviewData(p => ({ ...p, date: e.target.value }))} className="h-11 rounded-xl font-medium border-slate-200" />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-500 uppercase">Signatory 1</label>
-                                        <Input value={previewData.sig1Name} onChange={e => setPreviewData(p => ({...p, sig1Name: e.target.value}))} className="h-9 rounded-lg text-xs font-bold border-slate-200" />
-                                        <Input value={previewData.sig1Desig} onChange={e => setPreviewData(p => ({...p, sig1Desig: e.target.value}))} className="h-9 rounded-lg text-xs border-slate-200" />
+                                        <Input placeholder="Name" value={previewData.sig1Name} onChange={e => setPreviewData(p => ({ ...p, sig1Name: e.target.value }))} className="h-9 rounded-lg text-xs font-bold border-slate-200" />
+                                        <Input placeholder="Title" value={previewData.sig1Desig} onChange={e => setPreviewData(p => ({ ...p, sig1Desig: e.target.value }))} className="h-9 rounded-lg text-xs border-slate-200" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-500 uppercase">Signatory 2</label>
-                                        <Input value={previewData.sig2Name} onChange={e => setPreviewData(p => ({...p, sig2Name: e.target.value}))} className="h-9 rounded-lg text-xs font-bold border-slate-200" />
-                                        <Input value={previewData.sig2Desig} onChange={e => setPreviewData(p => ({...p, sig2Desig: e.target.value}))} className="h-9 rounded-lg text-xs border-slate-200" />
+                                        <Input placeholder="Name" value={previewData.sig2Name} onChange={e => setPreviewData(p => ({ ...p, sig2Name: e.target.value }))} className="h-9 rounded-lg text-xs font-bold border-slate-200" />
+                                        <Input placeholder="Title" value={previewData.sig2Desig} onChange={e => setPreviewData(p => ({ ...p, sig2Desig: e.target.value }))} className="h-9 rounded-lg text-xs border-slate-200" />
                                     </div>
                                 </div>
+                                {recipientType !== "EMPLOYEE" && <p className="text-[11px] text-slate-400">Students get a numbered certificate with a QR code that confirms it online, and it shows on their profile.</p>}
                             </div>
                         </div>
                     )}
@@ -1045,10 +1102,10 @@ ${certsHtml}
 
                     <Button 
                         onClick={handleGenerate}
-                        disabled={createMutation.isPending}
+                        disabled={createMutation.isPending || issuing}
                         className={`w-full text-white h-12 rounded-2xl font-black shadow-lg flex items-center justify-center gap-2 transition-all shrink-0 ${mode === 'TRANSFER' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#5C67F2] hover:bg-[#4a54c4]'}`}
                     >
-                        {createMutation.isPending ? (
+                        {createMutation.isPending || issuing ? (
                             <>
                                 <Loader2 className="w-4 h-4 animate-spin" /> Generating...
                             </>
@@ -1150,47 +1207,12 @@ ${certsHtml}
                     )}
 
                     {mode === 'STANDARD' && (
-                        <>
-                            {!activeTemplate ? (
-                                <div className="text-center space-y-3 animate-in fade-in duration-300">
-                                    <Award className="w-12 h-12 text-slate-300 mx-auto" />
-                                    <p className="text-sm font-bold text-slate-500">No active template selected.<br/>Go to Certificate Templates to activate one.</p>
-                                </div>
-                            ) : (
-                                <div className="w-full max-w-[800px] aspect-[1.414] bg-white shadow-2xl relative p-12 flex flex-col justify-between animate-in zoom-in-95 duration-300" style={{ border: `12px solid ${activeTemplate.accent_color || '#1e3a8a'}` }}>
-                                    <div className="text-center mt-8">
-                                        <h2 className="text-4xl font-black uppercase tracking-widest mb-6" style={{ color: activeTemplate.accent_color || '#1e3a8a' }}>
-                                            {previewData.title}
-                                        </h2>
-                                        <p className="text-lg font-medium text-slate-600 mb-8 italic">This is to certify that</p>
-                                        <h1 className="text-5xl font-black text-slate-900 mb-8 border-b-2 border-slate-200 inline-block px-12 pb-2">
-                                            {previewName}
-                                        </h1>
-                                        <p className="text-lg text-slate-700 leading-relaxed max-w-2xl mx-auto font-medium">
-                                            {previewData.body}
-                                        </p>
-                                    </div>
-
-                                    <div className="flex justify-between items-end mb-8 px-12">
-                                        <div className="text-center w-48">
-                                            <div className="border-b-2 border-slate-400 mb-2 h-12"></div>
-                                            <p className="text-sm font-bold text-slate-900">{previewData.sig1Name}</p>
-                                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{previewData.sig1Desig}</p>
-                                        </div>
-                                        
-                                        <div className="w-32 h-32 rounded-full border-4 border-dashed border-rose-200 flex items-center justify-center opacity-50">
-                                            <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest text-center">School<br/>Stamp</span>
-                                        </div>
-
-                                        <div className="text-center w-48">
-                                            <div className="border-b-2 border-slate-400 mb-2 h-12"></div>
-                                            <p className="text-sm font-bold text-slate-900">{previewData.sig2Name}</p>
-                                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{previewData.sig2Desig}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </>
+                        <div className="w-full self-start animate-in fade-in duration-300">
+                            <div ref={previewBox} className="relative overflow-hidden mx-auto shadow-2xl bg-white" style={{ width: "100%", maxWidth: 1123, aspectRatio: "1123 / 794" }}>
+                                <iframe title="Certificate preview" srcDoc={previewHtml} className="absolute top-0 left-0 border-0 origin-top-left pointer-events-none" style={{ width: 1123, height: 794, transform: `scale(${previewScale})` }} />
+                            </div>
+                            <p className="text-center text-[11px] text-slate-400 mt-3">Preview — the certificate number and QR are created when you issue it.{recipientType === "CLASS" && classStudents.length > 1 ? ` One certificate per student (${classStudents.length}).` : ""}</p>
+                        </div>
                     )}
                 </div>
             </div>

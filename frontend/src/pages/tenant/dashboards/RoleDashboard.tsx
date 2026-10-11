@@ -37,7 +37,7 @@ export default function RoleDashboard() {
     const active = new Set(curricula.map(c => String(c.code).toUpperCase()));
 
     const views: ViewKey[] = useMemo(() => {
-        if (perms.isAdmin) return ["admin", "teacher", ...(active.has("CBC") ? ["cbc" as const] : []), ...(active.has("844") || !active.size ? ["844" as const] : [])];
+        if (perms.isAdmin) return ["admin", "teacher", ...(active.has("CBC") ? ["cbc" as const] : []), ...(active.has("844") ? ["844" as const] : [])];
         if (perms.isTeacher) return ["teacher"];
         return [];
     }, [perms.isAdmin, perms.isTeacher, curricula]); // eslint-disable-line react-hooks/exhaustive-deps

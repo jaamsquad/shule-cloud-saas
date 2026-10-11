@@ -57,7 +57,6 @@ export const navItems: NavItem[] = [
   { label: "Subjects", icon: BookOpen, moduleKey: "subjects", children: [
       { label: "Subjects We Offer", path: "/subjects/offered" },
       { label: "All Subjects", path: "/subjects/all" },
-      { label: "New Subject", path: "/subjects/new" },
       { label: "Classes With Subjects", path: "/subjects" },
       { label: "Assign Subjects", path: "/subjects/assign" },
       { label: "Co-Curricular & Talents", path: "/subjects/activities" },

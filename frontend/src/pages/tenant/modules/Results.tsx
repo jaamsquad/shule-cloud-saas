@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useGrading, gradeFromScale } from "@/lib/grading";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Results() {
@@ -42,6 +43,12 @@ export default function Results() {
         enabled: !!selectedExam,
     });
 
+    // Configured grading for the assessment's class (school scale when it has none).
+    const selectedAssessment = (exams as Array<{ id: string; classId?: string; className?: string }>).find(e => e.id === selectedExam);
+    const grading = useGrading(selectedAssessment?.classId, selectedAssessment?.className);
+    const gradeScale = grading.scale;
+    const topGrade = [...gradeScale].sort((a, b) => b.from - a.from)[0]?.grade;
+
     const analysis = useMemo(() => {
         if (!marks || marks.length === 0) return null;
 
@@ -50,14 +57,14 @@ export default function Results() {
         const mean = (total / marks.length).toFixed(1);
         const passRank = marks.filter((m: any) => parseFloat(m.score) >= 50).length;
         const passRate = ((passRank / marks.length) * 100).toFixed(0);
-        const gradeA = marks.filter((m: any) => parseFloat(m.score) >= 80).length;
+        const gradeA = (marks as Array<{ score: string }>).filter(m => gradeFromScale(gradeScale, parseFloat(m.score)).grade === topGrade).length;
 
         const filtered = sorted.filter((m: any) =>
             `${m.student?.firstName} ${m.student?.lastName}`.toLowerCase().includes(search.toLowerCase())
         );
 
         return { sorted: filtered, original: sorted, mean, passRate, gradeA, count: marks.length };
-    }, [marks, search]);
+    }, [marks, search, gradeScale, topGrade]);
 
     return (
         <>
@@ -128,7 +135,7 @@ export default function Results() {
                                     <Card className="border-0 shadow-soft bg-background/50 backdrop-blur-md rounded-[2.5rem] overflow-hidden border border-border/50 group">
                                         <CardContent className="p-8 flex flex-col justify-between h-40">
                                             <div className="flex items-center justify-between">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Premium Nodes (A)</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Premium Nodes ({topGrade || "A"})</p>
                                                 <Award className="w-5 h-5 text-primary opacity-20 group-hover:scale-125 transition-transform" />
                                             </div>
                                             <div>
@@ -235,7 +242,7 @@ export default function Results() {
                                                                             m.score >= 60 ? "bg-skye-500/10 text-sky-600" :
                                                                                 m.score >= 50 ? "bg-amber-500/10 text-amber-600" : "bg-rose-500/10 text-rose-600"
                                                                     }`}>
-                                                                    GRADE {m.score >= 80 ? "A" : m.score >= 70 ? "B" : m.score >= 60 ? "C" : m.score >= 50 ? "D" : "E"}
+                                                                    GRADE {grading.grade(Number(m.score))}
                                                                 </Badge>
                                                             </TableCell>
                                                             <TableCell className="text-right pr-10">

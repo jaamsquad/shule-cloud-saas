@@ -2,12 +2,8 @@ import { useState } from "react";
 import { Home, Check, Loader2, Search, BookOpen, Lock, Unlock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useGrading } from "@/lib/grading";
 import { toast } from "sonner";
-
-function grade(pct: number) {
-    if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B";
-    if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F";
-}
 
 export default function V2MarksEntry() {
     const qc = useQueryClient();
@@ -22,6 +18,9 @@ export default function V2MarksEntry() {
     const { data: subjects = [] } = useQuery({ queryKey: ["v2_subjects"], queryFn: async () => { const r = await api.get("/v2/subjects"); return Array.isArray(r.data) ? r.data : []; } });
 
     const exam = exams.find((e: any) => e._id === selectedExam);
+    // Configured grading for the exam's class (preview only — the server grades what is saved).
+    const grading = useGrading(exam?.classId, exam?.className);
+    const grade = (pct: number) => grading.grade(pct);
 
     // Fetch enrollments for this exam's stream
     const { data: enrollments = [], isLoading: loadEnroll } = useQuery({

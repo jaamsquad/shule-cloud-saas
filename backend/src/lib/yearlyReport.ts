@@ -10,6 +10,7 @@ import { Db, ObjectId } from 'mongodb';
 import { loadTerms, pickCurrent } from '../modules/cbc/cbcTerm';
 import { canonicalStatus } from './studentStatus';
 import { onlyPublished } from './examPublish';
+import { makeGradingCache } from './grading';
 
 export const termNumberOf = (v: any): number => { const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10); return isNaN(n) ? 0 : n; };
 const norm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -36,12 +37,6 @@ export async function yearlyStatus(db: Db, yearAsked?: string) {
     };
 }
 
-async function gradeFn(db: Db) {
-    const g: any = await db.collection('grading_criteria').findOne({}).catch(() => null);
-    const grades: any[] = (g?.grades || []).map((x: any) => ({ grade: x.grade, from: Number(x.from), upto: Number(x.upto) })).filter((x: any) => x.grade && !isNaN(x.from));
-    return (pct: number) => (grades.find(x => pct >= x.from && pct <= x.upto)?.grade) || (pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E');
-}
-
 /** Active learners of a class (by class name, plus stream when one is chosen). */
 export async function classStudents(db: Db, opts: { className: string; streamId?: string | null }): Promise<any[]> {
     const rx = new RegExp(`^\\s*${String(opts.className).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}\\s*$`, 'i');
@@ -51,7 +46,13 @@ export async function classStudents(db: Db, opts: { className: string; streamId?
 
 export async function computeYearly(db: Db, students: any[], year: string): Promise<YearlyStudent[]> {
     if (!students.length) return [];
-    const grade = await gradeFn(db);
+    // Each learner is graded with their CLASS's configured grading (template → class → global → …).
+    const gradingFor = makeGradingCache(db);
+    const gradeBy: Record<string, (pct: number) => string> = {};
+    for (const s of students) {
+        const g = await gradingFor(s.classId ? String(s.classId) : undefined, s.studentClass || s.currentClass || undefined);
+        gradeBy[String(s._id)] = (pct: number) => g.gradeOf(pct).grade;
+    }
     const exams: any[] = await db.collection('exams').find({}).toArray().catch(() => []);
     const gens: any[] = (await db.collection('report_card_generations').find({}).toArray().catch(() => []))
         .filter(g => g.kind !== 'yearly' && String(g.academicYear) === String(year));
@@ -82,6 +83,7 @@ export async function computeYearly(db: Db, students: any[], year: string): Prom
 
     return plan.map(({ s, perTerm }) => {
         const sid = String(s._id);
+        const grade = gradeBy[sid];
         const names = new Map<string, string>();       // norm subject → display name
         const per: Record<string, (number | null)[]> = {};
         perTerm.forEach((ids, ti) => {

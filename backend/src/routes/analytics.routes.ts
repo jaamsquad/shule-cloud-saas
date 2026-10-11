@@ -3,7 +3,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
-import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { makeGradingCache, resolveGrading, meanGradeFromScale, GradeBand } from '../lib/grading';
 import { marksWindow, examInWindow } from '../lib/examWindow';
 import { enforceCrud } from '../lib/permissions';
 import { publishedView, onlyPublished } from '../lib/examPublish';
@@ -55,38 +55,16 @@ export async function analyticsSettings(database: Db) {
     return { ...DEFAULT_ANALYTICS_SETTINGS, ...(s || {}), views: { ...DEFAULT_ANALYTICS_SETTINGS.views, ...(s?.views || {}) } };
 }
 
-// ─── Grading (KCSE 12-point) ───────────────────────────────────────────────────
-// Loads the school's grading scale and exposes pct → { grade, points }. Falls
-// back to the standard Kenyan 12-point scale if none is configured.
-const DEFAULT_SCALE = [
-    { grade: 'A', from: 80, upto: 100, points: 12 }, { grade: 'A-', from: 75, upto: 79, points: 11 },
-    { grade: 'B+', from: 70, upto: 74, points: 10 }, { grade: 'B', from: 65, upto: 69, points: 9 },
-    { grade: 'B-', from: 60, upto: 64, points: 8 }, { grade: 'C+', from: 55, upto: 59, points: 7 },
-    { grade: 'C', from: 50, upto: 54, points: 6 }, { grade: 'C-', from: 45, upto: 49, points: 5 },
-    { grade: 'D+', from: 40, upto: 44, points: 4 }, { grade: 'D', from: 35, upto: 39, points: 3 },
-    { grade: 'D-', from: 30, upto: 34, points: 2 }, { grade: 'E', from: 0, upto: 29, points: 1 },
-];
-
+// ─── Grading ──────────────────────────────────────────────────────────────────
+// Always the configured grading (lib/grading resolveGrading: class template → class
+// criteria → global criteria → curriculum settings → KCSE default).
 async function loadScale(database: Db, classId?: string) {
-    let rec: any = classId ? await database.collection('grading_criteria').findOne({ classId }).catch(() => null) : null;
-    if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
-    const raw = (rec?.grades || rec?.gradingScale || []);
-    const scale = raw.length ? raw.map((g: any, i: number) => ({
-        grade: g.grade ?? g.name ?? g.label ?? '',
-        from: num(g.from ?? g.minPercent ?? g.min),
-        upto: num(g.upto ?? g.maxPercent ?? g.max ?? 100),
-        points: num(g.points ?? g.point ?? (raw.length - i)),
-    })).sort((a: any, b: any) => b.upto - a.upto) : DEFAULT_SCALE;
-    const grade = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
-    return { scale, grade };
+    const g = await resolveGrading(database, classId);
+    return { scale: g.scale, grade: g.gradeOf };
 }
 
 // Mean grade from a mean points value (reverse lookup, nearest band).
-const meanGradeFromPoints = (scale: any[], meanPoints: number) => {
-    let best = scale[scale.length - 1];
-    for (const s of scale) { if (meanPoints >= s.points - 0.5) { best = s; break; } }
-    return best?.grade || '-';
-};
+const meanGradeFromPoints = (scale: GradeBand[], meanPoints: number) => meanGradeFromScale(scale, meanPoints);
 
 // ─── Core: build per-student results for an exam ───────────────────────────────
 // Returns one row per student: { studentId, name, adm, stream, subjects[], totalMarks,
@@ -98,9 +76,10 @@ export async function buildExamResults(database: Db, examId: string, opts: { inc
     const raw = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
     const marks = opts.includeUnpublished ? raw : await onlyPublished(database, raw);
     // Grade PER CLASS using the class's assigned template (grading cache avoids
-    // re-querying). The overall `scale` (for grade-list axes) is the global one.
+    // re-querying). The overall `scale` (for grade-list axes) is the school one.
     const gradingFor = makeGradingCache(database);
     const { scale } = await loadScale(database);
+    const studentScale: Record<string, GradeBand[]> = {};
 
     // Pre-load each student's classId so per-student grading can resolve the template.
     const studentIdsAll = Array.from(new Set(marks.map((m: any) => String(m.studentId))));
@@ -127,7 +106,9 @@ export async function buildExamResults(database: Db, examId: string, opts: { inc
         const max = num(m.totalMarks) || 100;
         const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
         const scls = sClassById[sid] || { id: '', name: m.classAtTime || '' };
-        const g = (await gradingFor(scls.id, scls.name || m.classAtTime)).gradeOf(pct);
+        const grading = await gradingFor(scls.id, scls.name || m.classAtTime);
+        studentScale[sid] ||= grading.scale;   // the mean grade uses the same scale as the subjects
+        const g = grading.gradeOf(pct);
         const subName = m.subjectName || m.subject || 'Subject';
         (byStudent[sid] ||= { studentId: sid, subjects: [], classAtTime: m.classAtTime }).subjects.push({
             name: subName, shortCode: shortCodeFor(subName), marks: num(m.marksObtained), max, pct: round(pct, 1),
@@ -180,11 +161,11 @@ export async function buildExamResults(database: Db, examId: string, opts: { inc
             adm: stu.registrationNo || stu.admNo || stu.admissionNo || '',
             stream,
             className,
-            kcpe: num(stu.kcpeMarks ?? stu.kcpe),
+            kcpe: num(stu.kcpeMarks ?? stu.kcpe ?? stu.kcpeScore),
             gender: String(stu.gender || stu.sex || '').trim(),
             subjects, totalMarks, totalPoints,
             meanPct: round(meanPct, 2), meanPoints: round(meanPoints, 2),
-            meanGrade: meanGradeFromPoints(scale, meanPoints),
+            meanGrade: meanGradeFromPoints(studentScale[sid] || scale, meanPoints),
         };
     });
 
@@ -507,10 +488,15 @@ router.get('/analytics/subject-sheet', async (req: Request, res: Response) => {
 router.get('/analytics/class-levels', async (req: Request, res: Response) => {
     try {
         const examId = String(req.query.examId || '');
-        const { rows, scale } = await buildExamResults(db(req), examId);
+        const { rows } = await buildExamResults(db(req), examId);
         const byLevel: Record<string, any[]> = {};
         rows.forEach(r => { (byLevel[levelOf(r.className || r.stream)] ||= []).push(r); });
+        // Each class level's mean grade uses that level's configured grading.
+        const gradingFor = makeGradingCache(db(req));
+        const levelScale: Record<string, GradeBand[]> = {};
+        for (const [level, list] of Object.entries(byLevel)) levelScale[level] = (await gradingFor(undefined, level || list[0]?.className)).scale;
         const classes = Object.entries(byLevel).map(([level, list]) => {
+            const scale = levelScale[level];
             const byStream: Record<string, any[]> = {};
             list.forEach(r => { (byStream[r.stream || '(No stream)'] ||= []).push(r); });
             const mp = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;

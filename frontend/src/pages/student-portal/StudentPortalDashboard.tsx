@@ -17,22 +17,13 @@ import {
 
 // ─── Student-scoped axios ─────────────────────────────────────────────────────
 import { API_ORIGIN } from "@/lib/config";
+import { useGrading } from "@/lib/grading";
 const sApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 sApi.interceptors.request.use(cfg => {
     const t = localStorage.getItem("student_token");
     if (t) cfg.headers.Authorization = `Bearer ${t}`;
     return cfg;
 });
-
-function grade(pct: number) {
-    if (pct >= 80) return "A";
-    if (pct >= 70) return "B+";
-    if (pct >= 60) return "B";
-    if (pct >= 50) return "C+";
-    if (pct >= 40) return "C";
-    if (pct >= 33) return "D";
-    return "F";
-}
 
 function gradeColor(pct: number) {
     if (pct >= 70) return "text-emerald-400";
@@ -72,6 +63,12 @@ export default function StudentPortalDashboard() {
         queryFn: async () => { const r = await sApi.get("/auth/student-portal/exam-results"); return Array.isArray(r.data) ? r.data : []; },
         enabled: !!student,
     });
+
+    // The school's configured grading for this student's class (fetched with the portal token).
+    const grading = useGrading(student?.classId, student?.class, sApi);
+    const grade = (pct: number) => grading.grade(pct);
+    // Prefer the grade the server already worked out; compute only what it didn't send.
+    const examGrade = (e: { meanGrade?: string; grade?: string; average?: number }) => e?.meanGrade || e?.grade || grade(e?.average || 0);
 
     const { data: invoices = [], isLoading: loadFees } = useQuery({
         queryKey: ["sp_invoices"],
@@ -224,7 +221,7 @@ export default function StudentPortalDashboard() {
                                         </div>
                                         <div className="text-right">
                                             <p className={`text-2xl font-black ${gradeColor(examResults[0].average)}`}>{examResults[0].average.toFixed(1)}%</p>
-                                            <p className={`text-sm font-black ${gradeColor(examResults[0].average)}`}>{grade(examResults[0].average)}</p>
+                                            <p className={`text-sm font-black ${gradeColor(examResults[0].average)}`}>{examGrade(examResults[0])}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setTab("exams")} className="w-full mt-3 text-[9px] text-indigo-400 font-black uppercase tracking-widest text-center hover:text-indigo-300 flex items-center justify-center gap-1">
@@ -296,7 +293,7 @@ export default function StudentPortalDashboard() {
                                             onClick={() => setExpandedExam(isExpanded ? null : exam.examId)}>
                                             <div className="flex items-center gap-3 text-left">
                                                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm ${exam.average >= 70 ? "bg-emerald-900/50 text-emerald-400" : exam.average >= 50 ? "bg-amber-900/50 text-amber-400" : "bg-rose-900/50 text-rose-400"}`}>
-                                                    {grade(exam.average)}
+                                                    {examGrade(exam)}
                                                 </div>
                                                 <div>
                                                     <p className="text-white font-black text-sm">{exam.examName}</p>
@@ -321,7 +318,7 @@ export default function StudentPortalDashboard() {
                                                                     <p className="text-white text-[11px] font-black truncate">{sub.name}</p>
                                                                     <div className="flex items-center gap-2 flex-shrink-0">
                                                                         <span className="text-[10px] font-black text-slate-300">{sub.marks}/{sub.outOf}</span>
-                                                                        <span className={`text-[10px] font-black ${gradeColor(pct)}`}>{grade(pct)}</span>
+                                                                        <span className={`text-[10px] font-black ${gradeColor(pct)}`}>{sub.grade || grade(pct)}</span>
                                                                     </div>
                                                                 </div>
                                                                 <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -474,7 +471,7 @@ export default function StudentPortalDashboard() {
                                                             style={{ width: `${Math.min(e.average, 100)}%` }} />
                                                     </div>
                                                     <span className={`text-sm font-black w-10 text-right ${gradeColor(e.average)}`}>{e.average.toFixed(0)}%</span>
-                                                    <span className={`text-xs font-black w-5 ${gradeColor(e.average)}`}>{grade(e.average)}</span>
+                                                    <span className={`text-xs font-black w-5 ${gradeColor(e.average)}`}>{examGrade(e)}</span>
                                                 </div>
                                             </div>
                                         ))}

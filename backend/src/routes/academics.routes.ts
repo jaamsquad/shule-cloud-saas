@@ -18,6 +18,7 @@ import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issu
 import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
 import { onlyPublished } from '../lib/examPublish';
+import { makeGradingCache, resolveGrading } from '../lib/grading';
 
 const router = Router();
 
@@ -201,6 +202,8 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         const tid = (req as any).tenantContext?.tenantId;
         const tenant = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) || (tid as any) }) : null;
         const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
+        // Each card is graded with the student's CLASS grading (template → class → global → …).
+        const gradingFor = makeGradingCache(db);
         const curriculum = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
 
         // Fail fast with a clear message if email isn't configured at all, instead
@@ -230,7 +233,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             try {
                 const marks = await onlyPublished(db, await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
                 if (!marks.length) { skipped++; return; }
-                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
+                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading, scale: (await gradingFor(st.classId ? String(st.classId) : (classId ? String(classId) : undefined), st.studentClass || st.currentClass || clsName || undefined)).scale };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
                     to: [email],
@@ -892,25 +895,23 @@ router.post('/fee_structures/check', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Effective grading scale for a class: the class-specific grading_criteria if one
-// exists, otherwise the global (classId-less) record. Used by report cards / mark
-// sheets so each class can have its own grading or share one global scale.
+// Effective grading scale for a class — the configured grading via lib/grading
+// (class template → class grading_criteria → global → curriculum settings → default).
+// Used by report cards / mark sheets so each class follows its assigned grading.
 router.get('/grading-scale', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const classId = String(req.query.classId || '').trim();
+        const className = String(req.query.className || '').trim();
+        const g = await resolveGrading(db, classId || undefined, className || undefined);
+        const scope: 'class' | 'global' | 'none' = g.source === 'template' || g.source === 'class' ? 'class' : g.source === 'default' ? 'none' : 'global';
+        const grades = g.scale.map(b => ({ grade: b.grade, from: b.from, upto: b.upto, remark: b.remark }));
+        // Pass mark: from the class's / global grading_criteria row, as before.
         let rec: any = null;
         if (classId) rec = await db.collection('grading_criteria').findOne({ classId }).catch(() => null);
-        let scope: 'class' | 'global' = 'class';
-        if (!rec) { rec = await db.collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null); scope = 'global'; }
+        if (!rec) rec = await db.collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null);
         if (!rec) rec = await db.collection('grading_criteria').findOne({}).catch(() => null);
-        const grades = (rec?.grades || rec?.gradingScale || []).map((g: any) => ({
-            grade: g.grade ?? g.name ?? g.label ?? '',
-            from: Number(g.from ?? g.minPercent ?? g.min ?? 0),
-            upto: Number(g.upto ?? g.maxPercent ?? g.max ?? 100),
-            remark: g.remark ?? g.status ?? g.label ?? '',
-        })).sort((a: any, b: any) => b.upto - a.upto);
-        res.json({ scope: rec ? scope : 'none', classId: classId || null, grades, passMark: Number(rec?.failCriteria?.overallPercent ?? rec?.passMark ?? 50) });
+        res.json({ scope, source: g.source, templateName: g.templateName || null, classId: classId || null, grades, passMark: Number(rec?.failCriteria?.overallPercent ?? rec?.passMark ?? 50) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

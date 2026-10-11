@@ -13,6 +13,8 @@ import { useSchoolBrand } from "@/lib/printDoc";
 import { printTransferLetter, displayDate } from "./students/transferLetter";
 import CertificateModal from "./students/certificates/CertificateModal";
 import NemisDetailsCard from "./students/NemisDetailsCard";
+import StudentAnalysis from "./students/StudentAnalysis";
+import OtherDetailsCard from "./students/OtherDetailsCard";
 
 export default function StudentReport() {
     const { id } = useParams();
@@ -28,6 +30,7 @@ export default function StudentReport() {
     const [isSaving, setIsSaving] = useState(false);
     const [certOpen, setCertOpen] = useState(false);   // Generate certificate
     const [trendOpen, setTrendOpen] = useState(false);   // Performance Trends — wide view
+    const [view, setView] = useState<"profile" | "analysis">(() => (new URLSearchParams(window.location.search).get("tab") === "analysis" ? "analysis" : "profile"));
 
     // Manage Student — lifecycle status (Active / Transferred / Graduated) + transfer letter
     const queryClient = useQueryClient();
@@ -381,7 +384,17 @@ export default function StudentReport() {
                 </div>
             )}
 
-            <div ref={reportRef} className="p-6 pt-0 w-full mt-4 flex flex-col lg:flex-row gap-6">
+            <div className="w-[calc(100%-2rem)] mx-4 flex gap-1 p-1 bg-white rounded-xl self-start" style={{ border: "0.5px solid #e5e7eb", width: "max-content" }}>
+                {([["profile", "Profile", BookOpen], ["analysis", "Analysis", BarChart3]] as const).map(([k, l, I]) => (
+                    <button key={k} onClick={() => setView(k)} className={`h-9 px-4 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${view === k ? "bg-[#1f2937] text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+                        <I className="w-4 h-4" /> {l}
+                    </button>
+                ))}
+            </div>
+
+            {view === "analysis" && <div className="p-4 sm:p-6 pt-0 sm:pt-0 w-full mt-4"><StudentAnalysis studentId={String(student?._id || id)} studentName={student.studentName || `${student.firstName || ""} ${student.lastName || ""}`.trim()} canEdit={!!canUpdate} /></div>}
+
+            <div ref={reportRef} className={`p-6 pt-0 w-full mt-4 flex-col lg:flex-row gap-6 ${view === "profile" ? "flex" : "hidden"}`}>
                 
                 {/* Left Column - Profile Details */}
                 <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-6">
@@ -439,6 +452,7 @@ export default function StudentReport() {
 
                     {/* All NEMIS learner details — read-only, Edit to change */}
                     <NemisDetailsCard studentId={String(id)} canEdit={!!canUpdate} />
+                    <OtherDetailsCard student={student} canEdit={!!canUpdate} />
 
                     {/* Assigned Subjects List */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 space-y-4">

@@ -9,6 +9,11 @@ import { getMetaDb } from '../lib/mongodb';
 import { buildExamResults } from './analytics.routes';
 import { examClassReport, publishedExamsFor } from '../lib/examReports';
 import { levelKey } from '../lib/examPublish';
+import { canonicalCode } from '../lib/curriculum';
+import { resolveGrading, meanGradeFromScale } from '../lib/grading';
+
+/** A class's curriculum: what it was set to, else guessed from its name (Form → 8-4-4, Grade/PP → CBC). */
+const curriculumOf = (c: any) => (c?.curriculumType ? canonicalCode(c.curriculumType) : /^\s*(grade|pp|pre)/i.test(String(c?.name || '')) ? 'CBC' : /^\s*form/i.test(String(c?.name || '')) ? '844' : '');
 
 const router = Router();
 const db = (req: Request): Db => ((req as any).tenantDb as Db) || getMetaDb();
@@ -17,12 +22,14 @@ const TEACHING = /teacher|tutor|lecturer|instructor|hod|head of department|princ
 const r2 = (n: number, d = 2) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 const isGirl = (g: any) => /^(f|female|girl)/i.test(String(g || ''));
 const isBoy = (g: any) => /^(m|male|boy)/i.test(String(g || ''));
-const gradeOfPoints = (scale: any[], mp: number) => { for (const s of scale) if (mp >= Number(s.points) - 0.5) return s.grade; return scale[scale.length - 1]?.grade || '-'; };
+const gradeOfPoints = (scale: any[], mp: number) => meanGradeFromScale(scale, mp);
 
 async function levelSummary(d: Db, examId: string, level: string) {
-    const { rows, scale } = await buildExamResults(d, examId);
+    const { rows } = await buildExamResults(d, examId);
     const mine = rows.filter((r: any) => levelKey(r.className) === levelKey(level));
     if (!mine.length) return null;
+    // The level's configured grading (its template, else the school scale).
+    const scale = (await resolveGrading(d, undefined, level || mine[0]?.className)).scale;
     const mp = mine.reduce((a: number, r: any) => a + r.meanPoints, 0) / mine.length;
     const mm = mine.reduce((a: number, r: any) => a + r.meanPct, 0) / mine.length;
     return { entries: mine.length, meanPoints: r2(mp, 4), meanMarks: r2(mm, 2), grade: gradeOfPoints(scale, mp) };
@@ -38,6 +45,15 @@ router.get('/dashboard/exam-overview', async (req: Request, res: Response) => {
             d.collection('v2_classes').find({ deletedAt: { $exists: false } }).sort({ level: 1, name: 1 }).toArray().catch(() => [] as any[]),
             d.collection('v2_streams').find({ deletedAt: { $exists: false } }).toArray().catch(() => [] as any[]),
         ]);
+        // ?curriculum=844 → only that curriculum's classes (and their streams and learners)
+        const want = req.query.curriculum ? canonicalCode(String(req.query.curriculum)) : '';
+        if (want) {
+            const keep = classes.filter((c: any) => curriculumOf(c) === want);
+            const ids = new Set(keep.map((c: any) => String(c._id))); const lv = new Set(keep.map((c: any) => levelKey(c.name)));
+            classes.splice(0, classes.length, ...keep);
+            streams.splice(0, streams.length, ...streams.filter((st: any) => ids.has(String(st.classId))));
+            students.splice(0, students.length, ...students.filter((st: any) => ids.has(String(st.classId || '')) || lv.has(levelKey(st.studentClass || st.currentClass))));
+        }
         const live = students.filter((s: any) => !LEFT.test(String(s.status || '')));
         const activeStaff = staff.filter((s: any) => !/inactive|left|terminated|resigned/i.test(String(s.status || '')));
         const teachers = activeStaff.filter((s: any) => s.isTeachingStaff === true || TEACHING.test(`${s.designation || ''} ${(s.roles || []).join(' ')}`));
@@ -58,7 +74,8 @@ router.get('/dashboard/exam-overview', async (req: Request, res: Response) => {
         const since = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
         const att: any[] = await d.collection('student_attendance').find({ date: { $gte: since } }, { projection: { date: 1, status: 1, subject: 1, periodId: 1, studentId: 1 } }).toArray().catch(() => []);
         const days: Record<string, { present: Set<string>; absent: Set<string> }> = {};
-        att.filter(a => !a.periodId && (!a.subject || a.subject === 'General')).forEach(a => {
+        const mine = new Set(live.map((x: any) => String(x._id)));
+        att.filter(a => !a.periodId && (!a.subject || a.subject === 'General') && (!want || mine.has(String(a.studentId)))).forEach(a => {
             const dd = (days[a.date] ||= { present: new Set(), absent: new Set() });
             (/present|late/i.test(String(a.status)) ? dd.present : dd.absent).add(String(a.studentId));
         });

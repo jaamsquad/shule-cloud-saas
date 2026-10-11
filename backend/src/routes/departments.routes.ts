@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { requireDeptAccess, resolveDeptAccess, requireAdmin } from '../lib/departmentAccess';
 import { recordAudit } from '../lib/audit';
 import { buildExamResults } from './analytics.routes';
+import { resolveGrading } from '../lib/grading';
 
 const router = Router();
 const db = (req: any) => req.tenantDb || getMetaDb();
@@ -175,14 +176,6 @@ router.patch('/leave-requests/:id', async (req: Request, res: Response) => {
 // departmentId in this schema) and its assigned members. Returns:
 //   subjects[], teachers[], studentCount, examsAwaitingApproval, avgPerformance,
 //   teachersMissingMarks[], upcomingMeetings[], teachingProgress, subjectPerformance[].
-const DEFAULT_SCALE = [
-    { grade: 'A', from: 80, upto: 100, points: 12 }, { grade: 'A-', from: 75, upto: 79, points: 11 },
-    { grade: 'B+', from: 70, upto: 74, points: 10 }, { grade: 'B', from: 65, upto: 69, points: 9 },
-    { grade: 'B-', from: 60, upto: 64, points: 8 }, { grade: 'C+', from: 55, upto: 59, points: 7 },
-    { grade: 'C', from: 50, upto: 54, points: 6 }, { grade: 'C-', from: 45, upto: 49, points: 5 },
-    { grade: 'D+', from: 40, upto: 44, points: 4 }, { grade: 'D', from: 35, upto: 39, points: 3 },
-    { grade: 'D-', from: 30, upto: 34, points: 2 }, { grade: 'E', from: 0, upto: 29, points: 1 },
-];
 const NUM = (v: any) => Number(v) || 0;
 const NORM = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -199,14 +192,9 @@ router.get('/departments/:id/hod-dashboard', requireDeptAccess('param', 'id'), a
         let subjects: string[] = Array.isArray(dep.subjects) ? dep.subjects.filter(Boolean) : [];
         const subjectSet = new Set(subjects.map(NORM));
 
-        // Grading scale (school default).
-        const gradeRec: any = await d.collection('grading_criteria').findOne({}).catch(() => null);
-        const raw = gradeRec?.grades || gradeRec?.gradingScale || [];
-        const scale = raw.length ? raw.map((g: any, i: number) => ({
-            grade: g.grade ?? g.name ?? '', from: NUM(g.from ?? g.minPercent ?? g.min),
-            upto: NUM(g.upto ?? g.maxPercent ?? g.max ?? 100), points: NUM(g.points ?? g.point ?? (raw.length - i)),
-        })).sort((a: any, b: any) => b.upto - a.upto) : DEFAULT_SCALE;
-        const gradeOf = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
+        // Grading = the configured school scale (department figures span classes):
+        // global grading_criteria → curriculum settings → default, via lib/grading.
+        const { gradeOf } = await resolveGrading(d);
 
         // Marks for department subjects only. If the department has no subject list,
         // we can't scope by subject — return marks-derived panels empty rather than leak.
