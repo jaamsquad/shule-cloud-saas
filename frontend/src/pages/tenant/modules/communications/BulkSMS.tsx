@@ -98,7 +98,7 @@ export default function BulkSMS() {
                 </div>
 
                 <div className="flex gap-2 mb-6 flex-wrap">
-                    {[{ key: "connection", label: "Connection" }, { key: "compose", label: "Compose" }, { key: "results", label: "Send Results" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }, { key: "approvals", label: "Approvals" }].map(t => (
+                    {[{ key: "connection", label: "Connection" }, { key: "compose", label: "Compose" }, { key: "results", label: "Send Results" }, { key: "history", label: `History (${logs.length})` }, { key: "devices", label: "Devices & Provider" }, { key: "approvals", label: "Settings & Approvals" }].map(t => (
                         <button key={t.key} onClick={() => setTab(t.key as any)} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${tab === t.key ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
                             {t.label}
                         </button>

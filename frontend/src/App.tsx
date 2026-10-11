@@ -528,6 +528,7 @@ const App = () => {
               <Route path="/owner/announcements" element={<OwnerAnnouncements />} />
               <Route path="/owner/settings" element={<OwnerSettings />} />
               <Route path="/owner/billing" element={<OwnerBilling />} />
+              <Route path="/owner/business" element={<OwnerDashboard initialTab="business" />} />
             </Route>
 
             {/* Everyone signs in on the school's one login page — the old portal
