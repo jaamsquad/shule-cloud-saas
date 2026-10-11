@@ -121,6 +121,8 @@ export const updateTenantProfile = async (req: Request, res: Response) => {
             { $set: data }
         );
         if (result.matchedCount === 0) return res.status(404).json({ message: 'Tenant not found' });
+        if (data.schoolType !== undefined) { const { forgetDisabledApps } = await import('../lib/permissions'); forgetDisabledApps(tenantId); }
+        if (data.genderComposition !== undefined) { const { forgetGenderComposition } = await import('../lib/genderPolicy'); forgetGenderComposition(tenantId); }
         res.json({ message: 'Profile updated successfully' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });

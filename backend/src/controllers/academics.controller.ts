@@ -5,6 +5,7 @@ import { syncParentToStudents, syncStudentToParents } from '../services/parent-s
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { applyAutoNumber } from '../lib/idNumbering';
 import { resolveGrading, meanGradeFromScale } from '../lib/grading';
+import { genderCompositionFor, genderViolation } from '../lib/genderPolicy';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -48,6 +49,11 @@ export const bulkCreate = (collectionName: string) => async (req: Request, res: 
         const db = getRequestDb(req);
 
         if (collectionName === 'students') {
+            const genderComposition = await genderCompositionFor((req as any).tenantContext?.tenantId);
+            if (genderComposition === 'Boys' || genderComposition === 'Girls') {
+                const bad = items.find((i: any) => genderViolation(genderComposition, i.gender));
+                if (bad) return res.status(400).json({ message: genderViolation(genderComposition, bad.gender) });
+            }
             const regNos = items.map((i: any) => i.registrationNo).filter(Boolean);
             if (regNos.length > 0) {
                 const existing = await db.collection('students').find({
@@ -100,6 +106,12 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
     try {
         const db = getRequestDb(req);
         const data = { ...req.body, createdAt: new Date() };
+
+        if (collectionName === 'students') {
+            const genderComposition = await genderCompositionFor((req as any).tenantContext?.tenantId);
+            const violation = genderViolation(genderComposition, data.gender);
+            if (violation) return res.status(400).json({ message: violation });
+        }
 
         if (collectionName === 'exams') {
             const { type, term, academicYear } = req.body;
