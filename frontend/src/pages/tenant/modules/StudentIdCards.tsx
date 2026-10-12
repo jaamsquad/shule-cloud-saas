@@ -63,6 +63,18 @@ export default function StudentIdCards() {
     const isWide = (s: string) => s === "Landscape" || s === "Classic Navy";
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("studentCardStyle", s); };
 
+    // The card itself (.id-card) is sized to the real physical CR80 ID card dimensions so it
+    // prints at exactly normal ID card size. On screen that's quite small, so each card is
+    // magnified with a CSS transform for comfortable browsing — the wrapper around it reserves
+    // exactly that magnified footprint (via calc()) so cards never overlap, and printCards.ts
+    // clones only the un-scaled .id-card node, so none of this ever reaches the printed page.
+    const SCREEN_SCALE = 2.3;
+    const WRAPPER_SIZE: Record<string, { w: string; h: string }> = {
+        Landscape: { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(54mm * ${SCREEN_SCALE})` },
+        "Classic Navy": { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(111mm * ${SCREEN_SCALE})` }, // front + 3mm gap + back
+        Default: { w: `calc(54mm * ${SCREEN_SCALE})`, h: `calc(85.6mm * ${SCREEN_SCALE})` },
+    };
+
 
     const selectedStudent = students?.find((s: any) => s._id === selectedStudentId) || students?.[0];
 
@@ -155,17 +167,15 @@ export default function StudentIdCards() {
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {visibleStudents.length > 0 ? (
                             visibleStudents.map((student: any) => (
-                                // The zoom wrapper is purely a screen convenience — the real card (.id-card) is
-                                // sized to the physical CR80 ID card dimensions (85.6 × 54mm) so it prints at
-                                // exactly normal ID card size; printCards.ts clones only .id-card itself, so
-                                // this wrapper's zoom never reaches the printed page.
-                                <div key={student._id} className="flex justify-center print:contents" style={{ zoom: 2.35 } as any}>
-                                    <div className="id-card relative group/card">
-                                        <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
-                                            className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
-                                            <Printer className="w-4 h-4" />
-                                        </button>
-                                        <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
+                                <div key={student._id} className="relative print:contents" style={{ width: WRAPPER_SIZE[activeStyle].w, height: WRAPPER_SIZE[activeStyle].h }}>
+                                    <div style={{ transform: `scale(${SCREEN_SCALE})`, transformOrigin: "top left" }} className="print:!transform-none">
+                                        <div className="id-card relative group/card">
+                                            <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
+                                                className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
+                                                <Printer className="w-4 h-4" />
+                                            </button>
+                                            <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
+                                        </div>
                                     </div>
                                 </div>
                             ))
