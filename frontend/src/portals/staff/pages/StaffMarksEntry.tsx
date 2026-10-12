@@ -28,12 +28,12 @@ export default function StaffMarksEntry() {
         retry: false,
     });
 
-    const { className, subject } = pair ? parsePair(pair) : { className: "", subject: "" };
+    const { className, subject, subjectId } = pair ? parsePair(pair) : { className: "", subject: "", subjectId: "" };
     useEffect(() => { setPaperId(""); }, [pair]);
 
     const { data: roster, isFetching, refetch } = useQuery({
         queryKey: ["staff_roster", examId, pair, paperId],
-        queryFn: async () => (await api.get(`/staff-portal/roster?examId=${examId}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}${paperId ? `&paperId=${paperId}` : ""}`)).data,
+        queryFn: async () => (await api.get(`/staff-portal/roster?examId=${examId}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}${subjectId ? `&subjectId=${subjectId}` : ""}${paperId ? `&paperId=${paperId}` : ""}`)).data,
         enabled: !!examId && !!pair,
         retry: false,
     });
@@ -60,7 +60,7 @@ export default function StaffMarksEntry() {
 
     const save = useMutation({
         mutationFn: async () => (await api.post("/staff-portal/marks", {
-            examId, examName: exam?.name, term: exam?.term, className, subject, outOf,
+            examId, examName: exam?.name, term: exam?.term, className, subject, subjectId: subjectId || undefined, outOf,
             paperId: paperId || undefined, paperLabel: paper?.label,
             marks: rows.map(r => ({ studentId: r.studentId, marks: r.marks })),
         })).data,

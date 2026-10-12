@@ -19,7 +19,7 @@ import { signToken, publicAppUrl } from '../lib/verifyDocs';
 import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
 import { onlyPublished } from '../lib/examPublish';
 import { resolveGrading, Grading } from '../lib/grading';
-import { papersForSubjectName, combinePapers } from '../lib/subjectPapers';
+import { papersForSubject, papersForSubjectName, combinePapers } from '../lib/subjectPapers';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -1871,7 +1871,7 @@ const staffAssignments = async (db: Db, decoded: any) => {
     const staff = oid ? await db.collection('staff').findOne({ _id: oid }) : null;
     const sa: any[] = Array.isArray(staff?.subjectAssignments) ? staff!.subjectAssignments : [];
 
-    const assignments: { classId: string; className: string; subject: string }[] = [];
+    const assignments: { classId: string; className: string; subject: string; subjectId: string }[] = [];
     const seen = new Set<string>();
     sa.forEach((a: any) => {
         const className = a.className || a.class || '';
@@ -1879,7 +1879,7 @@ const staffAssignments = async (db: Db, decoded: any) => {
         const key = `${className}|${subject}`;
         if (!className || !subject || seen.has(key)) return;
         seen.add(key);
-        assignments.push({ classId: String(a.classId || ''), className, subject });
+        assignments.push({ classId: String(a.classId || ''), className, subject, subjectId: String(a.subjectId || '') });
     });
 
     // Class register: prefer classes the teacher formally heads; otherwise fall
@@ -2095,6 +2095,7 @@ const assertAssigned = async (db: Db, decoded: any, className: string, subject?:
 router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     const className = String(req.query.className || '');
     const subject = String(req.query.subject || '');
+    const subjectId = String(req.query.subjectId || '');
     const examId = String(req.query.examId || '');
     const paperId = String(req.query.paperId || '');
     if (!(await assertAssigned(db, decoded, className, subject))) {
@@ -2102,7 +2103,10 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     }
     if (examId) { const w = await examOpenForTeacher(db, examId); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const students = await studentsInClass(db, className);
-    const papers = await papersForSubjectName(db, subject);
+    // subjectId (carried from the teacher's own assignment) is the reliable key into
+    // subject_papers — a name match breaks if the subject was later renamed. Fall back
+    // to the name lookup only when the client doesn't have a subjectId yet.
+    const papers = subjectId ? await papersForSubject(db, subjectId) : await papersForSubjectName(db, subject);
     const paper = paperId ? papers.find(p => p._id === paperId) : null;
     // "Out Of" is the chosen paper's own max score, else the exam's Total Marks setting.
     const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
@@ -2122,7 +2126,7 @@ router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
 }));
 
 router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
-    const { examId, examName, className, subject, term, outOf, marks, paperId, paperLabel } = req.body || {};
+    const { examId, examName, className, subject, subjectId, term, outOf, marks, paperId, paperLabel } = req.body || {};
     if (!examId || !className || !subject || !Array.isArray(marks)) {
         return res.status(400).json({ message: 'examId, className, subject and marks are required' });
     }
@@ -2154,7 +2158,7 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
     // A subject with configured papers (General Settings → Subject Paper Ratios) is scored
     // one paper at a time; each save folds this paper's scores into the doc's `papers` map
     // and recombines, weighted by ratio and normalised by each paper's own "out of".
-    const paperDefs = paperId ? await papersForSubjectName(db, subject) : [];
+    const paperDefs = paperId ? (subjectId ? await papersForSubject(db, String(subjectId)) : await papersForSubjectName(db, subject)) : [];
     // Read the CURRENT marks first so we can record exactly what changed — this
     // powers the "changes made after approval" trail the HOD sees on re-submission.
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();

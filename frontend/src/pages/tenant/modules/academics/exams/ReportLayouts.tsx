@@ -40,6 +40,8 @@ export interface LayoutProps {
     comments?: { classTeacher?: string; principal?: string };
     /** principal's signature and school stamp (Institute Profile) */
     signature?: string; stamp?: string; signerName?: string; signerTitle?: string;
+    /** the class's own homeroom/class teacher's signature, if they've uploaded one (Employees → <teacher> → Signature) */
+    classTeacherSignature?: string;
 }
 
 const pctOf = (m: any) => (!m.noMarks && Number(m.totalMarks) > 0 ? Math.round((Number(m.marksObtained) / Number(m.totalMarks)) * 100) : null);
@@ -153,10 +155,12 @@ const Sign = ({ titles, p }: { titles: string[]; p: LayoutProps }) => (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${titles.length},1fr)`, gap: 22, marginTop: 34, breakInside: "avoid" }}>
         {titles.map(t => {
             const isHead = /principal|head ?teacher|director/i.test(t);
+            const isClassTeacher = /class teacher|homeroom/i.test(t);
+            const sigImg = isHead ? p.signature : (isClassTeacher ? p.classTeacherSignature : undefined);
             return (
                 <div key={t} style={{ textAlign: "center", fontSize: 12.5, position: "relative" }}>
                     <div style={{ height: 34, position: "relative" }}>
-                        {isHead && p.signature && <img src={p.signature} alt="" style={{ position: "absolute", left: "50%", bottom: 2, transform: "translateX(-50%)", maxHeight: 46, maxWidth: 150, objectFit: "contain" }} />}
+                        {sigImg && <img src={sigImg} alt="" style={{ position: "absolute", left: "50%", bottom: 2, transform: "translateX(-50%)", maxHeight: 46, maxWidth: 150, objectFit: "contain" }} />}
                     </div>
                     {isHead && p.stamp && <img src={p.stamp} alt="" style={{ position: "absolute", right: -8, bottom: -6, width: 70, height: 70, objectFit: "contain", opacity: 0.88, transform: "rotate(-8deg)" }} />}
                     <div style={{ borderTop: "1.5px solid #111", paddingTop: 4 }}>{isHead && p.signerName ? <>{p.signerName}<br /></> : null}{t}</div>

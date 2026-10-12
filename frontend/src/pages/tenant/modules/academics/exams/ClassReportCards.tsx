@@ -67,6 +67,13 @@ export default function ClassReportCards() {
     const { data: allStudents = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
     const { data: tenantProfile } = useQuery<any>({ queryKey: ["tenant_profile_global"], queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
     const { data: periods = [] } = useQuery<any[]>({ queryKey: ["periods"], queryFn: async () => (await api.get("/academics/periods")).data || [] });
+    const { data: staffList = [] } = useQuery<any[]>({ queryKey: ["staff"], queryFn: async () => (await api.get("/staff")).data || [] });
+    // The selected class's own homeroom/class teacher signature, if they've uploaded one.
+    const classTeacherSignature = useMemo(() => {
+        const teacherId = selectedClass?.classTeacherId;
+        if (!teacherId) return undefined;
+        return staffList.find((s: any) => String(s._id) === String(teacherId))?.signature || undefined;
+    }, [selectedClass, staffList]);
 
     // Subjects ASSIGNED to the class (set in Assign Subjects). Report cards show
     // only these — never the whole subjects collection.
@@ -193,7 +200,7 @@ export default function ClassReportCards() {
             const root = createRoot(div);
             import("react").then(React => {
                 root.render(React.createElement(RenderPrintTemplate, {
-                    templateId: reportTemplate, schoolAddress, classStats, signature: tenantProfile?.principalSignature, stamp: tenantProfile?.schoolStamp, signerName: tenantProfile?.principalName,
+                    templateId: reportTemplate, schoolAddress, classStats, signature: tenantProfile?.principalSignature, stamp: tenantProfile?.schoolStamp, signerName: tenantProfile?.principalName, classTeacherSignature,
                     schoolName, schoolTagline, schoolLogo, qrUrl,
                     studentName: row.name, admNo: row.admNo,
                     studentPhoto: row.student?.studentPhoto || row.student?.photo || row.student?.avatar || row.student?.photoUrl || row.student?.profilePhoto || null,
@@ -482,7 +489,7 @@ export default function ClassReportCards() {
                     return (
                         <div key={row.student._id} className={idx < studentSummaries.filter(r => r.scoredSubjects > 0).length - 1 ? "page-break" : ""}>
                             <RenderPrintTemplate
-                                templateId={reportTemplate} schoolAddress={schoolAddress} classStats={classStats} signature={tenantProfile?.principalSignature} stamp={tenantProfile?.schoolStamp} signerName={tenantProfile?.principalName}
+                                templateId={reportTemplate} schoolAddress={schoolAddress} classStats={classStats} signature={tenantProfile?.principalSignature} stamp={tenantProfile?.schoolStamp} signerName={tenantProfile?.principalName} classTeacherSignature={classTeacherSignature}
                                 schoolName={schoolName} schoolTagline={schoolTagline} schoolLogo={schoolLogo}
                                 qrUrl={qrMap[String(row.student._id)]}
                                 studentName={row.name} admNo={row.admNo}

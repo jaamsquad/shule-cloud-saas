@@ -20,8 +20,18 @@ export async function papersForSubject(db: Db, subjectId: string): Promise<Subje
  * is keyed by subjectId). Returns [] if no subject with that name is on file. */
 export async function papersForSubjectName(db: Db, subjectName: string): Promise<SubjectPaperDef[]> {
     if (!subjectName) return [];
-    const subj: any = await db.collection('subjects').findOne({ $or: [{ name: subjectName }, { subjectName }] }).catch(() => null);
-    return subj ? papersForSubject(db, String(subj._id)) : [];
+    const exact: any = await db.collection('subjects').findOne({ $or: [{ name: subjectName }, { subjectName }] }).catch(() => null);
+    if (exact) return papersForSubject(db, String(exact._id));
+    // The name on a teacher's assignment is captured once and never updated if the subject
+    // is later renamed/re-cased — fall back to a trim + case-insensitive match so a stale
+    // name still resolves instead of silently returning no papers. Prefer the subjectId
+    // path (papersForSubject) wherever the caller has it; this is a safety net only.
+    const nrm = String(subjectName).toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!nrm) return [];
+    const esc = nrm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const rx = new RegExp(`^${esc}$`, 'i');
+    const fuzzy: any = await db.collection('subjects').findOne({ $or: [{ name: rx }, { subjectName: rx }] }).catch(() => null);
+    return fuzzy ? papersForSubject(db, String(fuzzy._id)) : [];
 }
 
 /** Combine per-paper scores (keyed by paper _id) into one subject score out of 100.

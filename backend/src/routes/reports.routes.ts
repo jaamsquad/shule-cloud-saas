@@ -1963,9 +1963,11 @@ async function yearlyDocForGeneration(req: Request, gen: any) {
     const bandsOf = async (y: any) => (await gradingFor((gen.classV2Id || gen.classId) ? String(gen.classV2Id || gen.classId) : undefined, y?.className || gen.className || undefined)).scale
         .map(b => ({ grade: String(b.grade || ''), lo: b.from, hi: b.upto })).filter(b => b.grade);
     const { yearlyDocumentHtml } = require('../services/report-card-pdf.service');
+    const { classTeacherSignatureFor } = require('../lib/classTeacherSignature');
     const address = [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', ');
     const list: any[] = gen.yearly?.students || [];
-    const pages = await Promise.all(list.map(async y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands: await bandsOf(y) })));
+    const classTeacherSignature = await classTeacherSignatureFor(db, gen.className || list[0]?.className || '');
+    const pages = await Promise.all(list.map(async y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature, ...y, bands: await bandsOf(y) })));
     return { html: yearlyDocumentHtml(pages), count: list.length };
 }
 router.get('/report_card_generations/:id/yearly-html', async (req: Request, res: Response) => {
@@ -2063,6 +2065,8 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
         `;
 
         const classScale = (await resolveGrading(db, String(classDoc._id), classDoc.levelName || classDoc.name || undefined)).scale;
+        const { classTeacherSignatureFor } = require('../lib/classTeacherSignature');
+        const classTeacherSignature = await classTeacherSignatureFor(db, classDoc.levelName || classDoc.name || '');
         for (const student of students) {
             try {
                 // Fetch marks for this student
@@ -2076,7 +2080,7 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
                         school: school.schoolName || 'School',
                         logo: school.logo || null,
                         motto: school.motto || '',
-                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', signature: tenantRc?.principalSignature || null, stamp: tenantRc?.schoolStamp || null, signerName: tenantRc?.principalName || null, curriculum: mainExam.curriculum || '',
+                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', signature: tenantRc?.principalSignature || null, stamp: tenantRc?.schoolStamp || null, signerName: tenantRc?.principalName || null, classTeacherSignature, curriculum: mainExam.curriculum || '',
                         student: {
                             ...student,
                             className: classDoc.levelName || classDoc.name
