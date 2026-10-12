@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, UploadCloud, Trash2, FileText, Library as LibraryIcon, BookOpen, Sparkles } from "lucide-react";
 
 const GRADES = ["PP1", "PP2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Form 1", "Form 2", "Form 3", "Form 4"];
-const RES_TYPES = ["Notes", "Worksheet", "Document", "External Link", "Video", "Other"];
+const RES_TYPES = ["Notes", "Worksheet", "Document", "Image", "Diagram", "External Link", "Video", "Other"];
 
 export default function OwnerLibrary() {
     const [tab, setTab] = useState<"questions" | "resources">("questions");
@@ -170,7 +170,7 @@ function GlobalQuestionsList() {
 // ─── Teaching Resources ──────────────────────────────────────────────────────
 function ResourcesTab() {
     const qc = useQueryClient();
-    const [form, setForm] = useState({ title: "", type: "Notes", subjectName: "", className: "", description: "", url: "" });
+    const [form, setForm] = useState({ title: "", type: "Notes", subjectName: "", className: "", description: "", url: "", videoUrl: "" });
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const { data: rows = [], isLoading, refetch } = useQuery<any[]>({ queryKey: ["owner_global_resources"], queryFn: async () => (await api.get("/owner/library/resources")).data || [] });
@@ -184,7 +184,7 @@ function ResourcesTab() {
             if (file) fd.append("file", file);
             await api.post("/owner/library/resources", fd, { headers: { "Content-Type": "multipart/form-data" } });
             toast.success("Resource shared with every school");
-            setForm({ title: "", type: "Notes", subjectName: "", className: "", description: "", url: "" }); setFile(null);
+            setForm({ title: "", type: "Notes", subjectName: "", className: "", description: "", url: "", videoUrl: "" }); setFile(null);
             qc.invalidateQueries({ queryKey: ["owner_global_resources"] }); refetch();
         } catch (e: any) { toast.error(e.response?.data?.message || "Could not upload"); }
         finally { setUploading(false); }
@@ -200,7 +200,7 @@ function ResourcesTab() {
             <Card>
                 <CardHeader>
                     <CardTitle>Share a teaching resource</CardTitle>
-                    <CardDescription>Notes, worksheets or PDFs here appear to every school's teachers (Staff Portal → Resources) and admins (Academics → Notes & Resources).</CardDescription>
+                    <CardDescription>Notes, worksheets, PDFs, images, diagrams or YouTube videos here appear to every school's teachers (Staff Portal → Resources), students (Student Portal → Resources), and admins (Academics → Notes & Resources) — only where that school offers the subject and has the class you choose below.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     <div className="grid sm:grid-cols-2 gap-3">
@@ -209,17 +209,22 @@ function ResourcesTab() {
                             <label className="text-xs font-bold text-muted-foreground">Type</label>
                             <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">{RES_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
                         </div>
-                        <div><label className="text-xs font-bold text-muted-foreground">Subject</label><Input value={form.subjectName} onChange={e => setForm(f => ({ ...f, subjectName: e.target.value }))} placeholder="Leave blank for all subjects" /></div>
+                        <div><label className="text-xs font-bold text-muted-foreground">Subject</label><Input value={form.subjectName} onChange={e => setForm(f => ({ ...f, subjectName: e.target.value }))} placeholder="Leave blank for every subject" /></div>
                         <div>
                             <label className="text-xs font-bold text-muted-foreground">Grade / class</label>
                             <select value={form.className} onChange={e => setForm(f => ({ ...f, className: e.target.value }))} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"><option value="">All grades</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}</select>
                         </div>
                     </div>
+                    {(form.subjectName || form.className) && (
+                        <p className="text-xs text-muted-foreground">Only shown to schools that {form.subjectName && <>offer <b>{form.subjectName}</b></>}{form.subjectName && form.className && " and "}{form.className && <>have a <b>{form.className}</b> class</>}.</p>
+                    )}
                     <div><label className="text-xs font-bold text-muted-foreground">Description</label><Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} /></div>
-                    {form.type === "External Link" || form.type === "Video" ? (
+                    {form.type === "Video" ? (
+                        <div><label className="text-xs font-bold text-muted-foreground">YouTube (or other video) URL</label><Input value={form.videoUrl} onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))} placeholder="https://youtube.com/watch?v=…" /></div>
+                    ) : form.type === "External Link" ? (
                         <div><label className="text-xs font-bold text-muted-foreground">URL</label><Input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://…" /></div>
                     ) : (
-                        <div><label className="text-xs font-bold text-muted-foreground">File (PDF, doc, image…)</label><input type="file" onChange={e => setFile(e.target.files?.[0] || null)} className="mt-1 block w-full text-sm" /></div>
+                        <div><label className="text-xs font-bold text-muted-foreground">File {form.type === "Image" || form.type === "Diagram" ? "(image)" : "(PDF, doc…)"}</label><input type="file" accept={form.type === "Image" || form.type === "Diagram" ? "image/*" : undefined} onChange={e => setFile(e.target.files?.[0] || null)} className="mt-1 block w-full text-sm" /></div>
                     )}
                     <Button onClick={upload} disabled={uploading}>{uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-2" />} Share with every school</Button>
                 </CardContent>

@@ -6,7 +6,7 @@ import { PageTitle, PanelCard } from "../../PortalShell";
 import FileViewer from "../../FileViewer";
 import type { StaffCtx } from "../StaffLayout";
 
-const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, "Lesson Page": Video, Other: ExternalLink };
+const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, "Lesson Page": Video, Image: Eye, Diagram: Eye, Other: ExternalLink };
 
 const getVideoEmbedUrl = (url: string) => {
     if (!url) return "";

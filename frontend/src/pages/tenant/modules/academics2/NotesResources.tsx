@@ -130,12 +130,15 @@ export default function NotesResources() {
                                     <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : " · All grades"}</p>
                                     {r.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{r.description}</p>}
-                                    <div className="mt-3">
+                                    <div className="mt-3 flex flex-wrap gap-3">
                                         {r.fileUrl ? (
                                             <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Download className="w-3.5 h-3.5" /> View / Download</a>
                                         ) : r.url ? (
                                             <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
                                         ) : null}
+                                        {r.videoUrl && (
+                                            <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Video className="w-3.5 h-3.5" /> Watch</button>
+                                        )}
                                     </div>
                                 </div>
                             ))}

@@ -17,7 +17,8 @@ import { scholarSheetData, reportCardSettings } from './reports.routes';
 import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
-import { onlyPublished } from '../lib/examPublish';
+import { onlyPublished, levelKey } from '../lib/examPublish';
+import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
 import { resolveGrading, Grading } from '../lib/grading';
 import { papersForSubject, papersForSubjectName, combinePapers } from '../lib/subjectPapers';
 const router = Router();
@@ -1572,12 +1573,25 @@ router.post('/student-portal/tasks/:type/:id/submit', authed(async (req, res, db
 }));
 
 // ─── Notes & Resources visibility ─────────────────────────────────────────────
-// Students: resources marked available (isPublic) for their class (or unscoped).
+// Students: resources marked available (isPublic) for their class (or unscoped), plus the
+// owner-uploaded shared library (ShuleCloud Library) matching their class/grade — gated to
+// what this school offers that grade (see lib/globalResourceScope.ts).
 router.get('/student-portal/resources', authed(async (req, res, db, decoded) => {
     const student: any = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) }).catch(() => null);
     const cls = String(student?.studentClass || student?.className || '').toLowerCase();
     const all = await db.collection('academic_resources').find({ isPublic: { $ne: false } }).sort({ createdAt: -1 }).toArray();
-    res.json(all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls));
+    const mine = all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls);
+
+    const myLevel = levelKey(student?.studentClass || student?.currentClass || '');
+    const origin = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`).replace(/\/$/, '');
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (!r.className || !myLevel || levelKey(r.className) === myLevel))
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
 // Teachers: resources matching their assigned subjects (unscoped resources always shown),
@@ -1601,8 +1615,12 @@ router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     }
     // Absolute file URL so it resolves outside the /api/v1 prefix (same pattern as blog uploads).
     const origin = process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
-    const global = await getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []);
-    const globalMine = (mySubjectNames.size ? global.filter((r: any) => !r.subjectName || mySubjectNames.has(norm(r.subjectName))) : global)
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (mySubjectNames.size === 0 || !r.subjectName || mySubjectNames.has(norm(r.subjectName))))
         .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin.replace(/\/$/, '')}${r.fileUrl}` : '' }));
     res.json([...globalMine, ...mine]);
 }));
