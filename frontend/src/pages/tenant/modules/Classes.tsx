@@ -226,7 +226,8 @@ export default function Classes() {
     const queryClient = useQueryClient();
     const [view, setView] = useState<"grid" | "list">("grid");
     const [editingClass, setEditingClass] = useState<any>(null);
-    const [editName, setEditName] = useState("");
+    const [editClassLabel, setEditClassLabel] = useState("");
+    const [editStreamName, setEditStreamName] = useState("");
     const [editTeacherId, setEditTeacherId] = useState("");
 
     // Old classes
@@ -267,6 +268,14 @@ export default function Classes() {
         ...filteredLegacy.map((c: any) => ({ _id: c._id, name: c.name || c.levelName, isV2: false, classTeacherId: c.classTeacherId, capacity: c.capacity })),
     ];
 
+    // Splits "Grade 10 East" into { classLabel: "Grade 10", streamName: "East" } —
+    // only the stream (last word) is ever editable.
+    const splitClassName = (name: string) => {
+        const parts = String(name ?? "").trim().split(/\s+/);
+        const streamName = parts.pop() || "";
+        return { classLabel: parts.join(" "), streamName };
+    };
+
     const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const getClassStudents = (cls: any) => {
         if (cls.isV2) {
@@ -298,9 +307,9 @@ export default function Classes() {
     });
 
     const updateMut = useMutation({
-        mutationFn: async ({ cls, name, teacherId }: { cls: any; name: string; teacherId: string }) => {
-            if (cls.isV2) return api.patch(`/v2/streams/${cls._id}`, { name: name.split(" ").pop() || name, classTeacherId: teacherId || null });
-            return api.put(`/academics/classes/${cls._id}`, { levelName: name, classTeacherId: teacherId || null });
+        mutationFn: async ({ cls, classLabel, streamName, teacherId }: { cls: any; classLabel: string; streamName: string; teacherId: string }) => {
+            if (cls.isV2) return api.patch(`/v2/streams/${cls._id}`, { name: streamName, classTeacherId: teacherId || null });
+            return api.put(`/academics/classes/${cls._id}`, { levelName: `${classLabel} ${streamName}`.trim(), classTeacherId: teacherId || null });
         },
         onSuccess: (_, { cls }) => {
             queryClient.invalidateQueries({ queryKey: [cls.isV2 ? "v2_streams" : "classes"] });
@@ -376,7 +385,7 @@ export default function Classes() {
                                             <td className="px-3 py-3 text-center text-slate-500">{cls.capacity || "—"}</td>
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center justify-end gap-1.5">
-                                                    <button onClick={() => { setEditingClass(cls); setEditName(cls.name); setEditTeacherId(cls.classTeacherId || ""); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
+                                                    <button onClick={() => { const { classLabel, streamName } = splitClassName(cls.name); setEditingClass(cls); setEditClassLabel(classLabel); setEditStreamName(streamName); setEditTeacherId(cls.classTeacherId || ""); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
                                                     <button onClick={() => { if (confirm(`Delete ${cls.name}?`)) deleteMut.mutate(cls); }} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
                                                 </div>
                                             </td>
@@ -405,7 +414,7 @@ export default function Classes() {
                                     <div className="flex items-start justify-between mb-3">
                                         <h3 className="text-base font-black text-slate-800 tracking-tight">{cls.name}</h3>
                                         <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={e => { e.stopPropagation(); setEditingClass(cls); setEditName(cls.name); setEditTeacherId(cls.classTeacherId || ""); }}
+                                            <button onClick={e => { e.stopPropagation(); const { classLabel, streamName } = splitClassName(cls.name); setEditingClass(cls); setEditClassLabel(classLabel); setEditStreamName(streamName); setEditTeacherId(cls.classTeacherId || ""); }}
                                                 className="p-1.5 bg-slate-50 rounded-lg text-slate-400 hover:text-[#5C67F2] hover:bg-indigo-50 transition-all">
                                                 <Edit2 className="w-3.5 h-3.5" />
                                             </button>
@@ -466,30 +475,36 @@ export default function Classes() {
             {/* Edit Modal */}
             {editingClass && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 w-full max-w-[480px] mx-4 p-8 relative">
-                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-t-[2.5rem]" />
-                        <button onClick={() => setEditingClass(null)} className="absolute top-6 right-6 p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-rose-500"><X className="w-4 h-4" /></button>
-                        <div className="text-center mb-6">
-                            <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center text-white mx-auto mb-3"><Edit2 className="w-6 h-6" /></div>
-                            <h2 className="text-xl font-black text-slate-800">Edit Class</h2>
+                    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-[400px] mx-4 p-6 relative">
+                        <div className="flex items-center justify-between mb-5">
+                            <h2 className="text-base font-black text-slate-800">Edit Class</h2>
+                            <button onClick={() => setEditingClass(null)} className="p-1.5 text-slate-400 hover:text-rose-500"><X className="w-4 h-4" /></button>
                         </div>
-                        <div className="space-y-5">
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class Name*</div>
-                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide">Grade</label>
+                                <div className="mt-1 w-full h-11 px-4 bg-slate-100 border border-slate-100 rounded-xl flex items-center text-xs font-bold text-slate-500">
+                                    {editClassLabel || "—"}
+                                </div>
                             </div>
-                            <div className="relative">
-                                <div className="absolute -top-3 left-4 bg-slate-800 text-white text-[8px] px-2 py-0.5 rounded-full font-black tracking-widest z-10 uppercase">Class Teacher</div>
-                                <select value={editTeacherId} onChange={e => setEditTeacherId(e.target.value)} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide">Stream Name*</label>
+                                <input type="text" value={editStreamName} onChange={e => setEditStreamName(e.target.value)} autoFocus
+                                    className="mt-1 w-full h-11 px-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wide">Class Teacher</label>
+                                <select value={editTeacherId} onChange={e => setEditTeacherId(e.target.value)}
+                                    className="mt-1 w-full h-11 px-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700">
                                     <option value="">— No teacher —</option>
                                     {teachers.map((t: any) => <option key={t._id} value={t._id}>{t.employeeName || t.name}</option>)}
                                 </select>
                             </div>
                         </div>
-                        <div className="flex gap-3 mt-6">
-                            <button onClick={() => setEditingClass(null)} className="flex-1 h-11 border border-slate-200 text-slate-500 font-black text-xs uppercase rounded-2xl hover:bg-slate-50">Cancel</button>
-                            <button onClick={() => updateMut.mutate({ cls: editingClass, name: editName, teacherId: editTeacherId })} disabled={updateMut.isPending}
-                                className="flex-1 h-11 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100">
+                        <div className="flex gap-2.5 mt-6">
+                            <button onClick={() => setEditingClass(null)} className="flex-1 h-10 border border-slate-200 text-slate-500 font-bold text-xs rounded-xl hover:bg-slate-50">Cancel</button>
+                            <button onClick={() => updateMut.mutate({ cls: editingClass, classLabel: editClassLabel, streamName: editStreamName, teacherId: editTeacherId })} disabled={updateMut.isPending || !editStreamName.trim()}
+                                className="flex-1 h-10 bg-[#5C67F2] hover:bg-indigo-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2">
                                 {updateMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Save
                             </button>
                         </div>
