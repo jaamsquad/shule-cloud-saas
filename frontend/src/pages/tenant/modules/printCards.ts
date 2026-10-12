@@ -82,9 +82,11 @@ function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
     ]);
 }
 
-/** Build the hidden iframe, drop the cards in, wait for images, print, then remove. */
-function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): void {
-    if (!cards.length) { alert("No cards available to print."); return; }
+/** Build the hidden iframe, drop the cards in, wait for images, print, then remove.
+ *  Resolves once the print dialog has actually been invoked (images loaded), so callers
+ *  can show a spinner that lasts exactly as long as the real wait. */
+function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): Promise<void> {
+    if (!cards.length) { alert("No cards available to print."); return Promise.resolve(); }
     const L = { ...DEFAULT_LAYOUT, ...layout };
 
     // A 0×0 iframe can make some Chromium builds compute a zero-size print viewport (a blank
@@ -96,7 +98,7 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
-    if (!doc) { iframe.remove(); alert("Could not open the print view."); return; }
+    if (!doc) { iframe.remove(); alert("Could not open the print view."); return Promise.resolve(); }
 
     const sheet = document.createElement("div");
     sheet.className = "print-sheet";
@@ -120,7 +122,7 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
     doc.close();
 
     // Print only after images (logos/QR/barcodes) have loaded — never blank pages.
-    waitForImages(doc).then(() => {
+    return waitForImages(doc).then(() => {
         const win = iframe.contentWindow!;
         win.focus();
         win.print();
@@ -133,11 +135,12 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
 
 /**
  * Print every card matched by `selector` (e.g. ".id-card" inside the grid).
- * Excludes elements flagged with [data-no-print].
+ * Excludes elements flagged with [data-no-print]. Resolves once the print dialog
+ * has opened — await it to drive a "preparing to print…" spinner.
  */
-export function printAllCards(selector: string, layout: PrintLayout = {}): void {
+export function printAllCards(selector: string, layout: PrintLayout = {}): Promise<void> {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(el => !el.hasAttribute("data-no-print"));
-    printNodes(cards, "ID Cards", layout);
+    return printNodes(cards, "ID Cards", layout);
 }
 
 /** How many cards a given selector currently has (for the modal's summary). */
@@ -147,10 +150,10 @@ export function countCards(selector: string): number {
 
 /**
  * Print a single card. Pass the card element itself, or any element inside it —
- * we walk up to the nearest `.id-card`.
+ * we walk up to the nearest `.id-card`. Resolves once the print dialog has opened.
  */
-export function printSingleCard(elementInsideCard: HTMLElement | null, layout: PrintLayout = {}): void {
-    if (!elementInsideCard) { alert("No card to print."); return; }
+export function printSingleCard(elementInsideCard: HTMLElement | null, layout: PrintLayout = {}): Promise<void> {
+    if (!elementInsideCard) { alert("No card to print."); return Promise.resolve(); }
     const card = elementInsideCard.closest<HTMLElement>(".id-card") || elementInsideCard;
-    printNodes([card], "ID Card", { columns: 1, ...layout });
+    return printNodes([card], "ID Card", { columns: 1, ...layout });
 }

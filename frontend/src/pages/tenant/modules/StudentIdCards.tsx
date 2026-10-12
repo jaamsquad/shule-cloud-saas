@@ -59,9 +59,14 @@ export default function StudentIdCards() {
     const setL = <K extends keyof CardLayout>(k: K, v: CardLayout[K]) => setLayout(p => ({ ...p, [k]: v }));
     const setField = (k: keyof CardLayout["fields"], v: boolean) => setLayout(p => ({ ...p, fields: { ...p.fields, [k]: v } }));
 
-    const styles = ["Landscape", "Default", "Classic Navy"];
-    const isWide = (s: string) => s === "Landscape" || s === "Classic Navy";
+    const styles = ["Landscape", "Default", "Classic Navy", "Modern", "Minimal"];
+    const isWide = (s: string) => s !== "Default";
     const pickStyle = (s: string) => { setActiveStyle(s); localStorage.setItem("studentCardStyle", s); };
+    const [printingCardId, setPrintingCardId] = useState<string | null>(null);
+    const handlePrintSingle = async (studentId: string, el: HTMLElement) => {
+        setPrintingCardId(studentId);
+        try { await printSingleCard(el); } finally { setPrintingCardId(null); }
+    };
 
     // The card itself (.id-card) is sized to the real physical CR80 ID card dimensions so it
     // prints at exactly normal ID card size. On screen that's quite small, so each card is
@@ -72,6 +77,8 @@ export default function StudentIdCards() {
     const WRAPPER_SIZE: Record<string, { w: string; h: string }> = {
         Landscape: { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(54mm * ${SCREEN_SCALE})` },
         "Classic Navy": { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(111mm * ${SCREEN_SCALE})` }, // front + 3mm gap + back
+        Modern: { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(54mm * ${SCREEN_SCALE})` },
+        Minimal: { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(54mm * ${SCREEN_SCALE})` },
         Default: { w: `calc(54mm * ${SCREEN_SCALE})`, h: `calc(85.6mm * ${SCREEN_SCALE})` },
     };
 
@@ -170,9 +177,9 @@ export default function StudentIdCards() {
                                 <div key={student._id} className="relative print:contents" style={{ width: WRAPPER_SIZE[activeStyle].w, height: WRAPPER_SIZE[activeStyle].h }}>
                                     <div style={{ transform: `scale(${SCREEN_SCALE})`, transformOrigin: "top left" }} className="print:!transform-none">
                                         <div className="id-card relative group/card">
-                                            <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
-                                                className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
-                                                <Printer className="w-4 h-4" />
+                                            <button data-no-print disabled={printingCardId === student._id} onClick={(e) => handlePrintSingle(student._id, e.currentTarget)} title="Print this card"
+                                                className={`absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center transition-opacity print:hidden ${printingCardId === student._id ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"}`}>
+                                                {printingCardId === student._id ? <Loader2 className="w-4 h-4 animate-spin text-[#5C67F2]" /> : <Printer className="w-4 h-4" />}
                                             </button>
                                             <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
                                         </div>
@@ -432,6 +439,86 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
                         {layout.showQr && (
                             <div className="bg-white border border-slate-100 rounded flex flex-col items-center flex-shrink-0" style={{ padding: "0.6mm" }}>
                                 <img src={qrSrc} alt="wallet QR" style={{ width: "8mm", height: "8mm" }} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Modern (CR80 landscape, top colour banner with overlapping photo) ──────
+    if (activeStyle === "Modern") {
+        return (
+            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative flex flex-col group" style={CR80_LANDSCAPE}>
+                <CameraBtn />
+                {/* Top banner */}
+                <div className="flex items-center gap-[1.5mm] flex-shrink-0" style={{ height: "16mm", background: `linear-gradient(135deg, ${accent}, #0A1B3F)`, padding: "0 3mm" }}>
+                    <SchoolLogo size="6.5mm" onDark />
+                    <div className="min-w-0 flex-1">
+                        <div className="font-black text-white truncate leading-tight" style={{ fontSize: "2.8mm" }}>{schoolName}</div>
+                        <div className="font-bold uppercase tracking-[0.15em] truncate" style={{ color: "rgba(255,255,255,0.75)", fontSize: "1.6mm" }}>{layout.cardTitle}</div>
+                    </div>
+                </div>
+                {/* Body: photo overlapping the banner, info to the right */}
+                <div className="flex-1 min-h-0 flex" style={{ padding: "0 3mm 2mm" }}>
+                    {layout.showPhoto && (
+                        <div className={`bg-gray-50 border-white shadow-md overflow-hidden flex items-center justify-center flex-shrink-0 ring-1 ring-gray-100 ${layout.roundedPhoto ? "rounded-full" : "rounded-[1.5mm]"}`} style={{ width: "18mm", height: "18mm", borderWidth: "0.8mm", marginTop: "-9mm" }}>
+                            {isUploading ? <Loader2 className="animate-spin" style={{ width: "5mm", height: "5mm", color: accent }} /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap style={{ width: "7mm", height: "7mm", color: accent, opacity: 0.4 }} />}
+                        </div>
+                    )}
+                    <div className="flex-1 min-w-0" style={{ marginTop: "2mm", marginLeft: "2.5mm" }}>
+                        <h3 className="font-black text-slate-900 leading-tight truncate" style={{ fontSize: "3.4mm" }}>{studentName}</h3>
+                        <div className="grid grid-cols-2 gap-x-[2mm]" style={{ marginTop: "1.2mm" }}>
+                            {rows.map(([k, v]) => (
+                                <div key={k} className="min-w-0" style={{ marginBottom: "0.6mm" }}>
+                                    <div className="font-bold uppercase text-slate-400 truncate" style={{ fontSize: "1.5mm" }}>{k}</div>
+                                    <div className="font-black text-slate-800 truncate" style={{ fontSize: "2mm" }}>{v}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                {/* Footer strip */}
+                <div className="flex items-center justify-between flex-shrink-0" style={{ padding: "0 3mm", height: "7mm", borderTop: "0.3mm solid #f1f5f9" }}>
+                    {layout.showBarcode ? <img src={barSrc} alt="barcode" style={{ height: "4.5mm", maxWidth: "24mm" }} /> : <div />}
+                    {layout.showQr && <img src={qrSrc} alt="wallet QR" style={{ width: "6.5mm", height: "6.5mm" }} />}
+                </div>
+            </div>
+        );
+    }
+
+    // ── Minimal (CR80 landscape, clean with a thin accent bar) ─────────────────
+    if (activeStyle === "Minimal") {
+        return (
+            <div className="bg-white rounded-[1.5mm] shadow-xl border border-gray-100 overflow-hidden relative flex group" style={CR80_LANDSCAPE}>
+                <CameraBtn />
+                <div className="flex-shrink-0" style={{ width: "1.8mm", background: accent }} />
+                <div className="flex-1 min-w-0 flex flex-col" style={{ padding: "2.5mm" }}>
+                    <div className="flex items-center gap-[1.2mm]" style={{ marginBottom: "2mm" }}>
+                        <SchoolLogo size="5mm" />
+                        <div className="font-bold uppercase tracking-[0.15em] text-slate-400 truncate" style={{ fontSize: "1.5mm" }}>{schoolName}</div>
+                    </div>
+                    <div className="flex items-center flex-1 min-h-0" style={{ gap: "3mm" }}>
+                        {layout.showPhoto && (
+                            <div className={`bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-gray-100 ${layout.roundedPhoto ? "rounded-full" : "rounded-[1mm]"}`} style={{ width: "15mm", height: "15mm" }}>
+                                {isUploading ? <Loader2 className="animate-spin" style={{ width: "4mm", height: "4mm", color: accent }} /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap style={{ width: "6mm", height: "6mm", color: accent, opacity: 0.4 }} />}
+                            </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                            <h3 className="font-black text-slate-900 leading-tight truncate" style={{ fontSize: "3.2mm" }}>{studentName}</h3>
+                            <div style={{ marginTop: "1.2mm" }}>
+                                {rows.map(([k, v]) => (
+                                    <div key={k} className="flex items-baseline gap-[1mm]" style={{ fontSize: "1.9mm", marginBottom: "0.5mm" }}>
+                                        <span className="text-slate-400 font-medium flex-shrink-0">{k}</span>
+                                        <span className="font-bold text-slate-800 truncate">{v}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        {layout.showQr && (
+                            <div className="flex-shrink-0">
+                                <img src={qrSrc} alt="wallet QR" style={{ width: "9mm", height: "9mm" }} />
                             </div>
                         )}
                     </div>
