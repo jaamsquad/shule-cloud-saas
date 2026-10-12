@@ -430,7 +430,7 @@ export const navItems: NavItem[] = [
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
       { label: "Class Tuition Fees", path: "/settings/class-tuition" },
       { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
-      { label: "Discount Type", path: "/settings/discount-type", locked: true },
+      { label: "Discount Type", path: "/settings/discount-type" },
       { label: "Rules & Regulations", path: "/settings/rules" },
       { label: "Registration Numbers", path: "/settings/numbering" },
       { label: "Grading Templates", path: "/settings/grading-templates" },
