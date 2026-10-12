@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FileText, Library, Loader2, Pencil, Plus, Search, Trash2, X, Sparkles } from "lucide-react";
+import { FileText, Library, Loader2, Pencil, Plus, Search, Trash2, X, Sparkles, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -31,8 +31,23 @@ export default function QuestionBankPage() {
     const [sel, setSel] = useState<Set<string>>(new Set());
     const [edit, setEdit] = useState<QQuestion | null>(null);
     const [saving, setSaving] = useState(false);
+    const [showGlobal, setShowGlobal] = useState(true);
+    const [adopting, setAdopting] = useState<string | null>(null);
 
-    const refresh = () => { qc.invalidateQueries({ queryKey: ["qp_bank"] }); qc.invalidateQueries({ queryKey: ["qp_subjects"] }); };
+    // ShuleCloud Library — the owner-uploaded shared bank, filtered the same way as our own.
+    const { data: globalRows = [], isLoading: loadingGlobal } = useQuery<QQuestion[]>({
+        queryKey: ["qp_bank_global", subject, classId, type, difficulty],
+        enabled: !!subject && showGlobal,
+        queryFn: async () => (await api.get("/qp/bank/global", { params: { subject: subj?.name || subject, ...(classId === "__none" ? {} : classId ? { className: classId } : {}), type, difficulty } })).data || [],
+    });
+    const globalShown = useMemo(() => { const t = q.trim().toLowerCase(); return t ? globalRows.filter(r => JSON.stringify([r.text, r.parts, r.options]).toLowerCase().includes(t)) : globalRows; }, [globalRows, q]);
+    const adopt = async (id: string) => {
+        setAdopting(id);
+        try { const r = (await api.post("/qp/bank/adopt", { ids: [id] })).data; toast.success(r.added ? "Added to our bank" : "Already in our bank"); refresh(); }
+        catch (e: any) { toast.error(e?.response?.data?.message || "Could not add"); } finally { setAdopting(null); }
+    };
+
+    const refresh = () => { qc.invalidateQueries({ queryKey: ["qp_bank"] }); qc.invalidateQueries({ queryKey: ["qp_bank_global"] }); qc.invalidateQueries({ queryKey: ["qp_subjects"] }); };
     const [bulkClass, setBulkClass] = useState("");
     const [aiBusy, setAiBusy] = useState(false);
     const assignClass = async () => {
@@ -124,6 +139,28 @@ export default function QuestionBankPage() {
                             </div>
                         </div>
                     ))}
+
+                    {subject && (
+                        <div className="pt-2">
+                            <button onClick={() => setShowGlobal(s => !s)} className="flex items-center gap-2 text-sm font-black text-indigo-600 mb-2">
+                                <GraduationCap className="w-4 h-4" /> ShuleCloud Library {showGlobal ? "▾" : "▸"} {globalShown.length > 0 && <span className="text-xs font-bold text-slate-400">({globalShown.length})</span>}
+                            </button>
+                            {showGlobal && (
+                                loadingGlobal ? <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-indigo-400" /></div>
+                                : !globalShown.length ? <p className="text-xs text-slate-400 px-1">No shared questions for this subject/class yet.</p>
+                                : globalShown.map((r, i) => (
+                                    <div key={r._id} className="bg-indigo-50/40 rounded-2xl border border-indigo-100 p-4 flex gap-3 mb-3">
+                                        <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 font-black text-xs flex items-center justify-center shrink-0">{i + 1}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex flex-wrap items-center gap-1.5 mb-1.5"><TypeBadge t={r.type} /><DiffBadge d={r.difficulty || "MEDIUM"} /><span className="text-[10px] font-black text-indigo-500 uppercase">ShuleCloud Library</span>{r.className && <span className="text-[10px] font-bold text-slate-500">{r.className}</span>}<span className="ml-auto text-xs font-black text-slate-600">{r.marks ?? "?"} mk{r.marks === 1 ? "" : "s"}</span></div>
+                                            <QuestionBody q={r} showAnswer />
+                                        </div>
+                                        {crud.canCreate && <button onClick={() => adopt(r._id!)} disabled={adopting === r._id} className="h-8 px-3 shrink-0 self-start rounded-lg bg-indigo-600 text-white text-xs font-bold disabled:opacity-50">{adopting === r._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Add to our bank"}</button>}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 

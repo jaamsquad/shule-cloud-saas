@@ -94,7 +94,7 @@ export default function OwnerDashboard({ initialTab }: { initialTab?: OwnerTab }
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
         {/* Quick navigation */}
         <div className="flex flex-wrap gap-2">
-          {[["Tenants", "/owner/tenants"], ["Organizations", "/owner/organizations"], ["Communications", "/owner/communications"], ["Plans", "/owner/plans"], ["Billing", "/owner/billing"], ["Invoices & Contracts", "/owner/business"], ["Audit", "/owner/audit"]].map(([label, path]) => (
+          {[["Tenants", "/owner/tenants"], ["Organizations", "/owner/organizations"], ["Communications", "/owner/communications"], ["Plans", "/owner/plans"], ["Billing", "/owner/billing"], ["Invoices & Contracts", "/owner/business"], ["Shared Library", "/owner/library"], ["Audit", "/owner/audit"]].map(([label, path]) => (
             <Link key={path} to={path} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-sm flex items-center hover:border-[#534AB7] hover:text-[#534AB7] transition-colors">{label}</Link>
           ))}
         </div>

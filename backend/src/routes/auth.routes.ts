@@ -1580,7 +1580,9 @@ router.get('/student-portal/resources', authed(async (req, res, db, decoded) => 
     res.json(all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls));
 }));
 
-// Teachers: resources matching their assigned subjects (unscoped resources always shown).
+// Teachers: resources matching their assigned subjects (unscoped resources always shown),
+// plus the owner-uploaded shared library (ShuleCloud Resources) — matched by subject NAME
+// since those aren't tied to this school's own subject ids.
 router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const staffId = String(decoded.staffId || '');
     const staff: any = await db.collection('staff').findOne({ _id: new ObjectId(staffId) }).catch(() => null);
@@ -1589,7 +1591,20 @@ router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const links = await db.collection('staff_subjects').find({ $or: [{ teacherId: staffId }, { staffId }] }).toArray().catch(() => []);
     links.forEach((l: any) => subjectIds.add(String(l.subjectId)));
     const all = await db.collection('academic_resources').find({}).sort({ createdAt: -1 }).toArray();
-    res.json(subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all);
+    const mine = subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all;
+
+    const norm = (v: any) => String(v ?? '').toLowerCase().trim();
+    const mySubjectNames = new Set<string>();
+    if (subjectIds.size) {
+        const subs = await db.collection('subjects').find({ _id: { $in: [...subjectIds].map(safeObjId).filter(Boolean) as any[] } }, { projection: { name: 1, subjectName: 1 } }).toArray().catch(() => []);
+        subs.forEach((s: any) => mySubjectNames.add(norm(s.name || s.subjectName)));
+    }
+    // Absolute file URL so it resolves outside the /api/v1 prefix (same pattern as blog uploads).
+    const origin = process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+    const global = await getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []);
+    const globalMine = (mySubjectNames.size ? global.filter((r: any) => !r.subjectName || mySubjectNames.has(norm(r.subjectName))) : global)
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin.replace(/\/$/, '')}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
 // ─── Student Portal: academic requisitions ────────────────────────────────────

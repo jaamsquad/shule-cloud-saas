@@ -59,6 +59,7 @@ import OwnerAudit from "./pages/owner/Audit";
 import OwnerAnnouncements from "./pages/owner/Announcements";
 import OwnerSettings from "./pages/owner/Settings";
 import OwnerBilling from "./pages/owner/Billing";
+import OwnerLibrary from "./pages/owner/Library";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
 import VerifyDoc from "./pages/public/VerifyDoc";
@@ -528,6 +529,7 @@ const App = () => {
               <Route path="/owner/announcements" element={<OwnerAnnouncements />} />
               <Route path="/owner/settings" element={<OwnerSettings />} />
               <Route path="/owner/billing" element={<OwnerBilling />} />
+              <Route path="/owner/library" element={<OwnerLibrary />} />
               <Route path="/owner/business" element={<OwnerDashboard initialTab="business" />} />
             </Route>
 

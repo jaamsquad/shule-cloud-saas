@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen } from "lucide-react";
+import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen, GraduationCap } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { API_ORIGIN } from "@/lib/config";
 
 const TYPES = [
     { key: "Notes",       icon: FileText,     color: "text-blue-600",   bg: "bg-blue-50" },
@@ -38,6 +39,12 @@ export default function NotesResources() {
     const { data: classes = [] } = useQuery({
         queryKey: ["classes"],
         queryFn: async () => { const r = await api.get("/classes"); return Array.isArray(r.data) ? r.data : []; },
+    });
+
+    // Owner-uploaded, shared across every school — read-only here (managed in the Owner Portal).
+    const { data: globalResources = [] } = useQuery({
+        queryKey: ["global_resources"],
+        queryFn: async () => { const r = await api.get("/global-resources"); return Array.isArray(r.data) ? r.data : []; },
     });
 
     const delMut = useMutation({
@@ -109,6 +116,32 @@ export default function NotesResources() {
                         <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} items showing</div>
                     </div>
                 </div>
+
+                {globalResources.length > 0 && (
+                    <div className="mb-8 rounded-3xl border border-indigo-100 bg-indigo-50/40 p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <GraduationCap className="w-5 h-5 text-indigo-600" />
+                            <h2 className="font-black text-slate-800">ShuleCloud Library</h2>
+                            <span className="text-xs font-bold text-slate-400">— shared by ShuleCloud, available to every school</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {globalResources.map((r: any) => (
+                                <div key={r._id} className="bg-white rounded-2xl border border-indigo-100 p-4">
+                                    <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : " · All grades"}</p>
+                                    {r.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{r.description}</p>}
+                                    <div className="mt-3">
+                                        {r.fileUrl ? (
+                                            <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Download className="w-3.5 h-3.5" /> View / Download</a>
+                                        ) : r.url ? (
+                                            <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {isLoading ? (
                     <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading lesson pages...</div>

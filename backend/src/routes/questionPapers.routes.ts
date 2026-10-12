@@ -160,6 +160,36 @@ router.get('/qp/bank', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+// GET /qp/bank/global — the owner-uploaded shared library, filtered the same way as /qp/bank.
+// Read-only here: a school adds one of these to its own bank with POST /qp/bank/adopt.
+router.get('/qp/bank/global', async (req, res) => {
+    try {
+        const d = db(req);
+        let rows = await getMetaDb().collection('global_questions').find(bankFilter(req.query)).sort({ createdAt: -1 }).limit(Math.min(5000, Number(req.query.limit) || 2000)).toArray();
+        if (req.query.classId || req.query.className) rows = onlyLevel(rows, await levelFrom(d, req.query.classId, req.query.className));
+        res.json(rows.map((r: any) => ({ ...r, isGlobal: true, text: r.text ?? r.questionText ?? '', type: r.type || r.questionType || 'Short Answer', answer: r.answer ?? r.correctAnswer ?? '', parts: r.parts || [], options: (r.options || []).map((o: any, i: number) => typeof o === 'string' ? { label: String.fromCharCode(65 + i), text: o } : o) })));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// POST /qp/bank/adopt { ids } — copy ShuleCloud Library questions into this school's own bank
+router.post('/qp/bank/adopt', W, async (req, res) => {
+    try {
+        const d = db(req);
+        const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(oid).filter(Boolean) as ObjectId[];
+        if (!ids.length) return res.status(400).json({ message: 'Choose questions to add' });
+        const rows = await getMetaDb().collection('global_questions').find({ _id: { $in: ids } }).toArray();
+        const actor = (req as any).tenantContext?.user || {};
+        const existing = new Set((await d.collection('questions').find({}, { projection: { textKey: 1 } }).toArray()).map((x: any) => x.textKey).filter(Boolean));
+        const docs: any[] = []; let skipped = 0;
+        for (const r of rows) {
+            const doc = { ...toDoc(cleanQuestion({ ...r, text: r.text ?? r.questionText }), { subjectName: r.subjectName, className: r.className }), createdAt: new Date(), createdBy: actor.name || 'ShuleCloud Library', approvalStatus: 'Approved' };
+            if (existing.has(doc.textKey)) { skipped++; continue; }
+            existing.add(doc.textKey); docs.push(doc);
+        }
+        if (docs.length) await d.collection('questions').insertMany(docs);
+        res.status(201).json({ added: docs.length, skipped });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.post('/qp/bank', W, async (req, res) => {
     try {
         const d = db(req);

@@ -920,6 +920,20 @@ router.get('/audit-trails',             c.getItems('audit_trails'));
 router.get('/academics/audit_trails',   c.getItems('audit_trails'));
 router.get('/academics/audit-trails',   c.getItems('audit_trails'));
 
+// Owner-uploaded teaching resources (notes/PDFs), shared with every school — read-only
+// here; the owner manages them from the Owner Portal (routes/ownerLibrary.routes.ts).
+router.get('/global-resources', async (req, res) => {
+    try {
+        const q: any = req.query;
+        const and: any[] = [];
+        if (q.subject) and.push({ subjectName: new RegExp(`^${String(q.subject).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.className) and.push({ className: new RegExp(`^${String(q.className).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.type) and.push({ type: String(q.type) });
+        const filter = and.length ? { $and: and } : {};
+        res.json(await getMetaDb().collection('global_resources').find(filter).sort({ createdAt: -1 }).toArray());
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Other Collections ────────────────────────────────────────────────────────
 // Collection → sidebar module key, for CRUD enforcement on the generic routes.
 // Only collections with sensitive writes are gated; others stay admin-only by
