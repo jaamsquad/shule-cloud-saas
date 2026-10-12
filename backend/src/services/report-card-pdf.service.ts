@@ -58,6 +58,7 @@ const overallText = (pct: number, family: Family, passMark: number, scale?: Grad
 export interface ReportCardData {
     school?: string; logo?: string | null; motto?: string; address?: string; template?: string; curriculum?: string;
     signature?: string | null; stamp?: string | null; signerName?: string | null; signerTitle?: string | null;   // principal's signature + school stamp
+    classTeacherSignature?: string | null;   // the class's own homeroom/class teacher's signature, if uploaded
     student: any; exam: any; className?: string; marks: any[]; grading?: any;
     /** The student's class grading scale (resolveGrading). When given, grades/remarks/key come from it. */
     scale?: GradeBand[];
@@ -74,11 +75,14 @@ const LOOKS: Record<string, { head: string; text: string; zebra: string }> = {
 export const looksFor = (template?: string) => LOOKS[String(template || '')] ? String(template) : 'annual_exam';
 const esc = (v: any) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 
-/** A row of signature lines; the principal's signature sits on their line with the school stamp beside it. */
-function signRow(titles: string[], o: { signature?: string | null; stamp?: string | null; signerName?: string | null }): string {
+/** A row of signature lines; the principal's signature sits on their line with the school stamp beside it,
+ * and the homeroom/class teacher's own signature (if they've uploaded one) sits on theirs. */
+function signRow(titles: string[], o: { signature?: string | null; stamp?: string | null; signerName?: string | null; classTeacherSignature?: string | null }): string {
     return `<div style="display:flex;gap:22px;margin-top:38px;page-break-inside:avoid">${titles.map(x => {
         const head = /principal|head ?teacher|director/i.test(x);
-        return `<div style="flex:1;text-align:center;font-size:12px;position:relative"><div style="height:32px;position:relative">${head && o.signature ? `<img src="${esc(o.signature)}" style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);max-height:44px;max-width:150px;object-fit:contain"/>` : ''}</div>${head && o.stamp ? `<img src="${esc(o.stamp)}" style="position:absolute;right:-6px;bottom:-6px;width:68px;height:68px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}<div style="border-top:1.5px solid #111;padding-top:4px">${head && o.signerName ? `${esc(o.signerName)}<br/>` : ''}${x}</div></div>`;
+        const isClassTeacher = /class teacher|homeroom/i.test(x);
+        const sigImg = head ? o.signature : (isClassTeacher ? o.classTeacherSignature : null);
+        return `<div style="flex:1;text-align:center;font-size:12px;position:relative"><div style="height:32px;position:relative">${sigImg ? `<img src="${esc(sigImg)}" style="position:absolute;left:50%;bottom:2px;transform:translateX(-50%);max-height:44px;max-width:150px;object-fit:contain"/>` : ''}</div>${head && o.stamp ? `<img src="${esc(o.stamp)}" style="position:absolute;right:-6px;bottom:-6px;width:68px;height:68px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}<div style="border-top:1.5px solid #111;padding-top:4px">${head && o.signerName ? `${esc(o.signerName)}<br/>` : ''}${x}</div></div>`;
     }).join('')}</div>`;
 }
 const remark = (pct: number, scale?: GradeBand[] | null) => (scale ? gradeFromScale(scale, pct).remark : '') || remarkFallback(pct);
@@ -177,7 +181,7 @@ export function reportCardHtml(d: ReportCardData): string {
           <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr style="font-weight:700;text-align:center">${['Subject', 'Marks', gh, 'Remarks'].map((h, i) => `<td style="border:1px solid #000;padding:3px 5px;${i === 0 ? 'text-align:left' : ''}">${h}</td>`).join('')}</tr>
           ${subs.map(x => `<tr><td style="border:1px solid #000;padding:3px 5px">${esc(x.name).toUpperCase()}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center">${x.obtained}/${x.outOf}</td><td style="border:1px solid #000;padding:3px 5px;text-align:center;font-weight:700">${esc(x.grade)}</td><td style="border:1px solid #000;padding:3px 5px">${esc(remark(x.pct, scale))}</td></tr>`).join('') || `<tr><td colspan="4" style="border:1px solid #000;padding:10px;text-align:center">No marks recorded.</td></tr>`}</table>
           ${chart}
-          <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Class Teacher's Comments :</b></td><td style="border:1px solid #000;padding:5px;width:170px;vertical-align:bottom">Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Principal's Comments :</b></td><td style="border:1px solid #000;padding:5px;vertical-align:bottom;position:relative">${d.signature ? `<img src="${esc(d.signature)}" style="position:absolute;left:60px;bottom:2px;max-height:34px;max-width:110px;object-fit:contain"/>` : ''}${d.stamp ? `<img src="${esc(d.stamp)}" style="position:absolute;right:2px;top:-20px;width:58px;height:58px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:30px;vertical-align:top"><b>Report Seen By Parent/Guardian :</b> Date : ________</td><td style="border:1px solid #000;padding:5px">Result : <b>${esc(result)}</b></td></tr></table></div>`;
+          <table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:12px"><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Class Teacher's Comments :</b></td><td style="border:1px solid #000;padding:5px;width:170px;vertical-align:bottom;position:relative">${d.classTeacherSignature ? `<img src="${esc(d.classTeacherSignature)}" style="position:absolute;left:60px;bottom:2px;max-height:34px;max-width:100px;object-fit:contain"/>` : ''}Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:38px;vertical-align:top"><b>Principal's Comments :</b></td><td style="border:1px solid #000;padding:5px;vertical-align:bottom;position:relative">${d.signature ? `<img src="${esc(d.signature)}" style="position:absolute;left:60px;bottom:2px;max-height:34px;max-width:110px;object-fit:contain"/>` : ''}${d.stamp ? `<img src="${esc(d.stamp)}" style="position:absolute;right:2px;top:-20px;width:58px;height:58px;object-fit:contain;opacity:.88;transform:rotate(-8deg)"/>` : ''}Signature : ________</td></tr><tr><td style="border:1px solid #000;padding:5px;height:30px;vertical-align:top"><b>Report Seen By Parent/Guardian :</b> Date : ________</td><td style="border:1px solid #000;padding:5px">Result : <b>${esc(result)}</b></td></tr></table></div>`;
     } else {   // annual_exam (and any retired design)
         body = `${letterhead}<div style="text-align:center;font-size:24px;font-weight:700;text-transform:uppercase;margin:14px 0 4px">${esc(examName)}</div>
           ${info([[['Student Name', stu], ['Adm No', adm]], [['Class', cls], ['Date', date(d.exam?.date || d.exam?.examDate) || '—']]])}
@@ -196,7 +200,7 @@ export function reportCardHtml(d: ReportCardData): string {
 // ── Yearly (annual) report: Term 1 | Term 2 | Term 3 | Year average, in the school's chosen colours ──
 export interface YearlyData {
     school?: string; logo?: string | null; address?: string; template?: string;
-    signature?: string | null; stamp?: string | null; signerName?: string | null;
+    signature?: string | null; stamp?: string | null; signerName?: string | null; classTeacherSignature?: string | null;
     year: string; name: string; regNo: string; className: string;
     subjects: { name: string; t: (number | null)[]; avg: number | null; grade: string }[];
     termOverall: (number | null)[]; yearAvg: number | null; yearGrade: string;

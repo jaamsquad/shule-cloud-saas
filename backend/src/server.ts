@@ -62,6 +62,13 @@ async function bootstrap() {
         const { sendDueMeetingReminders } = require('./routes/meetings.routes');
         setInterval(() => { sendDueMeetingReminders().catch(() => {}); }, 60_000);
 
+        // ── Academic year/term auto-creation ───────────────────────────────────
+        // Keeps every school one academic year ahead (Term 1/2/3 carried forward from the
+        // latest year's own dates) for tenants nobody is actively viewing — active ones
+        // self-heal on their own via syncCurrentTerm() (cbcTerm.ts), called on every request.
+        const { ensureNextAcademicYearAllTenants } = require('./lib/academicYears');
+        setInterval(() => { ensureNextAcademicYearAllTenants().catch(() => {}); }, 6 * 60 * 60_000);
+
         // ── M-PESA auto-sync ──────────────────────────────────────────────────
         // Pull recent Till/Paybill transactions from Safaricom every 5 min for
         // every tenant with the Pull API registered, so payments appear without

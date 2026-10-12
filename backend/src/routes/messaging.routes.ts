@@ -200,6 +200,17 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
             const scaleOf = async (st: any, clsName?: string) => (await gradingFor(st?.classId ? String(st.classId) : undefined, st?.studentClass || st?.currentClass || st?.className || clsName || undefined)).scale;
             const curriculum = pdfSvc ? String(((await database.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '') : '';
             const note = body ? `${body}\n\n` : '';
+            // Cache the class→teacher-signature lookup per class name so a bulk send doesn't
+            // re-query it per student.
+            const classTeacherSigCache = new Map<string, Promise<string | null>>();
+            const classTeacherSigFor = async (clsName?: string) => {
+                if (!pdfSvc || !clsName) return null;
+                if (!classTeacherSigCache.has(clsName)) {
+                    const { classTeacherSignatureFor } = await import('../lib/classTeacherSignature');
+                    classTeacherSigCache.set(clsName, classTeacherSignatureFor(database, clsName));
+                }
+                return classTeacherSigCache.get(clsName)!;
+            };
             const job = async ({ student: st, link }: { student: any; link: string }) => {
                 const to = await parentEmailOf(database, st);
                 if (!to) { emailSkipped++; return; }
@@ -213,7 +224,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                             await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                         } else {
                             const bands = (await scaleOf(st, y.className)).map(b => ({ grade: String(b.grade || ''), lo: b.from, hi: b.upto })).filter(b => b.grade);
-                            const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.yearlyDocumentHtml([{ school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands }]));
+                            const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.yearlyDocumentHtml([{ school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature: await classTeacherSigFor(y.className), ...y, bands }]));
                             const cell = (v: number | null) => `<td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center;font-size:13px">${v == null ? '—' : v + '%'}</td>`;
                             const table = `<table style="width:100%;border-collapse:collapse;margin:12px 0"><tr>${['Subject', 'Term 1', 'Term 2', 'Term 3', 'Year'].map(h => `<th style="background:#33357f;color:#fff;padding:7px 8px;font-size:11px;text-transform:uppercase">${h}</th>`).join('')}</tr>${y.subjects.map(x => `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-size:13px">${escHtml(x.name)}</td>${cell(x.t[0])}${cell(x.t[1])}${cell(x.t[2])}${cell(x.avg)}</tr>`).join('')}<tr style="font-weight:700"><td style="padding:6px 8px;border:1px solid #e5e7eb">Overall</td>${cell(y.termOverall[0])}${cell(y.termOverall[1])}${cell(y.termOverall[2])}${cell(y.yearAvg)}</tr></table>`;
                             const introY = `<p style="font-family:Arial,sans-serif;font-size:14px">${escHtml(greetingY)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${escHtml(body)}</p>` : ''}<p style="font-family:Arial,sans-serif;font-size:14px"><b>${yearKey} annual report</b> — Term 1, Term 2, Term 3 and the year average. The PDF is attached.</p>`;
@@ -231,7 +242,7 @@ router.post('/messaging/compose', async (req: Request, res: Response) => {
                         await sendEmail(database, { to: [to], subject, message: text, html: `<pre style="font-family:Consolas,'Courier New',monospace;font-size:13px;line-height:1.5;color:#111;white-space:pre-wrap">${escHtml(text)}</pre>` });
                     } else {
                         const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
-                        const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading, scale: await scaleOf(st, snap.className) };
+                        const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature: await classTeacherSigFor(snap.className), template: tenant?.reportTemplate, curriculum, student: st, exam: examDoc, className: snap.className, marks, grading, scale: await scaleOf(st, snap.className) };
                         const pdf = await pdfSvc!.htmlToPdf(pdfSvc!.reportCardHtml(data));
                         const intro = `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937">${escHtml(greeting)}</p>${body ? `<p style="font-family:Arial,sans-serif;font-size:14px;color:#1f2937;white-space:pre-wrap">${escHtml(body)}</p>` : ''}`;
                         const outro = link ? `<p style="font-family:Arial,sans-serif;font-size:13px">View the full result online: <a href="${escHtml(link)}">${escHtml(link)}</a></p>` : '';

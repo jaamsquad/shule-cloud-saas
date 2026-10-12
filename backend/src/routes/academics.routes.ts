@@ -206,6 +206,8 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         // Each card is graded with the student's CLASS grading (template → class → global → …).
         const gradingFor = makeGradingCache(db);
         const curriculum = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
+        const { classTeacherSignatureFor } = await import('../lib/classTeacherSignature');
+        const classTeacherSignature = await classTeacherSignatureFor(db, clsName);
 
         // Fail fast with a clear message if email isn't configured at all, instead
         // of reporting "20 failed" with no reason.
@@ -234,7 +236,7 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             try {
                 const marks = await onlyPublished(db, await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
                 if (!marks.length) { skipped++; return; }
-                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading, scale: (await gradingFor(st.classId ? String(st.classId) : (classId ? String(classId) : undefined), st.studentClass || st.currentClass || clsName || undefined)).scale };
+                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading, scale: (await gradingFor(st.classId ? String(st.classId) : (classId ? String(classId) : undefined), st.studentClass || st.currentClass || clsName || undefined)).scale };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
                     to: [email],
@@ -869,6 +871,30 @@ router.get('/staff/:id',             async (req, res) => {
         res.json(item);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+// Per-subject average performance across this teacher's own (class, subject) assignments —
+// shown on their profile page. Looks at the latest ~6 exams' marks for each assignment and
+// reports the class average %, not just this teacher's own grading (there's no per-marker
+// field on exam_marks), so it reads as "how classes this teacher teaches are performing".
+router.get('/staff/:id/performance', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const staff = await db.collection('staff').findOne({ _id: new ObjectId(req.params.id) });
+        if (!staff) return res.status(404).json({ message: 'Staff not found' });
+        const assignments: any[] = Array.isArray(staff.subjectAssignments) ? staff.subjectAssignments : [];
+        const pairs = Array.from(new Map(assignments
+            .filter(a => a.subjectName && a.className)
+            .map(a => [`${a.className}|${a.subjectName}`, { className: a.className, subjectName: a.subjectName }])).values());
+        const subjects = await Promise.all(pairs.map(async ({ className, subjectName }) => {
+            const marks = await db.collection('exam_marks').find({ className, subjectName }).toArray().catch(() => []);
+            const scored = marks.filter((m: any) => Number(m.totalMarks) > 0 && m.marksObtained != null);
+            if (!scored.length) return { className, subjectName, average: null, studentsScored: 0 };
+            const pct = scored.reduce((a: number, m: any) => a + (Number(m.marksObtained) / Number(m.totalMarks)) * 100, 0) / scored.length;
+            return { className, subjectName, average: Math.round(pct * 10) / 10, studentsScored: scored.length };
+        }));
+        res.json({ subjects });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.post('/staff',                enforceCrud('employees', 'create'), c.createItem('staff'));
 router.patch('/staff/:id',           enforceCrud('employees', 'update'), c.updateItem('staff'));
 router.put('/staff/:id',             enforceCrud('employees', 'update'), c.updateItem('staff'));

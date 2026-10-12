@@ -62,6 +62,11 @@ export function pickCurrent(terms: TermInfo[]): TermInfo | null {
  * always a current period once at least one term has a start date.
  */
 export async function syncCurrentTerm(db: Db): Promise<void> {
+    // Self-heal: make sure there's always a next academic year/terms on file (carried forward
+    // from the latest one) once the latest year is underway — see lib/academicYears.ts.
+    const { ensureNextAcademicYear } = await import('../../lib/academicYears');
+    await ensureNextAcademicYear(db).catch(() => {});
+
     const rows: any[] = await db.collection('terms').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
     const dated = rows.filter(t => toDate(t.startDate));
     if (!dated.length) return;

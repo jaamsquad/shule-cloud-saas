@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { staffApi } from "./staffApi";
 
-export interface Assignment { classId: string; className: string; subject: string }
+export interface Assignment { classId: string; className: string; subject: string; subjectId?: string }
 
 // The (class, subject) pairs this teacher is assigned to + classes they head.
 export function useAssignments() {
@@ -15,8 +15,8 @@ export function useAssignments() {
     });
 }
 
-export const pairKey = (a: { className: string; subject: string }) => `${a.className}|||${a.subject}`;
+export const pairKey = (a: { className: string; subject: string; subjectId?: string }) => `${a.className}|||${a.subject}|||${a.subjectId || ""}`;
 export const parsePair = (key: string) => {
-    const [className, subject] = key.split("|||");
-    return { className, subject };
+    const [className, subject, subjectId] = key.split("|||");
+    return { className, subject, subjectId: subjectId || "" };
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Home, Save, Loader2, Camera, ImageIcon, Mail, Phone, MapPin, Globe, ChevronDown } from "lucide-react";
+import { Home, Save, Loader2, Camera, ImageIcon, Mail, Phone, MapPin, Globe, ChevronDown, Pencil, X, Hash } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { prepareTransparentImage } from "@/lib/imageClean";
 import api from "@/lib/api";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 export default function InstituteProfile() {
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [editing, setEditing] = useState(false);
 
     const { data: profileData, isLoading } = useQuery({
         queryKey: ["tenant_profile_global"],
@@ -32,25 +33,23 @@ export default function InstituteProfile() {
         principalSignature: "", schoolStamp: "", principalName: "", principalTitle: "Principal",
     });
 
-    useEffect(() => {
-        if (profileData) {
-            setFormData({
-                name: profileData.name || "",
-                targetLine: profileData.targetLine || "",
-                phone: profileData.phone || "",
-                website: profileData.website || "",
-                address: profileData.address || "",
-                country: profileData.country || "Kenya",
-                logo: profileData.logo || "",
-                email: profileData.email || "",
-                schoolType: profileData.schoolType || "Day",
-                genderComposition: profileData.genderComposition || "Mixed",
-                schoolLevel: profileData.schoolLevel || "All",
-                principalSignature: profileData.principalSignature || "", schoolStamp: profileData.schoolStamp || "",
-                principalName: profileData.principalName || "", principalTitle: profileData.principalTitle || "Principal",
-            });
-        }
-    }, [profileData]);
+    const fromProfile = (p: any) => ({
+        name: p.name || "",
+        targetLine: p.targetLine || "",
+        phone: p.phone || "",
+        website: p.website || "",
+        address: p.address || "",
+        country: p.country || "Kenya",
+        logo: p.logo || "",
+        email: p.email || "",
+        schoolType: p.schoolType || "Day",
+        genderComposition: p.genderComposition || "Mixed",
+        schoolLevel: p.schoolLevel || "All",
+        principalSignature: p.principalSignature || "", schoolStamp: p.schoolStamp || "",
+        principalName: p.principalName || "", principalTitle: p.principalTitle || "Principal",
+    });
+    useEffect(() => { if (profileData) setFormData(fromProfile(profileData)); }, [profileData]); // eslint-disable-line react-hooks/exhaustive-deps
+    const cancelEdit = () => { if (profileData) setFormData(fromProfile(profileData)); setEditing(false); };
 
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -79,6 +78,7 @@ export default function InstituteProfile() {
             queryClient.invalidateQueries({ queryKey: ["tenant_profile_global"] });
             queryClient.invalidateQueries({ queryKey: ["class_catalog"] });
             toast.success("Institute profile updated successfully");
+            setEditing(false);
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to update profile"),
     });
@@ -102,13 +102,29 @@ export default function InstituteProfile() {
     return (
         <div className="flex-1 bg-[#f8fafc] min-h-screen flex flex-col">
             {/* Breadcrumb */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm z-10 m-4 rounded-xl">
-                <span className="font-bold text-gray-800 text-lg mr-2">General Settings</span>
-                <span className="text-gray-300 mx-2">|</span>
-                <Home className="w-4 h-4 text-gray-500 mr-2" />
-                <span className="text-gray-500 font-medium">
-                    - Institute Profile
-                </span>
+            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl flex-wrap gap-3">
+                <div className="flex items-center">
+                    <span className="font-bold text-gray-800 text-lg mr-2">General Settings</span>
+                    <span className="text-gray-300 mx-2">|</span>
+                    <Home className="w-4 h-4 text-gray-500 mr-2" />
+                    <span className="text-gray-500 font-medium">
+                        - Institute Profile
+                    </span>
+                    {profileData?.shulecloudId && (
+                        <span className="ml-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-50 border border-slate-100 text-[11px] font-bold text-slate-500" title="ShuleCloud School ID — used to sign in to the mobile apps">
+                            <Hash className="w-3.5 h-3.5 text-slate-400" /> SCHOOL ID: <span className="font-mono text-slate-700">{profileData.shulecloudId}</span>
+                        </span>
+                    )}
+                </div>
+                {!editing ? (
+                    <button onClick={() => setEditing(true)} className="h-10 px-5 rounded-xl bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-sm font-bold flex items-center gap-2 shadow-sm">
+                        <Pencil className="w-4 h-4" /> Edit
+                    </button>
+                ) : (
+                    <button onClick={cancelEdit} className="h-10 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold flex items-center gap-2 hover:bg-slate-50">
+                        <X className="w-4 h-4" /> Cancel
+                    </button>
+                )}
             </div>
 
             <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -148,16 +164,17 @@ export default function InstituteProfile() {
                                     </div>
                                 </div>
                                 <div className="flex-1 text-center md:text-left">
-                                    <input 
-                                        type="file" 
-                                        ref={fileInputRef} 
-                                        onChange={handleLogoChange} 
-                                        accept="image/*" 
-                                        className="hidden" 
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleLogoChange}
+                                        accept="image/*"
+                                        className="hidden"
                                     />
-                                    <button 
+                                    <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="h-12 px-8 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-xl shadow-indigo-100 flex items-center gap-3 transition-all text-sm tracking-widest"
+                                        disabled={!editing}
+                                        className="h-12 px-8 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-2xl shadow-xl shadow-indigo-100 flex items-center gap-3 transition-all text-sm tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <Camera className="w-5 h-5" /> CHANGE LOGO
                                     </button>
@@ -167,54 +184,60 @@ export default function InstituteProfile() {
                         </div>
 
                         {/* Name Section */}
-                        <ProfileInput 
-                            label="Name Of Institute" 
-                            value={formData.name} 
+                        <ProfileInput
+                            label="Name Of Institute"
+                            value={formData.name}
                             onChange={(v) => setFormData({ ...formData, name: v })}
                             placeholder="Enter Institute Name"
                             required
+                            disabled={!editing}
                         />
 
                         {/* Phone Section */}
-                        <ProfileInput 
-                            label="Phone Number" 
-                            value={formData.phone} 
+                        <ProfileInput
+                            label="Phone Number"
+                            value={formData.phone}
                             onChange={(v) => setFormData({ ...formData, phone: v })}
                             placeholder="e.g. +254 700 000 000"
                             required
+                            disabled={!editing}
                         />
 
                         {/* Target Line */}
-                        <ProfileInput 
-                            label="Target Line" 
-                            value={formData.targetLine} 
+                        <ProfileInput
+                            label="Target Line"
+                            value={formData.targetLine}
                             onChange={(v) => setFormData({ ...formData, targetLine: v })}
                             placeholder="Your Institute Tagline"
+                            disabled={!editing}
                         />
 
                         {/* Website */}
-                        <ProfileInput 
-                            label="Website" 
-                            value={formData.website} 
+                        <ProfileInput
+                            label="Website"
+                            value={formData.website}
                             onChange={(v) => setFormData({ ...formData, website: v })}
                             placeholder="https://www.yourinstitute.com"
+                            disabled={!editing}
                         />
 
                         {/* Address */}
-                        <ProfileInput 
-                            label="Address" 
-                            value={formData.address} 
+                        <ProfileInput
+                            label="Address"
+                            value={formData.address}
                             onChange={(v) => setFormData({ ...formData, address: v })}
                             placeholder="Physical Address"
                             required
+                            disabled={!editing}
                         />
 
                         {/* Email Address */}
-                        <ProfileInput 
-                            label="Email Address" 
-                            value={formData.email} 
+                        <ProfileInput
+                            label="Email Address"
+                            value={formData.email}
                             onChange={(v) => setFormData({ ...formData, email: v })}
                             placeholder="info@institute.com"
+                            disabled={!editing}
                         />
 
                         {/* Country */}
@@ -223,10 +246,11 @@ export default function InstituteProfile() {
                                 Country*
                             </div>
                             <div className="relative">
-                                <select 
+                                <select
                                     value={formData.country}
                                     onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                                    className="w-full h-16 pl-8 pr-12 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold bg-white appearance-none cursor-pointer transition-all"
+                                    disabled={!editing}
+                                    className="w-full h-16 pl-8 pr-12 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold bg-white appearance-none cursor-pointer transition-all disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                                 >
                                     <option value="Kenya">Kenya</option>
                                     <option value="Uganda">Uganda</option>
@@ -248,6 +272,7 @@ export default function InstituteProfile() {
                                 { value: "Mixed", label: "Mixed (Boarding & Day)" },
                             ]}
                             hint="Controls whether students can be marked as boarders or day scholars."
+                            disabled={!editing}
                         />
 
                         {/* Gender Composition */}
@@ -261,6 +286,7 @@ export default function InstituteProfile() {
                                 { value: "Girls", label: "Girls Only" },
                             ]}
                             hint="Used as the default when admitting students."
+                            disabled={!editing}
                         />
 
                         {/* School Level (CBC Junior / Senior school) */}
@@ -274,6 +300,7 @@ export default function InstituteProfile() {
                                 { value: "Senior", label: "Senior school (Grade 10 – 12)" },
                             ]}
                             hint="Controls which grades show up under Classes → Classes we offer. 8-4-4 Forms always show regardless of this setting."
+                            disabled={!editing}
                         />
                     </div>
 
@@ -289,21 +316,24 @@ export default function InstituteProfile() {
                                         {formData[field] ? <img src={formData[field]} alt={label} className="max-h-24 max-w-[90%] object-contain" /> : <span className="text-xs text-slate-400">Nothing uploaded</span>}
                                     </div>
                                     <p className="text-xs text-slate-400 mt-2">{hint}</p>
+                                    {editing && (
                                     <div className="flex gap-2 mt-3">
                                         <label className="h-9 px-4 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium flex items-center cursor-pointer">Upload<input type="file" accept="image/*" className="hidden" onChange={pickImage(field)} /></label>
                                         {formData[field] && <button type="button" onClick={() => setFormData(prev => ({ ...prev, [field]: "" }))} className="h-9 px-4 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50">Remove</button>}
                                     </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
-                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Signatory name (printed under the signature)</label><input value={formData.principalName} onChange={e => setFormData({ ...formData, principalName: e.target.value })} placeholder="e.g. Mrs. Jane Wanjiku" className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" /></div>
-                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Title</label><select value={formData.principalTitle} onChange={e => setFormData({ ...formData, principalTitle: e.target.value })} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white">{["Principal", "Head Teacher", "Headmaster", "Headmistress", "Director"].map(t => <option key={t}>{t}</option>)}</select></div>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Signatory name (printed under the signature)</label><input value={formData.principalName} onChange={e => setFormData({ ...formData, principalName: e.target.value })} placeholder="e.g. Mrs. Jane Wanjiku" disabled={!editing} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed" /></div>
+                            <div><label className="block text-xs font-medium text-slate-500 mb-1.5">Title</label><select value={formData.principalTitle} onChange={e => setFormData({ ...formData, principalTitle: e.target.value })} disabled={!editing} className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed">{["Principal", "Head Teacher", "Headmaster", "Headmistress", "Director"].map(t => <option key={t}>{t}</option>)}</select></div>
                         </div>
                     </div>
 
+                    {editing && (
                     <div className="flex justify-center mt-12">
-                        <button 
+                        <button
                             onClick={handleSave}
                             disabled={updateMutation.isPending}
                             className="h-14 px-14 bg-[#FFC165] hover:bg-[#e0a855] text-slate-800 font-black rounded-full shadow-2xl shadow-orange-100 flex items-center gap-3 transition-all text-sm tracking-[0.2em] uppercase active:scale-95 disabled:opacity-50"
@@ -312,6 +342,7 @@ export default function InstituteProfile() {
                             SAVE CHANGES
                         </button>
                     </div>
+                    )}
                 </div>
 
                 {/* Profile View (Preview) */}
@@ -343,6 +374,7 @@ export default function InstituteProfile() {
                                 <div className="w-full h-px bg-slate-50 my-8"></div>
                                 
                                 <div className="w-full space-y-6">
+                                    {profileData?.shulecloudId && <InfoItem icon={Hash} label="School ID" value={profileData.shulecloudId} />}
                                     <InfoItem icon={Phone} label="Phone No" value={formData.phone} />
                                     <InfoItem icon={Mail} label="Email" value={formData.email} />
                                     <InfoItem icon={Globe} label="Website" value={formData.website} />
@@ -361,24 +393,25 @@ export default function InstituteProfile() {
     );
 }
 
-function ProfileInput({ label, value, onChange, placeholder, required }: any) {
+function ProfileInput({ label, value, onChange, placeholder, required, disabled }: any) {
     return (
         <div className="relative group">
             <div className={`absolute -top-3 left-6 text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase transition-all ${required ? 'bg-[#5C67F2]' : 'bg-slate-300 group-focus-within:bg-[#5C67F2]'}`}>
                 {label}{required ? '*' : ''}
             </div>
-            <input 
-                type="text" 
-                value={value} 
+            <input
+                type="text"
+                value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="w-full h-16 px-8 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold placeholder:text-slate-200 transition-all bg-white"
+                disabled={disabled}
+                className="w-full h-16 px-8 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold placeholder:text-slate-200 transition-all bg-white disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
             />
         </div>
     );
 }
 
-function ProfileSelect({ label, value, onChange, options, hint }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; hint?: string }) {
+function ProfileSelect({ label, value, onChange, options, hint, disabled }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; hint?: string; disabled?: boolean }) {
     return (
         <div className="relative">
             <div className="absolute -top-3 left-6 bg-[#868DF4] text-white text-[9px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-sm uppercase">
@@ -388,7 +421,8 @@ function ProfileSelect({ label, value, onChange, options, hint }: { label: strin
                 <select
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    className="w-full h-16 pl-8 pr-12 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold bg-white appearance-none cursor-pointer transition-all"
+                    disabled={disabled}
+                    className="w-full h-16 pl-8 pr-12 border-2 border-slate-100 rounded-3xl focus:outline-none focus:border-[#5C67F2] text-slate-700 font-bold bg-white appearance-none cursor-pointer transition-all disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                 >
                     {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
