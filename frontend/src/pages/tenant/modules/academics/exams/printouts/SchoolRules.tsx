@@ -1,7 +1,7 @@
 /**
- * Exams → Printouts → School Rules: a short, free-text list of school rules kept once
- * (General school conduct rules, not tied to any exam or class) and printed/downloaded
- * on demand, branded with the school's own header.
+ * Exams → Printouts → School Rules: prints/downloads the SAME rules list a school keeps
+ * under General Settings → Rules & Regulations (the `rules_regulations` document) — editing
+ * it from either screen shows up on the other, instead of keeping a second separate copy.
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +11,7 @@ import { ArrowLeft, Plus, X, Printer, Download, Save, Loader2, ScrollText } from
 import api from "@/lib/api";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 import { downloadHtmlAsPdf } from "@/lib/pdfDoc";
+import { parseRulesContent, formatRulesContent } from "@/lib/rulesRegulations";
 
 const INK = "#1f2937";
 const border = { border: "0.5px solid #e5e7eb" };
@@ -20,14 +21,22 @@ export default function SchoolRules() {
     const nav = useNavigate();
     const qc = useQueryClient();
     const school = useSchoolBrand();
-    const { data, isLoading } = useQuery<{ rules: string[] }>({ queryKey: ["school_rules"], queryFn: async () => (await api.get("/school-rules")).data });
+    const { data, isLoading } = useQuery({
+        queryKey: ["rules_regulations"],
+        queryFn: async () => (await api.get("/rules_regulations")).data?.[0] || null,
+    });
     const [rules, setRules] = useState<string[]>([]);
     const [dirty, setDirty] = useState(false);
-    useEffect(() => { if (data) { setRules(data.rules); setDirty(false); } }, [data]);
+    useEffect(() => { if (data !== undefined) { setRules(parseRulesContent(data?.content)); setDirty(false); } }, [data]);
 
     const save = useMutation({
-        mutationFn: async () => (await api.put("/school-rules", { rules: rules.filter(r => r.trim()) })).data,
-        onSuccess: (d: { rules: string[] }) => { setRules(d.rules); setDirty(false); qc.invalidateQueries({ queryKey: ["school_rules"] }); toast.success("School rules saved"); },
+        mutationFn: async () => {
+            const content = formatRulesContent(rules);
+            return data?._id
+                ? (await api.patch(`/rules_regulations/${data._id}`, { content })).data
+                : (await api.post("/rules_regulations", { content })).data;
+        },
+        onSuccess: () => { setDirty(false); qc.invalidateQueries({ queryKey: ["rules_regulations"] }); toast.success("School rules saved"); },
         onError: (e: any) => toast.error(e?.response?.data?.message || "Could not save"),
     });
 

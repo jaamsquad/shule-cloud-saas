@@ -3,6 +3,7 @@ import { Home, Check, Loader2, Plus, Trash2, GripVertical } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { parseRulesContent, formatRulesContent } from "@/lib/rulesRegulations";
 
 export default function RulesRegulations() {
     const queryClient = useQueryClient();
@@ -18,14 +19,8 @@ export default function RulesRegulations() {
     const [rules, setRules] = useState<string[]>([""]);
 
     useEffect(() => {
-        if (rulesData?.content) {
-            // Split by newline and remove manual numbers if they exist
-            const lines = rulesData.content.split("\n")
-                .map((line: string) => line.replace(/^\d+\.\s*/, "").trim())
-                .filter((line: string) => line !== "");
-            
-            if (lines.length > 0) setRules(lines);
-        }
+        const lines = parseRulesContent(rulesData?.content);
+        if (lines.length > 0) setRules(lines);
     }, [rulesData]);
 
     const addRule = () => setRules([...rules, ""]);
@@ -60,16 +55,11 @@ export default function RulesRegulations() {
     });
 
     const handleSave = () => {
-        const filteredRules = rules.filter(r => r.trim() !== "");
-        if (filteredRules.length === 0) {
+        const formattedContent = formatRulesContent(rules);
+        if (!formattedContent) {
             toast.error("Please add at least one rule");
             return;
         }
-        // Format with numbers: "1. Rule one\n2. Rule two"
-        const formattedContent = filteredRules
-            .map((r, i) => `${i + 1}. ${r}`)
-            .join("\n");
-            
         saveMutation.mutate(formattedContent);
     };
 
