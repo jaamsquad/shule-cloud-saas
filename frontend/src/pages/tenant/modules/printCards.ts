@@ -42,7 +42,11 @@ const DEFAULT_LAYOUT: Required<PrintLayout> = { orientation: "portrait", columns
 function buildPrintCss(L: Required<PrintLayout>): string {
     return `
   @page { size: A4 ${L.orientation}; margin: ${L.marginMm}mm; }
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+  /* Without this, Windows "High contrast"/accent-colour forced-colour modes can silently
+     swap every authored colour (gradients, accents) for a system colour during print only —
+     the page looks right on screen but prints in the OS's accent colour instead of ours. */
+  :root { forced-color-adjust: none; color-scheme: light; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; forced-color-adjust: none !important; box-sizing: border-box; }
   html, body { background: #fff !important; margin: 0; padding: 0; }
   .print-sheet {
     display: grid;
