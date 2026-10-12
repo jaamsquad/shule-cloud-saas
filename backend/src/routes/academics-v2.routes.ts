@@ -130,6 +130,10 @@ router.delete('/v2/terms/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
         await db.collection('terms').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        // Recompute "current" right away (it may fall back to an earlier term), and let
+        // the self-heal in ensureNextAcademicYear (lib/academicYears.ts) recreate the gap
+        // this just left — dates copied from the matching term the year before.
+        await syncCurrentTerm(db).catch(() => {});
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });

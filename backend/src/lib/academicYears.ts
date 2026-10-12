@@ -6,9 +6,17 @@
  * year/terms are ordinary editable records (Academic System → Academic Years & Terms); nothing
  * is locked — admins can change dates for just that year same as any other.
  *
+ * Also self-heals a GAP: if an admin deletes a term (e.g. "Term 1 2027") the school is now
+ * missing part of its forward-looking schedule — "current" quietly falls back to an earlier
+ * term (Term 3 2026) with no replacement ahead of it. The next time this runs, the missing
+ * term is recreated — same month/day as the matching term the year before, shifted a year
+ * forward, exactly like a brand-new year's terms are built — so the school is never left
+ * without a full year ahead of it just because one term record was removed.
+ *
  * Hooked in two places: lazily inside cbcTerm.ts's syncCurrentTerm() (so an active school
- * self-heals the moment anyone loads a page that reads terms), and on a background interval
- * (server.ts) for tenants nobody is actively viewing.
+ * self-heals the moment anyone loads a page that reads terms — including right after a term
+ * delete, since academics-v2.routes.ts calls syncCurrentTerm there too), and on a background
+ * interval (server.ts) for tenants nobody is actively viewing.
  */
 import { Db } from 'mongodb';
 
@@ -16,14 +24,37 @@ const toDate = (v: any): Date | null => { if (!v) return null; const d = new Dat
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const shiftYear = (v: any, years = 1): string | undefined => { const d = toDate(v); if (!d) return undefined; d.setFullYear(d.getFullYear() + years); return iso(d); };
 
+/** Recreates any term `targetYear` is missing that `templateYear` has, dates shifted one year forward. */
+async function backfillMissingTerms(db: Db, templateYear: any, targetYear: any): Promise<void> {
+    const [templateTerms, targetTerms] = await Promise.all([
+        db.collection('terms').find({ academicYearId: String(templateYear._id), deletedAt: { $exists: false } }).toArray().catch(() => [] as any[]),
+        db.collection('terms').find({ academicYearId: String(targetYear._id), deletedAt: { $exists: false } }).toArray().catch(() => [] as any[]),
+    ]);
+    if (!templateTerms.length) return;
+    const have = new Set(targetTerms.map((t: any) => Number(t.termNumber)));
+    const missing = templateTerms.filter((t: any) => !have.has(Number(t.termNumber)));
+    if (!missing.length) return;
+    await db.collection('terms').insertMany(missing.map((t: any) => ({
+        academicYearId: String(targetYear._id), academicYear: targetYear.year,
+        name: t.name, termNumber: t.termNumber,
+        startDate: shiftYear(t.startDate), endDate: shiftYear(t.endDate),
+        isActive: false, createdAt: new Date(), autoCreated: true, autoRestored: true,
+    })));
+}
+
 export async function ensureNextAcademicYear(db: Db): Promise<void> {
     const years: any[] = await db.collection('academic_years').find({ deletedAt: { $exists: false } }).sort({ year: -1 }).limit(1).toArray().catch(() => []);
     const latest = years[0];
     if (!latest) return;   // no first year on file yet — the school creates that one by hand, once
 
+    // Self-heal: the latest (furthest-ahead) year on file might be missing a term an admin
+    // deleted — recreate it against the year before, using that as the dated template.
+    const prevOfLatest: any = await db.collection('academic_years').findOne({ year: Number(latest.year) - 1, deletedAt: { $exists: false } }).catch(() => null);
+    if (prevOfLatest) await backfillMissingTerms(db, prevOfLatest, latest);
+
     const nextYearNum = Number(latest.year) + 1;
     const already = await db.collection('academic_years').findOne({ year: nextYearNum, deletedAt: { $exists: false } }).catch(() => null);
-    if (already) return;   // already created (by hand, or by us earlier) — nothing to do
+    if (already) { await backfillMissingTerms(db, latest, already); return; }   // already created — just make sure it's complete
 
     // Only create the next year once the latest one has actually begun, and either has no end
     // date yet or is within its final month — never pre-empt a year that hasn't started.
