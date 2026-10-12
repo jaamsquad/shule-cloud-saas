@@ -426,7 +426,6 @@ export const navItems: NavItem[] = [
   { label: "General Settings", icon: Settings, moduleKey: "settings", children: [
       { label: "Institute Profile", path: "/settings/profile" },
       { label: "Learning Periods", path: "/academics/periods" },
-      { label: "Academic Term Settings", path: "/settings/term-settings" },
       { label: "Fees Particulars", path: "/settings/fees-particulars" },
       { label: "Class Tuition Fees", path: "/settings/class-tuition" },
       { label: "Fees Structure", path: "/settings/fees-structure", locked: true },
