@@ -79,6 +79,11 @@ export function resolveClassRoute(cls: any, classes: any[], graduateFinal = true
         const up = live.filter(c => Number(c.level) === lvl + 1 && nrm(c.curriculumType || '844') === cur && sid(c._id) !== sid(cls._id));
         if (up.length === 1) return { action: 'promote', toClass: up[0], via: `Next level (${lvl + 1})` };
         if (up.length > 1) return { action: 'unresolved', reason: `Several classes are at level ${lvl + 1} — choose one in class setup` };
+        // No class one level up. If this is the highest level the school actually offers in this
+        // curriculum (e.g. a CBC school that stops at Grade 9, never ticking Grade 10-12 in Classes
+        // We Offer), that's the end of the ladder — graduate — not a data error to leave unresolved.
+        const maxLvl = Math.max(0, ...live.filter(c => nrm(c.curriculumType || '844') === cur).map(c => Number(c.level) || 0));
+        if (lvl >= maxLvl) return graduateFinal ? { action: 'graduate', via: 'Highest class the school offers' } : { action: 'unresolved', reason: 'Highest class offered (graduation is off for this run)' };
     }
     return { action: 'unresolved', reason: next ? `No class named ${next} — create it or choose the next class in class setup` : 'No next class — choose one in class setup or mark it final' };
 }
@@ -312,6 +317,28 @@ export async function runSchedule(db: any, sch: any, by: string) {
     } catch (e: any) {
         await db.collection('promotion_schedules').updateOne({ _id: sch._id }, { $set: { status: 'failed', error: e.message, failedAt: new Date() } });
         throw e;
+    }
+}
+
+/**
+ * Auto-promotes every active student onto the next class, the moment the academic YEAR
+ * itself advances (not a term-to-term move within the same year — see cbcTerm.ts's
+ * syncCurrentTerm, the only caller). Grade 1 → Grade 2 → … → Grade 9, then Grade 10-12 if
+ * the school offers senior school (else graduates at 9); Form 1 → 2 → 3 → 4 → graduates —
+ * all via the same class ladder (resolveClassRoute) the manual/scheduled promotion UI uses.
+ *
+ * Idempotent: `runId` is deterministic per year, so if this fires more than once (another
+ * tenant request, a retry) the per-student `lastPromotion.toYear` / `promotion_run_items`
+ * guards already in buildPromotionPlan/executePromotion make every call after the first a
+ * cheap no-op — never double-promotes.
+ */
+export async function runAutoPromotionForYearTransition(db: any, newYear: number | string) {
+    const runId = `auto-year-${newYear}`;
+    try {
+        return await executePromotion(db, runId, { academicYear: String(newYear), graduateFinal: true }, 'auto-year-transition');
+    } catch (e: any) {
+        // Never let a promotion failure break the term/year sync that triggered it.
+        return { error: e.message };
     }
 }
 

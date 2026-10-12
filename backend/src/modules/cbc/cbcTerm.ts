@@ -76,11 +76,24 @@ export async function syncCurrentTerm(db: Db): Promise<void> {
         ? started.reduce((a, b) => (toDate(b.startDate)!.getTime() > toDate(a.startDate)!.getTime() ? b : a))
         : dated.reduce((a, b) => (toDate(b.startDate)!.getTime() < toDate(a.startDate)!.getTime() ? b : a));
     if (pick.isActive) return;   // already correct — nothing to write
+    // Capture the outgoing active year BEFORE overwriting it, so we can tell whether this
+    // flip is just a term-to-term move within the same year (Term 1 → Term 2) or the
+    // academic year itself rolling over (Term 3 2026 → Term 1 2027) — students are only
+    // auto-promoted on the latter.
+    const prevActiveYear = await db.collection('academic_years').findOne({ isActive: true }).catch(() => null);
     await db.collection('terms').updateMany({}, { $set: { isActive: false } });
     await db.collection('terms').updateOne({ _id: pick._id }, { $set: { isActive: true } });
     if (pick.academicYearId) {
         await db.collection('academic_years').updateMany({}, { $set: { isActive: false } });
         try { await db.collection('academic_years').updateOne({ _id: new ObjectId(String(pick.academicYearId)) }, { $set: { isActive: true } }); } catch { /* not an ObjectId */ }
+        const yearChanged = !!pick.academicYear && (!prevActiveYear || String(prevActiveYear._id) !== String(pick.academicYearId));
+        if (yearChanged) {
+            // Fire-and-forget: never let student promotion block or fail the term/year sync
+            // that every page load depends on.
+            import('../../services/promotion.service')
+                .then(({ runAutoPromotionForYearTransition }) => runAutoPromotionForYearTransition(db, pick.academicYear))
+                .catch(() => {});
+        }
     }
     // Legacy `periods` collection a few older screens still read directly.
     await db.collection('periods').updateMany({}, { $set: { isCurrent: false } }).catch(() => {});
