@@ -640,29 +640,26 @@ router.put('/settings/numbering', enforceCrud('settings', 'update'), async (req,
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// ─── School rules (Exams → Printouts → School Rules) ─────────────────────────
-// A short free-text list the school keeps once and prints whenever needed —
-// handbook-style rules of conduct, not tied to any one exam or class.
-const DEFAULT_SCHOOL_RULES = [
-    'All learners must be in full, correct school uniform at all times.',
-    'Punctuality is mandatory — be on the school compound before the first bell.',
-    'Respect for teachers, staff, fellow learners and school property is expected at all times.',
-    'Any form of bullying, dishonesty or dangerous behaviour will not be tolerated.',
-    'Mobile phones and other electronic devices are not allowed on the school compound unless authorised.',
-];
-router.get('/school-rules', async (req, res) => {
+// School rules (Exams → Printouts → School Rules) used to keep its own separate list in a
+// `school_rules` collection; it now reads/writes the same `rules_regulations` document as
+// General Settings → Rules & Regulations, so the two screens always show the same list.
+// One-time, lazy: if a school already saved rules the old way and hasn't touched Rules &
+// Regulations yet, carry that list over the first time anyone asks for it (see the
+// `/rules_regulations` route below).
+async function migrateLegacySchoolRules(req: any, res: any, next: any) {
     try {
-        const doc = await getRequestDb(req).collection('school_rules').findOne({ _id: 'rules' as any });
-        res.json({ rules: Array.isArray(doc?.rules) ? doc!.rules : DEFAULT_SCHOOL_RULES });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-router.put('/school-rules', enforceCrud('settings', 'update'), async (req, res) => {
-    try {
-        const rules = (Array.isArray(req.body?.rules) ? req.body.rules : []).map((r: any) => String(r ?? '').trim().slice(0, 400)).filter(Boolean).slice(0, 60);
-        await getRequestDb(req).collection('school_rules').updateOne({ _id: 'rules' as any }, { $set: { rules, updatedAt: new Date() } }, { upsert: true });
-        res.json({ ok: true, rules });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
+        const db = getRequestDb(req);
+        const already = await db.collection('rules_regulations').countDocuments();
+        if (!already) {
+            const legacy = await db.collection('school_rules').findOne({ _id: 'rules' as any });
+            if (Array.isArray(legacy?.rules) && legacy.rules.length) {
+                const content = legacy.rules.map((r: any, i: number) => `${i + 1}. ${String(r ?? '').trim()}`).join('\n');
+                await db.collection('rules_regulations').insertOne({ content, createdAt: new Date(), migratedFrom: 'school_rules' });
+            }
+        }
+    } catch { /* non-fatal — fall through to the normal list either way */ }
+    next();
+}
 
 // ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
 // See lib/studentStatus.ts: Transferred / Graduated students are taken out of their class
@@ -905,7 +902,7 @@ router.post('/staff/bulk',           enforceCrud('employees', 'create'), c.bulkC
 router.get('/tenant_profile',        c.getItems('tenant_profile'));
 
 // ─── Rules & Regulations ─────────────────────────────────────────────────────
-router.get('/rules_regulations',     c.getItems('rules_regulations'));
+router.get('/rules_regulations',     migrateLegacySchoolRules, c.getItems('rules_regulations'));
 router.post('/rules_regulations',    c.createItem('rules_regulations'));
 router.patch('/rules_regulations/:id', c.updateItem('rules_regulations'));
 
