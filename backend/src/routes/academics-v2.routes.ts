@@ -126,10 +126,59 @@ router.patch('/v2/terms/:id', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+/**
+ * What a term can't be deleted out from under: exams held in it, fees invoiced for it, or
+ * students already promoted/graduated during its academic year. Each check matches both the
+ * precise id link (where a collection stores the term's own _id) and the looser name+year
+ * match (where it only stores "Term 1" + 2027 as plain fields) — the same two shapes used
+ * throughout the app (see resolveTermFilter in lib/assistantQueries.ts for the fees version).
+ */
+async function termUsageReasons(db: any, term: any): Promise<string[]> {
+    const termId = String(term._id);
+    const reasons: string[] = [];
+
+    const examCount = await db.collection('exams').countDocuments({
+        $or: [{ termId }, { term: term.name, academicYear: term.academicYear }],
+    }).catch(() => 0);
+    if (examCount) reasons.push(`${examCount} exam${examCount === 1 ? '' : 's'}`);
+
+    const invoiceCount = await db.collection('invoices').countDocuments({
+        $or: [
+            { semester_id: termId }, { term_id: termId }, { termId },
+            { term: term.name, academicYear: term.academicYear },
+            { semester: term.name, academicYear: term.academicYear },
+            { termName: term.name, academicYear: term.academicYear },
+        ],
+    }).catch(() => 0);
+    if (invoiceCount) reasons.push(`${invoiceCount} fee invoice${invoiceCount === 1 ? '' : 's'}`);
+
+    // Promotions/graduations are recorded per academic year, not per term, so any run or
+    // class-history entry tagged with this term's year means students have already moved
+    // under it — deleting one of its terms now would leave that history pointing nowhere.
+    const yearStr = String(term.academicYear ?? '');
+    const [promotionRuns, movedStudents] = await Promise.all([
+        db.collection('promotion_schedules').countDocuments({ 'options.academicYear': yearStr, status: { $in: ['completed', 'reverting', 'reverted'] } }).catch(() => 0),
+        db.collection('students').countDocuments({ 'classHistory.academicYear': yearStr }).catch(() => 0),
+    ]);
+    if (promotionRuns || movedStudents) reasons.push(`${movedStudents || promotionRuns} student${(movedStudents || promotionRuns) === 1 ? '' : 's'} already moved/graduated`);
+
+    return reasons;
+}
+
 router.delete('/v2/terms/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('terms').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        const term = await db.collection('terms').findOne({ _id: toOid(req.params.id) });
+        if (!term) return res.status(404).json({ message: 'Term not found' });
+        const reasons = await termUsageReasons(db, term);
+        if (reasons.length) {
+            return res.status(409).json({ message: `Can't delete ${term.name} ${term.academicYear || ''} — it already has ${reasons.join(', ')}. A term with real records can't be removed.` });
+        }
+        await db.collection('terms').updateOne({ _id: term._id }, { $set: { deletedAt: now() } });
+        // Recompute "current" right away (it may fall back to an earlier term), and let
+        // the self-heal in ensureNextAcademicYear (lib/academicYears.ts) recreate the gap
+        // this just left — dates copied from the matching term the year before.
+        await syncCurrentTerm(db).catch(() => {});
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
