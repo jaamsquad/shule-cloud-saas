@@ -349,6 +349,19 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
         <div className="rounded-full flex items-center justify-center font-black flex-shrink-0" style={{ width: size, height: size, background: onDark ? "rgba(255,255,255,0.15)" : accent, color: "#fff", fontSize: "2.6mm" }}>{(schoolName || "S")[0]}</div>
     );
 
+    // Faint full-card backdrop — the school's own logo when it has one, else the ShuleCloud
+    // wordmark, so a card never looks unbranded. Sits behind every other element: the root
+    // card gets z-0 (so it forms its own stacking context) and this sits at z just below it.
+    const Watermark = () => (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden" style={{ zIndex: -1 }}>
+            {schoolLogo ? (
+                <img src={schoolLogo} alt="" className="object-contain" style={{ width: "55%", opacity: 0.08, filter: "grayscale(1)" }} />
+            ) : (
+                <span className="font-black uppercase" style={{ fontSize: "7mm", letterSpacing: "0.06em", color: "#64748b", opacity: 0.16, whiteSpace: "nowrap" }}>shulecloud</span>
+            )}
+        </div>
+    );
+
     // ── Classic Navy (CR80 landscape, front + back) ────────────────────────────
     if (activeStyle === "Classic Navy") {
         const NAVY = accent;
@@ -356,8 +369,9 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
         return (
             <div className="flex flex-col gap-[3mm] group">
                 {/* FRONT */}
-                <div className="bg-white rounded-[2mm] shadow-xl overflow-hidden relative flex flex-col" style={CR80_LANDSCAPE}>
+                <div className="bg-white rounded-[2mm] shadow-xl overflow-hidden relative z-0 flex flex-col" style={CR80_LANDSCAPE}>
                     <CameraBtn />
+                    <Watermark />
                     {/* Header */}
                     <div className="flex items-center gap-[1.5mm] px-[3mm] pt-[2mm] pb-[1mm]">
                         <SchoolLogo size="6mm" />
@@ -407,8 +421,9 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
     // ── Landscape (CR80 landscape, coloured side panel) ────────────────────────
     if (activeStyle === "Landscape") {
         return (
-            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative flex group" style={CR80_LANDSCAPE}>
+            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative z-0 flex group" style={CR80_LANDSCAPE}>
                 <CameraBtn />
+                <Watermark />
                 {/* Left colored panel */}
                 <div className="flex flex-col items-center justify-center relative flex-shrink-0" style={{ width: "28mm", background: `linear-gradient(to bottom, ${accent}, #0A1B3F)`, padding: "2mm" }}>
                     <div className="absolute -right-[1.5mm] top-0 bottom-0 w-[2.5mm] bg-white/10 -skew-x-12 pointer-events-none" />
@@ -455,8 +470,9 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
     // ── Modern (CR80 landscape, top colour banner with overlapping photo) ──────
     if (activeStyle === "Modern") {
         return (
-            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative flex flex-col group" style={CR80_LANDSCAPE}>
+            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative z-0 flex flex-col group" style={CR80_LANDSCAPE}>
                 <CameraBtn />
+                <Watermark />
                 {/* Top banner */}
                 <div className="flex items-center gap-[1.5mm] flex-shrink-0" style={{ height: "16mm", background: `linear-gradient(135deg, ${accent}, #0A1B3F)`, padding: "0 3mm" }}>
                     <SchoolLogo size="6.5mm" onDark />
@@ -496,8 +512,9 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
     // ── Minimal (CR80 landscape, clean with a thin accent bar) ─────────────────
     if (activeStyle === "Minimal") {
         return (
-            <div className="bg-white rounded-[1.5mm] shadow-xl border border-gray-100 overflow-hidden relative flex group" style={CR80_LANDSCAPE}>
+            <div className="bg-white rounded-[1.5mm] shadow-xl border border-gray-100 overflow-hidden relative z-0 flex group" style={CR80_LANDSCAPE}>
                 <CameraBtn />
+                <Watermark />
                 <div className="flex-shrink-0" style={{ width: "1.8mm", background: accent }} />
                 <div className="flex-1 min-w-0 flex flex-col" style={{ padding: "2.5mm" }}>
                     <div className="flex items-center gap-[1.2mm]" style={{ marginBottom: "2mm" }}>
@@ -534,7 +551,8 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
 
     // ── Default (CR80 portrait badge) ───────────────────────────────────────────
     return (
-        <div className="bg-white rounded-[3mm] shadow-xl border border-gray-100 overflow-hidden relative flex flex-col items-center group" style={CR80_PORTRAIT}>
+        <div className="bg-white rounded-[3mm] shadow-xl border border-gray-100 overflow-hidden relative z-0 flex flex-col items-center group" style={CR80_PORTRAIT}>
+            <Watermark />
             {/* Header strip with logo + school name */}
             <div className="w-full flex items-center justify-center gap-[1.2mm] flex-shrink-0" style={{ padding: "2mm 2mm 0" }}>
                 <SchoolLogo size="5mm" />
