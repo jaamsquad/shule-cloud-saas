@@ -1,4 +1,4 @@
-import { Home, Search, Printer, Settings2, Camera, User, Loader2, QrCode, Barcode, GraduationCap, X, RotateCcw } from "lucide-react";
+import { Home, Search, Printer, Settings2, Camera, User, Loader2, GraduationCap, X, RotateCcw } from "lucide-react";
 import { printSingleCard, countCards } from "./printCards";
 import PrintCardsModal from "./PrintCardsModal";
 import { useState, useEffect } from "react";
@@ -155,12 +155,18 @@ export default function StudentIdCards() {
                     <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
                         {visibleStudents.length > 0 ? (
                             visibleStudents.map((student: any) => (
-                                <div key={student._id} className="id-card flex justify-center relative group/card">
-                                    <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
-                                        className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
-                                        <Printer className="w-4 h-4" />
-                                    </button>
-                                    <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
+                                // The zoom wrapper is purely a screen convenience — the real card (.id-card) is
+                                // sized to the physical CR80 ID card dimensions (85.6 × 54mm) so it prints at
+                                // exactly normal ID card size; printCards.ts clones only .id-card itself, so
+                                // this wrapper's zoom never reaches the printed page.
+                                <div key={student._id} className="flex justify-center print:contents" style={{ zoom: 2.35 } as any}>
+                                    <div className="id-card relative group/card">
+                                        <button data-no-print onClick={(e) => printSingleCard(e.currentTarget)} title="Print this card"
+                                            className="absolute -top-3 -right-1 z-20 w-8 h-8 rounded-full bg-white border border-slate-200 shadow text-slate-500 hover:text-[#5C67F2] flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity print:hidden">
+                                            <Printer className="w-4 h-4" />
+                                        </button>
+                                        <IdCard student={student} onUpload={handleImageUpload} isUploading={uploading} activeStyle={activeStyle} layout={layout} brand={brand} />
+                                    </div>
                                 </div>
                             ))
                         ) : (
@@ -280,19 +286,26 @@ function CustomizePanel({ layout, setL, setField, onReset, onClose }: {
     );
 }
 
+// Real CR80 card dimensions (the worldwide standard ID/bank-card size) — printing at
+// these physical sizes, rather than arbitrary pixel boxes, is what makes a card come
+// out of the printer as a normal ID card instead of an oversized sheet of paper.
+const CR80_LANDSCAPE = { width: "85.6mm", height: "54mm" };
+const CR80_PORTRAIT = { width: "54mm", height: "85.6mm" };
+
 function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: { student: any, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, isUploading: boolean, activeStyle: string, layout: CardLayout, brand?: { name: string; logo: string } }) {
     // School name & logo default to the real institution profile (override via layout.schoolName).
-    const schoolName = layout.schoolName || brand?.name || "Student Identity Card";
+    const schoolName = layout.schoolName || brand?.name || "School";
     const schoolLogo = brand?.logo || "";
     const photo = student.avatar || student.photo || student.studentPhoto || student.image || student.passportPhoto;
     const regNo = student.registrationNo || student.admNo || "—";
+    const studentName = student.studentName || student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student";
     const accent = layout.accent;
     // Wallet code = SCW + last 6 of the student _id (deterministic) — scannable for canteen/wallet.
     const walletCode = `SCW${String(student._id || "").slice(-6).toUpperCase()}`;
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(walletCode)}`;
 
     // Real Code-128 barcode (matches the ID Card Studio) — encodes the reg number.
-    const barSrc = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(regNo)}&scale=3&height=10&includetext=false`;
+    const barSrc = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(regNo)}&scale=2&height=8&includetext=false`;
 
     // Detail rows respecting the configured field toggles.
     const rows: [string, string][] = [];
@@ -301,97 +314,115 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
     if (layout.fields.gender) rows.push(["Gender", student.gender || "—"]);
     if (layout.fields.doa) rows.push(["DOA", student.admissionDate || "—"]);
 
-    // ── Classic Navy (the ID Card Studio design, rendered per-student) ────────
+    const CameraBtn = () => layout.showPhoto ? (
+        <label data-no-print className="absolute top-[2mm] right-[2mm] cursor-pointer z-20 print:hidden">
+            <input type="file" className="hidden" onChange={onUpload} accept="image/*" />
+            <div className="w-[6mm] h-[6mm] bg-white/90 rounded-md border border-gray-200 shadow-sm flex items-center justify-center" style={{ color: accent }}><Camera style={{ width: "3.2mm", height: "3.2mm" }} /></div>
+        </label>
+    ) : null;
+
+    const SchoolLogo = ({ size = "7mm", onDark = false }: { size?: string; onDark?: boolean }) => schoolLogo ? (
+        <img src={schoolLogo} alt="" className="object-contain bg-white rounded-full border border-slate-100 flex-shrink-0" style={{ width: size, height: size }} />
+    ) : (
+        <div className="rounded-full flex items-center justify-center font-black flex-shrink-0" style={{ width: size, height: size, background: onDark ? "rgba(255,255,255,0.15)" : accent, color: "#fff", fontSize: "2.6mm" }}>{(schoolName || "S")[0]}</div>
+    );
+
+    // ── Classic Navy (CR80 landscape, front + back) ────────────────────────────
     if (activeStyle === "Classic Navy") {
-        const NAVY = accent;  // Classic Navy now follows the chosen accent colour.
+        const NAVY = accent;
         const walletQr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=${encodeURIComponent(`https://shulecloud.com/wallet/${encodeURIComponent(regNo)}`)}`;
         return (
-            <div className="flex flex-col gap-4 group">
+            <div className="flex flex-col gap-[3mm] group">
                 {/* FRONT */}
-                <div className="w-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden relative">
-                    {layout.showPhoto && (
-                        <label data-no-print className="absolute top-3 right-3 cursor-pointer z-20 print:hidden"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-8 h-8 bg-white/90 rounded-lg border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: NAVY }}><Camera className="w-4 h-4" /></div></label>
-                    )}
+                <div className="bg-white rounded-[2mm] shadow-xl overflow-hidden relative flex flex-col" style={CR80_LANDSCAPE}>
+                    <CameraBtn />
                     {/* Header */}
-                    <div className="flex items-center gap-3 px-5 py-3">
-                        {schoolLogo
-                            ? <img src={schoolLogo} alt="" className="w-9 h-9 rounded-full object-contain bg-white border border-slate-100" />
-                            : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-base" style={{ background: NAVY }}>{(schoolName || "S")[0]}</div>}
-                        <div className="flex-1">
-                            <div className="font-black text-[15px] leading-tight" style={{ color: NAVY }}>{schoolName}</div>
-                            <div className="text-[9px] font-bold tracking-wider text-slate-500">{layout.cardTitle.toUpperCase()}</div>
+                    <div className="flex items-center gap-[1.5mm] px-[3mm] pt-[2mm] pb-[1mm]">
+                        <SchoolLogo size="6mm" />
+                        <div className="flex-1 min-w-0">
+                            <div className="font-black leading-tight truncate" style={{ color: NAVY, fontSize: "3mm" }}>{schoolName}</div>
+                            <div className="font-bold tracking-wider text-slate-500 truncate" style={{ fontSize: "1.9mm" }}>{layout.cardTitle.toUpperCase()}</div>
                         </div>
-                        <span className="text-[10px] font-black text-white px-2.5 py-1 rounded-full" style={{ background: NAVY }}>{student.admissionDate ? String(student.admissionDate).slice(0, 4) : new Date().getFullYear()}</span>
+                        <span className="font-black text-white rounded-full flex-shrink-0" style={{ background: NAVY, fontSize: "1.9mm", padding: "0.6mm 1.8mm" }}>{student.admissionDate ? String(student.admissionDate).slice(0, 4) : new Date().getFullYear()}</span>
                     </div>
                     {/* Navy body */}
-                    <div className="flex gap-4 px-5 py-4 text-white" style={{ background: NAVY }}>
+                    <div className="flex gap-[2.5mm] px-[3mm] py-[2mm] text-white flex-1 min-h-0" style={{ background: NAVY }}>
                         {layout.showPhoto && (
-                            <div className={`w-[100px] h-[124px] flex items-center justify-center text-[9px] font-black overflow-hidden ${layout.roundedPhoto ? "rounded-2xl" : "rounded-lg"}`} style={{ background: "#1c3a63", color: "#5b7aa8" }}>
-                                {isUploading ? <Loader2 className="w-7 h-7 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : "PHOTO"}
+                            <div className={`flex items-center justify-center font-black overflow-hidden flex-shrink-0 ${layout.roundedPhoto ? "rounded-[1.5mm]" : "rounded-[1mm]"}`} style={{ width: "16mm", height: "20mm", background: "#1c3a63", color: "#5b7aa8", fontSize: "2mm" }}>
+                                {isUploading ? <Loader2 className="animate-spin text-white" style={{ width: "5mm", height: "5mm" }} /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : "PHOTO"}
                             </div>
                         )}
-                        <div className="flex-1" style={{ color: "#ffffff" }}>
-                            <div className="text-[19px] font-black leading-tight" style={{ color: "#ffffff" }}>{student.studentName || student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student"}</div>
-                            <div className="text-[12px] mb-3" style={{ color: "#dbe7f5" }}>{student.gender || ""}</div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                        <div className="flex-1 min-w-0" style={{ color: "#ffffff" }}>
+                            <div className="font-black leading-tight truncate" style={{ color: "#ffffff", fontSize: "3.4mm" }}>{studentName}</div>
+                            <div className="mb-[1.5mm]" style={{ color: "#dbe7f5", fontSize: "2.2mm" }}>{student.gender || ""}</div>
+                            <div className="grid grid-cols-2 gap-x-[2mm] gap-y-[1mm]">
                                 {rows.map(([l, v]) => (
-                                    <div key={l}><div className="text-[8px] font-bold tracking-wide uppercase" style={{ color: "#c7d6ea" }}>{l}</div><div className="text-[12px] font-black" style={{ color: "#ffffff" }}>{v}</div></div>
+                                    <div key={l} className="min-w-0"><div className="font-bold tracking-wide uppercase truncate" style={{ color: "#c7d6ea", fontSize: "1.7mm" }}>{l}</div><div className="font-black truncate" style={{ color: "#ffffff", fontSize: "2.2mm" }}>{v}</div></div>
                                 ))}
                             </div>
                         </div>
                     </div>
                     {/* Strip: barcode + chip */}
-                    <div className="flex items-center gap-3 px-5 bg-white" style={{ height: 48 }}>
-                        {layout.showBarcode ? <img src={barSrc} alt="barcode" className="h-7" /> : <div className="flex-1" />}
-                        <span className="text-[10px] tracking-widest font-bold text-slate-500">{String(regNo).replace(/\W/g, "")}</span>
-                        <div className="ml-auto w-8 h-6 rounded" style={{ background: "linear-gradient(135deg,#e8b94a,#c8902a)" }} />
+                    <div className="flex items-center gap-[1.5mm] px-[3mm] bg-white flex-shrink-0" style={{ height: "7mm" }}>
+                        {layout.showBarcode ? <img src={barSrc} alt="barcode" style={{ height: "4mm" }} /> : <div className="flex-1" />}
+                        <span className="tracking-widest font-bold text-slate-500 truncate" style={{ fontSize: "1.7mm" }}>{String(regNo).replace(/\W/g, "")}</span>
+                        <div className="ml-auto rounded flex-shrink-0" style={{ width: "5mm", height: "3.5mm", background: "linear-gradient(135deg,#e8b94a,#c8902a)" }} />
                     </div>
                 </div>
 
                 {/* BACK */}
                 {layout.showQr && (
-                    <div className="w-[520px] h-[200px] rounded-2xl shadow-2xl flex flex-col items-center justify-center text-white" style={{ background: NAVY }}>
-                        <div className="text-[12px] font-black tracking-wider mb-3" style={{ color: "#9db6da" }}>SCAN FOR STUDENT WALLET</div>
-                        <img src={walletQr} alt="wallet QR" className="w-[100px] h-[100px] bg-white p-2 rounded-lg" />
-                        <div className="mt-3 text-[12px] tracking-widest" style={{ color: "#cbd5e1" }}>{regNo}</div>
+                    <div className="rounded-[2mm] shadow-xl flex flex-col items-center justify-center text-white" style={{ ...CR80_LANDSCAPE, background: NAVY }}>
+                        <div className="font-black tracking-wider" style={{ color: "#9db6da", fontSize: "2.2mm", marginBottom: "1.5mm" }}>SCAN FOR STUDENT WALLET</div>
+                        <img src={walletQr} alt="wallet QR" className="bg-white rounded" style={{ width: "16mm", height: "16mm", padding: "1mm" }} />
+                        <div style={{ color: "#cbd5e1", fontSize: "2mm", marginTop: "1.5mm", letterSpacing: "0.1em" }}>{regNo}</div>
                     </div>
                 )}
             </div>
         );
     }
 
+    // ── Landscape (CR80 landscape, coloured side panel) ────────────────────────
     if (activeStyle === "Landscape") {
         return (
-            <div className="w-[520px] h-[330px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden relative flex group">
-                {layout.showPhoto && (
-                    <label data-no-print className="absolute top-3 right-3 cursor-pointer z-20 print:hidden"><input type="file" className="hidden" onChange={onUpload} accept="image/*" /><div className="w-9 h-9 bg-white/80 rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}><Camera className="w-4 h-4" /></div></label>
-                )}
+            <div className="bg-white rounded-[2mm] shadow-xl border border-gray-100 overflow-hidden relative flex group" style={CR80_LANDSCAPE}>
+                <CameraBtn />
                 {/* Left colored panel */}
-                <div className="w-[185px] flex flex-col items-center justify-center p-5 relative" style={{ background: `linear-gradient(to bottom, ${accent}, #0A1B3F)` }}>
-                    <div className="absolute -right-5 top-0 bottom-0 w-10 bg-white/10 -skew-x-12 pointer-events-none" />
+                <div className="flex flex-col items-center justify-center relative flex-shrink-0" style={{ width: "28mm", background: `linear-gradient(to bottom, ${accent}, #0A1B3F)`, padding: "2mm" }}>
+                    <div className="absolute -right-[1.5mm] top-0 bottom-0 w-[2.5mm] bg-white/10 -skew-x-12 pointer-events-none" />
                     {layout.showPhoto && (
-                        <div className={`w-28 h-28 border-4 border-white/80 shadow-lg overflow-hidden flex items-center justify-center bg-white/10 ${layout.roundedPhoto ? "rounded-full" : "rounded-2xl"}`}>
-                            {isUploading ? <Loader2 className="w-8 h-8 animate-spin text-white" /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap className="w-12 h-12 text-white/70" />}
+                        <div className={`border-white/80 shadow-lg overflow-hidden flex items-center justify-center bg-white/10 ${layout.roundedPhoto ? "rounded-full" : "rounded-[1.5mm]"}`} style={{ width: "17mm", height: "17mm", borderWidth: "0.6mm" }}>
+                            {isUploading ? <Loader2 className="animate-spin text-white" style={{ width: "5mm", height: "5mm" }} /> : photo ? <img src={photo} alt="" className="w-full h-full object-cover" /> : <GraduationCap className="text-white/70" style={{ width: "7mm", height: "7mm" }} />}
                         </div>
                     )}
-                    <p className="text-white font-black text-[11px] uppercase tracking-widest mt-3 text-center leading-tight">{layout.cardTitle || "Student"}</p>
+                    <p className="text-white font-black uppercase tracking-widest text-center leading-tight" style={{ fontSize: "1.9mm", marginTop: "1.5mm" }}>{layout.cardTitle || "Student"}</p>
                 </div>
                 {/* Right info */}
-                <div className="flex-1 p-6 flex flex-col">
-                    {layout.schoolName && <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{layout.schoolName}</div>}
-                    <div className="flex items-center gap-2 mb-1"><GraduationCap className="w-4 h-4" style={{ color: accent }} /><span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: accent }}>{layout.cardTitle}</span></div>
-                    <h3 className="font-black text-slate-900 text-xl leading-tight">{student.studentName || "Student"}</h3>
-                    <div className="mt-4 space-y-2 text-xs flex-1">
+                <div className="flex-1 min-w-0 flex flex-col" style={{ padding: "2.5mm 3mm" }}>
+                    <div className="flex items-center gap-[1.5mm]" style={{ marginBottom: "1mm" }}>
+                        <SchoolLogo size="5.5mm" />
+                        <div className="min-w-0">
+                            <div className="font-black text-slate-800 truncate leading-tight" style={{ fontSize: "2.6mm" }}>{schoolName}</div>
+                            <div className="font-black uppercase tracking-[0.15em] truncate" style={{ color: accent, fontSize: "1.7mm" }}>{layout.cardTitle}</div>
+                        </div>
+                    </div>
+                    <h3 className="font-black text-slate-900 leading-tight truncate" style={{ fontSize: "3.6mm" }}>{studentName}</h3>
+                    <div className="flex-1 min-h-0" style={{ marginTop: "1.5mm" }}>
                         {rows.map(([k, v]) => (
-                            <div key={k} className="flex items-center"><span className="w-24 text-slate-400 font-bold uppercase text-[9px] tracking-wide">{k}</span><span className="font-bold text-slate-800">→ {v}</span></div>
+                            <div key={k} className="flex items-center" style={{ fontSize: "2mm", marginBottom: "0.8mm" }}>
+                                <span className="text-slate-400 font-bold uppercase flex-shrink-0" style={{ width: "13mm", fontSize: "1.6mm" }}>{k}</span>
+                                <span className="font-bold text-slate-800 truncate">→ {v}</span>
+                            </div>
                         ))}
                     </div>
-                    <div className="flex items-end justify-between mt-2">
+                    <div className="flex items-end justify-between" style={{ marginTop: "1mm" }}>
                         {layout.showBarcode ? (
-                            <div className="flex flex-col"><Barcode className="h-9 w-36 text-slate-800" /><span className="text-[8px] font-black text-slate-400 tracking-[0.2em] mt-0.5">{regNo}</span></div>
+                            <div className="flex flex-col min-w-0"><img src={barSrc} alt="barcode" style={{ height: "5mm", maxWidth: "22mm" }} /><span className="font-black text-slate-400 tracking-[0.15em] truncate" style={{ fontSize: "1.4mm", marginTop: "0.3mm" }}>{regNo}</span></div>
                         ) : <div />}
                         {layout.showQr && (
-                            <div className="bg-white border border-slate-100 p-1 rounded flex flex-col items-center"><img src={qrSrc} alt="wallet QR" className="w-12 h-12" /><span className="text-[6px] font-black text-slate-400 tracking-widest">{walletCode}</span></div>
+                            <div className="bg-white border border-slate-100 rounded flex flex-col items-center flex-shrink-0" style={{ padding: "0.6mm" }}>
+                                <img src={qrSrc} alt="wallet QR" style={{ width: "8mm", height: "8mm" }} />
+                            </div>
                         )}
                     </div>
                 </div>
@@ -399,88 +430,52 @@ function IdCard({ student, onUpload, isUploading, activeStyle, layout, brand }: 
         );
     }
 
+    // ── Default (CR80 portrait badge) ───────────────────────────────────────────
     return (
-        <div className="w-[340px] h-[520px] bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden relative flex flex-col items-center group">
-            {/* Background Pattern - Academic Icons */}
-            <div className="absolute inset-0 opacity-[0.04] pointer-events-none select-none overflow-hidden">
-                <svg width="100%" height="100%" className="text-gray-900">
-                    <pattern id="academic-pattern" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
-                        <path d="M20 20 L40 20 L30 10 Z" fill="currentColor" />
-                        <rect x="60" y="60" width="15" height="15" fill="currentColor" />
-                        <circle cx="20" cy="80" r="8" fill="currentColor" />
-                        <path d="M70 20 Q 80 10, 90 20 T 110 20" stroke="currentColor" fill="none" strokeWidth="2" />
-                    </pattern>
-                    <rect width="100%" height="100%" fill="url(#academic-pattern)" />
-                </svg>
+        <div className="bg-white rounded-[3mm] shadow-xl border border-gray-100 overflow-hidden relative flex flex-col items-center group" style={CR80_PORTRAIT}>
+            {/* Header strip with logo + school name */}
+            <div className="w-full flex items-center justify-center gap-[1.2mm] flex-shrink-0" style={{ padding: "2mm 2mm 0" }}>
+                <SchoolLogo size="5mm" />
+                <div className="font-black text-slate-500 uppercase tracking-[0.15em] truncate" style={{ fontSize: "1.7mm" }}>{schoolName}</div>
             </div>
+            <CameraBtn />
 
-            <div className="flex flex-col items-center pt-8 relative z-10 w-full h-full">
-                {layout.schoolName && <div className="absolute top-3 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] z-20">{layout.schoolName}</div>}
-                {/* Image Upload Label */}
-                {layout.showPhoto && (
-                    <label data-no-print className="absolute top-4 cursor-pointer hover:scale-110 transition-transform print:hidden">
-                        <input type="file" className="hidden" onChange={onUpload} accept="image/*" />
-                        <div className="w-10 h-10 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-100 shadow-sm flex items-center justify-center" style={{ color: accent }}>
-                            <Camera className="w-5 h-5" />
-                        </div>
-                    </label>
-                )}
-
-                {/* Avatar with Ring */}
-                {layout.showPhoto && (
-                    <div className="relative mt-4 mb-6">
-                        <div className={`w-36 h-36 bg-gray-50 flex items-center justify-center border-[8px] border-white shadow-xl overflow-hidden ring-1 ring-gray-100 ${layout.roundedPhoto ? "rounded-full" : "rounded-3xl"}`}>
-                            {isUploading ? (
-                                <Loader2 className="w-10 h-10 animate-spin" style={{ color: accent }} />
-                            ) : photo ? (
-                                <img src={photo} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-8">
-                                    <div className="w-12 h-12 bg-[#fcd34d] rounded-full"></div>
-                                    <div className="w-24 h-16 mt-2 rounded-t-[3rem]" style={{ background: accent }}></div>
-                                </div>
-                            )}
-                        </div>
+            {/* Avatar with Ring */}
+            {layout.showPhoto && (
+                <div className="relative flex-shrink-0" style={{ marginTop: "2mm" }}>
+                    <div className={`bg-gray-50 flex items-center justify-center shadow-md overflow-hidden ring-1 ring-gray-100 ${layout.roundedPhoto ? "rounded-full" : "rounded-[2mm]"}`} style={{ width: "22mm", height: "22mm", border: "1.2mm solid white", boxShadow: "0 0 0 0.3mm #e5e7eb" }}>
+                        {isUploading ? (
+                            <Loader2 className="animate-spin" style={{ width: "6mm", height: "6mm", color: accent }} />
+                        ) : photo ? (
+                            <img src={photo} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                            <GraduationCap style={{ width: "9mm", height: "9mm", color: accent, opacity: 0.4 }} />
+                        )}
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* Barcode Area */}
-                {layout.showBarcode && (
-                    <div className="w-56 h-14 bg-white/50 backdrop-blur-[2px] border border-gray-100 rounded-2xl flex flex-col items-center justify-center p-2 mb-4 group-hover:bg-white transition-colors">
-                        <Barcode className="w-full h-8 text-gray-800" />
-                        <span className="text-[10px] font-black text-gray-400 tracking-[0.3em] mt-1">{regNo}</span>
-                    </div>
-                )}
+            <h3 className="font-black text-slate-900 uppercase tracking-wide text-center flex-shrink-0" style={{ fontSize: "3mm", marginTop: "1.5mm", padding: "0 2mm" }}>
+                {studentName.split(' ').map((n: string, i: number) => (
+                    <span key={i} style={i === 1 ? { color: accent } : {}}>{n} </span>
+                ))}
+            </h3>
+            <div className="font-black uppercase tracking-widest flex-shrink-0" style={{ color: accent, fontSize: "1.8mm", marginTop: "0.5mm" }}>{layout.cardTitle}</div>
 
-                <h3 className="font-black text-slate-900 text-lg uppercase tracking-wider mb-8 text-center px-4">
-                    {(student.studentName || "Student").split(' ').map((n: string, i: number) => (
-                        <span key={i} style={i === 1 ? { color: accent } : {}}>{n} </span>
+            {/* Card Footer Details */}
+            <div className="w-full flex-1 min-h-0 flex flex-col items-center justify-end" style={{ padding: "1.5mm 3mm 2.5mm" }}>
+                <div className="w-full" style={{ marginBottom: "1.5mm" }}>
+                    {rows.map(([k, v]) => (
+                        <div key={k} className="flex items-center justify-center gap-[1mm] text-slate-600 font-bold" style={{ fontSize: "1.9mm", marginBottom: "0.4mm" }}>
+                            <span className="text-slate-400">{k === "Reg No" ? "ID" : k}</span><span className="text-slate-300">·</span><span className="text-slate-900">{v}</span>
+                        </div>
                     ))}
-                </h3>
-
-                {/* Card Footer Details */}
-                <div className="w-full px-10 mt-auto pb-10 flex justify-between items-end relative">
-                    <div className="space-y-4">
-                        <div className="inline-flex items-center gap-2 pb-1 border-b-2 border-slate-900">
-                            <GraduationCap className="w-5 h-5 text-slate-900" />
-                            <span className="font-black text-slate-900 text-sm tracking-widest">{layout.cardTitle.toUpperCase()}</span>
-                        </div>
-
-                        <div className="space-y-1.5 font-bold">
-                            {rows.map(([k, v]) => (
-                                <div key={k} className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span className="w-10">{k === "Reg No" ? "ID" : k}</span>
-                                    <span className="text-slate-400">→</span>
-                                    <span className="text-slate-900">{v}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* QR Code (wallet — scannable at canteen) */}
+                </div>
+                <div className="flex items-center justify-center gap-[2mm] w-full">
+                    {layout.showBarcode && <img src={barSrc} alt="barcode" style={{ height: "4.5mm", maxWidth: "20mm" }} />}
                     {layout.showQr && (
-                        <div className="w-20 h-20 bg-white rounded-2xl border-2 border-slate-900 p-1.5 shadow-lg transform rotate-3 hover:rotate-0 transition-transform">
-                            <img src={qrSrc} alt="wallet QR" className="w-full h-full" />
+                        <div className="bg-white rounded border border-slate-900 flex-shrink-0" style={{ padding: "0.5mm" }}>
+                            <img src={qrSrc} alt="wallet QR" style={{ width: "7mm", height: "7mm" }} />
                         </div>
                     )}
                 </div>
