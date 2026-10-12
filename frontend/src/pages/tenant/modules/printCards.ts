@@ -87,9 +87,12 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
     if (!cards.length) { alert("No cards available to print."); return; }
     const L = { ...DEFAULT_LAYOUT, ...layout };
 
+    // A 0×0 iframe can make some Chromium builds compute a zero-size print viewport (a blank
+    // or missing print job) — give it a real off-screen size instead so the content always
+    // has somewhere to lay out before print() is called.
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:1000px;height:1400px;border:0;visibility:hidden";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document;
