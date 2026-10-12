@@ -73,7 +73,10 @@ export default function StudentIdCards() {
     // magnified with a CSS transform for comfortable browsing — the wrapper around it reserves
     // exactly that magnified footprint (via calc()) so cards never overlap, and printCards.ts
     // clones only the un-scaled .id-card node, so none of this ever reaches the printed page.
-    const SCREEN_SCALE = 2.3;
+    // Kept modest (not huge) so a row of cards still fits a normal laptop screen without
+    // forcing the whole page to scroll sideways — the grid also carries its own horizontal
+    // scroll as a safety net for narrower screens.
+    const SCREEN_SCALE = 1.6;
     const WRAPPER_SIZE: Record<string, { w: string; h: string }> = {
         Landscape: { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(54mm * ${SCREEN_SCALE})` },
         "Classic Navy": { w: `calc(85.6mm * ${SCREEN_SCALE})`, h: `calc(111mm * ${SCREEN_SCALE})` }, // front + 3mm gap + back
@@ -171,7 +174,8 @@ export default function StudentIdCards() {
                         <p className="text-slate-400 font-bold animate-pulse">Synchronizing student nodes...</p>
                     </div>
                 ) : (
-                    <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isWide(activeStyle) ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}`}>
+                    <div className="overflow-x-auto pb-2">
+                    <div id="id-card-print" className={`grid gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 w-max min-w-full ${isWide(activeStyle) ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
                         {visibleStudents.length > 0 ? (
                             visibleStudents.map((student: any) => (
                                 <div key={student._id} className="relative print:contents" style={{ width: WRAPPER_SIZE[activeStyle].w, height: WRAPPER_SIZE[activeStyle].h }}>
@@ -192,6 +196,7 @@ export default function StudentIdCards() {
                                 <p className="text-gray-400 font-bold max-w-[200px]">No students found. Add students first to generate ID cards.</p>
                             </div>
                         )}
+                    </div>
                     </div>
                 )}
             </div>

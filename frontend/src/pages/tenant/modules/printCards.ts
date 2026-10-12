@@ -1,12 +1,13 @@
 // Robust ID-card printing — shared by the Student and Staff ID pages.
 //
-// Approach: instead of fighting the live DOM with @media-print visibility hacks
-// (which leave artifacts and print before images load), we render ONLY the cards
-// into a hidden same-origin <iframe>, copy the page's stylesheets so the cards look
-// identical, wait for every image (logos, QR codes, barcodes) to finish loading,
-// then call print() on the iframe and clean up. No sidebar, navbar, buttons or any
-// other UI is included — only the cards. Works in Chrome, Edge and Firefox, and in
-// the in-app WebView (no popup window, so no popup blockers).
+// Approach: render ONLY the cards (no sidebar, navbar, buttons or any other UI) into a
+// full standalone HTML document string, then hand it to outputHtmlDoc() — the same print
+// pipeline every other report in this app (report cards, dossiers, timetables, ...)
+// already uses successfully: a real popup window on desktop (falling back to a hidden
+// iframe only if the popup is blocked), or a rendered PDF download inside the mobile app.
+// An earlier version of this file rolled its own hidden-iframe-only print path, which
+// proved unreliable in some desktop builds — reusing the proven shared pipeline fixes that.
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 /** Collect the current document's CSS (inline <style> + linked stylesheets) so the
  *  cloned cards keep their exact look. We inline rules where readable and fall back
@@ -68,37 +69,12 @@ function buildPrintCss(L: Required<PrintLayout>): string {
 `;
 }
 
-/** Wait until every <img> inside a root has loaded (or errored), so nothing prints blank. */
-function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
-    const imgs = Array.from(root.querySelectorAll("img"));
-    if (!imgs.length) return Promise.resolve();
-    return Promise.race([
-        Promise.all(imgs.map(img =>
-            img.complete && img.naturalWidth > 0
-                ? Promise.resolve()
-                : new Promise<void>(res => { img.addEventListener("load", () => res(), { once: true }); img.addEventListener("error", () => res(), { once: true }); }),
-        )).then(() => undefined),
-        new Promise<void>(res => setTimeout(res, timeoutMs)),
-    ]);
-}
-
-/** Build the hidden iframe, drop the cards in, wait for images, print, then remove.
- *  Resolves once the print dialog has actually been invoked (images loaded), so callers
- *  can show a spinner that lasts exactly as long as the real wait. */
+/** Build a full standalone document of just the cards and hand it to the shared
+ *  print/PDF pipeline. Resolves once that pipeline has finished (the print dialog has
+ *  opened, or the PDF has been handed off on mobile), so callers can show a spinner. */
 function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): Promise<void> {
     if (!cards.length) { alert("No cards available to print."); return Promise.resolve(); }
     const L = { ...DEFAULT_LAYOUT, ...layout };
-
-    // A 0×0 iframe can make some Chromium builds compute a zero-size print viewport (a blank
-    // or missing print job) — give it a real off-screen size instead so the content always
-    // has somewhere to lay out before print() is called.
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:1000px;height:1400px;border:0;visibility:hidden";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) { iframe.remove(); alert("Could not open the print view."); return Promise.resolve(); }
 
     const sheet = document.createElement("div");
     sheet.className = "print-sheet";
@@ -113,24 +89,12 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
         sheet.appendChild(clone);
     });
 
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
         ${collectStyles()}
         <style>${buildPrintCss(L)}</style>
-        </head><body></body></html>`);
-    doc.body.appendChild(sheet);
-    doc.close();
+        </head><body>${sheet.outerHTML}</body></html>`;
 
-    // Print only after images (logos/QR/barcodes) have loaded — never blank pages.
-    return waitForImages(doc).then(() => {
-        const win = iframe.contentWindow!;
-        win.focus();
-        win.print();
-        // Clean up shortly after the print dialog is dismissed.
-        const cleanup = () => setTimeout(() => iframe.remove(), 500);
-        win.addEventListener("afterprint", cleanup, { once: true });
-        setTimeout(cleanup, 60000); // safety net if afterprint never fires
-    });
+    return outputHtmlDoc(title, html, { landscape: L.orientation === "landscape" });
 }
 
 /**
