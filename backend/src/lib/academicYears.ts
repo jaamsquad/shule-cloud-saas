@@ -55,13 +55,20 @@ export async function ensureNextAcademicYear(db: Db): Promise<void> {
     await db.collection('terms').insertMany(termDocs);
 }
 
-/** Same check, for every active tenant — the background-interval entry point (see server.ts). */
+/**
+ * Same check, for every active tenant — the background-interval entry point (see server.ts).
+ * Also flips the active term/year itself (cbcTerm.ts's syncCurrentTerm, which includes this
+ * same check as its own first step) and, when that actually rolls the year over, auto-promotes
+ * students — so a school nobody has logged into since New Year's still advances and promotes
+ * on its own, not just the next time someone happens to open the app.
+ */
 export async function ensureNextAcademicYearAllTenants(): Promise<void> {
     const { getMetaDb, getTenantDb } = await import('./mongodb');
+    const { syncCurrentTerm } = await import('../modules/cbc/cbcTerm');
     const tenants: any[] = await getMetaDb().collection('Tenant')
         .find({ status: 'active', databaseName: { $exists: true, $ne: '' } }, { projection: { databaseName: 1 } })
         .toArray().catch(() => []);
     for (const t of tenants) {
-        try { await ensureNextAcademicYear(getTenantDb(t.databaseName)); } catch { /* one tenant's failure must not block the rest */ }
+        try { await syncCurrentTerm(getTenantDb(t.databaseName)); } catch { /* one tenant's failure must not block the rest */ }
     }
 }
