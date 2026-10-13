@@ -33,6 +33,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls = "w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 bg-white focus:outline-none focus:border-[#5C67F2] transition-colors";
 const selectCls = inputCls + " appearance-none cursor-pointer";
 const levelOf = (name: string) => String(name || "").match(/(form|grade)\s*\d+/i)?.[0] || name;
+// Academic year is usually a plain year ("2027"), but exams created before this flow
+// existed can carry a legacy composite value ("2026/2027") — match if the picked year
+// appears anywhere in the exam's stored value, so those older exams still show up.
+const yearMatches = (examYear: any, wantYear: string) => {
+    if (!wantYear) return false;
+    const years: string[] = String(examYear || "").match(/\d{4}/g) || [];
+    return years.includes(String(wantYear).trim());
+};
+// Term is usually a bare name ("Term 1"), but legacy exams can carry "Term 1 (2026/2027)" —
+// match on the leading "Term N" only.
+const termKeyOf = (t: any) => String(t || "").match(/term\s*\d+/i)?.[0]?.toLowerCase().replace(/\s+/g, " ") || String(t || "").trim().toLowerCase();
+const termMatches = (examTerm: any, wantTermName: string) => termKeyOf(examTerm) === termKeyOf(wantTermName);
 
 export default function NewExamPage() {
     const navigate = useNavigate();
@@ -219,8 +231,8 @@ function ConsolidatedForm({ v2Terms, v2Years, classes, allExams, saving, onCreat
 
     const toggleTerm = (name: string) => setTermNames(p => { const n = new Set(p); if (n.has(name)) n.delete(name); else n.add(name); return n; });
     const candidates = useMemo(() => allExams.filter((e: any) =>
-        (e.examCategory || "written_test") === "written_test" && String(e.academicYear) === String(year)
-        && levelOf(e.classLevel) === levelOf(form) && (termNames.size === 0 || termNames.has(e.term))
+        (e.examCategory || "written_test") === "written_test" && yearMatches(e.academicYear, year)
+        && levelOf(e.classLevel) === levelOf(form) && (termNames.size === 0 || [...termNames].some(tn => termMatches(e.term, tn)))
     ), [allExams, year, form, termNames]);
 
     const submit = () => {
@@ -367,7 +379,7 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
     const [overallGrading, setOverallGrading] = useState("");
     const [subjectGrading, setSubjectGrading] = useState<Record<string, string>>({});
 
-    const examsForFormYear = useMemo(() => allExams.filter((e: any) => levelOf(e.classLevel) === levelOf(form) && String(e.academicYear) === String(year)), [allExams, form, year]);
+    const examsForFormYear = useMemo(() => allExams.filter((e: any) => levelOf(e.classLevel) === levelOf(form) && yearMatches(e.academicYear, year)), [allExams, form, year]);
 
     const submit = () => {
         if (!form || !year) { toast.error("Pick a form/grade and academic year"); return; }
@@ -410,7 +422,7 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
                                     <span className="text-sm font-bold text-gray-700">{term}</span>
                                     <select value={termExamIds[term]} onChange={e => setTermExamIds(p => ({ ...p, [term]: e.target.value }))} className={selectCls + " h-10"}>
                                         <option value="">Select Exam</option>
-                                        {examsForFormYear.filter((e: any) => e.term === term || e.term?.includes(term)).map((e: any) => <option key={e._id} value={e._id}>{e.examName}</option>)}
+                                        {examsForFormYear.filter((e: any) => termMatches(e.term, term)).map((e: any) => <option key={e._id} value={e._id}>{e.examName}</option>)}
                                     </select>
                                 </div>
                             ))}

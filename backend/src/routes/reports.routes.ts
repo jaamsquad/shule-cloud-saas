@@ -514,9 +514,20 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
         // Level system comes from the resolved curriculum (Form/Grade/Year), not a
-        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year.
+        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year. Used only as a
+        // fallback below — each historical column instead uses the word actually
+        // saved on its own exam_marks.classAtTime, so a school that renamed its
+        // classes (e.g. Form → Grade) still shows each old term under the name it
+        // was really sat under, instead of relabelling history with today's system.
         const levelPrefix = curriculumConfig.levelPrefix || 'Form';
         const levelSys = { prefix: levelPrefix, short: levelPrefix.charAt(0).toUpperCase() };
+        // The level-system word as saved on a class label itself (e.g. "Form 4 East" →
+        // "Form", "Grade 11 East" → "Grade") — falls back to the curriculum's own word
+        // when the label doesn't carry one (e.g. a bare class name).
+        const prefixWordOf = (cls: string): string => {
+            const m = String(cls || '').match(/form|grade|pp|class|year/i);
+            return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : levelPrefix;
+        };
 
         const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
         for (const m of myAll) {
@@ -532,14 +543,17 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const grid: Record<string, { mp: number; mg: string }> = {};
         const chart: Array<{ label: string; value: number }> = [];
         const levelsSet = new Set<number>(); const termsSet = new Set<number>();
+        const levelLabels: Record<number, string> = {};
         for (const v of Object.values(histAgg)) {
             if (!v.n) continue;
             const lvlMatch = String(v.cls).match(/(\d+)/); const lvl = lvlMatch ? Number(lvlMatch[1]) : 0;
             if (lvl < 1 || v.term < 1) continue;
             const mp = RND(v.pts / v.n, 0);
+            const ownPrefix = prefixWordOf(v.cls);
             grid[`l${lvl}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n) };
-            chart.push({ label: `${levelSys.short}${lvl}T${v.term}`, value: mp });
+            chart.push({ label: `${ownPrefix.charAt(0)}${lvl}T${v.term}`, value: mp });
             levelsSet.add(lvl); termsSet.add(v.term);
+            levelLabels[lvl] = ownPrefix;   // the word THIS level was actually saved under
         }
         const levels = Array.from(levelsSet).sort((a, b) => a - b);
         const terms = Array.from(termsSet).sort((a, b) => a - b);
@@ -601,7 +615,8 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             subjects,
             chart,
             history: grid,
-            levelSystem: levelSys.prefix,    // "Form" | "Grade"
+            levelSystem: levelSys.prefix,    // "Form" | "Grade" — fallback when a level has no saved label
+            levelLabels,                     // { 4: "Form", 11: "Grade" } — the word each level was actually saved under
             levels,                          // e.g. [3, 4] — only those with data
             terms,                           // e.g. [2, 3] — only those with data
             comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
