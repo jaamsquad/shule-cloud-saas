@@ -20,6 +20,7 @@ import bcrypt from 'bcrypt';
 import { onlyPublished, lockedExamIds } from '../lib/examPublish';
 import { makeGradingCache, resolveGrading } from '../lib/grading';
 import { papersForSubject, combinePapers, SubjectPaperDef } from '../lib/subjectPapers';
+import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
 
 const router = Router();
 
@@ -919,6 +920,28 @@ router.get('/audit_trails',             c.getItems('audit_trails'));
 router.get('/audit-trails',             c.getItems('audit_trails'));
 router.get('/academics/audit_trails',   c.getItems('audit_trails'));
 router.get('/academics/audit-trails',   c.getItems('audit_trails'));
+
+// Owner-uploaded teaching resources (notes/PDFs/videos), shared with every school — read-only
+// here; the owner manages them from the Owner Portal (routes/ownerLibrary.routes.ts). Only
+// resources this school actually offers the subject/class for are shown (see
+// lib/globalResourceScope.ts) — a resource tagged "Mathematics, Grade 10" never reaches a
+// school that doesn't teach Grade 10 or doesn't offer Mathematics.
+router.get('/global-resources', async (req, res) => {
+    try {
+        const d = getRequestDb(req);
+        const q: any = req.query;
+        const and: any[] = [];
+        if (q.subject) and.push({ subjectName: new RegExp(`^${String(q.subject).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.className) and.push({ className: new RegExp(`^${String(q.className).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.type) and.push({ type: String(q.type) });
+        const filter = and.length ? { $and: and } : {};
+        const [rows, scope] = await Promise.all([
+            getMetaDb().collection('global_resources').find(filter).sort({ createdAt: -1 }).toArray(),
+            schoolScope(d),
+        ]);
+        res.json(rows.filter((r: any) => visibleToSchool(r, scope)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // ─── Other Collections ────────────────────────────────────────────────────────
 // Collection → sidebar module key, for CRUD enforcement on the generic routes.
