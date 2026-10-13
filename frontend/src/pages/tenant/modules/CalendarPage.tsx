@@ -69,7 +69,7 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
   const toggleCat = (key: string) => setActiveCats(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   const [detail, setDetail] = useState<any>(null);
-  const emptyDraft = { title: "", category: "SCHOOL", eventDate: selectedDate, allDay: true, startTime: "", endTime: "", location: "", description: "", organizer: "", syncToGoogle: true };
+  const emptyDraft = { title: "", category: "SCHOOL", eventDate: selectedDate, allDay: true, startTime: "", endTime: "", location: "", description: "", organizer: "", syncToGoogle: true, notifyStaff: false };
   const [draft, setDraft] = useState<any>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -184,6 +184,8 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
       toast.success(editingId ? "Event updated" : "Event created");
       const sync = r?.data?.googleSync;
       if (sync && sync.synced === false && sync.error && sync.error !== "not_connected") toast.warning(`Saved, but Google Calendar sync failed: ${sync.error}`);
+      const notified = r?.data?.staffNotified;
+      if (notified?.attempted) toast.info(notified.error ? `Could not email staff: ${notified.error}` : `Emailed ${notified.sent} of ${notified.attempted} staff${notified.failed ? ` (${notified.failed} failed)` : ""}`);
       setShowModal(false); refresh();
     },
     onError: (e: any) => toast.error(e.response?.data?.message || "Could not save this event"),
@@ -395,6 +397,9 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
               </div>
               {googleStatus?.connected && (
                 <label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><input type="checkbox" checked={draft.syncToGoogle} onChange={e => setDraft((d: any) => ({ ...d, syncToGoogle: e.target.checked }))} /> Sync to Google Calendar</label>
+              )}
+              {!editingId && (
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><input type="checkbox" checked={draft.notifyStaff} onChange={e => setDraft((d: any) => ({ ...d, notifyStaff: e.target.checked }))} /> Notify all staff by email</label>
               )}
               <div className="flex justify-end gap-2 pt-2">
                 <button onClick={() => setShowModal(false)} className="h-11 px-4 rounded-xl border border-slate-200 text-slate-500 text-sm font-bold">Cancel</button>
