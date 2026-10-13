@@ -52,7 +52,10 @@ router.get('/exam-printouts/transcripts', async (req: Request, res: Response) =>
         if (!level) return res.status(400).json({ message: 'Pick a class' });
         const stream = String(req.query.stream || '').trim() || null;
         const mode = String(req.query.mode || 'term') === 'all' ? 'all' : 'term';
-        res.json(await transcripts(db(req), level, stream, mode));
+        // Optional single-term filter — "" means every term the student has sat.
+        const year = String(req.query.year || '').trim() || null;
+        const term = String(req.query.term || '').trim() || null;
+        res.json(await transcripts(db(req), level, stream, mode, year && term ? { year, term } : null));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
