@@ -71,6 +71,7 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     const examId = params.get("exam") || "";
     const set = (k: string, v: string) => setParams(prev => { const p = new URLSearchParams(prev); if (v) p.set(k, v); else p.delete(k); p.set("view", view); return p; });
     const [stream, setStream] = useState(params.get("stream") || "");
+    const [term, setTerm] = useState(params.get("term") || "");   // "" = all terms; else "<term>|<academicYear>"
     const [rankBy, setRankBy] = useState<"points" | "marks">("points");
     const [merit, setMerit] = useState<MeritOpts>({ section: "ranking", gender: "all", stream: "", cols: { upi: false, stream: true, kcpe: false, gender: true } });
     const [mode, setMode] = useState<"term" | "all">("term");
@@ -83,7 +84,16 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     const levelObj = levels.find(l => l.name.toLowerCase() === level.toLowerCase());
     useEffect(() => { if (!level && levels.length) set("class", levels[0].name); }, [levels.length]); // eslint-disable-line react-hooks/exhaustive-deps
     const exams: { _id: string; title: string; term: string; academicYear: string }[] = opts?.exams || [];
-    useEffect(() => { if (view !== "transcripts" && level && exams.length && !exams.some(e => e._id === examId)) set("exam", exams[0]._id); }, [exams, level]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Every distinct term that has a published exam for this class — newest year first.
+    const termKey = (e: { term: string; academicYear: string }) => `${e.term}|${e.academicYear}`;
+    const termOptions = useMemo(() => {
+        const seen = new Map<string, { key: string; term: string; academicYear: string }>();
+        exams.forEach(e => { const k = termKey(e); if (!seen.has(k)) seen.set(k, { key: k, term: e.term, academicYear: e.academicYear }); });
+        return [...seen.values()].sort((a, b) => b.academicYear.localeCompare(a.academicYear) || a.term.localeCompare(b.term));
+    }, [exams]);
+    const examsInTerm = term ? exams.filter(e => termKey(e) === term) : exams;
+    useEffect(() => { if (view !== "transcripts" && level && examsInTerm.length && !examsInTerm.some(e => e._id === examId)) set("exam", examsInTerm[0]._id); }, [examsInTerm, level]); // eslint-disable-line react-hooks/exhaustive-deps
+    const [selTermName, selYear] = term.split("|");
 
     const report = useQuery({
         queryKey: ["printout_report", examId, level, rankBy],
@@ -92,10 +102,10 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
         queryFn: async () => (await api.get("/exam-printouts/report", { params: { examId, level, rankBy } })).data,
     });
     const tdata = useQuery({
-        queryKey: ["printout_transcripts", level, stream, mode],
+        queryKey: ["printout_transcripts", level, stream, mode, term],
         enabled: view === "transcripts" && !!level,
         retry: false,
-        queryFn: async () => (await api.get("/exam-printouts/transcripts", { params: { level, stream: stream || undefined, mode } })).data,
+        queryFn: async () => (await api.get("/exam-printouts/transcripts", { params: { level, stream: stream || undefined, mode, term: selTermName || undefined, year: selYear || undefined } })).data,
     });
     // a signed verification QR per transcript
     useEffect(() => {
@@ -173,7 +183,7 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
 
                 {/* selection */}
                 <div className="bg-white rounded-2xl p-4" style={border}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                         <label className="block"><span className="text-[11px] font-bold text-slate-500">Form / grade</span>
                             <select className={sel} style={border} value={levelObj?.name || level} onChange={e => { set("class", e.target.value); setStream(""); }}>
                                 {!levelObj && level && <option value={level}>{level}</option>}
@@ -184,12 +194,17 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
                                 <option value="">All streams</option>
                                 {(levelObj?.streams || report.data?.streams || []).map((s: string) => <option key={s} value={s}>{s}</option>)}
                             </select></label>
+                        <label className="block"><span className="text-[11px] font-bold text-slate-500">Term</span>
+                            <select className={sel} style={border} value={term} onChange={e => { const v = e.target.value; setTerm(v); set("term", v); if (view !== "transcripts") set("exam", ""); }}>
+                                <option value="">All terms</option>
+                                {termOptions.map(t => <option key={t.key} value={t.key}>{t.term} · {t.academicYear}</option>)}
+                            </select></label>
                         {view !== "transcripts" ? (
                             <>
                                 <label className="block"><span className="text-[11px] font-bold text-slate-500">Exam (published)</span>
                                     <select className={sel} style={border} value={examId} onChange={e => set("exam", e.target.value)}>
-                                        {!exams.length && <option value="">No published exams for this class</option>}
-                                        {exams.map(e => <option key={e._id} value={e._id}>{e.title}</option>)}
+                                        {!examsInTerm.length && <option value="">No published exams for this class{term ? " · term" : ""}</option>}
+                                        {examsInTerm.map(e => <option key={e._id} value={e._id}>{e.title}</option>)}
                                     </select></label>
                                 <label className="block"><span className="text-[11px] font-bold text-slate-500">Rank by</span>
                                     <select className={sel} style={border} value={rankBy} onChange={e => setRankBy(e.target.value as "points" | "marks")}>
@@ -197,7 +212,7 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
                                     </select></label>
                             </>
                         ) : (
-                            <label className="block sm:col-span-2"><span className="text-[11px] font-bold text-slate-500">Columns</span>
+                            <label className="block"><span className="text-[11px] font-bold text-slate-500">Columns</span>
                                 <select className={sel} style={border} value={mode} onChange={e => setMode(e.target.value as "term" | "all")}>
                                     <option value="term">One per term (end-of-term exam)</option><option value="all">Every published exam</option>
                                 </select></label>

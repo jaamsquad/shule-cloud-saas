@@ -254,7 +254,7 @@ export async function publishedExamsFor(db: Db, level: string) {
  * Transcripts: each student's results across the published exams they sat, one column per
  * term (its end-of-term exam, else the last exam of the term) or one per exam (mode 'all').
  */
-export async function transcripts(db: Db, level: string, stream: string | null, mode: 'term' | 'all' = 'term') {
+export async function transcripts(db: Db, level: string, stream: string | null, mode: 'term' | 'all' = 'term', onlyTerm: { year: string; term: string } | null = null) {
     const students: any[] = await db.collection('students').find({}).toArray().catch(() => []);
     const roster = students.filter((s: any) => {
         const cls = s.studentClass || s.currentClass || s.className || '';
@@ -269,7 +269,10 @@ export async function transcripts(db: Db, level: string, stream: string | null, 
     const view = await publishedView(db);
     const marks: any[] = (await db.collection('exam_marks').find({ studentId: { $in: [...ids] } }).toArray().catch(() => [])).filter(view.ok);
     const sat = new Set(marks.map((m: any) => String(m.examId)));
-    const examsSat = order.filter((e: any) => sat.has(String(e._id)));
+    let examsSat = order.filter((e: any) => sat.has(String(e._id)));
+    // A specific term was picked — only that term's exams become columns (all of
+    // them, so "Every published exam" still shows every CAT/Mid Term within it).
+    if (onlyTerm) examsSat = examsSat.filter((e: any) => String(e.academicYear || '') === onlyTerm.year && String(e.term || '') === onlyTerm.term);
 
     // which exams become columns
     const colExams: any[] = [];
