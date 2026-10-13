@@ -2,7 +2,6 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
-import { formatExamName } from "@/lib/examName";
 import ScholarSheetReportCard from "./ScholarSheetReportCard";
 
 // ScholarSheet entry: pick a class → exam → student (or the whole class), then
@@ -106,7 +105,20 @@ export default function ScholarSheetPage() {
     const legacyClass = legacyClasses.find((c: any) => String(c._id) === String(classId));
     const stream = v2streams.find((s: any) => String(s._id) === String(streamId));
     const classNameSource = cls || legacyClass;
-    const classLabel = classNameSource ? (stream ? (stream.fullName || `${classNameSource.name || classNameSource.levelName || classNameSource.className} ${stream.name}`) : (classNameSource.name || classNameSource.levelName || classNameSource.className)) : "";
+    const classOnlyLabel = classNameSource ? (classNameSource.name || classNameSource.levelName || classNameSource.className) : "";
+    const classLabel = classNameSource ? (stream ? (stream.fullName || `${classOnlyLabel} ${stream.name}`) : classOnlyLabel) : "";
+    // Exams grouped "Form 3 – Term 1 (2026)" (recency-first, matching examsForYear's
+    // order) with just the exam's own name/type underneath — easier to scan than one
+    // flat list once a class has several terms' (or years') worth of exams.
+    const examGroups = useMemo(() => {
+        const g = new Map<string, any[]>();
+        examsForYear.forEach((ex: any) => {
+            const t = termNum(ex.term);
+            const key = `${classOnlyLabel || "Exams"} – Term ${t || "?"} (${ex.academicYear || "—"})`;
+            (g.get(key) || (g.set(key, []).get(key) as any[])).push(ex);
+        });
+        return [...g.entries()];
+    }, [examsForYear, classOnlyLabel]); // eslint-disable-line react-hooks/exhaustive-deps
     const classStudents = useMemo(() => {
         if (!classId || (!cls && !legacyClass)) return [];
         const source = cls || legacyClass;
@@ -235,14 +247,14 @@ export default function ScholarSheetPage() {
                         <option value="">All years</option>
                         {examYears.map((y: string) => <option key={y} value={y}>{y}</option>)}
                     </select>
-                    {/* Exam */}
+                    {/* Exam — grouped "Form 3 – Term 1 (2026)" with the exam's own name below it. */}
                     <select value={examId} onChange={e => setExamId(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                        <option value="">— Exam —</option>
-                        {examsForYear.map((ex: any) => {
-                            const full = formatExamName(ex, classLabel || undefined);
-                            const label = ex.academicYear ? `${ex.academicYear} — ${full.replace(new RegExp(`\\s*\\(${ex.academicYear}\\)\\s*$`), "")}` : full;
-                            return <option key={ex._id} value={ex._id}>{label}</option>;
-                        })}
+                        <option value="">Exam</option>
+                        {examGroups.map(([group, list]) => (
+                            <optgroup key={group} label={group}>
+                                {list.map((ex: any) => <option key={ex._id} value={ex._id}>{String(ex.examType || ex.type || ex.examName || ex.name || "Exam").toUpperCase()}</option>)}
+                            </optgroup>
+                        ))}
                     </select>
                     {/* Searchable student box */}
                     <div className="relative">
