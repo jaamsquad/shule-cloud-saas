@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen, ArrowUpDown, SlidersHorizontal, GraduationCap } from "lucide-react";
+import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, Eye, File, BookOpen, ArrowUpDown, SlidersHorizontal, GraduationCap } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { API_ORIGIN } from "@/lib/config";
+import FileViewer from "@/portals/FileViewer";
 
 const TYPES = [
     { key: "Notes",       icon: FileText,     color: "text-blue-600",   bg: "bg-blue-50" },
@@ -62,6 +63,9 @@ export default function NotesResources() {
     });
 
     const [videoOpen, setVideoOpen] = useState<{ src: string; title: string } | null>(null);
+    const [viewing, setViewing] = useState<{ src: string; name?: string; title?: string } | null>(null);
+
+    const isViewable = (src?: string, name?: string) => /\.(pdf|png|jpe?g|gif|webp|bmp)(\?|#|$)/i.test(name || src || "") || /^data:(application\/pdf|image\/)/i.test(src || "");
 
     // Class/subject filter options — from the subjects/classes catalogue (not just the
     // ones already in use), so an admin can filter even before adding that class's first resource.
@@ -190,7 +194,11 @@ export default function NotesResources() {
                                     {r.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{r.description}</p>}
                                     <div className="mt-3 flex flex-wrap gap-3">
                                         {r.fileUrl ? (
-                                            <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Download className="w-3.5 h-3.5" /> View / Download</a>
+                                            isViewable(`${API_ORIGIN}${r.fileUrl}`, r.fileName) ? (
+                                                <button onClick={() => setViewing({ src: `${API_ORIGIN}${r.fileUrl}`, name: r.fileName, title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Eye className="w-3.5 h-3.5" /> View</button>
+                                            ) : (
+                                                <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Download className="w-3.5 h-3.5" /> View / Download</a>
+                                            )
                                         ) : r.url ? (
                                             <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
                                         ) : null}
@@ -250,10 +258,17 @@ export default function NotesResources() {
                                         </div>
                                         <div className="flex flex-wrap gap-2 pt-2">
                                             {res.fileData ? (
-                                                <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
-                                                    className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
-                                                    <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
-                                                </a>
+                                                isViewable(res.fileData, res.fileName) ? (
+                                                    <button onClick={() => setViewing({ src: res.fileData, name: res.fileName, title: res.title })}
+                                                        className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                        <Eye className="w-3.5 h-3.5" /> View
+                                                    </button>
+                                                ) : (
+                                                    <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
+                                                        className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                        <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
+                                                    </a>
+                                                )
                                             ) : res.url ? (
                                                 <a href={res.url} target="_blank" rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
@@ -285,6 +300,7 @@ export default function NotesResources() {
                     </div>
                 )}
             </div>
+            <FileViewer open={!!viewing} src={viewing?.src} name={viewing?.name} title={viewing?.title} onClose={() => setViewing(null)} />
             {videoOpen && (
                 <div className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl overflow-hidden w-full max-w-4xl shadow-2xl">
