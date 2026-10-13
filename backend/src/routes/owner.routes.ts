@@ -184,6 +184,27 @@ router.post('/ai-settings/test', async (req, res) => {
     } catch (e: any) { res.status(400).json({ ok: false, message: e.message }); }
 });
 
+// ─── Google Calendar (OAuth) — owner sets the Google Cloud OAuth client every school's
+// "Connect Google Calendar" button uses. The secret is never sent back to the browser. ────
+router.get('/calendar-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { googleCalendarEnv, publicGoogleCalendarConfig } = await import('../lib/googleCalendar');
+        res.json(publicGoogleCalendarConfig(await googleCalendarEnv()));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/calendar-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Only an owner can change the Google Calendar settings.' });
+    try {
+        const { saveGoogleCalendarConfig } = await import('../lib/googleCalendar');
+        await saveGoogleCalendarConfig(req.body || {});
+        const { ownerAudit } = await import('../controllers/owner.controller');
+        await ownerAudit(req as any, 'GOOGLE_CALENDAR_SETTINGS_UPDATED', 'Platform', { clientIdChanged: !!req.body?.clientId, secretChanged: !!req.body?.clientSecret || !!req.body?.clearSecret, redirectUriChanged: !!req.body?.redirectUri });
+        res.json({ message: 'Saved' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
 // ─── Company email (SMTP) — super_owner only ─────────────────────────────────
 router.get('/company-email', getCompanyEmail);
 router.post('/company-email', setCompanyEmail);

@@ -17,15 +17,49 @@ export const GOOGLE_CALENDAR_SCOPES = 'openid email https://www.googleapis.com/a
 
 export interface GoogleCalendarEnv { clientId: string; clientSecret: string; redirectUri: string; configured: boolean }
 
-export function googleCalendarEnv(): GoogleCalendarEnv {
-    const clientId = String(process.env.GOOGLE_CALENDAR_CLIENT_ID || '').trim();
-    const clientSecret = String(process.env.GOOGLE_CALENDAR_CLIENT_SECRET || '').trim();
-    const redirectUri = String(process.env.GOOGLE_CALENDAR_REDIRECT_URI || '').trim();
+// The owner sets these from the Owner Portal (Settings → Google Calendar), stored in
+// platform_settings.googleCalendar — same single-document, env-var-fallback pattern as the AI
+// assistant's Groq key (lib/aiAssistant.ts). Never exposed to the browser: the owner-portal GET
+// only ever returns a masked hint for the secret, never the value itself (see
+// publicGoogleCalendarConfig below).
+export async function googleCalendarEnv(): Promise<GoogleCalendarEnv> {
+    const { getMetaDb } = await import('./mongodb');
+    const doc: any = await getMetaDb().collection('platform_settings').findOne({}).catch(() => null);
+    const g = doc?.googleCalendar || {};
+    const clientId = String(g.clientId || process.env.GOOGLE_CALENDAR_CLIENT_ID || '').trim();
+    const clientSecret = String(g.clientSecret || process.env.GOOGLE_CALENDAR_CLIENT_SECRET || '').trim();
+    const redirectUri = String(g.redirectUri || process.env.GOOGLE_CALENDAR_REDIRECT_URI || '').trim();
     return { clientId, clientSecret, redirectUri, configured: !!(clientId && clientSecret && redirectUri) };
 }
 
-export function buildGoogleAuthUrl(state: string): string {
-    const env = googleCalendarEnv();
+export interface GoogleCalendarOwnerConfig { enabled: boolean; clientId: string; clientSecret: string; redirectUri: string }
+
+/** What the owner portal shows: the client id/redirect URI (not secret) plus a masked hint for
+ *  the client secret — never the secret itself. */
+export function publicGoogleCalendarConfig(c: GoogleCalendarEnv) {
+    const { clientSecret, ...rest } = c;
+    return { ...rest, hasSecret: !!clientSecret, secretHint: clientSecret ? `${clientSecret.slice(0, 4)}…${clientSecret.slice(-4)}` : '' };
+}
+
+/** Save owner-submitted settings. Blank fields keep whatever is already saved — the same
+ *  "leave blank to keep the saved value" semantics as the AI assistant's key field. */
+export async function saveGoogleCalendarConfig(input: any) {
+    const { getMetaDb } = await import('./mongodb');
+    const set: any = {};
+    if (typeof input.clientId === 'string' && input.clientId.trim()) set['googleCalendar.clientId'] = input.clientId.trim();
+    if (typeof input.clientSecret === 'string' && input.clientSecret.trim()) set['googleCalendar.clientSecret'] = input.clientSecret.trim();
+    if (input.clearSecret) set['googleCalendar.clientSecret'] = '';
+    if (typeof input.redirectUri === 'string' && input.redirectUri.trim()) {
+        const u = input.redirectUri.trim();
+        if (!/^https?:\/\//i.test(u)) throw new Error('The redirect URI must start with https:// (or http:// for local testing)');
+        set['googleCalendar.redirectUri'] = u;
+    }
+    if (!Object.keys(set).length) return;
+    await getMetaDb().collection('platform_settings').updateOne({}, { $set: set }, { upsert: true });
+}
+
+export async function buildGoogleAuthUrl(state: string): Promise<string> {
+    const env = await googleCalendarEnv();
     const params = new URLSearchParams({
         client_id: env.clientId,
         redirect_uri: env.redirectUri,
@@ -42,7 +76,7 @@ export function buildGoogleAuthUrl(state: string): string {
 export interface GoogleTokens { access_token: string; refresh_token?: string; expires_in: number; scope: string; token_type: string; id_token?: string }
 
 async function tokenRequest(body: Record<string, string>): Promise<GoogleTokens> {
-    const env = googleCalendarEnv();
+    const env = await googleCalendarEnv();
     const r = await fetch(TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -53,8 +87,8 @@ async function tokenRequest(body: Record<string, string>): Promise<GoogleTokens>
     return j;
 }
 
-export const exchangeCodeForTokens = (code: string) => {
-    const env = googleCalendarEnv();
+export const exchangeCodeForTokens = async (code: string) => {
+    const env = await googleCalendarEnv();
     return tokenRequest({ code, grant_type: 'authorization_code', redirect_uri: env.redirectUri });
 };
 export const refreshAccessToken = (refreshToken: string) => tokenRequest({ refresh_token: refreshToken, grant_type: 'refresh_token' });
