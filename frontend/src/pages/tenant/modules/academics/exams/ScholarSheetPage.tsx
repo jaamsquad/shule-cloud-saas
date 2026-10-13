@@ -71,8 +71,22 @@ export default function ScholarSheetPage() {
     }, [classId, v2classes, legacyClasses]);
     const effectiveClassId = String(resolvedClass?._id || classId || "");
     const { data: v2streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", effectiveClassId], enabled: !!effectiveClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: effectiveClassId } })).data || [] });
-    const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
+    const { data: examsRaw = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
+
+    // Most recent exam first — by year, then term number, then creation time — so the
+    // just-previous exam sits at the top of the list (and can be auto-selected below).
+    const termNum = (t: any) => Number(String(t ?? "").match(/\d+/)?.[0]) || 0;
+    const exams = useMemo(() => [...examsRaw].sort((a: any, b: any) =>
+        (Number(b.academicYear) || 0) - (Number(a.academicYear) || 0)
+        || termNum(b.term) - termNum(a.term)
+        || String(b.createdAt || "").localeCompare(String(a.createdAt || ""))), [examsRaw]);
+
+    // Default to the just-previous (most recent) exam once the list has loaded, unless a
+    // deep link or the user has already picked one.
+    useEffect(() => {
+        if (!examId && !deepLink && exams.length) setExamId(exams[0]._id);
+    }, [exams]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const cls = v2classes.find((c: any) => String(c._id) === String(classId));
     const legacyClass = legacyClasses.find((c: any) => String(c._id) === String(classId));
@@ -203,7 +217,11 @@ export default function ScholarSheetPage() {
                     {/* Exam */}
                     <select value={examId} onChange={e => setExamId(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Exam —</option>
-                        {exams.map((ex: any) => <option key={ex._id} value={ex._id}>{formatExamName(ex, classLabel || undefined)}</option>)}
+                        {exams.map((ex: any) => {
+                            const full = formatExamName(ex, classLabel || undefined);
+                            const label = ex.academicYear ? `${ex.academicYear} — ${full.replace(new RegExp(`\\s*\\(${ex.academicYear}\\)\\s*$`), "")}` : full;
+                            return <option key={ex._id} value={ex._id}>{label}</option>;
+                        })}
                     </select>
                     {/* Searchable student box */}
                     <div className="relative">

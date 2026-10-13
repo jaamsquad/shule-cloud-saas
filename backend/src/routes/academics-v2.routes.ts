@@ -425,43 +425,73 @@ router.get('/v2/students/:id/history', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 // Promote selected students to a destination class + stream.
+// `toStreamId: "__keep__"` means "keep each student's own stream name" — e.g. a student
+// from "Form 3 North" promoted to Form 4 stays in a "North" stream, creating it under the
+// destination class automatically if Form 4 doesn't have one yet (same behaviour the
+// scheduled/auto-promotion flow already has — see services/promotion.service.ts).
 router.post('/v2/promotions', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const { studentIds, toClassId, toStreamId, academicYear } = req.body || {};
         if (!Array.isArray(studentIds) || !studentIds.length) return res.status(400).json({ message: 'No students selected' });
         if (!toClassId) return res.status(400).json({ message: 'Destination class is required' });
+        const keepOwnStream = toStreamId === '__keep__';
 
-        const [toClass, toStream] = await Promise.all([
+        const [toClass, toStream, destStreams] = await Promise.all([
             db.collection('v2_classes').findOne({ _id: toOid(toClassId) }).catch(() => null),
-            toStreamId ? db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }).catch(() => null) : null,
+            (toStreamId && !keepOwnStream) ? db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }).catch(() => null) : null,
+            keepOwnStream ? db.collection('v2_streams').find({ classId: toClassId, deletedAt: { $exists: false } }).toArray().catch(() => [] as any[]) : [],
         ]);
         if (!toClass) return res.status(400).json({ message: 'Destination class not found' });
         const fullClass = toStream ? (toStream.fullName || `${toClass.name} ${toStream.name}`) : toClass.name;
         const year = academicYear || String(new Date().getFullYear());
+        const nrm = (v: any) => String(v ?? '').trim().toLowerCase();
+        // find-or-create cache for "keep own stream", so two students from the same stream
+        // in this batch don't each try to create their own duplicate "North" stream.
+        const streamByName = new Map<string, any>(destStreams.map((s: any) => [nrm(s.name), s]));
 
-        let promoted = 0, skipped = 0;
+        let promoted = 0, skipped = 0, streamsCreated = 0;
         for (const sid of studentIds) {
             const oid = toOid(String(sid));
             if (!oid) { skipped++; continue; }
             const student: any = await db.collection('students').findOne({ _id: oid }).catch(() => null);
             if (!student) { skipped++; continue; }
             const fromClass = student.studentClass || student.currentClass || '';
+
+            let destStream: any = toStream;
+            if (keepOwnStream) {
+                const ownStreamName = String(student.stream || student.streamName || '').trim();
+                if (ownStreamName) {
+                    const key = nrm(ownStreamName);
+                    destStream = streamByName.get(key);
+                    if (!destStream) {
+                        const created = await db.collection('v2_streams').insertOne({
+                            classId: toClassId, className: toClass.name, name: ownStreamName, fullName: `${toClass.name} ${ownStreamName}`,
+                            capacity: 40, classTeacherId: null, isActive: true, createdAt: now(), autoCreatedByPromotion: true,
+                        });
+                        destStream = { _id: created.insertedId, name: ownStreamName, fullName: `${toClass.name} ${ownStreamName}` };
+                        streamByName.set(key, destStream);
+                        streamsCreated++;
+                    }
+                } else destStream = null;   // no stream on file for this student — leave them streamless
+            }
+            const destFull = destStream ? (destStream.fullName || `${toClass.name} ${destStream.name}`) : fullClass;
+
             // Append a history entry (immutable record of the class they left).
             const historyEntry = { className: fromClass, classId: student.classId || '', streamId: student.streamId || '', streamName: student.stream || student.streamName || '', academicYear: student.academicYear || '', leftAt: now() };
             await db.collection('students').updateOne({ _id: oid }, {
                 $set: {
-                    studentClass: fullClass, currentClass: fullClass,
+                    studentClass: destFull, currentClass: destFull,
                     classId: toClassId, className: toClass.name,
-                    streamId: toStreamId || null, stream: toStream?.name || '', streamName: toStream?.name || '',
+                    streamId: destStream ? String(destStream._id) : null, stream: destStream?.name || '', streamName: destStream?.name || '',
                     academicYear: year, updatedAt: now(),
                 },
                 $push: { classHistory: historyEntry } as any,
             });
             promoted++;
         }
-        await auditLog(db, 'BULK_PROMOTION', 'students', 'bulk', 'system', null, { toClassId, toStreamId, count: promoted });
-        res.json({ message: 'Promotion complete', promoted, skipped, total: studentIds.length, destination: fullClass });
+        await auditLog(db, 'BULK_PROMOTION', 'students', 'bulk', 'system', null, { toClassId, toStreamId, count: promoted, streamsCreated });
+        res.json({ message: 'Promotion complete', promoted, skipped, total: studentIds.length, destination: fullClass, streamsCreated });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
