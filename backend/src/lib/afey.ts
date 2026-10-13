@@ -157,7 +157,7 @@ function smsTool() {
         type: 'function',
         function: {
             name: 'prepare_sms',
-            description: 'Prepare (NOT send) an SMS to a group. The person must approve it before anything is sent. Use {name} (parent or staff name), {student}, {class} and {balance} (fee defaulters only) to personalise.',
+            description: 'Prepare (NOT send) an SMS to a group. The person must approve it before anything is sent. Use {name} (parent or staff name), {student}, {class} and {balance} (fee defaulters only) to personalise. For any audience about a learner (fee_defaulters, absent_today, class_parents, person when it is a student) ALWAYS include {student} in the message — e.g. "Dear parent, {student} has an outstanding fee balance of {balance}..." — never a vague "your child", since one parent may have more than one child at the school.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -197,7 +197,7 @@ function systemPrompt(c: AiCaller, school: string, acts: boolean) {
         `Answer anything about the school by calling school_query and base numbers ONLY on what it returns — never invent figures. Give short, clear answers: a one-line headline, then bullets when useful. If they ask about fee balances or defaulters and haven't said which term, ask which term (and year, if it matters) before calling the query — unless they clearly want the all-time total.`,
         acts
             ? [
-                `When asked to send an SMS (e.g. to fee defaulters' parents, parents of absent learners, a class, staff, or just one named person), call prepare_sms with a ready message. For a group, use the matching audience. Nothing is sent until they press Approve, so say so briefly and summarise who will get it. Never claim a message was sent.`,
+                `When asked to send an SMS (e.g. to fee defaulters' parents, parents of absent learners, a class, staff, or just one named person), call prepare_sms with a ready message. For a group, use the matching audience. When the audience is about a learner (fee_defaulters, absent_today, class_parents, or person when messaging a student's parent), name the learner in the message with {student} — never a generic "your child" — so a parent with more than one child at the school knows which one it's about. Nothing is sent until they press Approve, so say so briefly and summarise who will get it. Never claim a message was sent.`,
                 `For ONE named person (e.g. "text Jane Doe" or "message Mr Otieno"), first call search_people with their name — never guess spellings or pick blindly among same-named people. If it returns exactly one match, go straight to prepare_sms (audience "person", personQuery = that match's key). If it returns more than one, list them for the user as a numbered list "1) Name — detail", "2) Name — detail" etc. and ask which one they mean — do NOT send to anyone yet. Once they answer with a number or clearly pick one, call search_people again with the SAME name (and kind) to reproduce the same ordered list, then use that item's key as personQuery. If it returns none, say you couldn't find them and ask for a correct spelling, admission number, or staff ID.`,
             ].join(' ')
             : `You cannot send messages for this person; you can draft the text for them to send from Communications.`,
@@ -268,7 +268,7 @@ export async function afeyChat(req: Request, db: Db, c: AiCaller, messages: Afey
 export async function prepareSms(db: Db, c: AiCaller, args: any, scope?: ScopeResult): Promise<AfeyAction> {
     const audience = AUDIENCES.includes(args.audience) ? args.audience as Audience : null;
     if (!audience) throw new Error('Unknown audience');
-    const message = String(args.message || '').trim().slice(0, 480);
+    let message = String(args.message || '').trim().slice(0, 480);
     if (!message) throw new Error('Message is empty');
     const className = String(args.className || '').trim() || undefined;
     if (audience === 'class_parents' && !className) throw new Error('Which class?');
@@ -277,6 +277,10 @@ export async function prepareSms(db: Db, c: AiCaller, args: any, scope?: ScopeRe
     const minBalance = args.minBalance !== undefined ? num(args.minBalance) : undefined;
     const targets = await resolveTargets(db, { audience, className, minBalance, personQuery }, scope);
     if (audience === 'person' && !targets.length) throw new Error(`Could not find "${personQuery}" (or they have no phone number on file)`);
+    // Belt and braces: a parent with more than one child at the school needs to know which
+    // one a message is about, so never let a per-student SMS go out without their name even
+    // if the AI's draft forgot the {student} placeholder.
+    if (!/\{student\}/.test(message) && targets.some(t => t.vars.student)) message = `{student}: ${message}`;
     const a: AfeyAction = {
         type: 'sms', audience, className, minBalance, personQuery, message, recipients: targets.length,
         sample: targets.slice(0, 3).map(t => ({ to: t.phone, text: fill(message, t.vars) })),
