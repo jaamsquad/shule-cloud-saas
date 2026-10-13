@@ -11,6 +11,19 @@ import { Loader2, UploadCloud, Trash2, FileText, Library as LibraryIcon, BookOpe
 const GRADES = ["PP1", "PP2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Form 1", "Form 2", "Form 3", "Form 4"];
 const RES_TYPES = ["Notes", "Worksheet", "Document", "Image", "Diagram", "External Link", "Video", "Other"];
 
+// Built-in subject catalogue (Kenyan 8-4-4 and CBC senior school) — mirrors
+// backend/src/lib/subjectCatalog.ts's SUBJECT_CATALOG names, grouped the same way, so the
+// owner picks from the same subject list schools do rather than free-typing a name.
+const SUBJECT_GROUPS: { group: string; subjects: string[] }[] = [
+    { group: "Mathematics", subjects: ["Mathematics", "Essential Mathematics", "Core Mathematics"] },
+    { group: "Languages", subjects: ["English", "Kiswahili", "Kenyan Sign Language", "Literature", "Literature In English", "Fasihi Ya Kiswahili", "Indigenous Languages"] },
+    { group: "Sciences", subjects: ["Biology", "Physics", "Chemistry"] },
+    { group: "Humanities", subjects: ["History and Government", "Geography", "C.R.E.", "I.R.E.", "H.R.E.", "History and Citizenship", "Community Service Learning"] },
+    { group: "Technicals", subjects: ["Home Science", "Art and Design", "Agriculture", "Woodwork", "Metalwork", "Building Construction", "Power Mechanics", "Electricity", "Drawing and Design", "Aviation", "Computer Studies", "Music", "Braille", "Business Studies", "Economics", "Technical Sign Language", "Music & Dance", "Fine Arts", "Theatre & Film", "Sports and Recreation", "Media Technology", "Marine and Fisheries"] },
+    { group: "Optionals", subjects: ["Mathematics - Option B", "Fasihi", "Biology for the Blind", "General Science", "French", "German", "Arabic", "Mandarin", "Computer Literacy", "Adapted Home Science", "Adapted Agriculture", "P.E", "Library", "Pastoral", "Life Skills", "Latin", "Sign Language", "Catechism"] },
+    { group: "Support Subjects", subjects: ["Learner Personal/Group Study", "Pastoral/Religious Programme Instruction", "Information Communication Technology", "Physical Education"] },
+];
+
 export default function OwnerLibrary() {
     const [tab, setTab] = useState<"questions" | "resources">("questions");
     return (
@@ -209,7 +222,17 @@ function ResourcesTab() {
                             <label className="text-xs font-bold text-muted-foreground">Type</label>
                             <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">{RES_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
                         </div>
-                        <div><label className="text-xs font-bold text-muted-foreground">Subject</label><Input value={form.subjectName} onChange={e => setForm(f => ({ ...f, subjectName: e.target.value }))} placeholder="Leave blank for every subject" /></div>
+                        <div>
+                            <label className="text-xs font-bold text-muted-foreground">Subject</label>
+                            <select value={form.subjectName} onChange={e => setForm(f => ({ ...f, subjectName: e.target.value }))} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
+                                <option value="">Every subject</option>
+                                {SUBJECT_GROUPS.map(g => (
+                                    <optgroup key={g.group} label={g.group}>
+                                        {g.subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </optgroup>
+                                ))}
+                            </select>
+                        </div>
                         <div>
                             <label className="text-xs font-bold text-muted-foreground">Grade / class</label>
                             <select value={form.className} onChange={e => setForm(f => ({ ...f, className: e.target.value }))} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"><option value="">All grades</option>{GRADES.map(g => <option key={g} value={g}>{g}</option>)}</select>
