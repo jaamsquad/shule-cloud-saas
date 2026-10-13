@@ -8,11 +8,11 @@ import { API_ORIGIN } from "@/lib/config";
 import FileViewer from "@/portals/FileViewer";
 
 const TYPES = [
-    { key: "Notes",       icon: FileText,     color: "text-blue-600",   bg: "bg-blue-50" },
-    { key: "Worksheet",   icon: File,         color: "text-indigo-600", bg: "bg-indigo-50" },
-    { key: "Video",       icon: Video,        color: "text-rose-600",   bg: "bg-rose-50" },
-    { key: "External Link", icon: Link2,      color: "text-emerald-600",bg: "bg-emerald-50" },
-    { key: "Document",    icon: Download,     color: "text-amber-600",  bg: "bg-amber-50" },    { key: "Lesson Page", icon: BookOpen,    color: "text-violet-600", bg: "bg-violet-50" },    { key: "Other",       icon: ExternalLink, color: "text-slate-600",  bg: "bg-slate-50" },
+    { key: "Notes",       icon: FileText,     color: "text-blue-600",   bg: "bg-blue-50",   grad: "from-violet-400 to-fuchsia-500" },
+    { key: "Worksheet",   icon: File,         color: "text-indigo-600", bg: "bg-indigo-50", grad: "from-sky-400 to-blue-500" },
+    { key: "Video",       icon: Video,        color: "text-rose-600",   bg: "bg-rose-50",   grad: "from-rose-400 to-pink-500" },
+    { key: "External Link", icon: Link2,      color: "text-emerald-600",bg: "bg-emerald-50", grad: "from-emerald-400 to-teal-500" },
+    { key: "Document",    icon: Download,     color: "text-amber-600",  bg: "bg-amber-50",  grad: "from-amber-400 to-orange-500" },    { key: "Lesson Page", icon: BookOpen,    color: "text-violet-600", bg: "bg-violet-50", grad: "from-rose-400 to-pink-500" },    { key: "Other",       icon: ExternalLink, color: "text-slate-600",  bg: "bg-slate-50",  grad: "from-slate-400 to-slate-500" },
 ];
 
 const emptyForm = { title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true };
@@ -180,34 +180,43 @@ export default function NotesResources() {
                 </div>
 
                 {globalResources.length > 0 && (
-                    <div className="mb-8 rounded-3xl border border-indigo-100 bg-indigo-50/40 p-6">
+                    <div className="mb-8 rounded-3xl border border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/60 to-violet-50/40 p-6">
                         <div className="flex items-center gap-2 mb-4">
-                            <GraduationCap className="w-5 h-5 text-indigo-600" />
+                            <GraduationCap className="w-5 h-5 text-fuchsia-500" />
                             <h2 className="font-black text-slate-800">ShuleCloud Library</h2>
                             <span className="text-xs font-bold text-slate-400">— shared by ShuleCloud, available to every school</span>
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                            {globalResources.map((r: any) => (
-                                <div key={r._id} className="bg-white rounded-2xl border border-indigo-100 p-4">
-                                    <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : " · All grades"}</p>
-                                    {r.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{r.description}</p>}
-                                    <div className="mt-3 flex flex-wrap gap-3">
-                                        {r.fileUrl ? (
-                                            isViewable(`${API_ORIGIN}${r.fileUrl}`, r.fileName) ? (
-                                                <button onClick={() => setViewing({ src: `${API_ORIGIN}${r.fileUrl}`, name: r.fileName, title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Eye className="w-3.5 h-3.5" /> View</button>
-                                            ) : (
-                                                <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Download className="w-3.5 h-3.5" /> View / Download</a>
-                                            )
-                                        ) : r.url ? (
-                                            <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
-                                        ) : null}
-                                        {r.videoUrl && (
-                                            <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 text-[11px] font-black text-indigo-600 uppercase"><Video className="w-3.5 h-3.5" /> Watch</button>
-                                        )}
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            {globalResources.map((r: any) => {
+                                const gtc = getTypeConfig(r.type);
+                                return (
+                                    <div key={r._id} className="group bg-white rounded-3xl border border-fuchsia-100 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                                        <div className={`h-16 bg-gradient-to-br ${gtc.grad} relative flex items-center justify-center`}>
+                                            <gtc.icon className="w-6 h-6 text-white/90" strokeWidth={1.75} />
+                                            <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-white/25 backdrop-blur-sm text-[8px] font-black text-white uppercase tracking-wide">{r.type}</span>
+                                        </div>
+                                        <div className="p-4">
+                                            <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{r.subjectName || "All subjects"}{r.className ? ` · ${r.className}` : " · All grades"}</p>
+                                            {r.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{r.description}</p>}
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                {r.fileUrl ? (
+                                                    isViewable(`${API_ORIGIN}${r.fileUrl}`, r.fileName) ? (
+                                                        <button onClick={() => setViewing({ src: `${API_ORIGIN}${r.fileUrl}`, name: r.fileName, title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><Eye className="w-3.5 h-3.5" /> View</button>
+                                                    ) : (
+                                                        <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><Download className="w-3.5 h-3.5" /> View / Download</a>
+                                                    )
+                                                ) : r.url ? (
+                                                    <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
+                                                ) : null}
+                                                {r.videoUrl && (
+                                                    <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-rose-50 text-rose-600 text-[11px] font-black uppercase hover:bg-rose-100 transition-colors"><Video className="w-3.5 h-3.5" /> Watch</button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -228,26 +237,20 @@ export default function NotesResources() {
                             const tc = getTypeConfig(res.type);
                             const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
-                                <div key={res._id} className="bg-white rounded-3xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
-                                    <div className={`px-5 py-4 border-b ${tc.bg}`}>
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex items-start gap-3">
-                                                <div className={`w-10 h-10 rounded-2xl ${tc.bg} flex items-center justify-center flex-shrink-0 border border-white/80`}>
-                                                    <tc.icon className={`w-5 h-5 ${tc.color}`} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
-                                                    <div className="flex flex-wrap items-center gap-2 mt-1 text-[9px]">
-                                                        <span className={`px-2 py-0.5 rounded-lg font-black uppercase ${tc.bg} ${tc.color}`}>{res.type}</span>
-                                                        {res.subjectName && <span className="text-slate-500 truncate">{res.subjectName}</span>}
-                                                        {res.className && <span className="text-slate-500">· {res.className}</span>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {res.isPublic === false && <span className="text-[8px] text-amber-600 font-black uppercase">Staff only</span>}
+                                <div key={res._id} className="group bg-white rounded-3xl border border-slate-100 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                                    <div className={`h-20 bg-gradient-to-br ${tc.grad} relative flex items-center justify-center`}>
+                                        <tc.icon className="w-8 h-8 text-white/90" strokeWidth={1.75} />
+                                        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/25 backdrop-blur-sm text-[9px] font-black text-white uppercase tracking-wide">{res.type}</span>
+                                        {res.isPublic === false && <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/25 backdrop-blur-sm text-[9px] font-black text-white uppercase tracking-wide">Staff only</span>}
+                                    </div>
+                                    <div className="px-5 pt-4">
+                                        <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
+                                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+                                            {res.subjectName && <span className="truncate">{res.subjectName}</span>}
+                                            {res.className && <span>· {res.className}</span>}
                                         </div>
                                     </div>
-                                    <div className="p-5 space-y-3">
+                                    <div className="p-5 pt-3 space-y-3">
                                         {res.introduction && <p className="text-sm text-slate-600 line-clamp-3">{res.introduction}</p>}
                                         {res.objectives && <p className="text-[11px] text-slate-500"><span className="font-black text-slate-700">Objectives:</span> {res.objectives}</p>}
                                         {res.lessonNotes && <p className="text-[11px] text-slate-500 line-clamp-3">{res.lessonNotes}</p>}
@@ -260,23 +263,23 @@ export default function NotesResources() {
                                             {res.fileData ? (
                                                 isViewable(res.fileData, res.fileName) ? (
                                                     <button onClick={() => setViewing({ src: res.fileData, name: res.fileName, title: res.title })}
-                                                        className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
                                                         <Eye className="w-3.5 h-3.5" /> View
                                                     </button>
                                                 ) : (
                                                     <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
-                                                        className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
                                                         <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
                                                     </a>
                                                 )
                                             ) : res.url ? (
                                                 <a href={res.url} target="_blank" rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
                                                     <ExternalLink className="w-3.5 h-3.5" /> Open Resource
                                                 </a>
                                             ) : null}
                                             {embed && (
-                                                <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 text-[10px] font-black text-[#5C67F2] hover:underline uppercase tracking-wide">
+                                                <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-rose-50 text-rose-600 text-[11px] font-black uppercase hover:bg-rose-100 transition-colors">
                                                     <Video className="w-3.5 h-3.5" /> Watch Video
                                                 </button>
                                             )}
