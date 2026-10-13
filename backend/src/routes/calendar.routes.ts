@@ -6,6 +6,7 @@ import { getHolidaysInRange, DEFAULT_COUNTRY, COUNTRIES } from '../lib/holidays'
 import { googleCalendarEnv, buildGoogleAuthUrl, exchangeCodeForTokens, listGoogleEvents } from '../lib/googleCalendar';
 import { getConnection, saveConnection, disconnect as disconnectGoogle, syncEventToGoogle, deleteEventFromGoogle } from '../services/googleCalendarSync.service';
 import { callerOf, isSchoolAdmin } from '../lib/aiAssistant';
+import { resolveEmails, sendEmail } from '../services/communications.service';
 
 const router = express.Router();
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -208,6 +209,24 @@ router.get('/calendar/events', async (req: Request, res: Response) => {
     }
 });
 
+/** Email every staff member about a newly created school event — opt-in per event (the
+ *  "Notify staff by email" checkbox), never automatic, and a failure here never fails the
+ *  event creation itself (caught by the caller). */
+const notifyStaffOfEvent = async (db: Db, doc: any) => {
+    const emails = await resolveEmails(db, 'staff');
+    if (!emails.length) return { attempted: 0, sent: 0, failed: 0 };
+    const when = doc.startTime ? `${doc.eventDate} at ${doc.startTime}${doc.endTime ? `–${doc.endTime}` : ''}` : `${doc.eventDate} (all day)`;
+    const lines = [
+        `A new school event has been added to the calendar:`, '',
+        `${doc.title}`, `When: ${when}`,
+        doc.venue ? `Where: ${doc.venue}` : '', doc.organizer ? `Organiser: ${doc.organizer}` : '',
+        doc.description ? `\n${doc.description}` : '',
+    ].filter(Boolean);
+    const results = await sendEmail(db, { to: emails, subject: `New school event: ${doc.title}`, message: lines.join('\n') });
+    const sent = results.filter(r => r.status === 'sent').length;
+    return { attempted: emails.length, sent, failed: emails.length - sent };
+};
+
 router.post('/calendar/events', async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
@@ -251,7 +270,12 @@ router.post('/calendar/events', async (req: Request, res: Response) => {
         await db.collection('calendar_events').insertOne(doc);
         let googleSync: any = undefined;
         if (caller && payload.syncToGoogle !== false) googleSync = await syncEventToGoogle(db, caller.id, doc);
-        res.status(201).json({ ...doc, googleSync });
+        let staffNotified: any = undefined;
+        if (payload.notifyStaff) {
+            try { staffNotified = await notifyStaffOfEvent(db, doc); }
+            catch (e: any) { staffNotified = { attempted: 0, sent: 0, failed: 0, error: e.message || 'Could not send staff emails' }; }
+        }
+        res.status(201).json({ ...doc, googleSync, staffNotified });
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Unable to create calendar event' });
     }
