@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen, GraduationCap } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Home, Plus, Pencil, Trash2, Check, X, Loader2, Search, Link2, FileText, Video, Download, ExternalLink, File, BookOpen, ArrowUpDown, SlidersHorizontal, GraduationCap } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
@@ -16,9 +16,18 @@ const TYPES = [
 
 const emptyForm = { title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true };
 
+const SORTS = [
+    { key: "newest", label: "Newest first" },
+    { key: "oldest", label: "Oldest first" },
+    { key: "title", label: "Title A–Z" },
+];
+
 export default function NotesResources() {
     const [search, setSearch] = useState("");
     const [typeFilter, setTypeFilter] = useState("ALL");
+    const [classFilter, setClassFilter] = useState("ALL");
+    const [subjectFilter, setSubjectFilter] = useState("ALL");
+    const [sortBy, setSortBy] = useState("newest");
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const navigate = useNavigate();
     const qc = useQueryClient();
@@ -54,11 +63,40 @@ export default function NotesResources() {
 
     const [videoOpen, setVideoOpen] = useState<{ src: string; title: string } | null>(null);
 
-    const filtered = resources.filter((r: any) => {
-        const matchQ = !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase());
-        const matchT = typeFilter === "ALL" || r.type === typeFilter;
-        return matchQ && matchT;
-    });
+    // Class/subject filter options — from the subjects/classes catalogue (not just the
+    // ones already in use), so an admin can filter even before adding that class's first resource.
+    const classOptions = useMemo(() => {
+        const seen = new Set<string>(); const out: string[] = [];
+        [...classes.map((c: any) => c.name || c.levelName), ...resources.map((r: any) => r.className)].forEach((n: any) => {
+            const v = String(n || "").trim(); if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+        });
+        return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    }, [classes, resources]);
+    const subjectOptions = useMemo(() => {
+        const seen = new Set<string>(); const out: string[] = [];
+        [...subjects.map((s: any) => s.name || s.subjectName), ...resources.map((r: any) => r.subjectName)].forEach((n: any) => {
+            const v = String(n || "").trim(); if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+        });
+        return out.sort((a, b) => a.localeCompare(b));
+    }, [subjects, resources]);
+
+    const filtered = useMemo(() => {
+        const rows = resources.filter((r: any) => {
+            const matchQ = !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase());
+            const matchT = typeFilter === "ALL" || r.type === typeFilter;
+            const matchC = classFilter === "ALL" || (r.className || "") === classFilter;
+            const matchS = subjectFilter === "ALL" || (r.subjectName || "") === subjectFilter;
+            return matchQ && matchT && matchC && matchS;
+        });
+        const sorted = [...rows];
+        if (sortBy === "title") sorted.sort((a, b) => String(a.title || "").localeCompare(String(b.title || "")));
+        else if (sortBy === "oldest") sorted.sort((a, b) => String(a.createdAt || a._id || "").localeCompare(String(b.createdAt || b._id || "")));
+        else sorted.sort((a, b) => String(b.createdAt || b._id || "").localeCompare(String(a.createdAt || a._id || "")));
+        return sorted;
+    }, [resources, search, typeFilter, classFilter, subjectFilter, sortBy]);
+
+    const activeFilterCount = [typeFilter !== "ALL", classFilter !== "ALL", subjectFilter !== "ALL"].filter(Boolean).length;
+    const clearFilters = () => { setTypeFilter("ALL"); setClassFilter("ALL"); setSubjectFilter("ALL"); setSearch(""); };
 
     const getVideoEmbedUrl = (url: string) => {
         if (!url) return "";
@@ -107,13 +145,33 @@ export default function NotesResources() {
                         </div>
                     </div>
 
-                    <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="relative max-w-md w-full">
+                    <div className="mt-6 flex flex-col gap-3">
+                        <div className="relative w-full">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject..."
                                 className="w-full h-11 pl-12 pr-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
                         </div>
-                        <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} items showing</div>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                <option value="ALL">All classes</option>
+                                {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                <option value="ALL">All subjects</option>
+                                {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <div className="flex items-center gap-1.5 ml-1">
+                                <ArrowUpDown className="w-3.5 h-3.5 text-slate-300" />
+                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-10 pl-2 pr-7 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                    {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                </select>
+                            </div>
+                            {activeFilterCount > 0 && (
+                                <button onClick={clearFilters} className="h-10 px-3 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Clear filters</button>
+                            )}
+                            <div className="ml-auto text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} item{filtered.length === 1 ? "" : "s"} showing</div>
+                        </div>
                     </div>
                 </div>
 
@@ -149,14 +207,20 @@ export default function NotesResources() {
                 {isLoading ? (
                     <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading lesson pages...</div>
                 ) : filtered.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-300 text-xs font-bold uppercase rounded-[2rem] border border-dashed border-slate-200 bg-white/70"><FileText className="w-8 h-8" />No lesson pages found</div>
+                    <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-300 text-xs font-bold uppercase rounded-[2rem] border border-dashed border-slate-200 bg-white/70">
+                        <FileText className="w-8 h-8" />
+                        {resources.length === 0 ? "No lesson pages yet" : "Nothing matches these filters"}
+                        {resources.length > 0 && activeFilterCount + (search ? 1 : 0) > 0 && (
+                            <button onClick={clearFilters} className="normal-case text-[11px] font-bold text-[#5C67F2] hover:underline">Clear filters</button>
+                        )}
+                    </div>
                 ) : (
                     <div className="grid gap-5 xl:grid-cols-2">
                         {filtered.map((res: any) => {
                             const tc = getTypeConfig(res.type);
                             const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
-                                <div key={res._id} className="bg-white rounded-3xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden hover:shadow-sm transition-all">
+                                <div key={res._id} className="bg-white rounded-3xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
                                     <div className={`px-5 py-4 border-b ${tc.bg}`}>
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="flex items-start gap-3">
