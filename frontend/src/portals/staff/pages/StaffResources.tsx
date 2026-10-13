@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, FileText, Eye, Download, ExternalLink, Link2, Video, File } from "lucide-react";
+import { Loader2, FileText, Eye, Download, ExternalLink, Link2, Video, File, X } from "lucide-react";
 import { PageTitle, PanelCard } from "../../PortalShell";
 import FileViewer from "../../FileViewer";
 import type { StaffCtx } from "../StaffLayout";
@@ -22,28 +22,59 @@ export default function StaffResources() {
     const [viewing, setViewing] = useState<{ src: string; name?: string } | null>(null);
     const [videoOpen, setVideoOpen] = useState<{ src: string; title: string } | null>(null);
     const [search, setSearch] = useState("");
+    const [classFilter, setClassFilter] = useState("ALL");
+    const [subjectFilter, setSubjectFilter] = useState("ALL");
 
     const { data: resources = [], isLoading } = useQuery({
         queryKey: ["staff_shared_resources"],
         queryFn: async () => { const r = await api.get("/staff-portal/resources"); return Array.isArray(r.data) ? r.data : []; },
     });
 
-    const filtered = resources.filter((r: any) => !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase()));
+    const classOptions = useMemo(() => [...new Set(resources.map((r: any) => String(r.className || "").trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [resources]);
+    const subjectOptions = useMemo(() => [...new Set(resources.map((r: any) => String(r.subjectName || "").trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b)), [resources]);
+
+    const filtered = resources.filter((r: any) => {
+        const matchQ = !search || (r.title || "").toLowerCase().includes(search.toLowerCase()) || (r.subjectName || "").toLowerCase().includes(search.toLowerCase());
+        const matchC = classFilter === "ALL" || (r.className || "") === classFilter;
+        const matchS = subjectFilter === "ALL" || (r.subjectName || "") === subjectFilter;
+        return matchQ && matchC && matchS;
+    });
+    const hasFilters = classFilter !== "ALL" || subjectFilter !== "ALL" || !!search;
+    const clearFilters = () => { setClassFilter("ALL"); setSubjectFilter("ALL"); setSearch(""); };
 
     return (
         <>
             <PageTitle title="Notes & Resources" subtitle="Shared lesson pages and teaching materials for your subjects" />
             <PanelCard>
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                <div className="flex flex-col gap-3 mb-4">
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject…"
                         className="w-full md:max-w-sm h-11 px-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-[#5C67F2]" />
-                    <div className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} shared items</div>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                            <option value="ALL">All classes</option>
+                            {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                            <option value="ALL">All subjects</option>
+                            {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        {hasFilters && (
+                            <button onClick={clearFilters} className="h-10 px-3 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Clear</button>
+                        )}
+                        <div className="ml-auto text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} shared item{filtered.length === 1 ? "" : "s"}</div>
+                    </div>
                 </div>
 
                 {isLoading ? (
                     <div className="flex items-center justify-center h-32 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
                 ) : filtered.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-300 text-xs font-bold uppercase"><FileText className="w-8 h-8" />No resources for your subjects yet</div>
+                    <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-300 text-xs font-bold uppercase">
+                        <FileText className="w-8 h-8" />
+                        {resources.length === 0 ? "No resources for your subjects yet" : "Nothing matches these filters"}
+                        {resources.length > 0 && hasFilters && <button onClick={clearFilters} className="normal-case text-[11px] font-bold text-[#5C67F2] hover:underline">Clear filters</button>}
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {filtered.map((r: any) => {
