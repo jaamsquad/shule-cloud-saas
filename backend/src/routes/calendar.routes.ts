@@ -336,14 +336,14 @@ router.get('/calendar/google/auth-url', async (req: Request, res: Response) => {
     try {
         const caller = callerOf(req);
         if (!caller || !isSchoolAdmin(caller)) return res.status(403).json({ message: 'Only a school admin can connect Google Calendar' });
-        const env = googleCalendarEnv();
-        if (!env.configured) return res.status(503).json({ message: 'Google Calendar is not set up on this platform yet. Ask ShuleCloud support to add the Google OAuth credentials.' });
+        const env = await googleCalendarEnv();
+        if (!env.configured) return res.status(503).json({ message: 'Google Calendar is not set up on this platform yet. Ask ShuleCloud support to add the Google OAuth credentials (Owner Portal → Settings → Google Calendar).' });
         const returnUrl = String(req.query.returnUrl || '');
         if (!returnUrl || !ALLOWED_RETURN_HOSTS(returnUrl)) return res.status(400).json({ message: 'Invalid return URL' });
         const tenantContext = (req as any).tenantContext;
         if (!tenantContext?.databaseName) return res.status(400).json({ message: 'School context missing' });
         const state = jwt.sign({ userId: caller.id, databaseName: tenantContext.databaseName, returnUrl }, JWT_SECRET, { expiresIn: '15m' });
-        res.json({ url: buildGoogleAuthUrl(state) });
+        res.json({ url: await buildGoogleAuthUrl(state) });
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Unable to start Google Calendar connection' });
     }

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ShieldCheck, AlertCircle } from "lucide-react";
 import OwnerSchoolAuthCard from "@/components/auth/OwnerSchoolAuthCard";
 import OwnerAiCard from "@/components/owner/OwnerAiCard";
+import OwnerCalendarCard from "@/components/owner/OwnerCalendarCard";
 
 export default function OwnerSettings() {
     const queryClient = useQueryClient();
@@ -68,6 +69,7 @@ export default function OwnerSettings() {
 
                 <OwnerSchoolAuthCard />
                 <OwnerAiCard />
+                <OwnerCalendarCard />
             </div>
         </div>
     );

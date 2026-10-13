@@ -4,6 +4,7 @@ import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X, MessageS
 import { toast } from "sonner";
 import api from "@/lib/api";
 import OwnerAiCard from "@/components/owner/OwnerAiCard";
+import OwnerCalendarCard from "@/components/owner/OwnerCalendarCard";
 
 const PRIMARY = "#534AB7";
 
@@ -122,6 +123,9 @@ export default function OwnerSettings() {
         <div className="space-y-5">
             {/* AI assistant (Groq) — the key every school's AI uses */}
             <OwnerAiCard />
+
+            {/* Google Calendar OAuth client — every school's "Connect Google Calendar" button */}
+            <OwnerCalendarCard />
 
             {/* Public registration toggle */}
             <div className="bg-white rounded-xl p-5 flex items-center justify-between" style={{ border: "0.5px solid #e5e7eb" }}>
