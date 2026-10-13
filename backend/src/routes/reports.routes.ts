@@ -115,12 +115,11 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const genIsForOpenedExam = !!gen && String(gen.mainExamId) === examId;
         const mainEff = genIsForOpenedExam ? String(gen.mainExamId) : examId;   // the exam this card is built around
 
-        // If the class has no generated report card for this term, the result isn't
-        // ready — tell the frontend to show "Result not ready yet for this term".
-        if (!gen) {
-            return res.json({ notReady: true, message: 'Result not ready yet for this term.',
-                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: classFull } });
-        }
+        // No class-level report-card generation exists for this term — that's fine:
+        // the card still works straight off the opened exam's own published marks
+        // (a generation only ever ADDS extra CAT/Mid Term columns alongside it; it
+        // was never a precondition for printing the exam the admin already published).
+        // Having no published marks at all for this student is checked below instead.
 
         // The exam set = the exam the user opened (always shown) + the generation's
         // main End Term + any additional internal assessments. The selected exam
@@ -176,7 +175,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
         // the report card stays stable after generation — later exam_marks edits don't
         // change it until the class is regenerated. Otherwise read live.
-        const frozen: any[] = Array.isArray(gen.frozenMarks) ? gen.frozenMarks : [];
+        const frozen: any[] = Array.isArray(gen?.frozenMarks) ? gen.frozenMarks : [];
         const allMarks: any[] = frozen.length
             ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
             : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
