@@ -7,6 +7,56 @@ import { toast } from "sonner";
 import { FBadge, Tone } from "@/components/fees/FeesUI";
 
 const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Grade 1 → Grade 2, Form 4 → null (graduates), PP2 → Grade 1 — mirrors the backend's
+ *  resolveClassRoute (promotion.service.ts) so the destination can be previewed here before
+ *  the server resolves it for real. */
+function nextClassName(name: string): string | null | undefined {
+    const label = String(name || "").trim();
+    const v = label.toLowerCase();
+    if (v === "pp1") return "PP2";
+    if (v === "pp2") return "Grade 1";
+    const m = label.match(/^(.*?)(\d+)\s*$/);
+    if (!m) return undefined;
+    const prefix = m[1].trim(); const n = Number(m[2]);
+    const cap = /^form/i.test(prefix) ? 4 : /^grade/i.test(prefix) ? 12 : 0;
+    if (cap && n >= cap) return null;
+    return `${prefix} ${n + 1}`.trim();
+}
+
+type ClassRoute = { action: "promote"; toClass: any } | { action: "graduate" } | { action: "unresolved"; reason: string };
+
+function resolveClassRoute(cls: any, classes: any[]): ClassRoute {
+    const live = classes.filter((c: any) => !c.deletedAt && c.isActive !== false);
+    const cur = norm(cls.curriculumType || "844");
+    const sameCurriculum = (c: any) => norm(c.curriculumType || "844") === cur;
+    if (cls.isFinal) return { action: "graduate" };
+    if (cls.nextClassId) {
+        const t = live.find((c: any) => String(c._id) === String(cls.nextClassId));
+        if (t && String(t._id) !== String(cls._id)) {
+            if (!sameCurriculum(t)) return { action: "unresolved", reason: `The class set to follow it (${t.name}) is a different curriculum — update class setup` };
+            return { action: "promote", toClass: t };
+        }
+        return { action: "unresolved", reason: "The class set to follow it no longer exists" };
+    }
+    const next = nextClassName(cls.name);
+    if (next === null) return { action: "graduate" };
+    if (next) {
+        const byName = live.filter((c: any) => norm(c.name) === norm(next) && String(c._id) !== String(cls._id) && sameCurriculum(c));
+        if (byName.length === 1) return { action: "promote", toClass: byName[0] };
+        if (byName.length > 1) return { action: "unresolved", reason: `More than one class is named ${next}` };
+    }
+    const lvl = Number(cls.level);
+    if (Number.isFinite(lvl)) {
+        const up = live.filter((c: any) => Number(c.level) === lvl + 1 && sameCurriculum(c) && String(c._id) !== String(cls._id));
+        if (up.length === 1) return { action: "promote", toClass: up[0] };
+        if (up.length > 1) return { action: "unresolved", reason: `Several classes are at level ${lvl + 1} — choose one in class setup` };
+        const maxLvl = Math.max(0, ...live.filter(sameCurriculum).map((c: any) => Number(c.level) || 0));
+        if (lvl >= maxLvl) return { action: "graduate" };
+    }
+    return { action: "unresolved", reason: next ? `No class named ${next} — create it or choose the next class in class setup` : "No next class — set one in class setup or mark it final" };
+}
+
 const STATUS: Record<string, { tone: Tone; label: string }> = {
     completed: { tone: "emerald", label: "Completed" },
     reverting: { tone: "amber", label: "Undoing" },
@@ -81,10 +131,6 @@ export default function PromoteStudents() {
     const [fromStreamId, setFromStreamId] = useState("");
     // Selection
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    // Destination — "__keep__" means each student keeps their own stream name,
-    // created automatically in the destination class if it doesn't have one yet.
-    const [toClassId, setToClassId] = useState("");
-    const [toStreamId, setToStreamId] = useState("__keep__");
     const [promoting, setPromoting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<any>(null);
@@ -92,15 +138,15 @@ export default function PromoteStudents() {
 
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const { data: fromStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", fromClassId], enabled: !!fromClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: fromClassId } })).data || [] });
-    const { data: toStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", toClassId], enabled: !!toClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: toClassId } })).data || [] });
     const { data: students = [], isLoading: loadingStudents } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
 
     const fromCls = classes.find((c: any) => String(c._id) === fromClassId);
     const fromStream = fromStreams.find((s: any) => String(s._id) === fromStreamId);
-    const toCls = classes.find((c: any) => String(c._id) === toClassId);
-    const keepOwnStream = toStreamId === "__keep__";
-    const toStream = keepOwnStream ? null : toStreams.find((s: any) => String(s._id) === toStreamId);
-    const destLabel = toCls ? (keepOwnStream ? `${toCls.name} (same stream)` : toStream ? (toStream.fullName || `${toCls.name} ${toStream.name}`) : toCls.name) : "";
+    // Destination is never picked manually — it follows the same class ladder (next class
+    // by setup, then by name, then by level) the automatic/scheduled promotion uses, and
+    // each student keeps their own stream name (created in the destination class if new).
+    const route = useMemo<ClassRoute>(() => fromCls ? resolveClassRoute(fromCls, classes) : { action: "unresolved", reason: "" }, [fromCls, classes]);
+    const destLabel = route.action === "graduate" ? "Graduates (final class)" : route.action === "promote" ? `${route.toClass.name} (same stream)` : "";
 
     // Students in the chosen source class + stream.
     const roster = useMemo(() => {
@@ -123,7 +169,7 @@ export default function PromoteStudents() {
         try {
             const r = await api.post("/v2/promotions", {
                 studentIds: Array.from(selected),
-                toClassId, toStreamId: toStreamId || null,
+                fromClassId,
                 academicYear: String(new Date().getFullYear()),
             });
             clearInterval(tick); setProgress(100);
@@ -139,7 +185,7 @@ export default function PromoteStudents() {
         } finally { setPromoting(false); }
     };
 
-    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setToClassId(""); setToStreamId("__keep__"); setProgress(0); setResult(null); };
+    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setProgress(0); setResult(null); };
 
     const undoJustDone = async () => {
         if (!result?.runId) return;
@@ -158,7 +204,7 @@ export default function PromoteStudents() {
 
     const Stepper = () => (
         <div className="flex items-center gap-2 mb-6 flex-wrap">
-            {["Pick Class", "Choose Students", "Destination", "Done"].map((label, i) => {
+            {["Pick Class", "Choose Students", "Confirm", "Done"].map((label, i) => {
                 const n = i + 1; const active = step === n; const done = step > n;
                 return (
                     <div key={label} className="flex items-center gap-2">
@@ -241,32 +287,26 @@ export default function PromoteStudents() {
                     </div>
                 )}
 
-                {/* Step 3 — destination + confirm */}
+                {/* Step 3 — confirm (destination follows the class ladder automatically) */}
                 {step === 3 && (
                     <div className="space-y-4">
                         <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-2">
                             <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5" />
                             <p className="text-xs text-amber-700 font-bold">Promoting <b>{selected.size}</b> student(s) from <b>{fromCls?.name}{fromStream ? ` ${fromStream.name}` : ""}</b>. Their previous class & results stay intact and viewable on each profile.</p>
                         </div>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination class *</label>
-                                <select value={toClassId} onChange={e => { setToClassId(e.target.value); setToStreamId("__keep__"); }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                                    <option value="">— Select Class —</option>
-                                    {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
-                                </select>
+
+                        {route.action === "unresolved" ? (
+                            <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-rose-500 mt-0.5" />
+                                <p className="text-xs text-rose-700 font-bold">Can't tell what class follows {fromCls?.name}: {route.reason}. Fix this in Class setup (set its next class or level), then come back here.</p>
                             </div>
-                            <div>
-                                <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination stream</label>
-                                <select value={toStreamId} onChange={e => setToStreamId(e.target.value)} disabled={!toClassId} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
-                                    <option value="__keep__">Same stream as now — create it if needed</option>
-                                    <option value="">No stream</option>
-                                    {toStreams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                                </select>
+                        ) : (
+                            <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3">
+                                <p className="text-[11px] font-bold text-slate-400 uppercase mb-1">Destination (resolved automatically)</p>
+                                <p className="text-sm text-slate-600 font-bold flex items-center gap-2 flex-wrap">{fromCls?.name}{fromStream ? ` ${fromStream.name}` : ""} <ArrowRight className="w-4 h-4 text-[#5C67F2]" /> {destLabel}</p>
+                                {route.action === "promote" && <p className="text-xs text-slate-400 mt-1">Each student keeps their own stream name; it's created under {route.toClass.name} automatically if it doesn't exist yet.</p>}
                             </div>
-                        </div>
-                        {keepOwnStream && <p className="text-xs text-slate-400 -mt-2">Each student keeps their own stream name (e.g. "North"); it's created under {toCls?.name || "the destination class"} automatically if it doesn't exist yet.</p>}
-                        {destLabel && <p className="text-sm text-slate-600 font-bold flex items-center gap-2">{fromCls?.name}{fromStream ? ` ${fromStream.name}` : ""} <ArrowRight className="w-4 h-4 text-[#5C67F2]" /> {destLabel}</p>}
+                        )}
 
                         {(promoting || progress > 0) && (
                             <div>
@@ -277,7 +317,7 @@ export default function PromoteStudents() {
 
                         <div className="flex justify-between">
                             <button onClick={() => setStep(2)} disabled={promoting} className="h-11 px-4 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm flex items-center gap-1.5"><ArrowLeft className="w-4 h-4" /> Back</button>
-                            <button onClick={() => { if (confirm(`Promote ${selected.size} student(s) to ${destLabel}?`)) promote(); }} disabled={!toClassId || promoting} className="h-11 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-40">
+                            <button onClick={() => { if (confirm(`Promote ${selected.size} student(s) to ${destLabel}?`)) promote(); }} disabled={route.action === "unresolved" || promoting} className="h-11 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-40">
                                 {promoting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Confirm & Promote
                             </button>
                         </div>
