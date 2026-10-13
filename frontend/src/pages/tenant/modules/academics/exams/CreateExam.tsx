@@ -462,7 +462,7 @@ export default function CreateExam() {
                                     <div>
                                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Exam Type</label>
                                         <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2]">
-                                            {["End Term", "Mid Term", "CAT", "Mock", "KCSE", "KCPE", "Assignment", "Practical"].map(t => <option key={t}>{t}</option>)}
+                                            {["End Term", "Mid Term", "CAT", "Mock", "Assignment", "Practical"].map(t => <option key={t}>{t}</option>)}
                                         </select>
                                     </div>
                                     <div>

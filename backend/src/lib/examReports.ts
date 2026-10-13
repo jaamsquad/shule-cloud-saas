@@ -22,7 +22,14 @@ const isGirl = (g: any) => /^(f|female|girl)/i.test(String(g || ''));
 const isBoy = (g: any) => /^(m|male|boy)/i.test(String(g || ''));
 const genderLabel = (g: any) => (isGirl(g) ? 'Female' : isBoy(g) ? 'Male' : '');
 
-export type RankBy = 'points' | 'marks';
+// 'points'/'marks' are the original two criteria (kept for existing callers); the other four
+// match the "Ranking Criteria" choices on a Year Average exam. "Old KCSE points" is the fixed,
+// historical A–E / 12–1 scale (independent of whatever grading scale the school has configured)
+// — "New KCSE points" is simply that configured scale's own mean points (same as 'points').
+export type RankBy = 'points' | 'marks' | 'meanMarks' | 'meanPoints' | 'oldKcsePoints' | 'newKcsePoints';
+
+const OLD_KCSE_CUTOFFS: [number, number][] = [[80, 12], [75, 11], [70, 10], [65, 9], [60, 8], [55, 7], [50, 6], [45, 5], [40, 4], [35, 3], [30, 2], [0, 1]];
+const oldKcsePoints = (pct: number) => OLD_KCSE_CUTOFFS.find(([cutoff]) => pct >= cutoff)?.[1] ?? 1;
 
 function gradeOfPoints(scale: any[], mp: number) {
     return meanGradeFromScale(scale, mp);
@@ -111,7 +118,11 @@ export async function examClassReport(db: Db, examId: string, level: string, opt
     const codeOf = (name: string) => Number(catalogMatch(name)?.code) || 9999;
     const subjects = [...subjCount.values()].sort((a, b) => codeOf(a.name) - codeOf(b.name) || a.name.localeCompare(b.name)).map(({ name, short }) => ({ name, short }));
 
-    const key = (r: any) => (rankBy === 'marks' ? [r.totalMarks, r.meanPoints] : [r.meanPoints, r.totalMarks]);
+    const key = (r: any) => {
+        if (rankBy === 'marks' || rankBy === 'meanMarks') return [r.totalMarks, r.meanPoints];
+        if (rankBy === 'oldKcsePoints') return [oldKcsePoints(r.meanPct), r.totalMarks];
+        return [r.meanPoints, r.totalMarks]; // 'points' | 'meanPoints' | 'newKcsePoints'
+    };
     const overall = rankMap(rows, key, (r: any) => r.studentId);
     const streamsList = [...new Set(rows.map((r: any) => r.stream))].sort();
     const streamRank = new Map<string, number>();

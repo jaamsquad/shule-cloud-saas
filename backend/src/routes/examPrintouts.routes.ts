@@ -2,7 +2,7 @@
  * Exams → Printouts: merit list, analysis report and transcripts (published results only).
  */
 import { Router, Request, Response } from 'express';
-import { Db } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { examClassReport, publishedExamsFor, transcripts, RankBy } from '../lib/examReports';
 
@@ -29,7 +29,17 @@ router.get('/exam-printouts/report', async (req: Request, res: Response) => {
     try {
         const examId = String(req.query.examId || ''); const level = String(req.query.level || '');
         if (!examId || !level) return res.status(400).json({ message: 'Pick a class and an exam' });
-        const rankBy = (String(req.query.rankBy || 'points') === 'marks' ? 'marks' : 'points') as RankBy;
+        const RANK_OPTIONS: RankBy[] = ['points', 'marks', 'meanMarks', 'meanPoints', 'oldKcsePoints', 'newKcsePoints'];
+        // A Year Average exam carries its own ranking criteria (chosen when it was created) —
+        // used as the default so the merit list/analysis just works without re-picking it,
+        // unless the caller explicitly overrides it via ?rankBy=.
+        let defaultRankBy: string = 'points';
+        if (!req.query.rankBy) {
+            const examDoc: any = await db(req).collection('exams').findOne({ _id: ObjectId.isValid(examId) ? new ObjectId(examId) : (examId as any) }).catch(() => null);
+            if (examDoc?.rankingCriteria) defaultRankBy = examDoc.rankingCriteria;
+        }
+        const reqRankBy = String(req.query.rankBy || defaultRankBy);
+        const rankBy = (RANK_OPTIONS.includes(reqRankBy as RankBy) ? reqRankBy : 'points') as RankBy;
         const r = await examClassReport(db(req), examId, level, { rankBy });
         if (!r.students.length) return res.status(404).json({ message: 'No published results for this class and exam. Publish them under Exams → Manage Exams.' });
         res.json(r);
