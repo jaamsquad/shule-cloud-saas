@@ -113,15 +113,18 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
             if (violation) return res.status(400).json({ message: violation });
         }
 
-        if (collectionName === 'exams') {
+        // The one-per-term/year duplicate guard only applies to Written test exams (CAT and
+        // Assignment are exempt, as before) — Consolidated/Supplementary/Year Average exams
+        // are built FROM other exams and are expected to coexist with them.
+        if (collectionName === 'exams' && (!req.body.examCategory || req.body.examCategory === 'written_test')) {
             const { type, term, academicYear } = req.body;
-            const normalizedType = (type || '').trim().toLowerCase();
+            const normalizedType = String(type || '').trim().toLowerCase();
             const isMultipleAllowed = normalizedType === 'cat' || normalizedType === 'assignment';
-            if (!isMultipleAllowed) {
+            if (!isMultipleAllowed && String(type || '').trim()) {
                 const existing = await db.collection('exams').findOne({
                     term,
                     academicYear,
-                    type: { $regex: new RegExp(`^${type.trim()}$`, 'i') }
+                    type: { $regex: new RegExp(`^${String(type).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 });
                 if (existing) {
                     return res.status(400).json({

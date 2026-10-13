@@ -72,13 +72,43 @@ const meanGradeFromPoints = (scale: GradeBand[], meanPoints: number) => meanGrad
 // meanPct, totalPoints, meanPoints, meanGrade }.
 // Exported so the Department Analysis (departments.routes) can reuse the exact same
 // results-building + grading logic instead of duplicating it.
+/** Merge raw exam_marks from several real exams into one row per (student, subject) — the
+ *  mean of that subject's percentage across whichever of those exams the student sat (a
+ *  student absent from one source exam isn't penalised; its percentage is simply excluded).
+ *  Expressed back out of 100 so it drops into the normal single-exam marks pipeline unchanged. */
+function averageAcrossSourceExams(raw: any[]) {
+    const nrm = (v: any) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const groups = new Map<string, { studentId: string; subjectName: string; classAtTime: string; sumPct: number; count: number }>();
+    for (const m of raw) {
+        const max = num(m.totalMarks) || 100;
+        const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
+        const subjectName = m.subjectName || m.subject || 'Subject';
+        const key = `${m.studentId}|${nrm(subjectName)}`;
+        const g = groups.get(key) || { studentId: String(m.studentId), subjectName, classAtTime: m.classAtTime || '', sumPct: 0, count: 0 };
+        g.sumPct += pct; g.count += 1; g.classAtTime = g.classAtTime || m.classAtTime || '';
+        groups.set(key, g);
+    }
+    return [...groups.values()].map(g => ({ studentId: g.studentId, subjectName: g.subjectName, subject: g.subjectName, marksObtained: round(g.sumPct / g.count, 1), totalMarks: 100, classAtTime: g.classAtTime }));
+}
+
 export async function buildExamResults(database: Db, examId: string, opts: { includeUnpublished?: boolean } = {}) {
+    // A Consolidated or Year Average exam has no marks of its own — it's an average across
+    // the real written-test exams picked when it was created (sourceExamIds). Resolve to
+    // those here so everything downstream (merit lists, report cards, transcripts,
+    // printouts) works unchanged, the same way they already do for a single exam.
+    const examDoc: any = await database.collection('exams').findOne({ _id: ObjectId.isValid(examId) ? new ObjectId(examId) : (examId as any) }).catch(() => null);
+    const sourceIds: string[] = (examDoc?.examCategory === 'consolidated' || examDoc?.examCategory === 'year_average') && Array.isArray(examDoc?.sourceExamIds)
+        ? examDoc.sourceExamIds.map(String).filter(Boolean) : [];
+
     // Recover classAtTime on any older mark that predates the stamp, before reading —
     // otherwise a promoted student's historical exam would fall back to their current class.
-    await backfillClassAtTimeForExam(database, String(examId));
+    await Promise.all((sourceIds.length ? sourceIds : [String(examId)]).map(id => backfillClassAtTimeForExam(database, id)));
     // Only published results (Exams → Manage Exams) unless the caller is a moderation view.
-    const raw = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
-    const marks = opts.includeUnpublished ? raw : await onlyPublished(database, raw);
+    const raw = sourceIds.length
+        ? await database.collection('exam_marks').find({ examId: { $in: sourceIds } }).toArray().catch(() => [])
+        : await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
+    const published = opts.includeUnpublished ? raw : await onlyPublished(database, raw);
+    const marks = sourceIds.length ? averageAcrossSourceExams(published) : published;
     // Grade PER CLASS using the class's assigned template (grading cache avoids
     // re-querying). The overall `scale` (for grade-list axes) is the school one.
     const gradingFor = makeGradingCache(database);
