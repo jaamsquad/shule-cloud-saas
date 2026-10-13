@@ -7,6 +7,7 @@ import { makeGradingCache, resolveGrading, meanGradeFromScale, GradeBand } from 
 import { marksWindow, examInWindow } from '../lib/examWindow';
 import { enforceCrud } from '../lib/permissions';
 import { publishedView, onlyPublished } from '../lib/examPublish';
+import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -72,6 +73,9 @@ const meanGradeFromPoints = (scale: GradeBand[], meanPoints: number) => meanGrad
 // Exported so the Department Analysis (departments.routes) can reuse the exact same
 // results-building + grading logic instead of duplicating it.
 export async function buildExamResults(database: Db, examId: string, opts: { includeUnpublished?: boolean } = {}) {
+    // Recover classAtTime on any older mark that predates the stamp, before reading —
+    // otherwise a promoted student's historical exam would fall back to their current class.
+    await backfillClassAtTimeForExam(database, String(examId));
     // Only published results (Exams → Manage Exams) unless the caller is a moderation view.
     const raw = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
     const marks = opts.includeUnpublished ? raw : await onlyPublished(database, raw);

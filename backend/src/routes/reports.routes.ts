@@ -6,6 +6,7 @@ import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum }
 import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
 import { onlyPublished, publishedView } from '../lib/examPublish';
 import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
+import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -57,6 +58,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // their current class. Without this, a student promoted since the exam (Form 3 ->
         // Form 4) would print their old Form 3 exam under a "Form 4" heading, which is wrong:
         // the exam, its subjects/curriculum, grading and title must all stay Form 3.
+        await backfillClassAtTimeForExam(database, examId);
         const examMarkForMe: any = await database.collection('exam_marks').findOne({ examId, studentId: sid, $or: [{ classAtTime: { $exists: true, $ne: '' } }, { classIdAtTime: { $exists: true, $ne: '' } }] }).catch(() => null);
         const classId = String(examMarkForMe?.classIdAtTime || student.classId || '');
         const myClass = examMarkForMe?.classAtTime || student.studentClass || student.currentClass || '';

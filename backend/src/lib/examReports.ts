@@ -12,6 +12,7 @@ import { levelKey, publishedView } from './examPublish';
 import { formatExamName } from './examName';
 import { catalogMatch } from './subjectCatalog';
 import { resolveGrading, meanGradeFromScale } from './grading';
+import { backfillClassAtTimeForExam } from './classAtTimeBackfill';
 
 const num = (v: any) => Number(v) || 0;
 const r2 = (n: number, d = 2) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
@@ -226,6 +227,10 @@ export async function publishedExamsFor(db: Db, level: string) {
     const view = await publishedView(db);
     const order = await examsInOrder(db);
     const ids = order.map((e: any) => String(e._id));
+    // Recover classAtTime on any exam whose marks predate the stamp, so an older exam a
+    // now-promoted cohort sat still lists under the level it was ACTUALLY taken at
+    // (Form 3), not wherever those students happen to be enrolled today (Form 4).
+    await Promise.all(ids.map(id => backfillClassAtTimeForExam(db, id)));
     const pairs: any[] = ids.length ? await db.collection('exam_marks').aggregate([
         { $match: { examId: { $in: ids } } },
         { $group: { _id: { examId: '$examId', classId: { $ifNull: ['$classIdAtTime', '$classId'] }, className: { $ifNull: ['$classAtTime', '$className'] } } } },
