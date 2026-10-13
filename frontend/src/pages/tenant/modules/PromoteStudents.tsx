@@ -1,11 +1,71 @@
 import { useState, useMemo } from "react";
-import { Home, ArrowRight, ArrowLeft, Loader2, Check, Users, GraduationCap, AlertTriangle, CalendarClock } from "lucide-react";
+import { Home, ArrowRight, ArrowLeft, Loader2, Check, Users, GraduationCap, AlertTriangle, CalendarClock, Undo2, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { FBadge, Tone } from "@/components/fees/FeesUI";
 
 const norm = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+const STATUS: Record<string, { tone: Tone; label: string }> = {
+    completed: { tone: "emerald", label: "Completed" },
+    reverting: { tone: "amber", label: "Undoing" },
+    reverted: { tone: "violet", label: "Undone" },
+};
+const relTime = (d: any) => {
+    const ms = Date.now() - new Date(d).getTime();
+    const mins = Math.round(ms / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+};
+
+// Recent promotions, newest first — shows the last few runs (manual or scheduled)
+// with a one-click Undo for anything still "completed" (reverted ones show as such).
+function RecentPromotions() {
+    const qc = useQueryClient();
+    const [busy, setBusy] = useState<string | null>(null);
+    const { data: runs = [] } = useQuery<any[]>({ queryKey: ["promotion_schedules"], queryFn: async () => (await api.get("/v2/promotion-schedules")).data || [] });
+    const recent = runs.filter((r: any) => ["completed", "reverting", "reverted"].includes(r.status)).slice(0, 5);
+    if (!recent.length) return null;
+
+    const undo = async (r: any) => {
+        if (!confirm(`Undo "${r.name}"? Every student it moved goes back to their previous class (anyone moved again since is left alone).`)) return;
+        setBusy(r._id);
+        try {
+            const res = await api.post(`/v2/promotion-schedules/${r._id}/revert`);
+            toast.success(`Undone for ${res.data?.reverted || 0} student(s)`);
+            qc.invalidateQueries({ queryKey: ["promotion_schedules"] });
+            qc.invalidateQueries({ queryKey: ["students"] });
+            qc.invalidateQueries({ queryKey: ["students-list"] });
+        } catch (e: any) { toast.error(e.response?.data?.message || "Could not undo"); }
+        finally { setBusy(null); }
+    };
+
+    return (
+        <div className="mb-5 rounded-xl border border-slate-100 bg-white p-4">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Recent Promotions</p>
+            <div className="divide-y divide-slate-50">
+                {recent.map((r: any) => (
+                    <div key={r._id} className="flex items-center gap-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-700 truncate">{r.name}</p>
+                            <p className="text-xs text-slate-400">{relTime(r.finishedAt || r.runAt)} · {r.result?.promoted ?? 0} promoted{r.result?.graduated ? `, ${r.result.graduated} graduated` : ""}</p>
+                        </div>
+                        <FBadge tone={STATUS[r.status]?.tone || "slate"}>{STATUS[r.status]?.label || r.status}</FBadge>
+                        {r.status === "completed" && (
+                            <button onClick={() => undo(r)} disabled={busy === r._id} className="h-8 px-3 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 font-bold text-xs flex items-center gap-1.5 disabled:opacity-40">
+                                {busy === r._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />} Undo
+                            </button>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 // Promote Students — a guided flow:
 //   1) Pick a source class+stream
@@ -21,12 +81,14 @@ export default function PromoteStudents() {
     const [fromStreamId, setFromStreamId] = useState("");
     // Selection
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    // Destination
+    // Destination — "__keep__" means each student keeps their own stream name,
+    // created automatically in the destination class if it doesn't have one yet.
     const [toClassId, setToClassId] = useState("");
-    const [toStreamId, setToStreamId] = useState("");
+    const [toStreamId, setToStreamId] = useState("__keep__");
     const [promoting, setPromoting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<any>(null);
+    const [undoing, setUndoing] = useState(false);
 
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const { data: fromStreams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", fromClassId], enabled: !!fromClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: fromClassId } })).data || [] });
@@ -36,8 +98,9 @@ export default function PromoteStudents() {
     const fromCls = classes.find((c: any) => String(c._id) === fromClassId);
     const fromStream = fromStreams.find((s: any) => String(s._id) === fromStreamId);
     const toCls = classes.find((c: any) => String(c._id) === toClassId);
-    const toStream = toStreams.find((s: any) => String(s._id) === toStreamId);
-    const destLabel = toCls ? (toStream ? (toStream.fullName || `${toCls.name} ${toStream.name}`) : toCls.name) : "";
+    const keepOwnStream = toStreamId === "__keep__";
+    const toStream = keepOwnStream ? null : toStreams.find((s: any) => String(s._id) === toStreamId);
+    const destLabel = toCls ? (keepOwnStream ? `${toCls.name} (same stream)` : toStream ? (toStream.fullName || `${toCls.name} ${toStream.name}`) : toCls.name) : "";
 
     // Students in the chosen source class + stream.
     const roster = useMemo(() => {
@@ -67,7 +130,8 @@ export default function PromoteStudents() {
             setResult(r.data);
             qc.invalidateQueries({ queryKey: ["students"] });
             qc.invalidateQueries({ queryKey: ["students-list"] });
-            toast.success(`Promoted ${r.data.promoted} student(s) to ${r.data.destination}.`);
+            qc.invalidateQueries({ queryKey: ["promotion_schedules"] });
+            toast.success(`Promoted ${r.data.promoted} student(s) to ${r.data.destination}.${r.data.streamsCreated ? ` Created ${r.data.streamsCreated} new stream(s).` : ""}`);
             setStep(4);
         } catch (e: any) {
             clearInterval(tick); setProgress(0);
@@ -75,7 +139,22 @@ export default function PromoteStudents() {
         } finally { setPromoting(false); }
     };
 
-    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setToClassId(""); setToStreamId(""); setProgress(0); setResult(null); };
+    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setToClassId(""); setToStreamId("__keep__"); setProgress(0); setResult(null); };
+
+    const undoJustDone = async () => {
+        if (!result?.runId) return;
+        if (!confirm(`Undo this promotion? All ${result.promoted} student(s) go back to their previous class.`)) return;
+        setUndoing(true);
+        try {
+            const r = await api.post(`/v2/promotion-schedules/${result.runId}/revert`);
+            toast.success(`Undone for ${r.data?.reverted || 0} student(s)`);
+            qc.invalidateQueries({ queryKey: ["students"] });
+            qc.invalidateQueries({ queryKey: ["students-list"] });
+            qc.invalidateQueries({ queryKey: ["promotion_schedules"] });
+            reset();
+        } catch (e: any) { toast.error(e.response?.data?.message || "Could not undo"); }
+        finally { setUndoing(false); }
+    };
 
     const Stepper = () => (
         <div className="flex items-center gap-2 mb-6 flex-wrap">
@@ -109,6 +188,7 @@ export default function PromoteStudents() {
                     <span className="text-sm text-slate-600 flex-1"><b className="text-slate-800">Promote the whole school automatically</b> — set a date & time and every class moves up (Grade 1 East → Grade 2 East).</span>
                     <ArrowRight className="w-4 h-4 text-[#5C67F2]" />
                 </Link>
+                <RecentPromotions />
                 <Stepper />
 
                 {/* Step 1 — pick source class + stream */}
@@ -171,7 +251,7 @@ export default function PromoteStudents() {
                         <div className="grid sm:grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination class *</label>
-                                <select value={toClassId} onChange={e => { setToClassId(e.target.value); setToStreamId(""); }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <select value={toClassId} onChange={e => { setToClassId(e.target.value); setToStreamId("__keep__"); }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                                     <option value="">— Select Class —</option>
                                     {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
                                 </select>
@@ -179,11 +259,13 @@ export default function PromoteStudents() {
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination stream</label>
                                 <select value={toStreamId} onChange={e => setToStreamId(e.target.value)} disabled={!toClassId} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
+                                    <option value="__keep__">Same stream as now — create it if needed</option>
                                     <option value="">No stream</option>
                                     {toStreams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                                 </select>
                             </div>
                         </div>
+                        {keepOwnStream && <p className="text-xs text-slate-400 -mt-2">Each student keeps their own stream name (e.g. "North"); it's created under {toCls?.name || "the destination class"} automatically if it doesn't exist yet.</p>}
                         {destLabel && <p className="text-sm text-slate-600 font-bold flex items-center gap-2">{fromCls?.name}{fromStream ? ` ${fromStream.name}` : ""} <ArrowRight className="w-4 h-4 text-[#5C67F2]" /> {destLabel}</p>}
 
                         {(promoting || progress > 0) && (
@@ -209,7 +291,12 @@ export default function PromoteStudents() {
                         <h2 className="text-lg font-black text-slate-800">Promotion complete</h2>
                         <p className="text-sm text-slate-500 mt-1">Promoted <b>{result.promoted}</b> student(s) to <b>{result.destination}</b>{result.skipped ? ` · ${result.skipped} skipped` : ""}.</p>
                         <p className="text-xs text-slate-400 mt-2 flex items-center justify-center gap-1"><Users className="w-3.5 h-3.5" /> Their previous class results remain on each student's Academic History.</p>
-                        <button onClick={reset} className="mt-5 h-11 px-5 rounded-xl bg-[#5C67F2] text-white font-bold text-sm">Promote another class</button>
+                        <div className="flex items-center justify-center gap-2.5 mt-5">
+                            <button onClick={undoJustDone} disabled={undoing} className="h-11 px-5 rounded-xl border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 font-bold text-sm flex items-center gap-1.5 disabled:opacity-40">
+                                {undoing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />} Undo this promotion
+                            </button>
+                            <button onClick={reset} className="h-11 px-5 rounded-xl bg-[#5C67F2] text-white font-bold text-sm">Promote another class</button>
+                        </div>
                     </div>
                 )}
             </div>

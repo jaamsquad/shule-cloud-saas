@@ -17,7 +17,8 @@ import { scholarSheetData, reportCardSettings } from './reports.routes';
 import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
 import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
-import { onlyPublished } from '../lib/examPublish';
+import { onlyPublished, levelKey } from '../lib/examPublish';
+import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
 import { resolveGrading, Grading } from '../lib/grading';
 import { papersForSubject, papersForSubjectName, combinePapers } from '../lib/subjectPapers';
 const router = Router();
@@ -1572,15 +1573,30 @@ router.post('/student-portal/tasks/:type/:id/submit', authed(async (req, res, db
 }));
 
 // ─── Notes & Resources visibility ─────────────────────────────────────────────
-// Students: resources marked available (isPublic) for their class (or unscoped).
+// Students: resources marked available (isPublic) for their class (or unscoped), plus the
+// owner-uploaded shared library (ShuleCloud Library) matching their class/grade — gated to
+// what this school offers that grade (see lib/globalResourceScope.ts).
 router.get('/student-portal/resources', authed(async (req, res, db, decoded) => {
     const student: any = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) }).catch(() => null);
     const cls = String(student?.studentClass || student?.className || '').toLowerCase();
     const all = await db.collection('academic_resources').find({ isPublic: { $ne: false } }).sort({ createdAt: -1 }).toArray();
-    res.json(all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls));
+    const mine = all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls);
+
+    const myLevel = levelKey(student?.studentClass || student?.currentClass || '');
+    const origin = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`).replace(/\/$/, '');
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (!r.className || !myLevel || levelKey(r.className) === myLevel))
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
-// Teachers: resources matching their assigned subjects (unscoped resources always shown).
+// Teachers: resources matching their assigned subjects (unscoped resources always shown),
+// plus the owner-uploaded shared library (ShuleCloud Resources) — matched by subject NAME
+// since those aren't tied to this school's own subject ids.
 router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const staffId = String(decoded.staffId || '');
     const staff: any = await db.collection('staff').findOne({ _id: new ObjectId(staffId) }).catch(() => null);
@@ -1589,7 +1605,24 @@ router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const links = await db.collection('staff_subjects').find({ $or: [{ teacherId: staffId }, { staffId }] }).toArray().catch(() => []);
     links.forEach((l: any) => subjectIds.add(String(l.subjectId)));
     const all = await db.collection('academic_resources').find({}).sort({ createdAt: -1 }).toArray();
-    res.json(subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all);
+    const mine = subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all;
+
+    const norm = (v: any) => String(v ?? '').toLowerCase().trim();
+    const mySubjectNames = new Set<string>();
+    if (subjectIds.size) {
+        const subs = await db.collection('subjects').find({ _id: { $in: [...subjectIds].map(safeObjId).filter(Boolean) as any[] } }, { projection: { name: 1, subjectName: 1 } }).toArray().catch(() => []);
+        subs.forEach((s: any) => mySubjectNames.add(norm(s.name || s.subjectName)));
+    }
+    // Absolute file URL so it resolves outside the /api/v1 prefix (same pattern as blog uploads).
+    const origin = process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (mySubjectNames.size === 0 || !r.subjectName || mySubjectNames.has(norm(r.subjectName))))
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin.replace(/\/$/, '')}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
 // ─── Student Portal: academic requisitions ────────────────────────────────────
@@ -2168,6 +2201,19 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
     const prevDocByStudent: Record<string, any> = {};
     prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; prevDocByStudent[String(m.studentId)] = m; });
 
+    // Stamp each mark with the student's class + academic year AT SAVE TIME (first insert
+    // only — see $setOnInsert below), so a promotion afterwards never rewrites which class a
+    // student's past exam belongs to: it stays their Grade 10 result even once they're in
+    // Grade 11, same as the admin-side marks entry (academics.routes.ts).
+    const period = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null);
+    const year = period?.academicYear || new Date().getFullYear();
+    const sIds = Array.from(new Set(marks.map((m: any) => String(m.studentId)).filter(Boolean)));
+    const studentDocs = sIds.length
+        ? await db.collection('students').find({ _id: { $in: sIds.map(id => safeObjId(id) || id) as any[] } }, { projection: { studentClass: 1, className: 1, currentClass: 1, classId: 1 } }).toArray().catch(() => [])
+        : [];
+    const classByStudent: Record<string, { name: string; id: string }> = {};
+    studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || className, id: String(s.classId || '') }; });
+
     let saved = 0;
     const changes: Array<{ studentId: string; from: number | null; to: number }> = [];
     for (const m of marks) {
@@ -2184,13 +2230,17 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
             const combined = combinePapers(papers, paperDefs) || { marksObtained: obtained, totalMarks: total };
             scoreSet = { papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks };
         }
+        const cls = classByStudent[String(m.studentId)] || { name: className, id: '' };
         await db.collection('exam_marks').updateOne(
             { examId, subjectName: subject, studentId: String(m.studentId) },
             { $set: {
                 examId, examName: examName || 'Exam', term: term || '', className,
                 subjectName: subject, studentId: String(m.studentId),
                 ...scoreSet, markedBy: decoded.name, updatedAt: new Date(),
-            } },
+            },
+            // classAtTime/classIdAtTime/academicYear set only on first insert, so re-saving
+            // marks (or a later promotion) never rewrites the historical class attribution.
+            $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) } },
             { upsert: true },
         );
         saved++;

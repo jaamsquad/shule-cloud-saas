@@ -6,6 +6,7 @@ import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum }
 import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
 import { onlyPublished, publishedView } from '../lib/examPublish';
 import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
+import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -52,9 +53,19 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const extra: any = await database.collection('school_profile').findOne({}).catch(() => null)
             || await database.collection('tenant_profile').findOne({}).catch(() => null) || {};
         const profile: any = { ...(tenant || {}), ...extra, name: tenant?.instituteName || tenant?.name || extra?.name };
-        const classId = String(student.classId || '');
-        const myClass = student.studentClass || student.currentClass || '';
-        const myStream = student.stream || student.streamName || '';
+        // The class this card is FOR is the class the student was in when they sat this
+        // exam (exam_marks.classAtTime/classIdAtTime, stamped once at save time) — never
+        // their current class. Without this, a student promoted since the exam (Form 3 ->
+        // Form 4) would print their old Form 3 exam under a "Form 4" heading, which is wrong:
+        // the exam, its subjects/curriculum, grading and title must all stay Form 3.
+        await backfillClassAtTimeForExam(database, examId);
+        const examMarkForMe: any = await database.collection('exam_marks').findOne({ examId, studentId: sid, $or: [{ classAtTime: { $exists: true, $ne: '' } }, { classIdAtTime: { $exists: true, $ne: '' } }] }).catch(() => null);
+        const classId = String(examMarkForMe?.classIdAtTime || student.classId || '');
+        const myClass = examMarkForMe?.classAtTime || student.studentClass || student.currentClass || '';
+        // Stream at the time, pulled from the classAtTime label itself ("Form 3 East" -> "East");
+        // falls back to the student's current stream when there's no classAtTime to read it from.
+        const streamAtTimeMatch = examMarkForMe?.classAtTime ? String(examMarkForMe.classAtTime).match(/(?:form|grade)\s*\d+\s+(.+)$/i) : null;
+        const myStream = streamAtTimeMatch?.[1] || student.stream || student.streamName || '';
         // Grading resolves via the class's assigned template (by id OR name).
         const { gradeOf, meanGrade } = await loadGrading(database, classId, myClass);
 
@@ -216,17 +227,33 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const rankMarksMain = await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
-        // Normalized class identity for a student — prefer the v2 classId, else the
-        // normalized class-name text. Used so "FORM 4 WEST" == "Form 4 West".
-        const myClassId = String(student.classId || '');
+        // Normalized class identity for a student AT THE TIME OF THIS EXAM — prefer each
+        // mark's own classAtTime/classIdAtTime (stamped when it was saved) over the
+        // student's live class, so the whole cohort is grouped by who they sat the exam
+        // WITH, not who shares their class now. Without this, ranking a historical exam
+        // after the class has since been promoted would scatter the real cohort across
+        // "old class" (this student) vs "new class" (everyone already promoted).
+        const classAtTimeByStudent: Record<string, { cid: string; name: string }> = {};
+        rankMarks.forEach((m: any) => {
+            const id = String(m.studentId);
+            if (!classAtTimeByStudent[id] && (m.classAtTime || m.classIdAtTime)) {
+                classAtTimeByStudent[id] = { cid: String(m.classIdAtTime || ''), name: norm(m.classAtTime || '') };
+            }
+        });
+        const myClassId = classId;
         const classKeyOf = (id: string): { cid: string; name: string } => {
+            const at = classAtTimeByStudent[id];
+            if (at) return at;
             const meta = sMeta[id] || {};
             return { cid: String(meta.classId || ''), name: norm(meta.studentClass || meta.currentClass || meta.class || meta.className || '') };
         };
         // Class level (Form/Grade N) from any class label, e.g. "Form 4 West" → "form 4".
         const levelOfLabel = (s: string) => { const m = norm(s).match(/(form|grade)\s*\d+/); return m ? m[0] : norm(s); };
-        // Stream label from a student, e.g. "West".
+        // Stream label for a student AT THE TIME — from the classAtTime label when we
+        // have one (e.g. "Form 3 East" -> "east"), else their current stream.
         const streamOf = (id: string): string => {
+            const at = classAtTimeByStudent[id];
+            if (at?.name) { const m = at.name.match(/(?:form|grade)\s*\d+\s+(.+)$/i); if (m) return norm(m[1]); }
             const meta = sMeta[id] || {};
             return norm(meta.stream || meta.streamName || '');
         };

@@ -211,7 +211,7 @@ export async function buildPromotionPlan(db: any, opts: PromotionOptions = {}) {
     };
 }
 
-const CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName', 'academicYear'];
+export const CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName', 'academicYear'];
 
 /**
  * Apply a promotion. `runId` identifies the run (the schedule id): students already done

@@ -6,7 +6,7 @@ import { PageTitle, PanelCard } from "../../PortalShell";
 import FileViewer from "../../FileViewer";
 import type { StaffCtx } from "../StaffLayout";
 
-const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, "Lesson Page": Video, Other: ExternalLink };
+const ICON: Record<string, any> = { Notes: FileText, Worksheet: File, Video, "External Link": Link2, Document: Download, "Lesson Page": Video, Image: Eye, Diagram: Eye, Other: ExternalLink };
 
 const getVideoEmbedUrl = (url: string) => {
     if (!url) return "";
@@ -85,7 +85,7 @@ export default function StaffResources() {
                                         <div className="w-11 h-11 rounded-2xl bg-[#5C67F2]/10 flex items-center justify-center text-[#5C67F2] flex-shrink-0"><Icon className="w-5 h-5" /></div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : ""}{r.isPublic === false ? " · Staff only" : ""}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{r.type}{r.subjectName ? ` · ${r.subjectName}` : ""}{r.className ? ` · ${r.className}` : ""}{r.isPublic === false ? " · Staff only" : ""}{r.isGlobal ? " · ShuleCloud Library" : ""}</p>
                                         </div>
                                     </div>
                                     {r.description && <p className="text-[11px] text-slate-500">{r.description}</p>}
