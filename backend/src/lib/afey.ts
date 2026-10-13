@@ -14,6 +14,7 @@ import { AiCaller, getAiConfig, schoolAiEnabled, usedToday, countUse, callModel,
 import { hasQuery, runQuery, SmartCard } from './assistantQueries';
 import { queueSms } from '../services/smsGateway.service';
 import { resolveScope, ScopeResult } from './dataScope';
+import { GREETING_TEMPLATES } from './holidayGreetings';
 
 export type AfeyMsg = { role: 'user' | 'assistant'; content: string };
 export type AfeyAction = {
@@ -21,11 +22,11 @@ export type AfeyAction = {
     recipients: number; sample: { to: string; text: string }[]; status: 'pending' | 'done' | 'cancelled' | 'failed';
     createdBy: string; createdAt: Date; result?: any; title: string;
 };
-type Audience = 'fee_defaulters' | 'absent_today' | 'class_parents' | 'all_parents' | 'staff' | 'person';
-const AUDIENCES: Audience[] = ['fee_defaulters', 'absent_today', 'class_parents', 'all_parents', 'staff', 'person'];
+type Audience = 'fee_defaulters' | 'absent_today' | 'class_parents' | 'all_parents' | 'staff' | 'everyone' | 'person';
+const AUDIENCES: Audience[] = ['fee_defaulters', 'absent_today', 'class_parents', 'all_parents', 'staff', 'everyone', 'person'];
 const AUDIENCE_LABEL: Record<Audience, string> = {
     fee_defaulters: "parents of learners with fee balances", absent_today: 'parents of learners absent today',
-    class_parents: 'parents in a class', all_parents: 'all parents', staff: 'all staff', person: 'one person',
+    class_parents: 'parents in a class', all_parents: 'all parents', staff: 'all staff', everyone: 'all parents and staff', person: 'one person',
 };
 
 const LEFT = /left|transfer|graduat|alumni|withdraw|inactive/i;
@@ -120,12 +121,18 @@ export async function resolveTargets(db: Db, a: { audience: Audience; className?
         const t = await matchPerson(db, a.personQuery || '', scope);
         return t ? [t] : [];
     }
-    if (a.audience === 'staff') {
+    const addStaff = async () => {
         const staff = await db.collection('staff').find(staffFilter).toArray().catch(() => [] as any[]);
         staff.filter((s: any) => !/inactive|left|terminated|resigned/i.test(String(s.status || '')))
             .forEach((s: any) => { const phone = String(s.phone || s.phoneNumber || '').trim(); if (phone) out.push({ phone, vars: { name: String(s.name || [s.firstName, s.lastName].filter(Boolean).join(' ') || 'colleague') } }); });
+    };
+    if (a.audience === 'staff') {
+        await addStaff();
     } else if (a.audience === 'all_parents') {
         (await students()).forEach(s => forStudent(s));
+    } else if (a.audience === 'everyone') {
+        (await students()).forEach(s => forStudent(s));
+        await addStaff();
     } else if (a.audience === 'class_parents') {
         const want = norm(a.className);
         if (!want) return [];
@@ -143,7 +150,7 @@ export async function resolveTargets(db: Db, a: { audience: Audience; className?
         (await students()).filter(s => (bal[String(s._id)] || 0) >= min)
             .forEach(s => forStudent(s, { balance: `KES ${Math.round(bal[String(s._id)]).toLocaleString()}` }));
     }
-    if (a.className && a.audience !== 'class_parents' && a.audience !== 'staff') {
+    if (a.className && a.audience !== 'class_parents' && a.audience !== 'staff' && a.audience !== 'everyone') {
         const want = norm(a.className);
         return dedupe(out.filter(t => norm(t.vars.class) === want || norm(t.vars.class).startsWith(want + ' ')));
     }
@@ -161,7 +168,7 @@ function smsTool() {
             parameters: {
                 type: 'object',
                 properties: {
-                    audience: { type: 'string', enum: AUDIENCES, description: 'fee_defaulters = parents of learners owing fees; absent_today = parents of learners marked absent today; class_parents = parents of one class (className required); all_parents; staff; person = just one named individual (personQuery required)' },
+                    audience: { type: 'string', enum: AUDIENCES, description: 'fee_defaulters = parents of learners owing fees; absent_today = parents of learners marked absent today; class_parents = parents of one class (className required); all_parents; staff; everyone = all parents AND all staff in one send (e.g. a holiday wish to the whole school); person = just one named individual (personQuery required)' },
                     className: { type: 'string', description: 'Class or stream, e.g. "Form 2" or "Grade 4 West" (required for class_parents, optional filter for the others)' },
                     minBalance: { type: 'number', description: 'fee_defaulters only: smallest balance in KES to include' },
                     personQuery: { type: 'string', description: 'person only: the student\'s name/admission no. (to message their parent) or a staff member\'s name/phone, exactly as the user wrote it' },
@@ -198,6 +205,7 @@ function systemPrompt(c: AiCaller, school: string, acts: boolean) {
         acts
             ? [
                 `When asked to send an SMS (e.g. to fee defaulters' parents, parents of absent learners, a class, staff, or just one named person), call prepare_sms with a ready message. For a group, use the matching audience. Nothing is sent until they press Approve, so say so briefly and summarise who will get it. Never claim a message was sent.`,
+                `For a holiday or occasion wish (e.g. "wish everyone happy Eid", "send a Christmas message", "Mother's Day SMS for the parents"), use the ready template below for that occasion VERBATIM as the message — don't write your own — unless the person asks you to customise it. Pick the audience from what they ask: "parents" → all_parents, "staff"/"teachers" → staff, "everyone"/"the school" → everyone. Ready templates:\n${GREETING_TEMPLATES.map(t => `- ${t.title}: "${t.message}"`).join('\n')}`,
                 `For ONE named person (e.g. "text Jane Doe" or "message Mr Otieno"), first call search_people with their name — never guess spellings or pick blindly among same-named people. If it returns exactly one match, go straight to prepare_sms (audience "person", personQuery = that match's key). If it returns more than one, list them for the user as a numbered list "1) Name — detail", "2) Name — detail" etc. and ask which one they mean — do NOT send to anyone yet. Once they answer with a number or clearly pick one, call search_people again with the SAME name (and kind) to reproduce the same ordered list, then use that item's key as personQuery. If it returns none, say you couldn't find them and ask for a correct spelling, admission number, or staff ID.`,
             ].join(' ')
             : `You cannot send messages for this person; you can draft the text for them to send from Communications.`,
