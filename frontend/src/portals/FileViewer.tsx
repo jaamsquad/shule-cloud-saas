@@ -87,13 +87,21 @@ function PdfView({ src }: { src: string }) {
     useEffect(() => {
         let cancelled = false;
         setLoading(true); setError(null); docRef.current = null;
-        const source = src.startsWith("data:") ? { data: dataUriToBytes(src) } : { url: src };
-        pdfjsLib.getDocument(source).promise.then((doc: any) => {
-            if (cancelled) return;
-            docRef.current = doc; setNumPages(doc.numPages); setPage(1); setLoading(false);
-        }).catch(() => { if (!cancelled) { setError("Could not load this PDF."); setLoading(false); } });
+        (async () => {
+            try {
+                // Fetch the bytes ourselves rather than handing pdf.js the bare URL: its
+                // own network layer issues byte-range requests, which some hosts/CORS
+                // setups (and the 360 app's webview) don't serve correctly — a single
+                // plain fetch (the same request Download/Open already use) is reliable.
+                const data = src.startsWith("data:") ? dataUriToBytes(src) : new Uint8Array(await (await fetch(src)).arrayBuffer());
+                const doc = await pdfjsLib.getDocument({ data }).promise;
+                if (cancelled) return;
+                docRef.current = doc; setNumPages(doc.numPages); setPage(1); setLoading(false);
+            } catch (e) {
+                if (!cancelled) { console.error("PDF load failed", e); setError("Could not load this PDF."); setLoading(false); }
+            }
+        })();
         return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [src]);
 
     useEffect(() => {

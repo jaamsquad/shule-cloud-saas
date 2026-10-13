@@ -8,11 +8,13 @@ import { API_ORIGIN } from "@/lib/config";
 import FileViewer from "@/portals/FileViewer";
 
 const TYPES = [
-    { key: "Notes",       icon: FileText,     color: "text-blue-600",   bg: "bg-blue-50",   grad: "from-violet-400 to-fuchsia-500" },
-    { key: "Worksheet",   icon: File,         color: "text-indigo-600", bg: "bg-indigo-50", grad: "from-sky-400 to-blue-500" },
-    { key: "Video",       icon: Video,        color: "text-rose-600",   bg: "bg-rose-50",   grad: "from-rose-400 to-pink-500" },
-    { key: "External Link", icon: Link2,      color: "text-emerald-600",bg: "bg-emerald-50", grad: "from-emerald-400 to-teal-500" },
-    { key: "Document",    icon: Download,     color: "text-amber-600",  bg: "bg-amber-50",  grad: "from-amber-400 to-orange-500" },    { key: "Lesson Page", icon: BookOpen,    color: "text-violet-600", bg: "bg-violet-50", grad: "from-rose-400 to-pink-500" },    { key: "Other",       icon: ExternalLink, color: "text-slate-600",  bg: "bg-slate-50",  grad: "from-slate-400 to-slate-500" },
+    { key: "Notes",       icon: FileText },
+    { key: "Worksheet",   icon: File },
+    { key: "Video",       icon: Video },
+    { key: "External Link", icon: Link2 },
+    { key: "Document",    icon: Download },
+    { key: "Lesson Page", icon: BookOpen },
+    { key: "Other",       icon: ExternalLink },
 ];
 
 const emptyForm = { title: "", type: "Notes", subjectId: "", subjectName: "", classId: "", className: "", url: "", description: "", isPublic: true };
@@ -116,18 +118,18 @@ export default function NotesResources() {
         <div className="flex-1 min-h-screen bg-slate-50 text-slate-700 flex flex-col pb-20 font-sans">
             <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
                 <div className="flex items-center gap-2 text-sm">
-                    <Home className="w-4 h-4 text-[#5C67F2]" /><span className="text-gray-300">/</span>
-                    <span className="font-bold text-gray-600">Academics</span><span className="text-gray-300">/</span>
-                    <span className="font-black text-[#5C67F2]">Notes & Resources</span>
+                    <Home className="w-4 h-4 text-slate-400" /><span className="text-slate-300">/</span>
+                    <span className="font-bold text-slate-500">Academics</span><span className="text-slate-300">/</span>
+                    <span className="font-black text-slate-900">Notes & Resources</span>
                 </div>
                 <button onClick={() => navigate("/academics/resources/new")}
-                    className="h-10 px-5 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-md shadow-indigo-100">
+                    className="h-10 px-5 bg-slate-900 hover:bg-slate-700 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center gap-2">
                     <Plus className="w-4 h-4" /> Create Lesson Page
                 </button>
             </div>
 
             <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
-                <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">Lesson Library</p>
@@ -135,13 +137,13 @@ export default function NotesResources() {
                             <p className="text-slate-500 text-sm mt-2">Share teaching content, lesson pages, worksheets, and videos in one place.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+                            <button onClick={() => setTypeFilter("ALL")} className={`px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === "ALL" ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
                                 All ({resources.length})
                             </button>
                             {TYPES.map(t => {
                                 const count = resources.filter((r: any) => r.type === t.key).length;
                                 return (
-                                    <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === t.key ? `${t.bg} ${t.color} border-current` : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+                                    <button key={t.key} onClick={() => setTypeFilter(t.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[10px] font-semibold uppercase tracking-wide border transition-all ${typeFilter === t.key ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
                                         <t.icon className="w-3 h-3" />{t.key} ({count})
                                     </button>
                                 );
@@ -153,26 +155,26 @@ export default function NotesResources() {
                         <div className="relative w-full">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search title or subject..."
-                                className="w-full h-11 pl-12 pr-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-sm font-semibold text-slate-700" />
+                                className="w-full h-11 pl-12 pr-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 text-sm font-semibold text-slate-700" />
                         </div>
                         <div className="flex flex-wrap items-center gap-2.5">
                             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                            <select value={classFilter} onChange={e => setClassFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-slate-400">
                                 <option value="ALL">All classes</option>
                                 {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
-                            <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                            <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-slate-400">
                                 <option value="ALL">All subjects</option>
                                 {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                             <div className="flex items-center gap-1.5 ml-1">
                                 <ArrowUpDown className="w-3.5 h-3.5 text-slate-300" />
-                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-10 pl-2 pr-7 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-[#5C67F2]">
+                                <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-10 pl-2 pr-7 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 focus:outline-none focus:border-slate-400">
                                     {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
                                 </select>
                             </div>
                             {activeFilterCount > 0 && (
-                                <button onClick={clearFilters} className="h-10 px-3 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Clear filters</button>
+                                <button onClick={clearFilters} className="h-10 px-3 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Clear filters</button>
                             )}
                             <div className="ml-auto text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">{filtered.length} item{filtered.length === 1 ? "" : "s"} showing</div>
                         </div>
@@ -180,9 +182,9 @@ export default function NotesResources() {
                 </div>
 
                 {globalResources.length > 0 && (
-                    <div className="mb-8 rounded-3xl border border-fuchsia-100 bg-gradient-to-br from-fuchsia-50/60 to-violet-50/40 p-6">
+                    <div className="mb-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
                         <div className="flex items-center gap-2 mb-4">
-                            <GraduationCap className="w-5 h-5 text-fuchsia-500" />
+                            <GraduationCap className="w-5 h-5 text-slate-500" />
                             <h2 className="font-black text-slate-800">ShuleCloud Library</h2>
                             <span className="text-xs font-bold text-slate-400">— shared by ShuleCloud, available to every school</span>
                         </div>
@@ -190,10 +192,10 @@ export default function NotesResources() {
                             {globalResources.map((r: any) => {
                                 const gtc = getTypeConfig(r.type);
                                 return (
-                                    <div key={r._id} className="group bg-white rounded-3xl border border-fuchsia-100 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                                        <div className={`h-16 bg-gradient-to-br ${gtc.grad} relative flex items-center justify-center`}>
-                                            <gtc.icon className="w-6 h-6 text-white/90" strokeWidth={1.75} />
-                                            <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-white/25 backdrop-blur-sm text-[8px] font-black text-white uppercase tracking-wide">{r.type}</span>
+                                    <div key={r._id} className="group bg-white rounded-3xl border border-slate-200 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                        <div className="h-16 bg-slate-100 border-b border-slate-200 relative flex items-center justify-center">
+                                            <gtc.icon className="w-6 h-6 text-slate-400" strokeWidth={1.75} />
+                                            <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[8px] font-black text-slate-500 uppercase tracking-wide">{r.type}</span>
                                         </div>
                                         <div className="p-4">
                                             <p className="text-sm font-black text-slate-800 truncate">{r.title}</p>
@@ -202,15 +204,15 @@ export default function NotesResources() {
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 {r.fileUrl ? (
                                                     isViewable(`${API_ORIGIN}${r.fileUrl}`, r.fileName) ? (
-                                                        <button onClick={() => setViewing({ src: `${API_ORIGIN}${r.fileUrl}`, name: r.fileName, title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><Eye className="w-3.5 h-3.5" /> View</button>
+                                                        <button onClick={() => setViewing({ src: `${API_ORIGIN}${r.fileUrl}`, name: r.fileName, title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors"><Eye className="w-3.5 h-3.5" /> View</button>
                                                     ) : (
-                                                        <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><Download className="w-3.5 h-3.5" /> View / Download</a>
+                                                        <a href={`${API_ORIGIN}${r.fileUrl}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors"><Download className="w-3.5 h-3.5" /> View / Download</a>
                                                     )
                                                 ) : r.url ? (
-                                                    <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
+                                                    <a href={r.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors"><ExternalLink className="w-3.5 h-3.5" /> Open</a>
                                                 ) : null}
                                                 {r.videoUrl && (
-                                                    <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-rose-50 text-rose-600 text-[11px] font-black uppercase hover:bg-rose-100 transition-colors"><Video className="w-3.5 h-3.5" /> Watch</button>
+                                                    <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(r.videoUrl), title: r.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors"><Video className="w-3.5 h-3.5" /> Watch</button>
                                                 )}
                                             </div>
                                         </div>
@@ -222,13 +224,13 @@ export default function NotesResources() {
                 )}
 
                 {isLoading ? (
-                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-[#5C67F2]" />Loading lesson pages...</div>
+                    <div className="flex items-center justify-center h-40 gap-2 text-slate-400 text-xs font-bold uppercase"><Loader2 className="w-5 h-5 animate-spin text-slate-400" />Loading lesson pages...</div>
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-300 text-xs font-bold uppercase rounded-[2rem] border border-dashed border-slate-200 bg-white/70">
                         <FileText className="w-8 h-8" />
                         {resources.length === 0 ? "No lesson pages yet" : "Nothing matches these filters"}
                         {resources.length > 0 && activeFilterCount + (search ? 1 : 0) > 0 && (
-                            <button onClick={clearFilters} className="normal-case text-[11px] font-bold text-[#5C67F2] hover:underline">Clear filters</button>
+                            <button onClick={clearFilters} className="normal-case text-[11px] font-bold text-slate-600 hover:underline">Clear filters</button>
                         )}
                     </div>
                 ) : (
@@ -237,11 +239,11 @@ export default function NotesResources() {
                             const tc = getTypeConfig(res.type);
                             const embed = res.videoUrl ? getVideoEmbedUrl(res.videoUrl) : null;
                             return (
-                                <div key={res._id} className="group bg-white rounded-3xl border border-slate-100 shadow-[0_1px_3px_rgba(15,23,42,0.06)] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all">
-                                    <div className={`h-20 bg-gradient-to-br ${tc.grad} relative flex items-center justify-center`}>
-                                        <tc.icon className="w-8 h-8 text-white/90" strokeWidth={1.75} />
-                                        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white/25 backdrop-blur-sm text-[9px] font-black text-white uppercase tracking-wide">{res.type}</span>
-                                        {res.isPublic === false && <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/25 backdrop-blur-sm text-[9px] font-black text-white uppercase tracking-wide">Staff only</span>}
+                                <div key={res._id} className="group bg-white rounded-3xl border border-slate-200 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
+                                    <div className="h-20 bg-slate-100 border-b border-slate-200 relative flex items-center justify-center">
+                                        <tc.icon className="w-8 h-8 text-slate-400" strokeWidth={1.75} />
+                                        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wide">{res.type}</span>
+                                        {res.isPublic === false && <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-slate-900 text-[9px] font-black text-white uppercase tracking-wide">Staff only</span>}
                                     </div>
                                     <div className="px-5 pt-4">
                                         <p className="text-sm font-black text-slate-800 truncate">{res.title}</p>
@@ -255,31 +257,31 @@ export default function NotesResources() {
                                         {res.objectives && <p className="text-[11px] text-slate-500"><span className="font-black text-slate-700">Objectives:</span> {res.objectives}</p>}
                                         {res.lessonNotes && <p className="text-[11px] text-slate-500 line-clamp-3">{res.lessonNotes}</p>}
                                         <div className="flex flex-wrap gap-2 pt-1">
-                                            {res.assignment && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700">Assignment</span>}
-                                            {res.quizAvailable && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700">Quiz available</span>}
-                                            {res.videoUrl && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Video</span>}
+                                            {res.assignment && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200">Assignment</span>}
+                                            {res.quizAvailable && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200">Quiz available</span>}
+                                            {res.videoUrl && <span className="px-2 py-1 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200">Video</span>}
                                         </div>
                                         <div className="flex flex-wrap gap-2 pt-2">
                                             {res.fileData ? (
                                                 isViewable(res.fileData, res.fileName) ? (
                                                     <button onClick={() => setViewing({ src: res.fileData, name: res.fileName, title: res.title })}
-                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
+                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors">
                                                         <Eye className="w-3.5 h-3.5" /> View
                                                     </button>
                                                 ) : (
                                                     <a href={res.fileData} target="_blank" rel="noopener noreferrer" download={res.fileName}
-                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
+                                                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors">
                                                         <Download className="w-3.5 h-3.5" /> {res.fileName ? "View / Download" : "Open File"}
                                                     </a>
                                                 )
                                             ) : res.url ? (
                                                 <a href={res.url} target="_blank" rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-fuchsia-50 text-fuchsia-600 text-[11px] font-black uppercase hover:bg-fuchsia-100 transition-colors">
+                                                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors">
                                                     <ExternalLink className="w-3.5 h-3.5" /> Open Resource
                                                 </a>
                                             ) : null}
                                             {embed && (
-                                                <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-rose-50 text-rose-600 text-[11px] font-black uppercase hover:bg-rose-100 transition-colors">
+                                                <button onClick={() => setVideoOpen({ src: embed, title: res.title })} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black uppercase hover:bg-slate-200 transition-colors">
                                                     <Video className="w-3.5 h-3.5" /> Watch Video
                                                 </button>
                                             )}
@@ -287,12 +289,12 @@ export default function NotesResources() {
                                         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                                             <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em]">Ready to teach</span>
                                             <div className="flex gap-1.5">
-                                                <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => navigate(`/academics/resources/${res._id}/edit`)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center border border-slate-100 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                                                 {confirmDelete === res._id ? (
-                                                    <><button onClick={() => delMut.mutate(res._id)} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
+                                                    <><button onClick={() => delMut.mutate(res._id)} className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
                                                     <button onClick={() => setConfirmDelete(null)} className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>
                                                 ) : (
-                                                    <button onClick={() => setConfirmDelete(res._id)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 flex items-center justify-center border border-slate-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => setConfirmDelete(res._id)} className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center border border-slate-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                                 )}
                                             </div>
                                         </div>
