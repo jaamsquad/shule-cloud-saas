@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosInstance } from "axios";
 import {
   CalendarDays, CalendarRange, CalendarClock, List, Plus, Loader2, ChevronLeft, ChevronRight,
-  Trash2, X, Check, MapPin, Clock, User, Globe2, Link2, Unlink, AlertTriangle, Moon,
+  Trash2, X, Check, MapPin, Clock, User, Globe2, Link2, Unlink, AlertTriangle, Moon, PartyPopper, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -143,6 +143,27 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
 
   const refresh = () => { qc.invalidateQueries({ queryKey: ["calendar-events"] }); qc.invalidateQueries({ queryKey: ["calendar-summary"] }); };
 
+  // ── Holiday/occasion SMS wishes (Eid, Christmas, Mother's/Father's Day, …) ────────────────
+  const { data: occasions = [] } = useQuery({
+    queryKey: ["calendar-occasions", country],
+    queryFn: async () => (await client.get("/calendar/occasions", { params: { country } })).data as any[],
+    staleTime: 60 * 60_000,
+  });
+  const [wishOpen, setWishOpen] = useState(false);
+  const [wishAudience, setWishAudience] = useState<"parents" | "staff" | "both">("both");
+  const [wishMessage, setWishMessage] = useState("");
+  const openWish = () => {
+    const occ = occasions.find((o: any) => o.template?.key === detail?.greetingKey);
+    setWishMessage(occ?.template?.message || detail?.description || "");
+    setWishAudience("both");
+    setWishOpen(true);
+  };
+  const wishMut = useMutation({
+    mutationFn: () => client.post("/calendar/occasions/send", { key: detail?.greetingKey, audience: wishAudience, message: wishMessage }),
+    onSuccess: (r: any) => { toast.success(r?.data?.message || "Sent"); setWishOpen(false); },
+    onError: (e: any) => toast.error(e.response?.data?.message || "Could not send this wish"),
+  });
+
   // ── Create / edit / delete ────────────────────────────────────────────────
   const openCreate = (date?: string) => { setEditingId(null); setDraft({ ...emptyDraft, eventDate: date || selectedDate }); setShowModal(true); };
   const openEdit = (e: any) => {
@@ -260,13 +281,13 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
 
       {/* Event detail */}
       {detail && (
-        <div className="fixed inset-0 bg-black/50 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDetail(null)}>
+        <div className="fixed inset-0 bg-black/50 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setDetail(null); setWishOpen(false); }}>
           <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="h-2" style={{ backgroundColor: colorOf(catKey(detail)) }} />
             <div className="p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-lg font-black text-slate-800">{detail.title}</h3>
-                <button onClick={() => setDetail(null)} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0"><X className="w-4 h-4" /></button>
+                <button onClick={() => { setDetail(null); setWishOpen(false); }} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0"><X className="w-4 h-4" /></button>
               </div>
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full" style={{ color: colorOf(catKey(detail)), backgroundColor: `${colorOf(catKey(detail))}14` }}>{labelOf(catKey(detail))}</span>
               <div className="space-y-1.5 text-sm text-slate-600">
@@ -284,6 +305,25 @@ export default function CalendarPage({ apiClient }: CalendarPageProps) {
               )}
               {detail.approxDate && detail.description && <p className="text-[11px] text-slate-400 italic">{detail.description}</p>}
               <p className="text-[10px] text-slate-400 uppercase tracking-wide pt-1">Source: {detail.source === "google" ? "Your Google Calendar" : detail.source === "public_holiday" ? "Public holiday registry" : detail.source === "religious" ? "Religious observance registry" : detail.source === "international" ? "International observance registry" : "ShuleCloud School"}</p>
+              {detail.greetingKey && !wishOpen && (
+                <button onClick={openWish} className="w-full h-10 rounded-xl bg-fuchsia-50 text-fuchsia-600 text-xs font-black uppercase flex items-center justify-center gap-2 hover:bg-fuchsia-100"><PartyPopper className="w-4 h-4" /> Send a wish by SMS</button>
+              )}
+              {wishOpen && (
+                <div className="space-y-2.5 border-t border-slate-100 pt-3">
+                  <div className="flex items-center gap-1 bg-slate-50 rounded-xl p-1">
+                    {([["parents", "Parents"], ["staff", "Staff"], ["both", "Everyone"]] as const).map(([v, label]) => (
+                      <button key={v} onClick={() => setWishAudience(v)} className={`flex-1 h-8 rounded-lg text-[11px] font-black uppercase transition-colors ${wishAudience === v ? "bg-white text-fuchsia-600 shadow-sm" : "text-slate-500"}`}>{label}</button>
+                    ))}
+                  </div>
+                  <textarea value={wishMessage} onChange={e => setWishMessage(e.target.value)} rows={3} className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-fuchsia-300" />
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setWishOpen(false)} className="h-9 px-3 rounded-xl text-xs font-bold text-slate-400">Cancel</button>
+                    <button onClick={() => { if (!wishMessage.trim()) { toast.error("Write a message"); return; } wishMut.mutate(); }} disabled={wishMut.isPending} className="h-9 px-4 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-600 text-white text-xs font-black uppercase flex items-center gap-1.5 disabled:opacity-50">
+                      {wishMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send
+                    </button>
+                  </div>
+                </div>
+              )}
               {detail.editable && (
                 <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                   <button onClick={() => openEdit(detail)} className="h-9 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-black uppercase">Edit</button>

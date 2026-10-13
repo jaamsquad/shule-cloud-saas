@@ -2,10 +2,13 @@ import express, { Request, Response } from 'express';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { getMetaDb } from '../lib/mongodb';
-import { getHolidaysInRange, DEFAULT_COUNTRY, COUNTRIES } from '../lib/holidays';
+import { getHolidaysInRange, getHolidaysForYear, DEFAULT_COUNTRY, COUNTRIES } from '../lib/holidays';
+import { upcomingGreetableOccasions, greetingByKey, greetingForTitle } from '../lib/holidayGreetings';
 import { googleCalendarEnv, buildGoogleAuthUrl, exchangeCodeForTokens, listGoogleEvents } from '../lib/googleCalendar';
 import { getConnection, saveConnection, disconnect as disconnectGoogle, syncEventToGoogle, deleteEventFromGoogle } from '../services/googleCalendarSync.service';
 import { callerOf, isSchoolAdmin } from '../lib/aiAssistant';
+import { resolvePhones, schoolIdFromReq } from '../services/communications.service';
+import { queueSms } from '../services/smsGateway.service';
 
 const router = express.Router();
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -124,6 +127,7 @@ const holidayToEvent = (h: ReturnType<typeof getHolidaysInRange>[number]) => ({
         h.source === 'public_holiday' ? (COUNTRIES[h.country || DEFAULT_COUNTRY]?.name ? `${COUNTRIES[h.country || DEFAULT_COUNTRY].name} Government` : 'Public Holiday') : h.source === 'religious' ? 'Religious observance' : 'International observance',
     source: h.source, country: h.country, isPublicHoliday: h.isPublicHoliday, isObservance: h.isObservance,
     approxDate: h.approxDate, allDay: true, editable: false, status: 'approved',
+    greetingKey: greetingForTitle(h.title)?.key || null,
 });
 
 const googleEventToEvent = (ev: any) => {
@@ -306,6 +310,46 @@ router.get('/calendar/summary', async (req: Request, res: Response) => {
         res.json({ todayCount: today.length, tomorrowCount: tomorrow.length, upcomingCount: upcoming.length, today, tomorrow, upcoming });
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Unable to load calendar summary' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Holiday/occasion SMS wishes (Eid, Christmas, Mother's/Father's Day, World Teachers' Day, …)
+// ═══════════════════════════════════════════════════════════════════
+
+router.get('/calendar/occasions', async (req: Request, res: Response) => {
+    try {
+        const country = String(req.query.country || DEFAULT_COUNTRY).toUpperCase();
+        const now = new Date();
+        const year = Number(req.query.year) || now.getFullYear();
+        // Spill into next year too, near December, so "upcoming" never goes empty right before New Year.
+        const holidays = [...getHolidaysForYear(year, country), ...getHolidaysForYear(year + 1, country)];
+        const occasions = upcomingGreetableOccasions(holidays, fmtDate(now)).slice(0, 12);
+        res.json(occasions);
+    } catch (error: any) {
+        res.status(500).json({ message: error.message || 'Unable to load occasions' });
+    }
+});
+
+router.post('/calendar/occasions/send', async (req: Request, res: Response) => {
+    try {
+        const caller = callerOf(req);
+        if (!caller || !isSchoolAdmin(caller)) return res.status(403).json({ message: 'Only a school admin can send a holiday wish' });
+        const db = getRequestDb(req);
+        const schoolId = schoolIdFromReq(req);
+        if (!schoolId) return res.status(400).json({ message: 'School context missing' });
+        const { key, audience, message } = req.body || {};
+        const template = greetingByKey(String(key || ''));
+        const text = String(message || template?.message || '').trim();
+        if (!text) return res.status(400).json({ message: 'No message — pick a ready template or write one' });
+        const aud = ['parents', 'staff', 'both'].includes(audience) ? audience : 'both';
+        const numbers = aud === 'both'
+            ? Array.from(new Set([...(await resolvePhones(db, 'parents')), ...(await resolvePhones(db, 'staff'))]))
+            : await resolvePhones(db, aud);
+        const r = await queueSms(db, schoolId, numbers, text, { audience: `occasion_${key || 'custom'}`, createdBy: caller.id });
+        res.json({ message: `Sent to ${r.queued} recipient${r.queued === 1 ? '' : 's'}`, ...r });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message || 'Unable to send this wish' });
     }
 });
 
