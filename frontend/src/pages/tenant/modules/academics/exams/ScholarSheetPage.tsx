@@ -12,6 +12,7 @@ export default function ScholarSheetPage() {
     // Class + stream are SEPARATE (v2 model): pick Form 4, then East/South.
     const [classId, setClassId] = useState("");
     const [streamId, setStreamId] = useState("");
+    const [yearFilter, setYearFilter] = useState("");   // "" = all years
     const [examId, setExamId] = useState("");
     const [studentId, setStudentId] = useState("");
     const [studentSearch, setStudentSearch] = useState("");   // searchable student box
@@ -82,11 +83,24 @@ export default function ScholarSheetPage() {
         || termNum(b.term) - termNum(a.term)
         || String(b.createdAt || "").localeCompare(String(a.createdAt || ""))), [examsRaw]);
 
-    // Default to the just-previous (most recent) exam once the list has loaded, unless a
-    // deep link or the user has already picked one.
+    // Every year that has an exam, newest first — a quick way to jump straight to the
+    // exams of one year instead of scanning the whole (potentially multi-year) list.
+    const examYears = useMemo(() => [...new Set(exams.map((e: any) => String(e.academicYear || "")).filter(Boolean))]
+        .sort((a, b) => Number(b) - Number(a)), [exams]);
+    const examsForYear = useMemo(() => yearFilter ? exams.filter((e: any) => String(e.academicYear || "") === yearFilter) : exams, [exams, yearFilter]);
+
+    // Default to the just-previous (most recent) exam/year once the list has loaded,
+    // unless a deep link or the user has already picked one.
     useEffect(() => {
-        if (!examId && !deepLink && exams.length) setExamId(exams[0]._id);
+        if (!examId && !deepLink && exams.length) { setExamId(exams[0]._id); setYearFilter(String(exams[0].academicYear || "")); }
     }, [exams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Switching the year jumps the exam picker to that year's most recent exam.
+    const onYearFilter = (y: string) => {
+        setYearFilter(y);
+        const list = y ? exams.filter((e: any) => String(e.academicYear || "") === y) : exams;
+        setExamId(list[0]?._id || "");
+    };
 
     const cls = v2classes.find((c: any) => String(c._id) === String(classId));
     const legacyClass = legacyClasses.find((c: any) => String(c._id) === String(classId));
@@ -203,7 +217,7 @@ export default function ScholarSheetPage() {
 
             <div className="ss-no-print bg-white border-b border-slate-100 p-4">
                 <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 mb-3"><FileText className="w-5 h-5 text-[#2E7D32]" /> ScholarSheet — Report Card</h1>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-4xl">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 max-w-5xl">
                     {/* Class (Form 4) */}
                     <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); setStudentId(""); setStudentSearch(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Class —</option>
@@ -214,10 +228,17 @@ export default function ScholarSheetPage() {
                         <option value="">All streams</option>
                         {v2streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                     </select>
+                    {/* Year — narrows the exam list below to one year, so a class with exams
+                        spanning several years (e.g. a promoted cohort's old + new exams) is
+                        easy to search. */}
+                    <select value={yearFilter} onChange={e => onYearFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                        <option value="">All years</option>
+                        {examYears.map((y: string) => <option key={y} value={y}>{y}</option>)}
+                    </select>
                     {/* Exam */}
                     <select value={examId} onChange={e => setExamId(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Exam —</option>
-                        {exams.map((ex: any) => {
+                        {examsForYear.map((ex: any) => {
                             const full = formatExamName(ex, classLabel || undefined);
                             const label = ex.academicYear ? `${ex.academicYear} — ${full.replace(new RegExp(`\\s*\\(${ex.academicYear}\\)\\s*$`), "")}` : full;
                             return <option key={ex._id} value={ex._id}>{label}</option>;
