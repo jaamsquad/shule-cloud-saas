@@ -2168,6 +2168,19 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
     const prevDocByStudent: Record<string, any> = {};
     prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; prevDocByStudent[String(m.studentId)] = m; });
 
+    // Stamp each mark with the student's class + academic year AT SAVE TIME (first insert
+    // only — see $setOnInsert below), so a promotion afterwards never rewrites which class a
+    // student's past exam belongs to: it stays their Grade 10 result even once they're in
+    // Grade 11, same as the admin-side marks entry (academics.routes.ts).
+    const period = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null);
+    const year = period?.academicYear || new Date().getFullYear();
+    const sIds = Array.from(new Set(marks.map((m: any) => String(m.studentId)).filter(Boolean)));
+    const studentDocs = sIds.length
+        ? await db.collection('students').find({ _id: { $in: sIds.map(id => safeObjId(id) || id) as any[] } }, { projection: { studentClass: 1, className: 1, currentClass: 1, classId: 1 } }).toArray().catch(() => [])
+        : [];
+    const classByStudent: Record<string, { name: string; id: string }> = {};
+    studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || className, id: String(s.classId || '') }; });
+
     let saved = 0;
     const changes: Array<{ studentId: string; from: number | null; to: number }> = [];
     for (const m of marks) {
@@ -2184,13 +2197,17 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
             const combined = combinePapers(papers, paperDefs) || { marksObtained: obtained, totalMarks: total };
             scoreSet = { papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks };
         }
+        const cls = classByStudent[String(m.studentId)] || { name: className, id: '' };
         await db.collection('exam_marks').updateOne(
             { examId, subjectName: subject, studentId: String(m.studentId) },
             { $set: {
                 examId, examName: examName || 'Exam', term: term || '', className,
                 subjectName: subject, studentId: String(m.studentId),
                 ...scoreSet, markedBy: decoded.name, updatedAt: new Date(),
-            } },
+            },
+            // classAtTime/classIdAtTime/academicYear set only on first insert, so re-saving
+            // marks (or a later promotion) never rewrites the historical class attribution.
+            $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) } },
             { upsert: true },
         );
         saved++;
