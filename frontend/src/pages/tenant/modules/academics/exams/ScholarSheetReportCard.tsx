@@ -71,7 +71,9 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
     // History grid: render only the levels & terms that actually have data.
     const levels: number[] = d.levels?.length ? d.levels : [];
     const terms: number[] = d.terms?.length ? d.terms : [];
-    const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade"
+    const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade" — fallback only
+    const levelLabels: Record<number, string> = d.levelLabels || {};
+    const labelFor = (l: number) => levelLabels[l] || levelPrefix;   // the word that level was actually saved under
     const hist = (lvl: number, t: number) => d.history?.[`l${lvl}t${t}`];
 
     // ── Curriculum-aware rendering (driven by the backend-resolved config) ──────
@@ -248,7 +250,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                     <table style={{ marginTop: 3, textAlign: "center" }}><tbody>
                         <tr style={{ fontWeight: 700 }}>
                             <td></td>
-                            {levels.map(l => <td key={l} colSpan={terms.length}>{levelPrefix} {l}</td>)}
+                            {levels.map(l => <td key={l} colSpan={terms.length}>{labelFor(l)} {l}</td>)}
                         </tr>
                         <tr style={{ fontWeight: 700 }}>
                             <td></td>

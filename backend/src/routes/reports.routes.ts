@@ -115,12 +115,11 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const genIsForOpenedExam = !!gen && String(gen.mainExamId) === examId;
         const mainEff = genIsForOpenedExam ? String(gen.mainExamId) : examId;   // the exam this card is built around
 
-        // If the class has no generated report card for this term, the result isn't
-        // ready — tell the frontend to show "Result not ready yet for this term".
-        if (!gen) {
-            return res.json({ notReady: true, message: 'Result not ready yet for this term.',
-                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: classFull } });
-        }
+        // No class-level report-card generation exists for this term — that's fine:
+        // the card still works straight off the opened exam's own published marks
+        // (a generation only ever ADDS extra CAT/Mid Term columns alongside it; it
+        // was never a precondition for printing the exam the admin already published).
+        // Having no published marks at all for this student is checked below instead.
 
         // The exam set = the exam the user opened (always shown) + the generation's
         // main End Term + any additional internal assessments. The selected exam
@@ -176,7 +175,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
         // the report card stays stable after generation — later exam_marks edits don't
         // change it until the class is regenerated. Otherwise read live.
-        const frozen: any[] = Array.isArray(gen.frozenMarks) ? gen.frozenMarks : [];
+        const frozen: any[] = Array.isArray(gen?.frozenMarks) ? gen.frozenMarks : [];
         const allMarks: any[] = frozen.length
             ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
             : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
@@ -515,9 +514,20 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
         // Level system comes from the resolved curriculum (Form/Grade/Year), not a
-        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year.
+        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year. Used only as a
+        // fallback below — each historical column instead uses the word actually
+        // saved on its own exam_marks.classAtTime, so a school that renamed its
+        // classes (e.g. Form → Grade) still shows each old term under the name it
+        // was really sat under, instead of relabelling history with today's system.
         const levelPrefix = curriculumConfig.levelPrefix || 'Form';
         const levelSys = { prefix: levelPrefix, short: levelPrefix.charAt(0).toUpperCase() };
+        // The level-system word as saved on a class label itself (e.g. "Form 4 East" →
+        // "Form", "Grade 11 East" → "Grade") — falls back to the curriculum's own word
+        // when the label doesn't carry one (e.g. a bare class name).
+        const prefixWordOf = (cls: string): string => {
+            const m = String(cls || '').match(/form|grade|pp|class|year/i);
+            return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : levelPrefix;
+        };
 
         const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
         for (const m of myAll) {
@@ -533,14 +543,17 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const grid: Record<string, { mp: number; mg: string }> = {};
         const chart: Array<{ label: string; value: number }> = [];
         const levelsSet = new Set<number>(); const termsSet = new Set<number>();
+        const levelLabels: Record<number, string> = {};
         for (const v of Object.values(histAgg)) {
             if (!v.n) continue;
             const lvlMatch = String(v.cls).match(/(\d+)/); const lvl = lvlMatch ? Number(lvlMatch[1]) : 0;
             if (lvl < 1 || v.term < 1) continue;
             const mp = RND(v.pts / v.n, 0);
+            const ownPrefix = prefixWordOf(v.cls);
             grid[`l${lvl}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n) };
-            chart.push({ label: `${levelSys.short}${lvl}T${v.term}`, value: mp });
+            chart.push({ label: `${ownPrefix.charAt(0)}${lvl}T${v.term}`, value: mp });
             levelsSet.add(lvl); termsSet.add(v.term);
+            levelLabels[lvl] = ownPrefix;   // the word THIS level was actually saved under
         }
         const levels = Array.from(levelsSet).sort((a, b) => a - b);
         const terms = Array.from(termsSet).sort((a, b) => a - b);
@@ -602,7 +615,8 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             subjects,
             chart,
             history: grid,
-            levelSystem: levelSys.prefix,    // "Form" | "Grade"
+            levelSystem: levelSys.prefix,    // "Form" | "Grade" — fallback when a level has no saved label
+            levelLabels,                     // { 4: "Form", 11: "Grade" } — the word each level was actually saved under
             levels,                          // e.g. [3, 4] — only those with data
             terms,                           // e.g. [2, 3] — only those with data
             comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
