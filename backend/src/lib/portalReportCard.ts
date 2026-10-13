@@ -13,6 +13,7 @@ import { signToken, publicAppUrl } from './verifyDocs';
 import { gradingFrom, summariseStudent, classStatsOf, subjectNamesOf } from './reportCardCalc';
 import { onlyPublished } from './examPublish';
 import { resolveGrading } from './grading';
+import { backfillClassAtTimeForExam } from './classAtTimeBackfill';
 
 const oid = (v: any) => { try { return new ObjectId(String(v)); } catch { return null; } };
 const idForms = (v: any) => { const s = String(v ?? ''); const o = oid(s); return o ? [s, o] : [s]; };
@@ -46,39 +47,55 @@ export async function printableReports(db: Db, req: Request, sid: string, examId
         signature: tenant?.principalSignature || '', stamp: tenant?.schoolStamp || '', signerName: tenant?.principalName || '',
     };
 
-    // the learner's class, classmates and the class's subjects — as the class report page resolves them
     const classNameRaw = student.studentClass || student.currentClass || '';
-    const cls: any = (student.classId && await db.collection('classes').findOne({ _id: (oid(student.classId) || student.classId) as any }).catch(() => null))
-        || (classNameRaw && await db.collection('classes').findOne({ $or: [{ levelName: classNameRaw }, { name: classNameRaw }] }).catch(() => null)) || null;
-    const className = cls?.levelName || cls?.name || classNameRaw || '—';
-    const rosterQ: any[] = [];
-    if (cls?._id) rosterQ.push({ classId: String(cls._id) }, { classId: cls._id });
-    if (className && className !== '—') rosterQ.push({ studentClass: className });
-    const roster: any[] = rosterQ.length ? await db.collection('students').find({ $or: rosterQ }, { projection: { _id: 1, subjects: 1, studentName: 1 } }).toArray().catch(() => []) : [];
-    const rosterIds = new Set(roster.map(r => String(r._id)));
-    rosterIds.add(String(student._id));
-
-    let classSubjectNames: string[] = subjectNamesOf(roster.find(r => subjectNamesOf(r.subjects).length)?.subjects);
-    if (!classSubjectNames.length && Array.isArray(cls?.subjects) && cls.subjects.length) {
-        classSubjectNames = cls.subjects.map((s: any) => s.subjectName || s.name).filter(Boolean);
-    }
-    if (!classSubjectNames.length && className !== '—') {
-        const subs = await db.collection('subjects').find({ className }).toArray().catch(() => []);
-        classSubjectNames = subs.map((s: any) => s.name || s.subjectName).filter(Boolean);
-    }
-
     const current: any = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null)
         || await db.collection('periods').findOne({}).catch(() => null);
     const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
     const studentName = student.studentName || `${student.firstName || ''} ${student.lastName || ''}`.trim() || student.name || '—';
     const admNo = student.admissionNumber || student.admNo || student.registrationNo || '—';
 
+    // The learner's class, classmates and the class's subjects, resolved PER EXAM from
+    // exam_marks.classAtTime/classIdAtTime — the class the student was actually in when
+    // they sat THAT exam — not their current class. Otherwise a promoted student's old
+    // exam (e.g. sat in Form 3) would render under their new class (Form 4): wrong subjects,
+    // wrong classmates for the class average, wrong class name on the card. Cached by class
+    // key so repeat exams for the same historical class don't re-query.
+    const classCache = new Map<string, { className: string; rosterIds: Set<string>; subjectNames: string[] }>();
+    async function resolveClassFor(classAtTime: string, classIdAtTime: string) {
+        const key = `${classIdAtTime}|${classAtTime}`;
+        if (classCache.has(key)) return classCache.get(key)!;
+        const nameRaw = classAtTime || classNameRaw;
+        const idRaw = classIdAtTime || student.classId;
+        const cls: any = (idRaw && await db.collection('classes').findOne({ _id: (oid(idRaw) || idRaw) as any }).catch(() => null))
+            || (nameRaw && await db.collection('classes').findOne({ $or: [{ levelName: nameRaw }, { name: nameRaw }] }).catch(() => null)) || null;
+        const className = cls?.levelName || cls?.name || nameRaw || '—';
+        const rosterQ: any[] = [];
+        if (cls?._id) rosterQ.push({ classId: String(cls._id) }, { classId: cls._id });
+        if (className && className !== '—') rosterQ.push({ studentClass: className });
+        const roster: any[] = rosterQ.length ? await db.collection('students').find({ $or: rosterQ }, { projection: { _id: 1, subjects: 1, studentName: 1 } }).toArray().catch(() => []) : [];
+        const rosterIds = new Set(roster.map(r => String(r._id)));
+        rosterIds.add(String(student._id));
+        let subjectNames: string[] = subjectNamesOf(roster.find(r => subjectNamesOf(r.subjects).length)?.subjects);
+        if (!subjectNames.length && Array.isArray(cls?.subjects) && cls.subjects.length) subjectNames = cls.subjects.map((s: any) => s.subjectName || s.name).filter(Boolean);
+        if (!subjectNames.length && className !== '—') {
+            const subs = await db.collection('subjects').find({ className }).toArray().catch(() => []);
+            subjectNames = subs.map((s: any) => s.name || s.subjectName).filter(Boolean);
+        }
+        const result = { className, rosterIds, subjectNames };
+        classCache.set(key, result);
+        return result;
+    }
+
     const exams: Record<string, any> = {};
     for (const examId of examIds) {
+        await backfillClassAtTimeForExam(db, examId);
         const exam: any = await db.collection('exams').findOne({ _id: (oid(examId) || examId) as any }).catch(() => null);
         const allMarks: any[] = await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: idForms(examId) } }).toArray().catch(() => []));
         const studentMarks = allMarks.filter(m => String(m.studentId) === String(student._id) || (!m.studentId && m.studentName === studentName));
         if (!studentMarks.length) continue;
+        const classAtTime = studentMarks.find(m => m.classAtTime)?.classAtTime || '';
+        const classIdAtTime = studentMarks.find(m => m.classIdAtTime)?.classIdAtTime || '';
+        const { className, rosterIds, subjectNames: classSubjectNames } = await resolveClassFor(classAtTime, classIdAtTime);
         const subjectNames = classSubjectNames.length ? classSubjectNames : [...new Set(allMarks.map(m => m.subjectName).filter(Boolean))] as string[];
         const sum = summariseStudent({ studentMarks, ownSubjects: student.subjects, classSubjectNames: subjectNames, missingMarkPolicy: exam?.missingMarkPolicy, scale, passMark });
         const classStats = classStatsOf(allMarks.filter(m => rosterIds.has(String(m.studentId))));

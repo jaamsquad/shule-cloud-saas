@@ -81,9 +81,10 @@ export default function PromoteStudents() {
     const [fromStreamId, setFromStreamId] = useState("");
     // Selection
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    // Destination
+    // Destination — "__keep__" means each student keeps their own stream name,
+    // created automatically in the destination class if it doesn't have one yet.
     const [toClassId, setToClassId] = useState("");
-    const [toStreamId, setToStreamId] = useState("");
+    const [toStreamId, setToStreamId] = useState("__keep__");
     const [promoting, setPromoting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState<any>(null);
@@ -97,8 +98,9 @@ export default function PromoteStudents() {
     const fromCls = classes.find((c: any) => String(c._id) === fromClassId);
     const fromStream = fromStreams.find((s: any) => String(s._id) === fromStreamId);
     const toCls = classes.find((c: any) => String(c._id) === toClassId);
-    const toStream = toStreams.find((s: any) => String(s._id) === toStreamId);
-    const destLabel = toCls ? (toStream ? (toStream.fullName || `${toCls.name} ${toStream.name}`) : toCls.name) : "";
+    const keepOwnStream = toStreamId === "__keep__";
+    const toStream = keepOwnStream ? null : toStreams.find((s: any) => String(s._id) === toStreamId);
+    const destLabel = toCls ? (keepOwnStream ? `${toCls.name} (same stream)` : toStream ? (toStream.fullName || `${toCls.name} ${toStream.name}`) : toCls.name) : "";
 
     // Students in the chosen source class + stream.
     const roster = useMemo(() => {
@@ -129,7 +131,7 @@ export default function PromoteStudents() {
             qc.invalidateQueries({ queryKey: ["students"] });
             qc.invalidateQueries({ queryKey: ["students-list"] });
             qc.invalidateQueries({ queryKey: ["promotion_schedules"] });
-            toast.success(`Promoted ${r.data.promoted} student(s) to ${r.data.destination}.`);
+            toast.success(`Promoted ${r.data.promoted} student(s) to ${r.data.destination}.${r.data.streamsCreated ? ` Created ${r.data.streamsCreated} new stream(s).` : ""}`);
             setStep(4);
         } catch (e: any) {
             clearInterval(tick); setProgress(0);
@@ -137,7 +139,7 @@ export default function PromoteStudents() {
         } finally { setPromoting(false); }
     };
 
-    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setToClassId(""); setToStreamId(""); setProgress(0); setResult(null); };
+    const reset = () => { setStep(1); setFromClassId(""); setFromStreamId(""); setSelected(new Set()); setToClassId(""); setToStreamId("__keep__"); setProgress(0); setResult(null); };
 
     const undoJustDone = async () => {
         if (!result?.runId) return;
@@ -249,7 +251,7 @@ export default function PromoteStudents() {
                         <div className="grid sm:grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination class *</label>
-                                <select value={toClassId} onChange={e => { setToClassId(e.target.value); setToStreamId(""); }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <select value={toClassId} onChange={e => { setToClassId(e.target.value); setToStreamId("__keep__"); }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                                     <option value="">— Select Class —</option>
                                     {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
                                 </select>
@@ -257,11 +259,13 @@ export default function PromoteStudents() {
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Destination stream</label>
                                 <select value={toStreamId} onChange={e => setToStreamId(e.target.value)} disabled={!toClassId} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50">
+                                    <option value="__keep__">Same stream as now — create it if needed</option>
                                     <option value="">No stream</option>
                                     {toStreams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                                 </select>
                             </div>
                         </div>
+                        {keepOwnStream && <p className="text-xs text-slate-400 -mt-2">Each student keeps their own stream name (e.g. "North"); it's created under {toCls?.name || "the destination class"} automatically if it doesn't exist yet.</p>}
                         {destLabel && <p className="text-sm text-slate-600 font-bold flex items-center gap-2">{fromCls?.name}{fromStream ? ` ${fromStream.name}` : ""} <ArrowRight className="w-4 h-4 text-[#5C67F2]" /> {destLabel}</p>}
 
                         {(promoting || progress > 0) && (
