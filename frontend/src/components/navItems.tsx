@@ -306,6 +306,7 @@ export const navItems: NavItem[] = [
       { label: "Notes & Resources", path: "/academics/resources" },
       { label: "Assignments", path: "/academics/assignments" },
       { label: "Homework", path: "/homework" },
+      { label: "CBC Materials", path: "/academics/cbc-materials" },
   ] },
   { label: "CBC Assessment", icon: BookOpen, moduleKey: "cbc", children: [
       { label: "Dashboard", path: "/cbc" },

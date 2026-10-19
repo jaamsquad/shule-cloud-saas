@@ -231,6 +231,7 @@ import SchemeForm from "./pages/tenant/modules/academics2/SchemeForm";
 import NotesResources from "./pages/tenant/modules/academics2/NotesResources";
 import ResourceForm from "./pages/tenant/modules/academics2/ResourceForm";
 import AssignmentsManagement from "./pages/tenant/modules/academics2/AssignmentsManagement";
+import CbcMaterials from "./pages/tenant/modules/academics/CbcMaterials";
 import AssignmentForm from "./pages/tenant/modules/academics2/AssignmentForm";
 import LibraryDashboard from "./pages/tenant/modules/library/LibraryDashboard";
 import LibraryBooks from "./pages/tenant/modules/library/LibraryBooks";
@@ -744,6 +745,7 @@ const App = () => {
               <Route path="/academics/assignments" element={<AssignmentsManagement />} />
               <Route path="/academics/assignments/new" element={<AssignmentForm />} />
               <Route path="/academics/assignments/:id/edit" element={<AssignmentForm />} />
+              <Route path="/academics/cbc-materials" element={<CbcMaterials />} />
 
               {/* Staff HR */}
               <Route path="/staff/departments" element={<Departments />} />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus, CalendarDays, ClipboardCheck as ClipboardCheckIcon, MessageSquare, ListChecks, Printer } from "lucide-react";
+import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus, CalendarDays, ClipboardCheck as ClipboardCheckIcon, MessageSquare, ListChecks, Printer, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
 import { tenantDisplayName } from "../portal";
@@ -41,6 +41,7 @@ const NAV: PortalNavSection[] = [
         { to: "/shared-resources", label: "Shared Library", icon: BookMarked },
         { to: "/assignments", label: "Assignments", icon: ClipboardList },
         { to: "/homework", label: "Homework", icon: FileText },
+        { to: "/cbc-materials", label: "CBC Materials", icon: GraduationCap },
     ]},
     { label: "Communication", items: [
         { to: "/announcements", label: "Announcements", icon: Megaphone },
