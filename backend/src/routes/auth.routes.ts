@@ -21,6 +21,7 @@ import { onlyPublished, levelKey } from '../lib/examPublish';
 import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
 import { resolveGrading, Grading } from '../lib/grading';
 import { papersForSubject, papersForSubjectName, combinePapers } from '../lib/subjectPapers';
+import { SCALES } from '../modules/skills/skills.routes';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -3187,6 +3188,114 @@ router.get('/staff-portal/cbc/progress/:studentId', authed(async (req, res, db, 
     const latest = terms[terms.length - 1]; const prev = terms[terms.length - 2];
     const areaRow = (term?: string) => term ? Object.fromEntries(Object.entries(byTermArea[term]).map(([ar, v]) => [ar, CBC_SCORE_LEVEL(v.sum / v.n)])) : {};
     res.json({ terms, current: { term: latest || '', areas: areaRow(latest) }, previous: { term: prev || '', areas: areaRow(prev) }, total: all.length });
+}));
+
+// ─── Teacher-portal Skill-Based Reports ──────────────────────────────────────
+// Reuses the SAME skill_areas / skill_assessments collections (and rating SCALES)
+// the admin "Exams → Skill-Based Reports" module reads/writes, but scoped so a
+// teacher may only assess/print for the (class, subject) pairs they're assigned
+// — the same staffAssignments-based enforcement as the CBC endpoints above.
+router.get('/staff-portal/skills/scope', authed(async (req, res, db, decoded) => {
+    const { assignments } = await staffAssignments(db, decoded);
+    const classMap: Record<string, { classId: string; className: string; subjects: Set<string> }> = {};
+    assignments.forEach(a => {
+        if (!a.className || !a.subject) return;
+        const key = cbcNorm(a.className);
+        (classMap[key] ||= { classId: a.classId, className: a.className, subjects: new Set() }).subjects.add(a.subject);
+    });
+    res.json({ classes: Object.values(classMap).map(c => ({ classId: c.classId, className: c.className, subjects: Array.from(c.subjects).sort() })) });
+}));
+
+// Fields of study set up for a subject (read-only; the teacher never edits the framework).
+router.get('/staff-portal/skills/frameworks', authed(async (req, res, db, decoded) => {
+    const subject = String(req.query.subject || '').trim();
+    const { assignments } = await staffAssignments(db, decoded);
+    const mySubjects = new Set(assignments.map(a => cbcNorm(a.subject)));
+    if (subject && !mySubjects.has(cbcNorm(subject))) return res.status(403).json({ message: 'Not your subject.' });
+    const rows: any[] = await db.collection('skill_areas').find(subject ? { subject } : {}).toArray();
+    const list = subject ? rows : rows.filter((r: any) => mySubjects.has(cbcNorm(r.subject)));
+    res.json(list.sort((a: any, b: any) => a.subject.localeCompare(b.subject) || (a.order ?? 0) - (b.order ?? 0)));
+}));
+
+// Roster + existing ratings for a class/subject/term the teacher is assigned.
+router.get('/staff-portal/skills/assessments', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || ''), subject = String(req.query.subject || ''), term = String(req.query.term || ''), year = String(req.query.year || '');
+    if (!className || !subject || !term) return res.status(400).json({ message: 'className, subject and term are required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    if (!assignments.some(a => cbcNorm(a.className) === cbcNorm(className) && cbcNorm(a.subject) === cbcNorm(subject))) return res.status(403).json({ message: 'Not your class/subject.' });
+    const students = await studentsInClass(db, className);
+    const learners = students.map((s: any) => ({ _id: String(s._id), name: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), regNo: s.registrationNo || s.admNo || '', className, gender: s.gender || '' })).sort((a, b) => a.name.localeCompare(b.name));
+    const ids = learners.map(l => l._id);
+    const rows: any[] = ids.length ? await db.collection('skill_assessments').find({ studentId: { $in: ids }, subject, term, year }).toArray() : [];
+    const ratings: Record<string, Record<string, string>> = {};
+    rows.forEach((r: any) => { (ratings[r.studentId] ||= {})[r.skillId] = r.rating; });
+    res.json({ learners, ratings });
+}));
+
+router.post('/staff-portal/skills/assessments/bulk', authed(async (req, res, db, decoded) => {
+    const b = req.body || {};
+    const className = String(b.className || ''), subject = String(b.subject || ''), term = String(b.term || ''), year = String(b.year || '');
+    const records: any[] = Array.isArray(b.records) ? b.records.slice(0, 5000) : [];
+    if (!className || !subject || !term || !year || !records.length) return res.status(400).json({ message: 'className, subject, term, year and records are required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    if (!assignments.some(a => cbcNorm(a.className) === cbcNorm(className) && cbcNorm(a.subject) === cbcNorm(subject))) return res.status(403).json({ message: 'Not your class/subject.' });
+    // Only students actually in this class — a tampered studentId from elsewhere is dropped.
+    const roster = await studentsInClass(db, className);
+    const rosterIds = new Set(roster.map((s: any) => String(s._id)));
+    const frameworks: any[] = await db.collection('skill_areas').find({ subject }).toArray();
+    const skillInfo = new Map<string, { area: string; scale: string }>();
+    frameworks.forEach((f: any) => (f.skills || []).forEach((s: any) => skillInfo.set(s.id, { area: f.area, scale: f.scale })));
+    const ops: any[] = []; let saved = 0, cleared = 0, skipped = 0;
+    for (const r of records) {
+        const studentId = String(r.studentId || '');
+        const info = skillInfo.get(String(r.skillId));
+        if (!rosterIds.has(studentId) || !info) { skipped++; continue; }
+        const key = { studentId, skillId: String(r.skillId), term, year };
+        if (!r.rating) { ops.push({ deleteOne: { filter: key } }); cleared++; continue; }
+        if (!SCALES[info.scale]?.ratings.some((x: any) => x.code === String(r.rating))) { skipped++; continue; }
+        ops.push({ updateOne: { filter: key, update: { $set: { ...key, subject, area: info.area, rating: String(r.rating), updatedAt: new Date(), updatedBy: decoded.name || decoded.staffId || 'teacher' }, $setOnInsert: { createdAt: new Date() } }, upsert: true } }); saved++;
+    }
+    if (ops.length) await db.collection('skill_assessments').bulkWrite(ops);
+    res.json({ saved, cleared, skipped });
+}));
+
+// Report data for printing — one class, the subjects (default: all this teacher's
+// subjects for that class) across all terms of the given year.
+router.get('/staff-portal/skills/report', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || '');
+    const year = String(req.query.year || '');
+    if (!className) return res.status(400).json({ message: 'className is required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    const mySubjectsForClass = assignments.filter(a => cbcNorm(a.className) === cbcNorm(className)).map(a => a.subject);
+    if (!mySubjectsForClass.length) return res.status(403).json({ message: 'Not your class.' });
+    const wantSubjects = String(req.query.subjects || '').split(',').map(s => s.trim()).filter(Boolean);
+    const subjects = wantSubjects.length ? wantSubjects.filter(s => mySubjectsForClass.some(m => cbcNorm(m) === cbcNorm(s))) : mySubjectsForClass;
+    if (!subjects.length) return res.status(403).json({ message: 'Not your subject.' });
+    const terms = ['Term 1', 'Term 2', 'Term 3'];
+    const students = await studentsInClass(db, className);
+    const learners = students.map((s: any) => ({ _id: String(s._id), name: s.studentName || s.name || '', regNo: s.registrationNo || s.admNo || '', className, gender: s.gender || '' }));
+    const frameworks: any[] = (await db.collection('skill_areas').find({ subject: { $in: subjects } }).toArray())
+        .filter((f: any) => !f.levels?.length || f.levels.some((l: string) => cbcNorm(className).startsWith(cbcNorm(l))));
+    const ids = learners.map(l => l._id);
+    const rows: any[] = ids.length ? await db.collection('skill_assessments').find({ studentId: { $in: ids }, year }).toArray() : [];
+    const byStudent = new Map<string, any[]>(); rows.forEach((r: any) => { (byStudent.get(r.studentId) || byStudent.set(r.studentId, []).get(r.studentId)!).push(r); });
+    const subjectNames = Array.from(new Set(frameworks.map((f: any) => f.subject))).sort();
+    res.json({
+        year, terms, scales: SCALES,
+        reports: learners.map(l => {
+            const mine = byStudent.get(l._id) || [];
+            return {
+                student: l,
+                subjects: subjectNames.map(subject => ({
+                    subject,
+                    areas: frameworks.filter((f: any) => f.subject === subject).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)).map((f: any) => ({
+                        area: f.area, scale: f.scale,
+                        skills: (f.skills || []).map((s: any) => ({ id: s.id, name: s.name, ratings: Object.fromEntries(terms.map(t => [t, mine.find((r: any) => r.skillId === s.id && r.term === t)?.rating || ''])) })),
+                    })),
+                })),
+            };
+        }),
+    });
 }));
 
 // ─── Online Examination — student-portal exam taking ─────────────────────────
