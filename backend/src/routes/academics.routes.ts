@@ -614,6 +614,25 @@ router.patch('/academics/curricula/:id',  c.updateItem('curricula'));
 router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 
 // ─── Students ────────────────────────────────────────────────────────────────
+// `/students/trash` MUST be registered before `/students/:id` — Express matches
+// routes in registration order, and `:id` would otherwise swallow "trash" as if
+// it were an id (and 500, since "trash" isn't a valid ObjectId), so the trash
+// list always 500'd and the dialog silently rendered "Trash is empty".
+const trashQuery = async (req: Request, db: Db, extra: any = {}) => {
+    const scope = await resolveScope(req, db);
+    return mergeFilter({ originalCollection: 'students', ...extra }, scopeForCollection('students', scope));
+};
+const toObjectId = (id: string): ObjectId | null => { try { return new ObjectId(id); } catch { return null; } };
+router.get('/students/trash', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const items = await db.collection('archives')
+            .find(await trashQuery(req, db), { projection: { portalPassword: 0, parentPortalPassword: 0 } })
+            .sort({ deletedAt: -1 }).toArray();
+        res.json(items);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/students',              c.getItems('students'));
 router.get('/students/:id',          c.getItem('students'));
 router.post('/students',             enforceCrud('students', 'create'), enforcePlanLimit, c.createItem('students'));
@@ -744,24 +763,10 @@ router.delete('/students/:id/transfer', enforceCrud('students', 'update'), async
 
 // ─── Student trash (soft delete) ─────────────────────────────────────────────
 // DELETE /students/:id moves the record into `archives` (see deleteItem), which hides
-// it everywhere. These endpoints list that trash, restore from it, or erase for good.
+// it everywhere. These endpoints restore from the trash or erase for good — the trash
+// LIST itself (GET /students/trash) is registered up with the other /students routes,
+// above /students/:id (see the comment there for why).
 // Credentials are never sent to the browser. Scoped users only see their own students.
-const trashQuery = async (req: Request, db: Db, extra: any = {}) => {
-    const scope = await resolveScope(req, db);
-    return mergeFilter({ originalCollection: 'students', ...extra }, scopeForCollection('students', scope));
-};
-const toObjectId = (id: string): ObjectId | null => { try { return new ObjectId(id); } catch { return null; } };
-
-router.get('/students/trash', enforceCrud('students', 'delete'), async (req, res) => {
-    try {
-        const db = getRequestDb(req);
-        const items = await db.collection('archives')
-            .find(await trashQuery(req, db), { projection: { portalPassword: 0, parentPortalPassword: 0 } })
-            .sort({ deletedAt: -1 }).toArray();
-        res.json(items);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-
 router.post('/students/trash/:id/restore', enforceCrud('students', 'delete'), async (req, res) => {
     try {
         const db = getRequestDb(req);
