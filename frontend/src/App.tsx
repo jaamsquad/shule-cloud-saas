@@ -292,6 +292,7 @@ import NemisDataEntry from "./pages/tenant/modules/nemis/NemisDataEntry";
 import NemisHistory from "./pages/tenant/modules/nemis/NemisHistory";
 import NemisSettings from "./pages/tenant/modules/nemis/NemisSettings";
 import GenericReport from "./pages/tenant/modules/reports/GenericReport";
+import ReportViewer from "./pages/tenant/modules/reports/ReportViewer";
 import StudentsInfoReport from "./pages/tenant/modules/reports/StudentsInfoReport";
 import ParentsInfoReport from "./pages/tenant/modules/reports/ParentsInfoReport";
 import StudentsMonthlyAttendanceReport from "./pages/tenant/modules/reports/StudentsMonthlyAttendanceReport";
@@ -1057,6 +1058,7 @@ const App = () => {
               <Route path="/reports/student-progress" element={<StudentProgressReport />} />
               <Route path="/reports/accounts" element={<AccountsReport />} />
               <Route path="/reports/custom" element={<CustomisedReports />} />
+              <Route path="/reports/:reportKey" element={<ReportViewer />} />
 
               {/* Institutional Modules */}
               {/* Library Module */}

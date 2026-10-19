@@ -6,34 +6,18 @@ import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tool
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { COMPUTED_REPORTS } from "./reportsConfig";
 
 const BLUE = "#2563EB";
 const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#0F766E"];
 
-// Maps the route slug → backend computed endpoint.
-const ENDPOINT: Record<string, string> = {
-    "subject-performance": "subject-performance", "class-performance": "class-performance",
-    "grade-distribution": "grade-distribution", "mark-sheets": "mark-sheets",
-    "cbc-competency": "cbc-competency", "mean-score-trends": "mean-score-trends",
-    "attendance-summary": "attendance-summary", "balance-sheet": "balance-sheet",
-    "trial-balance": "trial-balance", "revenue-overview": "revenue-overview",
-    "enrollment-trends": "enrollment-trends", "nemis-export": "nemis-export",
-    "knec-registration": "knec-registration", "statutory-returns": "statutory-returns",
-    "ministry-data": "ministry-data",
-};
-
-// Marks-based reports that should offer an exam filter.
-const EXAM_FILTERABLE = new Set(["subject-performance", "class-performance", "grade-distribution", "mark-sheets", "cbc-competency", "mean-score-trends"]);
-// Reports that REQUIRE both a class and an exam before showing data.
-const CLASS_REQUIRED = new Set(["mark-sheets"]);
-
-export default function ComputedReport() {
-    const { key = "" } = useParams();
-    const endpoint = ENDPOINT[key];
-    const showExamFilter = EXAM_FILTERABLE.has(key);
-    const showClassFilter = CLASS_REQUIRED.has(key);
+export function ComputedReportView({ reportKey }: { reportKey: string }) {
+    const cfg = COMPUTED_REPORTS[reportKey];
+    const endpoint = cfg?.endpoint;
+    const showExamFilter = !!cfg?.examFilter;
+    const showClassFilter = !!cfg?.classRequired;
     const [examId, setExamId] = useState("");   // "" = All Exams
-    const [classId, setClassId] = useState(""); // required for mark-sheets
+    const [classId, setClassId] = useState(""); // required when classRequired
 
     // Exam + class lists for the dropdowns (only fetched when relevant).
     const { data: exams = [] } = useQuery({
@@ -50,7 +34,7 @@ export default function ComputedReport() {
     // For class-required reports, don't query until both class + exam are chosen.
     const ready = !showClassFilter || (!!classId && !!examId);
     const { data, isLoading } = useQuery({
-        queryKey: ["computed_report", key, examId, classId],
+        queryKey: ["computed_report", reportKey, examId, classId],
         queryFn: async () => (await api.get(`/reports/computed/${endpoint}`, { params: { ...(examId ? { exam_id: examId } : {}), ...(classId ? { class_id: classId } : {}) } })).data,
         enabled: !!endpoint && ready,
     });
@@ -149,6 +133,11 @@ export default function ComputedReport() {
             </div>
         </div>
     );
+}
+
+export default function ComputedReport() {
+    const { key = "" } = useParams();
+    return <ComputedReportView reportKey={key} />;
 }
 
 function NotConfigured() {
