@@ -15,6 +15,7 @@ import StaffMyAttendance from "./pages/StaffMyAttendance";
 import StaffLive from "./pages/StaffLive";
 import StaffContent from "./pages/StaffContent";
 import StaffResources from "./pages/StaffResources";
+import StaffCbcMaterials from "./pages/StaffCbcMaterials";
 import StaffLeave from "./pages/StaffLeave";
 import StaffMessageParents from "./pages/StaffMessageParents";
 import AnnouncementsView from "../AnnouncementsView";
@@ -44,6 +45,7 @@ export default function StaffApp() {
                 <Route path="/schemes" element={<StaffContent type="schemes" />} />
                 <Route path="/resources" element={<StaffContent type="resources" />} />
                 <Route path="/shared-resources" element={<StaffResources />} />
+                <Route path="/cbc-materials" element={<StaffCbcMaterials />} />
                 <Route path="/leave" element={<StaffLeave />} />
                 <Route path="/calendar" element={<CalendarPage apiClient={staffCalendarApi} />} />
                 <Route path="/calendar/events" element={<CalendarPage apiClient={staffCalendarApi} />} />
