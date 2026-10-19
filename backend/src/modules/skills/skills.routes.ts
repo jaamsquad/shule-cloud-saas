@@ -14,6 +14,7 @@ import { getMetaDb } from '../../lib/mongodb';
 import { enforceCrud } from '../../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../../lib/dataScope';
 import { canonicalStatus } from '../../lib/studentStatus';
+import { CBC_DEFAULT_SKILLS, CBC_DEFAULT_SUBJECTS } from './cbcDefaults';
 
 const router = Router();
 const dbOf = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -78,6 +79,28 @@ router.delete('/skills/frameworks/:id', enforceCrud('exams', 'delete'), async (r
         await d.collection('skill_areas').deleteMany({ _id });
         await d.collection('skill_assessments').deleteMany({ skillId: { $in: (prev.skills || []).map((s: any) => s.id) } });
         res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── CBC defaults: ready-made strands/skills a school can load instead of typing ──
+// them from scratch (see cbcDefaults.ts for sourcing notes).
+router.get('/skills/defaults', (_req, res) => {
+    res.json({ subjects: CBC_DEFAULT_SUBJECTS, areas: CBC_DEFAULT_SKILLS });
+});
+router.post('/skills/frameworks/seed-defaults', enforceCrud('exams', 'create'), async (req, res) => {
+    try {
+        const d = dbOf(req);
+        const wantSubjects: string[] = Array.isArray(req.body?.subjects) && req.body.subjects.length
+            ? req.body.subjects.map((s: any) => str(s, 80))
+            : CBC_DEFAULT_SUBJECTS;
+        const toSeed = CBC_DEFAULT_SKILLS.filter(a => wantSubjects.some(s => norm(s) === norm(a.subject)));
+        if (!toSeed.length) return res.status(400).json({ message: 'No matching default subjects.' });
+        const existing: any[] = await d.collection('skill_areas').find({ subject: { $in: toSeed.map(a => a.subject) } }, { projection: { subject: 1, area: 1 } }).toArray();
+        const have = new Set(existing.map((e: any) => `${norm(e.subject)}|${norm(e.area)}`));
+        const docs = toSeed.filter(a => !have.has(`${norm(a.subject)}|${norm(a.area)}`))
+            .map(a => ({ ...cleanFramework(a), createdAt: new Date(), source: 'cbc-default' }));
+        if (docs.length) await d.collection('skill_areas').insertMany(docs as any[]);
+        res.json({ added: docs.length, skipped: toSeed.length - docs.length });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
