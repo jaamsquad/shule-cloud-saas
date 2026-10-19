@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus, CalendarDays, ClipboardCheck as ClipboardCheckIcon, MessageSquare } from "lucide-react";
+import { User, Users, CalendarClock, Megaphone, Loader2, PencilLine, BarChart3, CalendarCheck, UserCheck, Video, BookOpen, ClipboardList, FileText, NotebookPen, BookMarked, CalendarPlus, CalendarDays, ClipboardCheck as ClipboardCheckIcon, MessageSquare, ListChecks, Printer } from "lucide-react";
 import { toast } from "sonner";
 import PortalShell, { PortalNavSection } from "../PortalShell";
 import { tenantDisplayName } from "../portal";
@@ -24,6 +24,8 @@ const NAV: PortalNavSection[] = [
     { label: "Assessment", items: [
         { to: "/marks", label: "Marks Entry", icon: PencilLine },
         { to: "/cbc", label: "CBC Assessment", icon: ClipboardCheckIcon },
+        { to: "/skills/assess", label: "Assess Learners (Skills)", icon: ListChecks },
+        { to: "/skills/print", label: "Print Skill Reports", icon: Printer },
         { to: "/results", label: "Results", icon: BarChart3 },
     ]},
     { label: "Attendance", items: [
