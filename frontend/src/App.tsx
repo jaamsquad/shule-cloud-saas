@@ -64,7 +64,9 @@ import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
 import VerifyDoc from "./pages/public/VerifyDoc";
 import ResultOnline from "./pages/public/ResultOnline";
-import SkillReports from "./pages/tenant/modules/skills/SkillReports";
+import SkillsSetupPage from "./pages/tenant/modules/skills/SkillsSetupPage";
+import SkillsAssessPage from "./pages/tenant/modules/skills/SkillsAssessPage";
+import SkillsPrintPage from "./pages/tenant/modules/skills/SkillsPrintPage";
 import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
 import Scholarships from "./pages/tenant/modules/fees/Scholarships";
 import Sponsors from "./pages/tenant/modules/fees/Sponsors";
@@ -804,7 +806,10 @@ const App = () => {
               <Route path="/exams/create" element={<CreateExam />} />
               <Route path="/exams/manage" element={<ManageExams />} />
               <Route path="/exams/printouts" element={<ExamPrintouts />} />
-              <Route path="/exams/skills" element={<SkillReports />} />
+              <Route path="/exams/skills" element={<Navigate to="/exams/skills/setup" replace />} />
+              <Route path="/exams/skills/setup" element={<SkillsSetupPage />} />
+              <Route path="/exams/skills/assess" element={<SkillsAssessPage />} />
+              <Route path="/exams/skills/print" element={<SkillsPrintPage />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
               <Route path="/exams/generate-reports" element={<Navigate to="/exams/scholar-sheet" replace />} />
