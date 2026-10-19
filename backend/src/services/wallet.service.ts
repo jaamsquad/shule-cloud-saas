@@ -20,6 +20,21 @@ export interface Wallet {
     updatedAt?: Date;
 }
 
+export interface WalletSettings { enabled: boolean }
+
+/** School-wide wallet settings (single doc). Deposits (not spending) are blocked when disabled. */
+export const getWalletSettings = async (db: Db): Promise<WalletSettings> => {
+    const doc = await db.collection('wallet_settings').findOne({}).catch(() => null);
+    return { enabled: doc?.enabled !== false };   // default: enabled
+};
+
+export const saveWalletSettings = async (db: Db, patch: Partial<WalletSettings>): Promise<WalletSettings> => {
+    const current = await getWalletSettings(db);
+    const next: WalletSettings = { ...current, ...patch };
+    await db.collection('wallet_settings').updateOne({}, { $set: next }, { upsert: true });
+    return next;
+};
+
 /** Find or create a student's wallet. */
 export const ensureWallet = async (db: Db, studentId: string): Promise<Wallet> => {
     let wallet = await db.collection('wallets').findOne({ studentId: String(studentId) });

@@ -3,7 +3,7 @@ import { login, getTenantProfile, updateTenantProfile, updateUser, deleteUser } 
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
-import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
+import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits, getWalletSettings } from '../services/wallet.service';
 import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete, platformCallbackBaseV1 } from '../services/mpesa.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
@@ -1747,11 +1747,13 @@ router.get('/student-portal/mpesa-status', authed(async (req, res, db) => {
 router.get('/student-portal/wallet', authed(async (req, res, db, decoded) => {
     const wallet = await ensureWallet(db, decoded.studentId);
     const transactions = await getTransactions(db, wallet.walletId);
-    res.json({ wallet, transactions });
+    const settings = await getWalletSettings(db);
+    res.json({ wallet, transactions, walletEnabled: settings.enabled });
 }));
 
 // Wallet top-up via M-PESA STK Push (credited on confirmation).
 router.post('/student-portal/wallet/topup', authed(async (req, res, db, decoded) => {
+    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
     res.json(await initiateStk(req, db, decoded.studentId, 'wallet'));
 }));
 
@@ -2728,10 +2730,12 @@ router.get('/parent-portal/mpesa-status', authed(async (req, res, db) => {
 router.get('/parent-portal/wallet', authed(async (req, res, db, decoded) => {
     const wallet = await ensureWallet(db, parentStudentId(req, decoded));
     const transactions = await getTransactions(db, wallet.walletId);
-    res.json({ wallet, transactions });
+    const settings = await getWalletSettings(db);
+    res.json({ wallet, transactions, walletEnabled: settings.enabled });
 }));
 
 router.post('/parent-portal/wallet/topup', authed(async (req, res, db, decoded) => {
+    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
     res.json(await initiateStk(req, db, parentStudentId(req, decoded), 'wallet'));
 }));
 

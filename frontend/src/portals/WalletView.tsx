@@ -34,6 +34,7 @@ export default function WalletView({ api, base, canManage, canPayFees, accent = 
     const txns: any[] = data?.transactions || [];
     const balance = Number(wallet?.balance || 0);
     const frozen = wallet && wallet.status !== "Active";
+    const walletEnabled = data?.walletEnabled !== false;
 
     const invalidate = () => qc.invalidateQueries({ queryKey: ["wallet", base] });
 
@@ -104,6 +105,7 @@ export default function WalletView({ api, base, canManage, canPayFees, accent = 
                         <p className="text-3xl font-black mt-1">KSh {balance.toLocaleString()}</p>
                         <p className="text-white/60 text-xs mt-2 font-mono">{wallet?.walletId} · {wallet?.code}</p>
                         {frozen && <span className="inline-block mt-2 bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">{wallet.status}</span>}
+                        {!walletEnabled && <p className="text-white/70 text-[11px] mt-2">Top-ups are currently disabled by the school.</p>}
                     </div>
                     {wallet?.code && (
                         <img alt="wallet code" className="w-20 h-20 rounded-lg bg-white p-1"
@@ -111,9 +113,11 @@ export default function WalletView({ api, base, canManage, canPayFees, accent = 
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-5">
-                    <button onClick={openTopup} className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-2 rounded-lg backdrop-blur">
-                        <Plus className="w-4 h-4" /> Top Up
-                    </button>
+                    {walletEnabled && (
+                        <button onClick={openTopup} className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-2 rounded-lg backdrop-blur">
+                            <Plus className="w-4 h-4" /> Top Up
+                        </button>
+                    )}
                     {canPayFees && (
                         <button onClick={() => payFees.mutate()} disabled={payFees.isPending || balance <= 0}
                             className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-2 rounded-lg backdrop-blur disabled:opacity-50">
