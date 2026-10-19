@@ -15,6 +15,8 @@ import { enforceCrud } from '../../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../../lib/dataScope';
 import { canonicalStatus } from '../../lib/studentStatus';
 import { CBC_DEFAULT_SKILLS, CBC_DEFAULT_SUBJECTS } from './cbcDefaults';
+import { sendEmail, getCommSettings } from '../../services/communications.service';
+import { htmlToPdf, closeReportBrowser } from '../../services/report-card-pdf.service';
 
 const router = Router();
 const dbOf = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -196,6 +198,111 @@ router.get('/skills/report', async (req, res) => {
             }),
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// ── Email a class's skill-based reports (PDF) to parents ──────────────────────
+// Communications → Bulk SMS → Send Results: the "Skill-Based Report" option
+// generates one PDF per learner (their ratings for the chosen term) and emails
+// it to their parent, the same way Exams → Manage Exams emails result cards.
+const RATING_LABEL = (scale: string, code: string): string => SCALES[scale]?.ratings.find(r => r.code === code)?.label || code || '—';
+function skillReportPdfHtml(opts: {
+    schoolName: string; studentName: string; regNo: string; className: string; term: string; year: string;
+    subjects: { subject: string; areas: { area: string; scale: string; skills: { name: string; rating: string }[] }[] }[];
+}): string {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+    const sections = opts.subjects.map(s => `
+        <h3 style="margin:18px 0 6px;font-size:14px;color:#1f2937">${esc(s.subject)}</h3>
+        ${s.areas.map(a => `
+            <div style="margin-bottom:10px">
+                <div style="font-weight:700;font-size:12px;color:#475569;margin-bottom:4px">${esc(a.area)}</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                    ${a.skills.map(sk => `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb">${esc(sk.name)}</td><td style="padding:4px 8px;border:1px solid #e5e7eb;width:140px;font-weight:700;color:#334155">${esc(RATING_LABEL(a.scale, sk.rating))}</td></tr>`).join('')}
+                </table>
+            </div>`).join('')}`).join('');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}</style></head><body>
+        <div style="border-bottom:3px solid #5C67F2;padding-bottom:10px;margin-bottom:14px">
+            <h1 style="margin:0;font-size:18px">${esc(opts.schoolName)}</h1>
+            <p style="margin:2px 0 0;font-size:12px;color:#64748b">Skill-Based Report — ${esc(opts.term)} ${esc(opts.year)}</p>
+        </div>
+        <p style="margin:0 0 2px;font-size:13px"><b>${esc(opts.studentName)}</b> ${opts.regNo ? `(${esc(opts.regNo)})` : ''}</p>
+        <p style="margin:0 0 10px;font-size:12px;color:#64748b">${esc(opts.className)}</p>
+        ${sections || '<p style="color:#94a3b8;font-size:12px">No skills rated for this term yet.</p>'}
+    </body></html>`;
+}
+router.post('/skills/email-report', enforceCrud('exams', 'update'), async (req, res) => {
+    const d = dbOf(req);
+    try {
+        const className = str(req.body?.className, 80), term = str(req.body?.term, 40), year = str(req.body?.year, 10);
+        if (!className || !term || !year) return res.status(400).json({ message: 'className, term and year are required' });
+        const wantSubjects: string[] = Array.isArray(req.body?.subjects) ? req.body.subjects.map((s: any) => str(s, 80)).filter(Boolean) : [];
+
+        // Fail fast with a clear message if email isn't configured at all.
+        const cs: any = await getCommSettings(d);
+        const host = cs.smtpHost || process.env.SMTP_HOST, user = cs.smtpUser || process.env.SMTP_USER, pass = cs.smtpPass || process.env.SMTP_PASS;
+        if (cs.emailEnabled === false) return res.status(400).json({ message: 'Email sending is disabled. Enable it in Communications → Settings.' });
+        if (!host || !user || !pass) return res.status(400).json({ message: 'Email is not configured. Set SMTP host, username and password in Communications → Settings.' });
+
+        const learners = await classLearners(req, className);
+        if (!learners.length) return res.status(404).json({ message: 'No learners found in this class.' });
+        const students = await d.collection('students').find({ _id: { $in: learners.map(l => new ObjectId(l._id)) } }).toArray();
+        const studentById = new Map<string, any>(students.map((s: any) => [String(s._id), s]));
+
+        const frameworks: any[] = (await d.collection('skill_areas').find(wantSubjects.length ? { subject: { $in: wantSubjects } } : {}).toArray())
+            .filter((f: any) => !f.levels?.length || f.levels.some((l: string) => norm(className).startsWith(norm(l))));
+        const subjects = Array.from(new Set(frameworks.map((f: any) => f.subject))).sort();
+        if (!subjects.length) return res.status(400).json({ message: 'No skills have been set up for this class/subject yet — set them up under Exams → Skill-Based Reports.' });
+
+        const ids = learners.map(l => l._id);
+        const rows: any[] = ids.length ? await d.collection('skill_assessments').find({ studentId: { $in: ids }, term, year }).toArray() : [];
+        const byStudent = new Map<string, any[]>(); rows.forEach((r: any) => { (byStudent.get(r.studentId) || byStudent.set(r.studentId, []).get(r.studentId)!).push(r); });
+
+        const tenantId = (req as any).tenantContext?.tenantId;
+        const tenant: any = tenantId ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tenantId)) }).catch(() => null) : null;
+        const schoolName = tenant?.instituteName || tenant?.name || 'School';
+
+        let sent = 0, failed = 0, skipped = 0; let firstError = '';
+        const processLearner = async (l: { _id: string; name: string; regNo: string }) => {
+            const st = studentById.get(l._id);
+            if (!st) { skipped++; return; }
+            const linked = await d.collection('parents').find({ 'linkedStudents.studentId': l._id }).toArray().catch(() => []);
+            const parent = linked.find((p: any) => (p.linkedStudents || []).some((x: any) => String(x.studentId) === l._id && x.isPrimary)) || linked[0];
+            const email = parent?.email || parent?.parentEmail || parent?.emailAddress || st.parentEmail || st.fatherEmail || st.motherEmail || st.guardianEmail || '';
+            if (!email) { skipped++; return; }
+            try {
+                const mine = byStudent.get(l._id) || [];
+                const html = skillReportPdfHtml({
+                    schoolName, studentName: l.name, regNo: l.regNo, className, term, year,
+                    subjects: subjects.map(subject => ({
+                        subject,
+                        areas: frameworks.filter((f: any) => f.subject === subject).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)).map((f: any) => ({
+                            area: f.area, scale: f.scale,
+                            skills: (f.skills || []).map((s: any) => ({ name: s.name, rating: mine.find((r: any) => r.skillId === s.id)?.rating || '' })),
+                        })),
+                    })),
+                });
+                const pdf = await htmlToPdf(html);
+                await sendEmail(d, {
+                    to: [email],
+                    subject: `Skill-Based Report — ${l.name} (${term} ${year})`,
+                    html: `<p>Dear Parent,</p><p>Please find attached ${l.name}'s Skill-Based Report for ${term} ${year}.</p><p>Regards,<br>${schoolName}</p>`,
+                    attachments: [{ filename: `SkillReport-${(l.regNo || l.name).toString().replace(/[^\w-]/g, '_')}.pdf`, content: pdf, contentType: 'application/pdf' }],
+                });
+                sent++;
+            } catch (e: any) { failed++; if (!firstError) firstError = e?.message || String(e); }
+        };
+
+        const CONCURRENCY = 6;
+        let cursor = 0;
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, learners.length) }, async () => {
+            while (cursor < learners.length) { const i = cursor++; await processLearner(learners[i]); }
+        }));
+
+        await closeReportBrowser().catch(() => {});
+        res.json({ total: learners.length, sent, failed, skipped, error: failed > 0 ? firstError : undefined });
+    } catch (e: any) {
+        await closeReportBrowser().catch(() => {});
+        res.status(500).json({ message: e.message });
+    }
 });
 
 export default router;
