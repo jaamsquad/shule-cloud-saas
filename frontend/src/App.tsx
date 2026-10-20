@@ -105,6 +105,8 @@ import Guardians from "./pages/tenant/modules/Guardians";
 import ManageFamilies from "./pages/tenant/modules/ManageFamilies";
 import NewFamily from "./pages/tenant/modules/NewFamily";
 import Classes from "./pages/tenant/modules/Classes";
+import GraduatedClasses from "./pages/tenant/modules/classes/GraduatedClasses";
+import GraduatedClassDetail from "./pages/tenant/modules/classes/GraduatedClassDetail";
 import NewClass from "./pages/tenant/modules/NewClass";
 import ClassesOffered from "./pages/tenant/modules/classes/ClassesOffered";
 import ClassDetail from "./pages/tenant/modules/ClassDetail";
@@ -678,6 +680,8 @@ const App = () => {
               <Route path="/classes" element={<Classes />} />
               <Route path="/classes/new" element={<NewClass />} />
               <Route path="/classes/offered" element={<ClassesOffered />} />
+              <Route path="/classes/graduated" element={<GraduatedClasses />} />
+              <Route path="/classes/graduated/:className/:year" element={<GraduatedClassDetail />} />
               <Route path="/classes/room/:streamId" element={<ClassRoster />} />
               <Route path="/classes/:id" element={<ClassDetail />} />
               <Route path="/classes/streams" element={<Classes />} />

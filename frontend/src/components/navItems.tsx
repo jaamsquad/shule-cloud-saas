@@ -51,6 +51,7 @@ export const navItems: NavItem[] = [
       { label: "All Classes", path: "/classes" },
       { label: "New Class", path: "/classes/new" },
       { label: "Classes & Streams", path: "/academic-system/classes" },
+      { label: "Graduated Classes", path: "/classes/graduated" },
       { label: "Curriculum Settings", path: "/settings/curriculum" },
     ]
   },
