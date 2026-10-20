@@ -52,10 +52,19 @@ router.get('/exam-printouts/transcripts', async (req: Request, res: Response) =>
         if (!level) return res.status(400).json({ message: 'Pick a class' });
         const stream = String(req.query.stream || '').trim() || null;
         const mode = String(req.query.mode || 'term') === 'all' ? 'all' : 'term';
-        // Optional single-term filter — "" means every term the student has sat.
-        const year = String(req.query.year || '').trim() || null;
-        const term = String(req.query.term || '').trim() || null;
-        res.json(await transcripts(db(req), level, stream, mode, year && term ? { year, term } : null));
+        // Optional term filter — "terms" is a comma list of "<term>|<year>" keys; empty
+        // means every term the student has sat. Falls back to the older single term/year
+        // params for any caller still using them.
+        const termsParam = String(req.query.terms || '').trim();
+        let onlyTerms: { year: string; term: string }[] | null = null;
+        if (termsParam) {
+            onlyTerms = termsParam.split(',').map(k => { const [term, year] = k.split('|'); return { term: (term || '').trim(), year: (year || '').trim() }; }).filter(t => t.term && t.year);
+        } else {
+            const year = String(req.query.year || '').trim();
+            const term = String(req.query.term || '').trim();
+            if (year && term) onlyTerms = [{ year, term }];
+        }
+        res.json(await transcripts(db(req), level, stream, mode, onlyTerms));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

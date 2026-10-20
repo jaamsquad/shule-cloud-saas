@@ -72,7 +72,9 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     const examId = params.get("exam") || "";
     const set = (k: string, v: string) => setParams(prev => { const p = new URLSearchParams(prev); if (v) p.set(k, v); else p.delete(k); p.set("view", view); return p; });
     const [stream, setStream] = useState(params.get("stream") || "");
-    const [term, setTerm] = useState(params.get("term") || "");   // "" = all terms; else "<term>|<academicYear>"
+    const [term, setTerm] = useState(params.get("term") || "");   // "" = all terms; else "<term>|<academicYear>" — merit/analysis exam picker
+    // Transcripts: which terms to include — empty = all terms, one key = that term only, several = that combination.
+    const [selTermKeys, setSelTermKeys] = useState<Set<string>>(() => new Set((params.get("terms") || "").split(",").filter(Boolean)));
     const [rankBy, setRankBy] = useState<"points" | "marks">("points");
     const [merit, setMerit] = useState<MeritOpts>({ section: "ranking", gender: "all", stream: "", cols: { upi: false, stream: true, kcpe: false, gender: true } });
     const [mode, setMode] = useState<"term" | "all">("term");
@@ -94,7 +96,9 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
     }, [exams]);
     const examsInTerm = term ? exams.filter(e => termKey(e) === term) : exams;
     useEffect(() => { if (view !== "transcripts" && level && examsInTerm.length && !examsInTerm.some(e => e._id === examId)) set("exam", examsInTerm[0]._id); }, [examsInTerm, level]); // eslint-disable-line react-hooks/exhaustive-deps
-    const [selTermName, selYear] = term.split("|");
+    const setTermKeys = (next: Set<string>) => { setSelTermKeys(next); set("terms", [...next].join(",")); };
+    const toggleTermKey = (k: string) => { const n = new Set(selTermKeys); if (n.has(k)) n.delete(k); else n.add(k); setTermKeys(n); };
+    const termsParam = selTermKeys.size ? [...selTermKeys].join(",") : undefined;
 
     const report = useQuery({
         queryKey: ["printout_report", examId, level, rankBy],
@@ -103,10 +107,10 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
         queryFn: async () => (await api.get("/exam-printouts/report", { params: { examId, level, rankBy } })).data,
     });
     const tdata = useQuery({
-        queryKey: ["printout_transcripts", level, stream, mode, term],
+        queryKey: ["printout_transcripts", level, stream, mode, termsParam],
         enabled: view === "transcripts" && !!level,
         retry: false,
-        queryFn: async () => (await api.get("/exam-printouts/transcripts", { params: { level, stream: stream || undefined, mode, term: selTermName || undefined, year: selYear || undefined } })).data,
+        queryFn: async () => (await api.get("/exam-printouts/transcripts", { params: { level, stream: stream || undefined, mode, terms: termsParam } })).data,
     });
     // a signed verification QR per transcript
     useEffect(() => {
@@ -195,11 +199,32 @@ function Builder({ view, onBack }: { view: View; onBack: () => void }) {
                                 <option value="">All streams</option>
                                 {(levelObj?.streams || report.data?.streams || []).map((s: string) => <option key={s} value={s}>{s}</option>)}
                             </select></label>
-                        <label className="block"><span className="text-[11px] font-bold text-slate-500">Term</span>
-                            <select className={sel} style={border} value={term} onChange={e => { const v = e.target.value; setTerm(v); set("term", v); if (view !== "transcripts") set("exam", ""); }}>
-                                <option value="">All terms</option>
-                                {termOptions.map(t => <option key={t.key} value={t.key}>{t.term} · {t.academicYear}</option>)}
-                            </select></label>
+                        {view === "transcripts" ? (
+                            <label className="block">
+                                <span className="text-[11px] font-bold text-slate-500">Term</span>
+                                <details className="relative">
+                                    <summary className={sel + " flex items-center justify-between list-none"} style={border}>
+                                        <span>{selTermKeys.size === 0 ? "All terms" : selTermKeys.size === 1 ? (() => { const t = termOptions.find(o => o.key === [...selTermKeys][0]); return t ? `${t.term} · ${t.academicYear}` : "1 term"; })() : `${selTermKeys.size} terms selected`}</span>
+                                    </summary>
+                                    <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg p-2 space-y-0.5 max-h-60 overflow-auto" style={border}>
+                                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                            <input type="checkbox" checked={selTermKeys.size === 0} onChange={() => setTermKeys(new Set())} /> All terms
+                                        </label>
+                                        {termOptions.map(t => (
+                                            <label key={t.key} className="flex items-center gap-2 text-xs font-bold text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                                <input type="checkbox" checked={selTermKeys.has(t.key)} onChange={() => toggleTermKey(t.key)} /> {t.term} · {t.academicYear}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </details>
+                            </label>
+                        ) : (
+                            <label className="block"><span className="text-[11px] font-bold text-slate-500">Term</span>
+                                <select className={sel} style={border} value={term} onChange={e => { const v = e.target.value; setTerm(v); set("term", v); set("exam", ""); }}>
+                                    <option value="">All terms</option>
+                                    {termOptions.map(t => <option key={t.key} value={t.key}>{t.term} · {t.academicYear}</option>)}
+                                </select></label>
+                        )}
                         {view !== "transcripts" ? (
                             <>
                                 <label className="block"><span className="text-[11px] font-bold text-slate-500">Exam (published)</span>
