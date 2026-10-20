@@ -159,24 +159,43 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         let typeByExam: Record<string, string>; let examIdsByType: Record<string, string[]>;
         let examColumns: Array<{ type: string; title: string; examIds: string[] }>; let multiExam: boolean;
         let allMarks: any[]; let onlineExamDocs: any[];
+        let computedAvgRows: any[] = [];   // the averaged rows only — used for ranking (not the raw per-term rows, which would double-count)
 
         if (isComputedExam) {
-            // Average the published marks of every source exam, then tag the merged rows
-            // with THIS exam's own id — everything below (positions, change column,
-            // teacher initials) reads marks by examId/typeByExam, so this one substitution
-            // is all it takes for the rest of the card to work unchanged.
+            // One column per SOURCE exam (labelled by its own term, "T1"/"T2"…) — not
+            // collapsed into a single averaged column, so a Consolidated/Year Average card
+            // shows each term's actual marks. The card's own built-in "AGGREGATE"/"OVERALL"
+            // column (shown whenever there's more than one column) then IS the average —
+            // the same mechanism a normal CAT/Mid Term/End Term card already uses, so no
+            // separate "AVG" column is added here.
+            const srcOids = sourceExamIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
+            const sourceExamDocs = await database.collection('exams').find({ _id: { $in: srcOids } }).toArray().catch(() => []);
+            const srcMetaById: Record<string, any> = {};
+            sourceExamDocs.forEach((e: any) => { srcMetaById[String(e._id)] = e; });
+
             const rawSource = await database.collection('exam_marks').find({ examId: { $in: sourceExamIds } }).toArray().catch(() => []);
             const publishedSource = await onlyPublished(database, rawSource);
-            allMarks = averageAcrossSourceExams(publishedSource).map((m: any) => ({ ...m, examId: String(examId) }));
+            allMarks = publishedSource;
+            // Used only for ranking below — the raw per-term rows above would otherwise
+            // double-count a subject once per term in the position/points totals.
+            computedAvgRows = averageAcrossSourceExams(publishedSource).map((m: any) => ({ ...m, examId: String(examId) }));
             onlineExamDocs = [];
             examMeta = {};
-            examIds = [String(examId)];
-            mainType = (exam?.examName || exam?.type || 'AVERAGE').toString().toUpperCase().slice(0, 14);
+            examIds = sourceExamIds;
+
+            const termLabel = (e: any): string => { const n = String(e?.term || '').match(/\d+/)?.[0]; return n ? `T${n}` : (e?.term || 'EXAM').toString().toUpperCase().slice(0, 8); };
+            typeByExam = {};
+            examIdsByType = {};
+            sourceExamIds.forEach(id => {
+                const ty = termLabel(srcMetaById[id]);
+                typeByExam[id] = ty;
+                (examIdsByType[ty] ||= []).push(id);
+            });
+            const termColsSorted = Object.keys(examIdsByType).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            mainType = termColsSorted[0] || 'EXAM';
             mainTypeForOrder = mainType;
-            typeByExam = { [String(examId)]: mainType };
-            examIdsByType = { [mainType]: [String(examId)] };
-            examColumns = [{ type: mainType, title: mainType, examIds: [String(examId)] }];
-            multiExam = false;
+            examColumns = termColsSorted.map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
+            multiExam = examColumns.length > 1;
         } else {
             // The exam set = the exam the user opened (always shown) + the generation's
             // main End Term + any additional internal assessments. The selected exam
@@ -271,9 +290,10 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
         // Marks used for ranking: the End-Term (main) exam across ALL students. If for
         // some reason that's empty, fall back to the full pinned exam set. A computed
-        // exam's "main exam" marks ARE allMarks (already the whole cohort's average).
+        // exam ranks on its AVERAGED rows only — allMarks also carries each term's raw
+        // marks (for the T1/T2 columns), which would double-count a subject per term.
         const rankExamId = mainEff;
-        const rankMarksMain = isComputedExam ? allMarks
+        const rankMarksMain = isComputedExam ? computedAvgRows
             : await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
