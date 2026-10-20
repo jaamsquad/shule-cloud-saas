@@ -1,13 +1,13 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award, Phone, BarChart3, Eye, EyeOff, TrendingDown, Lock } from "lucide-react";
+import { Home, FileText, BookOpen, Search, Loader2, Book, Check, X, Printer, TrendingUp, Settings2, Maximize2, Award, Phone, BarChart3, Eye, EyeOff, TrendingDown, Lock, CalendarCheck, Wallet } from "lucide-react";
 import { useItems } from "@/hooks/useItems";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
 import api from "@/lib/api";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, LabelList } from "recharts";
-import { openPrintDoc, printElementToPdf } from "@/lib/pdfDoc";
+import { openPrintDoc } from "@/lib/pdfDoc";
 import AcademicHistoryCard from "@/components/AcademicHistoryCard";
 import { useSchoolBrand } from "@/lib/printDoc";
 import { printTransferLetter, displayDate } from "./students/transferLetter";
@@ -18,7 +18,6 @@ import OtherDetailsCard from "./students/OtherDetailsCard";
 
 export default function StudentReport() {
     const { id } = useParams();
-    const reportRef = useRef<HTMLDivElement>(null);
     const { items: students, isLoading } = useItems("students");
     const { items: allSubjects } = useItems("subjects");
     const { items: classes } = useItems("classes");
@@ -309,7 +308,7 @@ export default function StudentReport() {
     return (
         <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center">
             {/* Breadcrumb Header */}
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm z-10 m-4 rounded-xl w-[calc(100%-2rem)]">
+            <div className="bg-white border-b border-gray-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-sm z-10 m-4 rounded-xl w-[calc(100%-2rem)]">
                 <div className="flex items-center">
                     <span className="font-bold text-gray-800 text-lg mr-2">Students</span>
                     <span className="text-gray-300 mx-2">|</span>
@@ -318,7 +317,7 @@ export default function StudentReport() {
                         - Student Report
                     </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     {canUpdate && (
                         <button onClick={handleOpenManage}
                             className="h-9 px-4 bg-white border border-[#868DF4]/40 hover:border-[#5C67F2] text-[#5C67F2] text-[11px] font-bold rounded-full flex items-center gap-2 transition-colors">
@@ -365,10 +364,6 @@ export default function StudentReport() {
                             );
                         })()}
                     </div>
-                    <button onClick={() => printElementToPdf(reportRef.current, `Student Report — ${student?.studentName || student?.firstName || "Student"}`, { fileName: `Student-Report-${student?.registrationNo || student?.admissionNo || ""}`, always: true })}
-                        className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors">
-                        <FileText className="w-3.5 h-3.5" /> Get PDF
-                    </button>
                 </div>
             </div>
 
@@ -394,31 +389,37 @@ export default function StudentReport() {
 
             {view === "analysis" && <div className="p-4 sm:p-6 pt-0 sm:pt-0 w-full mt-4"><StudentAnalysis studentId={String(student?._id || id)} studentName={student.studentName || `${student.firstName || ""} ${student.lastName || ""}`.trim()} canEdit={!!canUpdate} /></div>}
 
-            <div ref={reportRef} className={`p-6 pt-0 w-full mt-4 flex-col lg:flex-row gap-6 ${view === "profile" ? "flex" : "hidden"}`}>
-                
+            <div className={`p-6 pt-0 w-full mt-4 flex-col lg:flex-row gap-6 ${view === "profile" ? "flex" : "hidden"}`}>
+
                 {/* Left Column - Profile Details */}
                 <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-6">
                     {/* Top Profile Card */}
-                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex flex-col items-center text-center">
-                        <div className="w-32 h-32 bg-gray-100 rounded-full border-[6px] border-[#868DF4]/10 flex items-center justify-center overflow-hidden mb-6">
-                            {(student.studentPhoto || student.avatar) ? (
-                                <img src={student.studentPhoto || student.avatar} alt={student.studentName} className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-5 relative">
-                                    <div className="w-10 h-10 bg-[#fcd34d] rounded-full"></div>
-                                    <div className="w-20 h-16 bg-[#5C67F2] mt-2 rounded-t-[2rem] relative"></div>
-                                </div>
+                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col items-center text-center">
+                        <div className="w-full h-20 bg-gradient-to-r from-[#868DF4] to-[#5C67F2] relative">
+                            <span className={`absolute top-3 right-3 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full ${statusBadge(currentStatus)}`}>{currentStatus}</span>
+                        </div>
+                        <div className="px-8 pb-8 -mt-14 flex flex-col items-center w-full">
+                            <div className="w-28 h-28 bg-gray-100 rounded-full border-[5px] border-white shadow-md flex items-center justify-center overflow-hidden mb-4">
+                                {(student.studentPhoto || student.avatar) ? (
+                                    <img src={student.studentPhoto || student.avatar} alt={student.studentName} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-[#1e293b] flex flex-col items-center pt-5 relative">
+                                        <div className="w-10 h-10 bg-[#fcd34d] rounded-full"></div>
+                                        <div className="w-20 h-16 bg-[#5C67F2] mt-2 rounded-t-[2rem] relative"></div>
+                                    </div>
+                                )}
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800">{student.studentName || `${student.firstName} ${student.lastName}`}</h2>
+                            <p className="text-xs font-bold text-[#868DF4] mb-5">{student.studentClass || student.currentClass || "No class assigned"} · {student.registrationNo || student.admNo || "—"}</p>
+                            {!isTransferred && (
+                            <button
+                                onClick={handleOpenAssignModal}
+                                className="w-full bg-[#868DF4]/10 hover:bg-[#868DF4]/20 text-[#868DF4] font-bold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Book className="w-4 h-4" /> Assign Subjects
+                            </button>
                             )}
                         </div>
-                        <h2 className="text-xl font-bold text-[#868DF4] mb-4">{student.studentName || `${student.firstName} ${student.lastName}`}</h2>
-                        {!isTransferred && (
-                        <button 
-                            onClick={handleOpenAssignModal}
-                            className="w-full bg-[#868DF4]/10 hover:bg-[#868DF4]/20 text-[#868DF4] font-bold py-2 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-                        >
-                            <Book className="w-4 h-4" /> Assign Subjects
-                        </button>
-                        )}
                     </div>
 
                     {/* Details List */}
@@ -485,17 +486,20 @@ export default function StudentReport() {
                     
                     {/* 1 Attendance Report */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col break-inside-avoid mb-6">
-                        <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">1</div>
-                            <h3 className="text-[#868DF4] font-bold">Attendance Report</h3>
+                        <div className="flex items-center gap-2.5 mb-6">
+                            <div className="w-8 h-8 rounded-xl bg-[#868DF4]/10 text-[#868DF4] flex items-center justify-center"><CalendarCheck className="w-4 h-4" /></div>
+                            <h3 className="text-slate-700 font-black">Attendance Report</h3>
                         </div>
-                        
+
                         <div className="flex justify-center gap-6 mb-8">
                             {/* Overall Circle */}
                             <div className="flex flex-col items-center">
-                                <div className="w-20 h-20 rounded-full border-[6px] border-emerald-500/20 flex flex-col items-center justify-center relative">
-                                    <span className="text-emerald-500 font-bold text-lg leading-tight">{latestAttendance}%</span>
-                                    <span className="text-[9px] text-emerald-500 font-bold">Overall</span>
+                                <div className="relative w-[84px] h-[84px]">
+                                    <CircularGauge percent={latestAttendance} color="#10b981" trackColor="#ecfdf5" />
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-emerald-500 font-black text-lg leading-tight">{latestAttendance}%</span>
+                                        <span className="text-[9px] text-emerald-500 font-bold">Overall</span>
+                                    </div>
                                 </div>
                                 <div className="mt-4 border border-gray-200 rounded-full px-3 py-1 text-[8px] font-bold text-gray-400 flex items-center gap-1">
                                     <span className="text-[#6b8cff]">Trend</span> <span className="text-gray-300">-&gt;</span> PRESENT
@@ -526,11 +530,11 @@ export default function StudentReport() {
                     {trendData.length >= 2 && (
                         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 break-inside-avoid mb-6">
                             <div className="flex items-center justify-between gap-2 mb-5">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
-                                        <TrendingUp className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                                        <TrendingUp className="w-4 h-4" />
                                     </div>
-                                    <h3 className="text-emerald-600 font-bold">Performance Trends</h3>
+                                    <h3 className="text-slate-700 font-black">Performance Trends</h3>
                                 </div>
                                 <button onClick={() => setTrendOpen(true)} className="h-8 px-3 rounded-full border border-emerald-200 text-emerald-600 hover:bg-emerald-50 text-[11px] font-bold flex items-center gap-1.5 transition-colors print:hidden">
                                     <Maximize2 className="w-3 h-3" /> View more
@@ -576,9 +580,9 @@ export default function StudentReport() {
 
                     {/* 2 Class Tests Report (Using best exam as placeholder if tests unavailable) */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col break-inside-avoid mb-6">
-                        <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">2</div>
-                            <h3 className="text-[#ff5e6c] font-bold">Performance Summary</h3>
+                        <div className="flex items-center gap-2.5 mb-6">
+                            <div className="w-8 h-8 rounded-xl bg-[#ff5e6c]/10 text-[#ff5e6c] flex items-center justify-center"><Award className="w-4 h-4" /></div>
+                            <h3 className="text-slate-700 font-black">Performance Summary</h3>
                         </div>
                         
                         {bestExam ? (
@@ -622,9 +626,9 @@ export default function StudentReport() {
 
                     {/* 4 Fee Report */}
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 flex flex-col break-inside-avoid mb-6">
-                        <div className="flex items-center gap-2 mb-6">
-                            <div className="w-6 h-6 rounded-full bg-[#868DF4] text-white flex items-center justify-center text-xs font-bold">3</div>
-                            <h3 className="text-[#868DF4] font-bold">Fee Report</h3>
+                        <div className="flex items-center gap-2.5 mb-6">
+                            <div className="w-8 h-8 rounded-xl bg-[#868DF4]/10 text-[#868DF4] flex items-center justify-center"><Wallet className="w-4 h-4" /></div>
+                            <h3 className="text-slate-700 font-black">Fee Report</h3>
                         </div>
                         <div className="flex-1 flex flex-col justify-center pb-8 w-full">
                             {feeData ? (
@@ -955,6 +959,25 @@ export default function StudentReport() {
                 </div>
             )}
         </div>
+    );
+}
+
+function statusBadge(status: string) {
+    if (status === "Active") return "bg-emerald-400/90 text-white";
+    if (status === "Transferred") return "bg-amber-400/90 text-white";
+    if (status === "Graduated") return "bg-sky-400/90 text-white";
+    return "bg-white/80 text-slate-600";
+}
+
+function CircularGauge({ percent, color, trackColor }: { percent: number; color: string; trackColor: string }) {
+    const r = 34, c = 2 * Math.PI * r;
+    const pct = Math.max(0, Math.min(100, percent));
+    return (
+        <svg width="84" height="84" viewBox="0 0 84 84" className="-rotate-90">
+            <circle cx="42" cy="42" r={r} fill="none" stroke={trackColor} strokeWidth="8" />
+            <circle cx="42" cy="42" r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+                strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c} style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+        </svg>
     );
 }
 
