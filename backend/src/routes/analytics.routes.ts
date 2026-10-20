@@ -100,6 +100,14 @@ export async function buildExamResults(database: Db, examId: string, opts: { inc
     const sourceIds: string[] = (examDoc?.examCategory === 'consolidated' || examDoc?.examCategory === 'year_average') && Array.isArray(examDoc?.sourceExamIds)
         ? examDoc.sourceExamIds.map(String).filter(Boolean) : [];
 
+    // A Consolidated/Year Average exam is published as ITS OWN step in Manage Exams (it has
+    // no exam_marks of its own to gate on) — not published yet means no result, same as the
+    // source exams being unpublished would.
+    if (sourceIds.length && !opts.includeUnpublished) {
+        const view = await publishedView(database);
+        if (view.statusOf(String(examId), undefined, examDoc?.classLevel) !== 'Published') return { rows: [], scale: [] };
+    }
+
     // Recover classAtTime on any older mark that predates the stamp, before reading —
     // otherwise a promoted student's historical exam would fall back to their current class.
     await Promise.all((sourceIds.length ? sourceIds : [String(examId)]).map(id => backfillClassAtTimeForExam(database, id)));

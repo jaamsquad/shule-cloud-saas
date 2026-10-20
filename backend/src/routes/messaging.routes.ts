@@ -6,7 +6,7 @@ import { resolveScope } from '../lib/dataScope';
 import { loadTerms, pickCurrent, termOption, TermInfo } from '../modules/cbc/cbcTerm';
 import { resultUrl, resultSnapshot, resultText } from '../lib/resultLink';
 import { yearlyStatus, yearlyFor, yearlyText } from '../lib/yearlyReport';
-import { onlyPublished } from '../lib/examPublish';
+import { onlyPublished, publishedView } from '../lib/examPublish';
 import { makeGradingCache } from '../lib/grading';
 import { averageAcrossSourceExams } from './analytics.routes';
 
@@ -74,6 +74,11 @@ async function resultsAttachment(database: Db, studentId: string, examId: string
     // exams' published marks for this student instead, tagged with this exam's own id.
     const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
         ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+    // Consolidated/Year Average is published as its own step in Manage Exams.
+    if (sourceExamIds.length) {
+        const view = await publishedView(database);
+        if (view.statusOf(examId, undefined, exam?.classLevel) !== 'Published') return null;
+    }
     // Only published results are sent (Exams → Manage Exams).
     const marks = sourceExamIds.length
         ? averageAcrossSourceExams(await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: sourceExamIds }, studentId }).toArray().catch(() => []))).map((m: any) => ({ ...m, examId }))

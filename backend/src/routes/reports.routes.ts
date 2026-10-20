@@ -56,6 +56,14 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
             ? exam.sourceExamIds.map(String).filter(Boolean) : [];
         const isComputedExam = sourceExamIds.length > 0;
+        // A Consolidated/Year Average exam is published as its own step in Manage Exams
+        // (it has no exam_marks of its own to gate on) — not published yet, no card.
+        if (isComputedExam) {
+            const view = await publishedView(database);
+            if (view.statusOf(examId, undefined, exam?.classLevel) !== 'Published') {
+                return res.json({ notReady: true, student: { name: student.studentName || `${student.firstName || ''} ${student.lastName || ''}`.trim(), className: exam?.classLevel || '' } });
+            }
+        }
         // School profile = the Tenant record in the meta DB (name, logo, etc.),
         // merged with any tenant-DB profile collection extras.
         const tenantId = (req as any).tenantContext?.tenantId;
