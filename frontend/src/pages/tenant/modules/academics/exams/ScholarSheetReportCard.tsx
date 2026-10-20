@@ -123,15 +123,33 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
             <style>{`
                 ${hideToolbar ? "" : "@page { size: A4 portrait; margin: 8mm; }"}
                 @media print { .no-print { display: none !important; } body { -webkit-print-color-adjust: exact; } .rc { break-inside: avoid; } }
-                .rc { width: 194mm; margin: 0 auto; color: #000; font-family: 'Times New Roman', Georgia, serif; font-size: 10px; line-height: 1.15; }
+                .rc { position: relative; width: 194mm; margin: 0 auto; color: #000; font-family: 'Times New Roman', Georgia, serif; font-size: 10px; line-height: 1.15; }
                 .rc table { width: 100%; border-collapse: collapse; }
                 .rc td, .rc th { border: 0.6px solid #000; padding: 1.5px 3px; }
                 .rc .nb td, .rc .nb th { border: none; }
                 .rc h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
                 .rc .muted { font-size: 9px; }
+                .rc-watermark { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: -1; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             `}</style>
 
             <div className="rc p-2">
+                {/* Watermark: faded school logo centred + the admission no. tiled diagonally */}
+                <div className="rc-watermark">
+                    {d.school.logo && (
+                        <img src={d.school.logo} alt="" style={{ position: "absolute", top: "50%", left: "50%", width: "130mm", height: "130mm", objectFit: "contain", opacity: 0.06, transform: "translate(-50%, -50%)" }} />
+                    )}
+                    {d.student.adm && Array.from({ length: 40 }).map((_, i) => {
+                        const cols = 5, r = Math.floor(i / cols), c = i % cols;
+                        const left = c * (194 / cols) + (r % 2 ? (194 / cols) / 2 : 0) - 10;
+                        const top = r * 34 - 10;
+                        return (
+                            <span key={i} style={{ position: "absolute", left: `${left}mm`, top: `${top}mm`, transform: "rotate(-30deg)", fontSize: 9, fontWeight: 700, color: "#000", opacity: 0.08, whiteSpace: "nowrap" }}>
+                                {d.student.adm}
+                            </span>
+                        );
+                    })}
+                </div>
+
                 {/* Header */}
                 <table className="nb"><tbody><tr>
                     <td style={{ width: "16mm", verticalAlign: "top" }}>{d.school.logo ? <img src={d.school.logo} alt="logo" style={{ width: "15mm", height: "15mm", objectFit: "contain" }} /> : null}</td>
