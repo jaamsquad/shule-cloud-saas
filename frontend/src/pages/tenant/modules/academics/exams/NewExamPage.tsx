@@ -32,7 +32,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls = "w-full h-11 px-4 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 bg-white focus:outline-none focus:border-[#5C67F2] transition-colors";
 const selectCls = inputCls + " appearance-none cursor-pointer";
-const levelOf = (name: string) => String(name || "").match(/(form|grade)\s*\d+/i)?.[0] || name;
+// Case/whitespace-normalized so "Grade 11" matches a source exam stored as "grade  11" or
+// "GRADE 11 EAST" — written tests aren't always created through this exact flow (older ones,
+// imports, admin edits), so their classLevel text can differ in case/spacing from the Form/
+// Grade dropdown's value even when they mean the same class.
+const levelOf = (name: string) => (String(name || "").match(/(form|grade)\s*\d+/i)?.[0] || String(name || "")).toLowerCase().replace(/\s+/g, " ").trim();
 // Academic year is usually a plain year ("2027"), but exams created before this flow
 // existed can carry a legacy composite value ("2026/2027") — match if the picked year
 // appears anywhere in the exam's stored value, so those older exams still show up.
