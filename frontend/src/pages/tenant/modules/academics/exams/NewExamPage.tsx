@@ -396,7 +396,7 @@ function SupplementaryForm({ v2Terms, v2Years, classes, subjects, activeTerm, ac
 function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplates, saving, onCreate, onCancel }: any) {
     const [form, setForm] = useState("");
     const [year, setYear] = useState("");
-    const [termExamIds, setTermExamIds] = useState<Record<string, string>>({ "Term 1": "", "Term 2": "", "Term 3": "" });
+    const [termExamIds, setTermExamIds] = useState<Record<string, string[]>>({ "Term 1": [], "Term 2": [], "Term 3": [] });
     const [rankingCriteria, setRankingCriteria] = useState("meanMarks");
     const [minSubjects, setMinSubjects] = useState("7");
     const [overallGrading, setOverallGrading] = useState("");
@@ -408,26 +408,32 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
         (e.examCategory || "written_test") === "written_test" && levelOf(e.classLevel) === levelOf(form) && yearMatches(e.academicYear, year)
     ), [allExams, form, year]);
 
-    // When a term has exactly one matching written test, pick it automatically — the
-    // teacher shouldn't have to pick from a dropdown with a single option. A term with
-    // two or more stays a manual dropdown choice.
+    // When a term has exactly one matching written test, pick it automatically — nothing
+    // to choose between. A term with two or more leaves every one of them selectable, so
+    // any combination (just one, or all of them) can feed the average.
     useEffect(() => {
         setTermExamIds(prev => {
             let changed = false;
             const next = { ...prev };
             for (const term of Object.keys(prev)) {
                 const matches = examsForFormYear.filter((e: any) => termMatches(e.term, term));
-                if (!prev[term] && matches.length === 1) { next[term] = matches[0]._id; changed = true; }
-                else if (prev[term] && !matches.some((e: any) => e._id === prev[term])) { next[term] = ""; changed = true; }
+                const matchIds = new Set(matches.map((e: any) => e._id));
+                const stillValid = prev[term].filter(id => matchIds.has(id));
+                if (stillValid.length !== prev[term].length) { next[term] = stillValid; changed = true; }
+                if (!next[term].length && matches.length === 1) { next[term] = [matches[0]._id]; changed = true; }
             }
             return changed ? next : prev;
         });
     }, [examsForFormYear]);
+    const toggleTermExam = (term: string, examId: string) => setTermExamIds(p => {
+        const cur = p[term];
+        return { ...p, [term]: cur.includes(examId) ? cur.filter(id => id !== examId) : [...cur, examId] };
+    });
 
     const submit = () => {
         if (!form || !year) { toast.error("Pick a form/grade and academic year"); return; }
-        const sourceExamIds = Object.values(termExamIds).filter(Boolean);
-        if (!sourceExamIds.length) { toast.error("Pick at least one term's exam to average"); return; }
+        const sourceExamIds = Object.values(termExamIds).flat();
+        if (!sourceExamIds.length) { toast.error("Pick at least one exam to average"); return; }
         onCreate([{
             examCategory: "year_average", examName: `${form} Year Average ${year}`, type: "Year Average", academicYear: year, term: "Year",
             classLevel: form, sourceExamIds, rankingCriteria, minSubjects: Number(minSubjects) || undefined,
@@ -460,15 +466,26 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
                         <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Select Exams — {form}</label>
                         <div className="border border-gray-100 rounded-xl overflow-hidden">
                             <div className="grid grid-cols-2 bg-gray-50 px-4 py-2 text-[10px] font-black uppercase text-gray-400"><span>Term</span><span>Exam</span></div>
-                            {Object.keys(termExamIds).map(term => (
-                                <div key={term} className="grid grid-cols-2 items-center px-4 py-2.5 border-t border-gray-100">
-                                    <span className="text-sm font-bold text-gray-700">{term}</span>
-                                    <select value={termExamIds[term]} onChange={e => setTermExamIds(p => ({ ...p, [term]: e.target.value }))} className={selectCls + " h-10"}>
-                                        <option value="">Select Exam</option>
-                                        {examsForFormYear.filter((e: any) => termMatches(e.term, term)).map((e: any) => <option key={e._id} value={e._id}>{e.examName}</option>)}
-                                    </select>
-                                </div>
-                            ))}
+                            {Object.keys(termExamIds).map(term => {
+                                const matches = examsForFormYear.filter((e: any) => termMatches(e.term, term));
+                                return (
+                                    <div key={term} className="grid grid-cols-2 items-start px-4 py-2.5 border-t border-gray-100">
+                                        <span className="text-sm font-bold text-gray-700 pt-1.5">{term}</span>
+                                        {matches.length === 0 ? (
+                                            <span className="text-xs font-medium text-gray-400 py-2">No written-test exams found for this form, year and term yet.</span>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                {matches.map((e: any) => (
+                                                    <label key={e._id} className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+                                                        <input type="checkbox" checked={termExamIds[term].includes(e._id)} onChange={() => toggleTermExam(term, e._id)} />
+                                                        {e.examName}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 
