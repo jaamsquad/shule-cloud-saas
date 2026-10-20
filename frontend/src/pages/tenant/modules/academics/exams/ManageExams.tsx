@@ -19,7 +19,7 @@ const border = { border: "0.5px solid #e5e7eb" };
 const fmtDate = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 type ClassRow = { classId: string; className: string; students: number; subjects: number; marks: number; updatedAt: string | null; status: "Published" | "Pending"; publishedAt: string | null; publishedBy: string | null; changedBy: string | null };
-type ExamRow = { _id: string; title: string; examName: string; type: string; term: string; academicYear: string; classes: ClassRow[]; manual: boolean };
+type ExamRow = { _id: string; title: string; examName: string; type: string; term: string; academicYear: string; classes: ClassRow[]; manual: boolean; examCategory: string };
 
 export default function ManageExams() {
     const nav = useNavigate();
@@ -129,7 +129,11 @@ export default function ManageExams() {
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                             <button onClick={() => nav(`/exams/edit/${exam._id}`)} className="h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 bg-white" style={{ ...border, color: INK }}><Pencil className="w-3.5 h-3.5" /> Edit exam</button>
-                                            <button onClick={() => nav("/exams/marks")} className="h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 bg-white" style={{ ...border, color: INK }}><FileSpreadsheet className="w-3.5 h-3.5" /> Enter marks</button>
+                                            {/* Consolidated/Year Average have no marks of their own — they're an average of
+                                                their source exams — so there's nothing to enter marks against. */}
+                                            {exam.examCategory !== "consolidated" && exam.examCategory !== "year_average" && (
+                                                <button onClick={() => nav("/exams/marks")} className="h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 bg-white" style={{ ...border, color: INK }}><FileSpreadsheet className="w-3.5 h-3.5" /> Enter marks</button>
+                                            )}
                                         </div>
                                     </div>
                                     {exam.classes.length === 0 ? (

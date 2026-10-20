@@ -59,6 +59,30 @@ router.get('/exam-publishing', async (req: Request, res: Response) => {
             rowsByExam.set(examId, list);
         }
 
+        // Consolidated/Year Average exams have no exam_marks of their own — they're an
+        // average of their source exams, already scoped to one class (classLevel). Synthesize
+        // their single class row from those source exams' marks, so the same Publish/Unpublish
+        // controls below work for them too.
+        const computedExams = exams.filter((e: any) => (e.examCategory === 'consolidated' || e.examCategory === 'year_average') && Array.isArray(e.sourceExamIds) && e.sourceExamIds.length);
+        if (computedExams.length) {
+            const allSourceIds = Array.from(new Set(computedExams.flatMap((e: any) => e.sourceExamIds.map(String))));
+            const sourceMarks = allSourceIds.length ? await d.collection('exam_marks').find({ examId: { $in: allSourceIds } }).toArray().catch(() => []) : [];
+            const marksBySource = new Map<string, any[]>();
+            sourceMarks.forEach((m: any) => { const k = String(m.examId); (marksBySource.get(k) || (marksBySource.set(k, []).get(k) as any[])).push(m); });
+            for (const e of computedExams) {
+                const examId = String(e._id);
+                const marks = (e.sourceExamIds as any[]).map(String).flatMap(id => marksBySource.get(id) || []);
+                if (!marks.length) continue;   // nothing to publish yet
+                const updatedAt = marks.reduce((max: any, m: any) => { const u = m.updatedAt || m.createdAt; return u && (!max || u > max) ? u : max; }, null);
+                rowsByExam.set(examId, [{
+                    classId: '', className: e.classLevel || '', marks: marks.length,
+                    students: Array.from(new Set(marks.map((m: any) => String(m.studentId)))),
+                    subjects: Array.from(new Set(marks.map((m: any) => m.subjectName).filter(Boolean))),
+                    updatedAt,
+                }]);
+            }
+        }
+
         const out: Record<string, Record<string, any[]>> = {};
         for (const e of exams) {
             const examId = String(e._id);
@@ -79,7 +103,7 @@ router.get('/exam-publishing', async (req: Request, res: Response) => {
             ((out[y] ||= {})[t] ||= []).push({
                 _id: examId, title: formatExamName(e), examName: e.examName || e.name || 'Exam', type: e.type || '',
                 term: t, academicYear: y, classLevel: e.classLevel || '', createdAt: e.createdAt || null,
-                manual: e.publishing === 'manual', classes,
+                manual: e.publishing === 'manual', classes, examCategory: e.examCategory || 'written_test',
             });
         }
         const years = Object.keys(out).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a)).map(yr => ({
@@ -103,7 +127,10 @@ async function setStatus(req: Request, res: Response, status: 'Published' | 'Unp
         const exam = await d.collection('exams').findOne({ _id: (ObjectId.isValid(examId) ? new ObjectId(examId) : examId) as any }).catch(() => null);
         if (!exam) return res.status(404).json({ message: 'Exam not found' });
         if (status === 'Published') {
-            const has = await d.collection('exam_marks').countDocuments({ examId, $or: [...(classId ? [{ classId }, { classIdAtTime: classId }] : []), ...(className ? [{ className }, { classAtTime: className }] : [])] }).catch(() => 0);
+            // Consolidated/Year Average has no exam_marks of its own — check its source exams.
+            const isComputed = (exam.examCategory === 'consolidated' || exam.examCategory === 'year_average') && Array.isArray(exam.sourceExamIds) && exam.sourceExamIds.length;
+            const checkIds = isComputed ? (exam.sourceExamIds as any[]).map(String) : [examId];
+            const has = await d.collection('exam_marks').countDocuments({ examId: { $in: checkIds }, ...(isComputed ? {} : { $or: [...(classId ? [{ classId }, { classIdAtTime: classId }] : []), ...(className ? [{ className }, { classAtTime: className }] : [])] }) }).catch(() => 0);
             if (!has) return res.status(400).json({ message: 'There are no marks for this class yet.' });
         }
         const filter: any = { examId, ...(classId ? { classId } : { classKey: levelKey(className) }) };

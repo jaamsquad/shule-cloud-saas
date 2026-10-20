@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { Db, ObjectId } from 'mongodb';
 import { publicAppUrl } from './verifyDocs';
 import { formatExamName } from './examName';
-import { onlyPublished } from './examPublish';
+import { onlyPublished, publishedView } from './examPublish';
 import { resolveGrading } from './grading';
 import { averageAcrossSourceExams } from '../routes/analytics.routes';
 
@@ -52,6 +52,11 @@ export async function resultSnapshot(db: Db, examId: string, studentId: string) 
     // exams' published marks for this student instead, tagged with this exam's own id.
     const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
         ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+    // Consolidated/Year Average is published as its own step in Manage Exams.
+    if (sourceExamIds.length) {
+        const view = await publishedView(db);
+        if (view.statusOf(examId, undefined, exam?.classLevel) !== 'Published') return null;
+    }
     const marks: any[] = sourceExamIds.length
         ? averageAcrossSourceExams(await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: sourceExamIds }, studentId }).toArray().catch(() => []))).map((m: any) => ({ ...m, examId }))
         : await db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []).then(m => onlyPublished(db, m));

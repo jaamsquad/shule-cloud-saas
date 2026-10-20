@@ -11,7 +11,7 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from './mongodb';
 import { signToken, publicAppUrl } from './verifyDocs';
 import { gradingFrom, summariseStudent, classStatsOf, subjectNamesOf } from './reportCardCalc';
-import { onlyPublished } from './examPublish';
+import { onlyPublished, publishedView } from './examPublish';
 import { resolveGrading } from './grading';
 import { backfillClassAtTimeForExam } from './classAtTimeBackfill';
 import { averageAcrossSourceExams } from '../routes/analytics.routes';
@@ -97,6 +97,9 @@ export async function printableReports(db: Db, req: Request, sid: string, examId
             ? exam.sourceExamIds.map(String).filter(Boolean) : [];
         let allMarks: any[];
         if (sourceExamIds.length) {
+            // Consolidated/Year Average is published as its own step in Manage Exams.
+            const view = await publishedView(db);
+            if (view.statusOf(String(examId), undefined, exam?.classLevel) !== 'Published') continue;
             await Promise.all(sourceExamIds.map(id => backfillClassAtTimeForExam(db, id)));
             const raw = await db.collection('exam_marks').find({ examId: { $in: sourceExamIds } }).toArray().catch(() => []);
             const published = await onlyPublished(db, raw);

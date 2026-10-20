@@ -138,7 +138,7 @@ export default function NewExamPage() {
                 {category === "written_test" && <WrittenTestForm v2Terms={v2Terms} v2Years={v2Years} classes={classes} subjects={subjects} activeTerm={activeTerm} activeYear={activeYear} saving={createMany.isPending} onCreate={docs => createMany.mutate(docs)} onCancel={() => navigate("/exams/create")} />}
                 {category === "consolidated" && <ConsolidatedForm v2Terms={v2Terms} v2Years={v2Years} classes={classes} allExams={allExams} saving={createMany.isPending} onCreate={docs => createMany.mutate(docs)} onCancel={() => navigate("/exams/create")} />}
                 {category === "supplementary" && <SupplementaryForm v2Terms={v2Terms} v2Years={v2Years} classes={classes} subjects={subjects} activeTerm={activeTerm} activeYear={activeYear} saving={createMany.isPending} onCreate={docs => createMany.mutate(docs)} onCancel={() => navigate("/exams/create")} />}
-                {category === "year_average" && <YearAverageForm v2Years={v2Years} classes={classes} subjects={subjects} allExams={allExams} gradingTemplates={gradingTemplates} saving={createMany.isPending} onCreate={docs => createMany.mutate(docs)} onCancel={() => navigate("/exams/create")} />}
+                {category === "year_average" && <YearAverageForm v2Terms={v2Terms} activeTerm={activeTerm} v2Years={v2Years} classes={classes} subjects={subjects} allExams={allExams} gradingTemplates={gradingTemplates} saving={createMany.isPending} onCreate={docs => createMany.mutate(docs)} onCancel={() => navigate("/exams/create")} />}
             </div>
         </div>
     );
@@ -397,7 +397,7 @@ function SupplementaryForm({ v2Terms, v2Years, classes, subjects, activeTerm, ac
 }
 
 // ── Year Average ─────────────────────────────────────────────────────────────
-function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplates, saving, onCreate, onCancel }: any) {
+function YearAverageForm({ v2Terms, activeTerm, v2Years, classes, subjects, allExams, gradingTemplates, saving, onCreate, onCancel }: any) {
     const [form, setForm] = useState("");
     const [year, setYear] = useState("");
     const [termExamIds, setTermExamIds] = useState<Record<string, string[]>>({ "Term 1": [], "Term 2": [], "Term 3": [] });
@@ -405,6 +405,10 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
     const [minSubjects, setMinSubjects] = useState("7");
     const [overallGrading, setOverallGrading] = useState("");
     const [subjectGrading, setSubjectGrading] = useState<Record<string, string>>({});
+    // A Year Average normally stands on its own ("Year" group in Manage Exams). Some
+    // schools instead want it to COUNT AS a specific term's own exam (e.g. publish it as
+    // this term's result) — this tags it with that term so it's grouped/treated as such.
+    const [markAsTermId, setMarkAsTermId] = useState("");
 
     // Only real sat written tests are averageable sources — never another Consolidated/
     // Year Average exam, which would make the average compute from a computed result.
@@ -434,12 +438,15 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
         return { ...p, [term]: cur.includes(examId) ? cur.filter(id => id !== examId) : [...cur, examId] };
     });
 
+    const markAsTerm = v2Terms?.find((t: any) => t._id === markAsTermId);
+
     const submit = () => {
         if (!form || !year) { toast.error("Pick a form/grade and academic year"); return; }
         const sourceExamIds = Object.values(termExamIds).flat();
         if (!sourceExamIds.length) { toast.error("Pick at least one exam to average"); return; }
         onCreate([{
-            examCategory: "year_average", examName: `${form} Year Average ${year}`, type: "Year Average", academicYear: year, term: "Year",
+            examCategory: "year_average", examName: `${form} Year Average ${year}`, type: "Year Average", academicYear: year,
+            term: markAsTerm ? markAsTerm.name : "Year", termId: markAsTerm ? markAsTerm._id : undefined,
             classLevel: form, sourceExamIds, rankingCriteria, minSubjects: Number(minSubjects) || undefined,
             overallGradingTemplateId: overallGrading || null, subjectGradingTemplates: subjectGrading,
             status: "Active", publishStatus: "Published",
@@ -462,6 +469,18 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
                         {v2Years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}</option>)}
                     </select>
                 </Field>
+            </div>
+
+            <div>
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={!!markAsTermId} onChange={e => setMarkAsTermId(e.target.checked ? (activeTerm?._id || v2Terms?.[0]?._id || "") : "")} />
+                    Mark as a term's exam (groups it under that term in Manage Exams instead of its own "Year" group)
+                </label>
+                {markAsTermId && (
+                    <select value={markAsTermId} onChange={e => setMarkAsTermId(e.target.value)} className={selectCls + " h-10 mt-2 max-w-xs"}>
+                        {(v2Terms || []).map((t: any) => <option key={t._id} value={t._id}>{t.name}{t.isActive ? " · Active" : ""}</option>)}
+                    </select>
+                )}
             </div>
 
             {form && year && (
