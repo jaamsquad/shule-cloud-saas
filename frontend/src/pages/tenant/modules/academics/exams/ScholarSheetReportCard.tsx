@@ -10,7 +10,11 @@ import { reportQr } from "@/lib/reportQr";
 // Designed to fit ONE A4 page via print media queries.
 // `portal`: the student/parent portals pass everything in (data with its settings, the school
 // profile and a server-signed QR), so the card makes no admin API calls there.
-export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, hideToolbar = false, preloaded, portal }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any; portal?: { profile?: any; qrUrl?: string } }) {
+export type ChartType = "line" | "bar" | "area" | "dots";
+export const CHART_TYPES: { key: ChartType; label: string }[] = [
+    { key: "line", label: "Line" }, { key: "bar", label: "Bar" }, { key: "area", label: "Area" }, { key: "dots", label: "Dots" },
+];
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, chartType = "line", hideToolbar = false, preloaded, portal }: { studentId: string; examId: string; showKcpe?: boolean; chartType?: ChartType; hideToolbar?: boolean; preloaded?: any; portal?: { profile?: any; qrUrl?: string } }) {
     // When the parent page has already fetched the data (whole-class print), use
     // it directly so the card never shows a spinner mid-print. Otherwise fetch.
     const { data: fetched, isLoading } = useQuery({
@@ -219,23 +223,29 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                     </div>
                 )}
 
-                {/* Performance line graph (B&W) — mean points per term */}
+                {/* Performance graph (B&W) — mean points per term. Shape (line/bar/area/dots) is a setting. */}
                 {chartBars.length > 1 && (() => {
                     const W = 180, H = 70, padL = 10, padR = 6, padT = 6, padB = 14;   // viewBox units
                     const n = chartBars.length;
                     const x = (i: number) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
                     const y = (v: number) => padT + (H - padT - padB) * (1 - (maxChart ? v / maxChart : 0));
+                    const baseY = y(0);
                     const pts = chartBars.map((c: any, i: number) => `${x(i)},${y(c.value)}`).join(" ");
+                    const areaPts = `${x(0)},${baseY} ${pts} ${x(n - 1)},${baseY}`;
+                    const barW = Math.min(10, (W - padL - padR) / n * 0.5);
                     return (
                         <div style={{ border: "0.6px solid #000", marginTop: 3 }}>
                             <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "30mm" }} preserveAspectRatio="none">
                                 {/* gridlines */}
                                 {[0, 0.25, 0.5, 0.75, 1].map(g => <line key={g} x1={padL} x2={W - padR} y1={padT + (H - padT - padB) * g} y2={padT + (H - padT - padB) * g} stroke="#ddd" strokeWidth={0.3} />)}
-                                {/* the performance line */}
-                                <polyline points={pts} fill="none" stroke="#000" strokeWidth={0.8} />
+                                {chartType === "bar" && chartBars.map((c: any, i: number) => (
+                                    <rect key={`b${i}`} x={x(i) - barW / 2} y={y(c.value)} width={barW} height={Math.max(0, baseY - y(c.value))} fill={c.target ? "#ccc" : "#000"} />
+                                ))}
+                                {chartType === "area" && <polygon points={areaPts} fill="#000" fillOpacity={0.15} stroke="none" />}
+                                {(chartType === "line" || chartType === "area") && <polyline points={pts} fill="none" stroke="#000" strokeWidth={0.8} />}
                                 {chartBars.map((c: any, i: number) => (
                                     <g key={i}>
-                                        <circle cx={x(i)} cy={y(c.value)} r={1.2} fill="#000" />
+                                        {chartType !== "bar" && <circle cx={x(i)} cy={y(c.value)} r={1.2} fill="#000" />}
                                         {!c.target && <text x={x(i)} y={y(c.value) - 2} fontSize={5} textAnchor="middle">{c.value}</text>}
                                         <text x={x(i)} y={H - 4} fontSize={5} textAnchor="middle">{c.label}</text>
                                     </g>
