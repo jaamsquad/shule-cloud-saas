@@ -608,6 +608,34 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             (histAgg[key] ||= { sum: 0, pts: 0, n: 0, cls: m.classAtTime || myClass || '', year: N(e.academicYear ?? e.year), term: N(String(e.term || '').match(/\d+/)?.[0] || 0) });
             histAgg[key].sum += pct; histAgg[key].pts += gradeOf(pct).points; histAgg[key].n += 1;
         }
+        // A Consolidated/Year Average exam explicitly "marked as a term's exam" (a real
+        // Term N, not the default "Year"/"Term 1 + Term 2" label) has no exam_marks of its
+        // own, so it would never show up above even though it IS that term's result.
+        // Fold each one in from its averaged source marks — processed after the real
+        // exams above, so a term an admin has explicitly assigned to a computed exam
+        // reflects that exam's result rather than a leftover written test for the same term.
+        const computedTermExams = exams.filter((e: any) =>
+            (e.examCategory === 'consolidated' || e.examCategory === 'year_average')
+            && Array.isArray(e.sourceExamIds) && e.sourceExamIds.length
+            && /term\s*\d+/i.test(String(e.term || '')));
+        if (computedTermExams.length) {
+            const histView = await publishedView(database);
+            for (const ce of computedTermExams) {
+                const ceId = String(ce._id);
+                if (histView.statusOf(ceId, undefined, ce.classLevel) !== 'Published') continue;
+                const srcIds: string[] = (ce.sourceExamIds as any[]).map(String);
+                const rawCe = await database.collection('exam_marks').find({ examId: { $in: srcIds }, studentId: sid }).toArray().catch(() => []);
+                const pubCe = await onlyPublished(database, rawCe);
+                if (!pubCe.length) continue;
+                const avgCe = averageAcrossSourceExams(pubCe);
+                const clsAtTime = pubCe.find((m: any) => m.classAtTime)?.classAtTime || myClass || ce.classLevel || '';
+                const bucket = (histAgg[ceId] ||= { sum: 0, pts: 0, n: 0, cls: clsAtTime, year: N(ce.academicYear), term: N(String(ce.term || '').match(/\d+/)?.[0] || 0) });
+                avgCe.forEach((m: any) => {
+                    const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
+                    bucket.sum += pct; bucket.pts += gradeOf(pct).points; bucket.n += 1;
+                });
+            }
+        }
         // Build the grid + chart from the (level, term) combos that ACTUALLY have
         // data, so only filled cells/bars are shown — and report which levels &
         // terms exist so the frontend renders just those columns.
