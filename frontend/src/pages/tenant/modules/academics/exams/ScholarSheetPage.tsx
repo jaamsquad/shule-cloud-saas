@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
-import ScholarSheetReportCard from "./ScholarSheetReportCard";
+import ScholarSheetReportCard, { CHART_TYPES, type ChartType } from "./ScholarSheetReportCard";
 
 // ScholarSheet entry: pick a class → exam → student (or the whole class), then
 // render/print the A4 card(s). Print outputs ONLY the report(s) — sidebar, header
@@ -20,6 +20,7 @@ export default function ScholarSheetPage() {
     const [hideEmptyCards, setHideEmptyCards] = useState(false);   // skip students with no marks at all
     // KCPE field visibility toggles.
     const [showKcpe, setShowKcpe] = useState(true);
+    const [chartType, setChartType] = useState<ChartType>("line");   // performance graph shape
     // Deep-link from a student's Academic History: ?studentId=&examId= opens that
     // exact card directly (used for viewing previous-class ScholarSheets).
     const [deepLink, setDeepLink] = useState<{ studentId: string; examId: string } | null>(null);
@@ -201,7 +202,7 @@ export default function ScholarSheetPage() {
                     <button onClick={() => { setDeepLink(null); }} className="text-sm font-bold text-[#5C67F2]">Open full ScholarSheet →</button>
                 </div>
                 <div className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto">
-                    <ScholarSheetReportCard studentId={deepLink.studentId} examId={deepLink.examId} showKcpe={showKcpe} />
+                    <ScholarSheetReportCard studentId={deepLink.studentId} examId={deepLink.examId} showKcpe={showKcpe} chartType={chartType} />
                 </div>
             </div>
         );
@@ -300,6 +301,12 @@ export default function ScholarSheetPage() {
                         <input type="checkbox" checked={hideEmptyCards} disabled={!wholeClass} onChange={e => setHideEmptyCards(e.target.checked)} /> Don't show empty report cards
                         {hideEmptyCards && allLoaded && emptyCount > 0 && <span className="text-xs font-bold text-slate-400">({emptyCount} hidden)</span>}
                     </label>
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                        Performance graph:
+                        <select value={chartType} onChange={e => setChartType(e.target.value as ChartType)} className="h-9 px-2.5 rounded-lg border border-slate-200 text-sm bg-white">
+                            {CHART_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                        </select>
+                    </label>
                     <button onClick={printAll} disabled={!ready || !allLoaded || noneReady} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
                         {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${readyCount} ready)` : "Report"}`}
@@ -322,7 +329,7 @@ export default function ScholarSheetPage() {
                         if (hideEmptyCards && isEmptyCard(i)) return null;
                         return (
                             <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
-                                <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
+                                <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} chartType={chartType} hideToolbar preloaded={cardQueries[i]?.data} />
                             </div>
                         );
                     })}
