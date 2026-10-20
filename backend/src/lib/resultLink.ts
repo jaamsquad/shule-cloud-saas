@@ -13,6 +13,7 @@ import { publicAppUrl } from './verifyDocs';
 import { formatExamName } from './examName';
 import { onlyPublished } from './examPublish';
 import { resolveGrading } from './grading';
+import { averageAcrossSourceExams } from '../routes/analytics.routes';
 
 const secret = () => process.env.DOC_VERIFY_SECRET || process.env.JWT_SECRET || 'shulecloud_doc_verify_secret';
 
@@ -43,11 +44,17 @@ export async function findExamByCode(db: Db, code: string): Promise<any | null> 
 export async function resultSnapshot(db: Db, examId: string, studentId: string) {
     let sOid: ObjectId, eOid: ObjectId;
     try { sOid = new ObjectId(studentId); eOid = new ObjectId(examId); } catch { return null; }
-    const [marks, exam, student] = await Promise.all([
-        db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []).then(m => onlyPublished(db, m)),
+    const [exam, student] = await Promise.all([
         db.collection('exams').findOne({ _id: eOid }).catch(() => null) as Promise<any>,
         db.collection('students').findOne({ _id: sOid }).catch(() => null) as Promise<any>,
     ]);
+    // Consolidated/Year Average exams have no marks of their own — average their source
+    // exams' published marks for this student instead, tagged with this exam's own id.
+    const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
+        ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+    const marks: any[] = sourceExamIds.length
+        ? averageAcrossSourceExams(await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: sourceExamIds }, studentId }).toArray().catch(() => []))).map((m: any) => ({ ...m, examId }))
+        : await db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []).then(m => onlyPublished(db, m));
     if (!student || !exam || !marks.length) return null;
     // Grades follow the student's CLASS grading (template → class → global → curriculum → default).
     const grading = await resolveGrading(db, student.classId ? String(student.classId) : undefined, String(student.studentClass || student.currentClass || '') || undefined);

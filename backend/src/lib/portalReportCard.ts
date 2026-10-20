@@ -14,6 +14,7 @@ import { gradingFrom, summariseStudent, classStatsOf, subjectNamesOf } from './r
 import { onlyPublished } from './examPublish';
 import { resolveGrading } from './grading';
 import { backfillClassAtTimeForExam } from './classAtTimeBackfill';
+import { averageAcrossSourceExams } from '../routes/analytics.routes';
 
 const oid = (v: any) => { try { return new ObjectId(String(v)); } catch { return null; } };
 const idForms = (v: any) => { const s = String(v ?? ''); const o = oid(s); return o ? [s, o] : [s]; };
@@ -88,9 +89,22 @@ export async function printableReports(db: Db, req: Request, sid: string, examId
 
     const exams: Record<string, any> = {};
     for (const examId of examIds) {
-        await backfillClassAtTimeForExam(db, examId);
         const exam: any = await db.collection('exams').findOne({ _id: (oid(examId) || examId) as any }).catch(() => null);
-        const allMarks: any[] = await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: idForms(examId) } }).toArray().catch(() => []));
+        // Consolidated/Year Average exams have no marks of their own — average their
+        // source exams' published marks and tag the merged rows with this exam's own id,
+        // so the rest of this loop (classAtTime, class stats, student marks) is unchanged.
+        const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
+            ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+        let allMarks: any[];
+        if (sourceExamIds.length) {
+            await Promise.all(sourceExamIds.map(id => backfillClassAtTimeForExam(db, id)));
+            const raw = await db.collection('exam_marks').find({ examId: { $in: sourceExamIds } }).toArray().catch(() => []);
+            const published = await onlyPublished(db, raw);
+            allMarks = averageAcrossSourceExams(published).map((m: any) => ({ ...m, examId: String(examId) }));
+        } else {
+            await backfillClassAtTimeForExam(db, examId);
+            allMarks = await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: idForms(examId) } }).toArray().catch(() => []));
+        }
         const studentMarks = allMarks.filter(m => String(m.studentId) === String(student._id) || (!m.studentId && m.studentName === studentName));
         if (!studentMarks.length) continue;
         const classAtTime = studentMarks.find(m => m.classAtTime)?.classAtTime || '';
