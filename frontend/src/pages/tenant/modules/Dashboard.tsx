@@ -309,6 +309,13 @@ export default function Dashboard() {
 
     // ── Metrics ───────────────────────────────────────────────────────────────
 
+    // "Total Students" only counts students currently Active — Transferred/Graduated
+    // students are no longer part of the live roster.
+    const activeStudents = useMemo(() =>
+        students.filter((s: any) => String(s.status || "Active").toLowerCase() === "active"),
+        [students]
+    );
+
     const studentsThisMonth = useMemo(() =>
         students.filter((s: any) => s.createdAt?.startsWith(currentMonthStr)).length,
         [students, currentMonthStr]
@@ -498,7 +505,7 @@ export default function Dashboard() {
                         <div className="flex flex-col items-end gap-1">
                             {loadingStudents
                                 ? <span className="text-4xl font-bold tracking-tight opacity-60">…</span>
-                                : <span className="text-4xl font-bold tracking-tight">{students.length}</span>
+                                : <span className="text-4xl font-bold tracking-tight">{activeStudents.length}</span>
                             }
                             <span className="text-xs font-semibold opacity-90">Live registry</span>
                         </div>
@@ -710,8 +717,8 @@ export default function Dashboard() {
                             Welcome back, {userProfile?.name || "Administrator"}
                         </h3>
                         <p className="text-gray-600 text-sm font-medium leading-relaxed">
-                            {canStudents && students.length > 0
-                                ? `${students.length} students${canStaff ? ` and ${staff.length} staff members` : ""} registered. Your registers are live.`
+                            {canStudents && activeStudents.length > 0
+                                ? `${activeStudents.length} students${canStaff ? ` and ${staff.length} staff members` : ""} registered. Your registers are live.`
                                 : "Welcome to your dashboard. Use the menu to access your assigned areas."}
                         </p>
                     </div>
