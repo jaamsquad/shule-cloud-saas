@@ -17,6 +17,7 @@ export default function ScholarSheetPage() {
     const [studentSearch, setStudentSearch] = useState("");   // searchable student box
     const [studentOpen, setStudentOpen] = useState(false);
     const [wholeClass, setWholeClass] = useState(false);
+    const [hideEmptyCards, setHideEmptyCards] = useState(false);   // skip students with no marks at all
     // KCPE field visibility toggles.
     const [showKcpe, setShowKcpe] = useState(true);
     // Deep-link from a student's Academic History: ?studentId=&examId= opens that
@@ -162,7 +163,10 @@ export default function ScholarSheetPage() {
     // A card is "not ready" when its class has no generated report card for this term.
     const isNotReady = (i: number) => cardQueries[i]?.data?.notReady === true;
     const notReadyCount = cardQueries.filter(q => q.data?.notReady === true).length;
-    const readyCount = cardQueries.filter(q => q.isSuccess && !q.data?.notReady).length;
+    // "Empty" = loaded fine, but the student has no marks at all for this exam set.
+    const isEmptyCard = (i: number) => { const d = cardQueries[i]?.data; return !!d && !d.notReady && (!Array.isArray(d.subjects) || d.subjects.length === 0); };
+    const emptyCount = cardQueries.filter((q, i) => q.isSuccess && isEmptyCard(i)).length;
+    const readyCount = cardQueries.filter((q, i) => q.isSuccess && !q.data?.notReady && !(hideEmptyCards && isEmptyCard(i))).length;
     const noneReady = allLoaded && cardQueries.length > 0 && readyCount === 0;
 
     // Reliable print: copy the rendered cards' HTML into a fresh window with a
@@ -292,6 +296,10 @@ export default function ScholarSheetPage() {
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
                         <input type="checkbox" checked={wholeClass} onChange={e => { setWholeClass(e.target.checked); setStudentId(""); }} /> <Users className="w-4 h-4" /> Whole class ({classStudents.length})
                     </label>
+                    <label className={`flex items-center gap-2 text-sm font-bold ${wholeClass ? "text-slate-600" : "text-slate-300"}`}>
+                        <input type="checkbox" checked={hideEmptyCards} disabled={!wholeClass} onChange={e => setHideEmptyCards(e.target.checked)} /> Don't show empty report cards
+                        {hideEmptyCards && allLoaded && emptyCount > 0 && <span className="text-xs font-bold text-slate-400">({emptyCount} hidden)</span>}
+                    </label>
                     <button onClick={printAll} disabled={!ready || !allLoaded || noneReady} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
                         {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${readyCount} ready)` : "Report"}`}
@@ -310,11 +318,14 @@ export default function ScholarSheetPage() {
 
             {ready ? (
                 <div ref={printRef} className="ss-print-area p-4 print:p-0">
-                    {renderList.map((s: any, i: number) => (
-                        <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
-                            <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
-                        </div>
-                    ))}
+                    {renderList.map((s: any, i: number) => {
+                        if (hideEmptyCards && isEmptyCard(i)) return null;
+                        return (
+                            <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
+                                <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="ss-no-print py-24 text-center text-slate-400">
