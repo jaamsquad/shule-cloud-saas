@@ -351,11 +351,15 @@ export default function ExamMarks() {
                                 className="w-full h-12 pl-4 pr-10 border border-gray-200 rounded-2xl text-sm font-bold text-slate-700 bg-white focus:outline-none focus:border-[#5C67F2] appearance-none"
                             >
                                 <option value="">— Select Exam —</option>
-                                {exams.map((o: any) => (
-                                    <option key={o._id} value={o._id}>
-                                        {o.examName || o.name || o.label || "Unnamed Exam"}
-                                    </option>
-                                ))}
+                                {exams.map((o: any) => {
+                                    const name = o.examName || o.name || o.label || "Unnamed Exam";
+                                    const when = [o.term, o.academicYear].filter(Boolean).join(" ");
+                                    return (
+                                        <option key={o._id} value={o._id}>
+                                            {when ? `${name} (${when})` : name}
+                                        </option>
+                                    );
+                                })}
                             </select>
                             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         </div>
