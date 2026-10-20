@@ -235,6 +235,21 @@ function ConsolidatedForm({ v2Terms, v2Years, classes, allExams, saving, onCreat
         && levelOf(e.classLevel) === levelOf(form) && (termNames.size === 0 || [...termNames].some(tn => termMatches(e.term, tn)))
     ), [allExams, year, form, termNames]);
 
+    // When a term ends up with exactly one candidate exam, pre-check it — nothing to
+    // pick between. Terms with two or more stay manual checkboxes.
+    useEffect(() => {
+        if (!specifying) return;
+        setSourceIds(prev => {
+            const next = new Set(prev);
+            let changed = false;
+            for (const termName of new Set(candidates.map((e: any) => e.term || "—"))) {
+                const matches = candidates.filter((e: any) => (e.term || "—") === termName);
+                if (matches.length === 1 && !next.has(matches[0]._id)) { next.add(matches[0]._id); changed = true; }
+            }
+            return changed ? next : prev;
+        });
+    }, [candidates, specifying]);
+
     const submit = () => {
         if (!examName.trim()) { toast.error("Exam name is required"); return; }
         if (!form || !year) { toast.error("Pick a form/grade and academic year"); return; }
@@ -281,13 +296,21 @@ function ConsolidatedForm({ v2Terms, v2Years, classes, allExams, saving, onCreat
                 <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Exams to combine ({candidates.length} found)</label>
                     {candidates.length === 0 ? <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> No written-test exams found for this form, year and term(s) yet.</p> : (
-                        <div className="space-y-1.5">
-                            {candidates.map((e: any) => (
-                                <label key={e._id} className="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer">
-                                    <input type="checkbox" checked={sourceIds.has(e._id)} onChange={() => setSourceIds(p => { const n = new Set(p); if (n.has(e._id)) n.delete(e._id); else n.add(e._id); return n; })} />
-                                    <span className="text-sm font-bold text-gray-700">{e.examName}</span>
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase ml-auto">{e.term} · {e.classLevel}</span>
-                                </label>
+                        <div className="space-y-3">
+                            {/* One group per term that has matching exams — every term with 1+ exam shows them here, all selectable. */}
+                            {[...new Set(candidates.map((e: any) => e.term || "—"))].map(termName => (
+                                <div key={termName} className="border border-gray-100 rounded-xl overflow-hidden">
+                                    <div className="px-3 py-1.5 bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400">{termName}</div>
+                                    <div className="divide-y divide-gray-50">
+                                        {candidates.filter((e: any) => (e.term || "—") === termName).map((e: any) => (
+                                            <label key={e._id} className="flex items-center gap-3 p-2.5 hover:bg-gray-50 cursor-pointer">
+                                                <input type="checkbox" checked={sourceIds.has(e._id)} onChange={() => setSourceIds(p => { const n = new Set(p); if (n.has(e._id)) n.delete(e._id); else n.add(e._id); return n; })} />
+                                                <span className="text-sm font-bold text-gray-700">{e.examName}</span>
+                                                <span className="text-[10px] text-gray-400 font-bold uppercase ml-auto">{e.classLevel}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     )}
@@ -379,7 +402,27 @@ function YearAverageForm({ v2Years, classes, subjects, allExams, gradingTemplate
     const [overallGrading, setOverallGrading] = useState("");
     const [subjectGrading, setSubjectGrading] = useState<Record<string, string>>({});
 
-    const examsForFormYear = useMemo(() => allExams.filter((e: any) => levelOf(e.classLevel) === levelOf(form) && yearMatches(e.academicYear, year)), [allExams, form, year]);
+    // Only real sat written tests are averageable sources — never another Consolidated/
+    // Year Average exam, which would make the average compute from a computed result.
+    const examsForFormYear = useMemo(() => allExams.filter((e: any) =>
+        (e.examCategory || "written_test") === "written_test" && levelOf(e.classLevel) === levelOf(form) && yearMatches(e.academicYear, year)
+    ), [allExams, form, year]);
+
+    // When a term has exactly one matching written test, pick it automatically — the
+    // teacher shouldn't have to pick from a dropdown with a single option. A term with
+    // two or more stays a manual dropdown choice.
+    useEffect(() => {
+        setTermExamIds(prev => {
+            let changed = false;
+            const next = { ...prev };
+            for (const term of Object.keys(prev)) {
+                const matches = examsForFormYear.filter((e: any) => termMatches(e.term, term));
+                if (!prev[term] && matches.length === 1) { next[term] = matches[0]._id; changed = true; }
+                else if (prev[term] && !matches.some((e: any) => e._id === prev[term])) { next[term] = ""; changed = true; }
+            }
+            return changed ? next : prev;
+        });
+    }, [examsForFormYear]);
 
     const submit = () => {
         if (!form || !year) { toast.error("Pick a form/grade and academic year"); return; }

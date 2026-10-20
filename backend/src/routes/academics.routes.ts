@@ -307,16 +307,22 @@ router.delete('/assessments/:id', c.deleteItem('exams'));
 
 // ?for=marks → the exams a person may enter marks for: admins get all, everyone else only
 // this term's (lib/examWindow). Without the flag the list is unchanged.
+// Consolidated / Year Average are always excluded — their results are computed from
+// the marks of their source exams, so they are never themselves marks-enterable.
+const COMPUTED_EXAM_CATEGORIES = new Set(['consolidated', 'year_average']);
 router.get('/academics/exams', async (req, res, next) => {
     if (req.query.for !== 'marks') return next();
     delete (req.query as any).for;
     const role = (req as any).tenantContext?.user?.role;
-    if (isAdminRole(role)) return c.getItems('exams')(req, res);
     try {
         const db = getRequestDb(req);
+        if (isAdminRole(role)) {
+            const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
+            return res.json(exams.filter((e: any) => !COMPUTED_EXAM_CATEGORIES.has(e.examCategory)));
+        }
         const [win, locked] = await Promise.all([marksWindow(db), lockedExamIds(db)]);
         const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
-        res.json(exams.filter((e: any) => examInWindow(e, win) && !locked.has(String(e._id))));
+        res.json(exams.filter((e: any) => !COMPUTED_EXAM_CATEGORIES.has(e.examCategory) && examInWindow(e, win) && !locked.has(String(e._id))));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 router.get('/academics/marks-window', async (req, res) => {
