@@ -76,7 +76,7 @@ const meanGradeFromPoints = (scale: GradeBand[], meanPoints: number) => meanGrad
  *  mean of that subject's percentage across whichever of those exams the student sat (a
  *  student absent from one source exam isn't penalised; its percentage is simply excluded).
  *  Expressed back out of 100 so it drops into the normal single-exam marks pipeline unchanged. */
-function averageAcrossSourceExams(raw: any[]) {
+export function averageAcrossSourceExams(raw: any[]) {
     const nrm = (v: any) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const groups = new Map<string, { studentId: string; subjectName: string; classAtTime: string; sumPct: number; count: number }>();
     for (const m of raw) {

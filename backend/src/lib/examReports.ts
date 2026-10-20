@@ -247,7 +247,15 @@ export async function publishedExamsFor(db: Db, level: string) {
         { $group: { _id: { examId: '$examId', classId: { $ifNull: ['$classIdAtTime', '$classId'] }, className: { $ifNull: ['$classAtTime', '$className'] } } } },
     ]).toArray().catch(() => []) : [];
     const ok = new Set(pairs.filter(p => levelKey(p._id.className) === levelKey(level) && view.statusOf(String(p._id.examId), p._id.classId ? String(p._id.classId) : undefined, p._id.className) === 'Published').map(p => String(p._id.examId)));
-    return order.filter((e: any) => ok.has(String(e._id))).reverse().map((e: any) => ({ _id: String(e._id), title: formatExamName(e), term: e.term || '', academicYear: String(e.academicYear || ''), type: e.type || '' }));
+    // A Consolidated/Year Average exam has no exam_marks of its own (it's an average of
+    // other exams), so it never shows up in the aggregate check above — it's self-describing
+    // instead (classLevel + publishStatus set when it was created), so list it the same way.
+    const eligible = order.filter((e: any) => ok.has(String(e._id)) || (
+        (e.examCategory === 'consolidated' || e.examCategory === 'year_average')
+        && levelKey(e.classLevel) === levelKey(level)
+        && String(e.publishStatus || '').toLowerCase() === 'published'
+    ));
+    return eligible.reverse().map((e: any) => ({ _id: String(e._id), title: formatExamName(e), term: e.term || '', academicYear: String(e.academicYear || ''), type: e.type || '' }));
 }
 
 /**

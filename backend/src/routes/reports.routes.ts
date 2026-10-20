@@ -7,6 +7,7 @@ import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport'
 import { onlyPublished, publishedView } from '../lib/examPublish';
 import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
 import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
+import { averageAcrossSourceExams } from './analytics.routes';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -46,6 +47,15 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const student: any = await database.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
         if (!student) return res.status(404).json({ message: 'Student not found' });
         const exam: any = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
+        // A Consolidated or Year Average exam has no marks of its own — it's an average
+        // across the real written-test exams picked when it was created (sourceExamIds).
+        // Resolve those here, then AVERAGE their published marks and tag the merged rows
+        // with this exam's own id, so every downstream step below (generations, columns,
+        // positions, change-vs-previous) treats it exactly like a normal single exam —
+        // no special-casing needed past this point.
+        const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
+            ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+        const isComputedExam = sourceExamIds.length > 0;
         // School profile = the Tenant record in the meta DB (name, logo, etc.),
         // merged with any tenant-DB profile collection extras.
         const tenantId = (req as any).tenantContext?.tenantId;
@@ -58,8 +68,8 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // their current class. Without this, a student promoted since the exam (Form 3 ->
         // Form 4) would print their old Form 3 exam under a "Form 4" heading, which is wrong:
         // the exam, its subjects/curriculum, grading and title must all stay Form 3.
-        await backfillClassAtTimeForExam(database, examId);
-        const examMarkForMe: any = await database.collection('exam_marks').findOne({ examId, studentId: sid, $or: [{ classAtTime: { $exists: true, $ne: '' } }, { classIdAtTime: { $exists: true, $ne: '' } }] }).catch(() => null);
+        await Promise.all((isComputedExam ? sourceExamIds : [examId]).map(id => backfillClassAtTimeForExam(database, id)));
+        const examMarkForMe: any = await database.collection('exam_marks').findOne({ examId: isComputedExam ? { $in: sourceExamIds } : examId, studentId: sid, $or: [{ classAtTime: { $exists: true, $ne: '' } }, { classIdAtTime: { $exists: true, $ne: '' } }] }).catch(() => null);
         const classId = String(examMarkForMe?.classIdAtTime || student.classId || '');
         const myClass = examMarkForMe?.classAtTime || student.studentClass || student.currentClass || '';
         // Stream at the time, pulled from the classAtTime label itself ("Form 3 East" -> "East");
@@ -109,9 +119,12 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             (g.mainExamId && String(g.mainExamId) === examId && (norm(myClass).includes(norm(g.className)) || norm(g.className).includes(norm(myClass))));
         // The generation for the exam that was OPENED wins. Only its own CATs / Mid Term are shown alongside —
         // a CAT that belongs to another term's generation of the same class must not leak into this card.
-        const gen: any = generations.find((g: any) => String(g.mainExamId) === examId && sameClassGen(g))
-            || generations.find((g: any) => String(g.mainExamId) === examId)
-            || generations.find(sameClassGen);
+        // A Consolidated/Year Average exam has no class-term generation of its own — it isn't
+        // a single sat exam, so skip generation matching for it entirely.
+        const gen: any = isComputedExam ? null
+            : generations.find((g: any) => String(g.mainExamId) === examId && sameClassGen(g))
+                || generations.find((g: any) => String(g.mainExamId) === examId)
+                || generations.find(sameClassGen);
         const genIsForOpenedExam = !!gen && String(gen.mainExamId) === examId;
         const mainEff = genIsForOpenedExam ? String(gen.mainExamId) : examId;   // the exam this card is built around
 
@@ -121,30 +134,6 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // was never a precondition for printing the exam the admin already published).
         // Having no published marks at all for this student is checked below instead.
 
-        // The exam set = the exam the user opened (always shown) + the generation's
-        // main End Term + any additional internal assessments. The selected exam
-        // comes first so its column leads. De-duplicated.
-        const examIds: string[] = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
-            .filter((v, i, a) => v && a.indexOf(v) === i);
-        const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
-        // Additional assessments may be regular exams OR online exams, so look in both
-        // collections — otherwise online CAT/Mid Term docs are missed and their column
-        // falls back to a generic "EXAM" title with no type.
-        const [regularExamDocs, onlineExamDocs] = await Promise.all([
-            database.collection('exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
-            database.collection('online_exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
-        ]);
-        const examMeta: Record<string, any> = {};
-        [...regularExamDocs, ...onlineExamDocs].forEach((e: any) => { if (!examMeta[String(e._id)]) examMeta[String(e._id)] = e; });
-
-        // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
-        // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
-        // "END-TERM". When several exams of the same type cover the same subject
-        // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
-        // Each DISTINCT exam becomes its own column, labelled by its type/name
-        // (e.g. "CAT 1", "CAT 2", "MID TERM", "END TERM") — so every exam picked for
-        // this term that has marks shows as a separate column. Only the End-Term main
-        // is normalised so the leading column reads "END-TERM".
         const typeOf = (e: any): string => {
             const raw = String(e?.type || e?.examType || e?.category || e?.examName || e?.title || e?.name || '').trim();
             const t = norm(raw);
@@ -152,52 +141,104 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             // Otherwise keep the exam's own label (CAT 1 / CAT 2 / Mid Term / Mock …).
             return (raw || 'EXAM').toUpperCase().slice(0, 14);
         };
-        // The main exam defines the leading column's type.
-        const mainType = typeOf(examMeta[mainEff] || examMeta[examId]) || 'END-TERM';
-        // Map each pinned examId → its type, and each type → the examIds under it.
-        const typeByExam: Record<string, string> = {};
-        const examIdsByType: Record<string, string[]> = {};
-        examIds.forEach(id => {
-            const ty = typeOf(examMeta[id]) || 'EXAM';
-            typeByExam[id] = ty;
-            (examIdsByType[ty] ||= []).push(id);
-        });
         // Column order: the main exam's column first, then END-TERM, then every other
-        // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…).
-        const typeOrder = (ty: string) => ty === mainType ? 0 : ty === 'END-TERM' ? 1 : 2;
-        let examColumns: Array<{ type: string; title: string; examIds: string[] }> =
-            Object.keys(examIdsByType)
+        // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…). `mainType` is
+        // assigned below (in each branch) before this is ever called.
+        let mainTypeForOrder = '';
+        const typeOrder = (ty: string) => ty === mainTypeForOrder ? 0 : ty === 'END-TERM' ? 1 : 2;
+
+        let examIds: string[]; let examMeta: Record<string, any>; let mainType: string;
+        let typeByExam: Record<string, string>; let examIdsByType: Record<string, string[]>;
+        let examColumns: Array<{ type: string; title: string; examIds: string[] }>; let multiExam: boolean;
+        let allMarks: any[]; let onlineExamDocs: any[];
+
+        if (isComputedExam) {
+            // Average the published marks of every source exam, then tag the merged rows
+            // with THIS exam's own id — everything below (positions, change column,
+            // teacher initials) reads marks by examId/typeByExam, so this one substitution
+            // is all it takes for the rest of the card to work unchanged.
+            const rawSource = await database.collection('exam_marks').find({ examId: { $in: sourceExamIds } }).toArray().catch(() => []);
+            const publishedSource = await onlyPublished(database, rawSource);
+            allMarks = averageAcrossSourceExams(publishedSource).map((m: any) => ({ ...m, examId: String(examId) }));
+            onlineExamDocs = [];
+            examMeta = {};
+            examIds = [String(examId)];
+            mainType = (exam?.examName || exam?.type || 'AVERAGE').toString().toUpperCase().slice(0, 14);
+            mainTypeForOrder = mainType;
+            typeByExam = { [String(examId)]: mainType };
+            examIdsByType = { [mainType]: [String(examId)] };
+            examColumns = [{ type: mainType, title: mainType, examIds: [String(examId)] }];
+            multiExam = false;
+        } else {
+            // The exam set = the exam the user opened (always shown) + the generation's
+            // main End Term + any additional internal assessments. The selected exam
+            // comes first so its column leads. De-duplicated.
+            examIds = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
+                .filter((v, i, a) => v && a.indexOf(v) === i);
+            const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
+            // Additional assessments may be regular exams OR online exams, so look in both
+            // collections — otherwise online CAT/Mid Term docs are missed and their column
+            // falls back to a generic "EXAM" title with no type.
+            const [regularExamDocs, onlineDocs] = await Promise.all([
+                database.collection('exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+                database.collection('online_exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+            ]);
+            onlineExamDocs = onlineDocs;
+            examMeta = {};
+            [...regularExamDocs, ...onlineExamDocs].forEach((e: any) => { if (!examMeta[String(e._id)]) examMeta[String(e._id)] = e; });
+
+            // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
+            // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
+            // "END-TERM". When several exams of the same type cover the same subject
+            // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
+            // Each DISTINCT exam becomes its own column, labelled by its type/name
+            // (e.g. "CAT 1", "CAT 2", "MID TERM", "END TERM") — so every exam picked for
+            // this term that has marks shows as a separate column. Only the End-Term main
+            // is normalised so the leading column reads "END-TERM".
+            // The main exam defines the leading column's type.
+            mainType = typeOf(examMeta[mainEff] || examMeta[examId]) || 'END-TERM';
+            mainTypeForOrder = mainType;
+            // Map each pinned examId → its type, and each type → the examIds under it.
+            typeByExam = {};
+            examIdsByType = {};
+            examIds.forEach(id => {
+                const ty = typeOf(examMeta[id]) || 'EXAM';
+                typeByExam[id] = ty;
+                (examIdsByType[ty] ||= []).push(id);
+            });
+            examColumns = Object.keys(examIdsByType)
                 .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b, undefined, { numeric: true }))
                 .map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
-        let multiExam = examColumns.length > 1;
+            multiExam = examColumns.length > 1;
 
-        // Marks across ALL exams in the set (for positions + per-student aggregate).
-        // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
-        // the report card stays stable after generation — later exam_marks edits don't
-        // change it until the class is regenerated. Otherwise read live.
-        const frozen: any[] = Array.isArray(gen?.frozenMarks) ? gen.frozenMarks : [];
-        const allMarks: any[] = frozen.length
-            ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
-            : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
+            // Marks across ALL exams in the set (for positions + per-student aggregate).
+            // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
+            // the report card stays stable after generation — later exam_marks edits don't
+            // change it until the class is regenerated. Otherwise read live.
+            const frozen: any[] = Array.isArray(gen?.frozenMarks) ? gen.frozenMarks : [];
+            allMarks = frozen.length
+                ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
+                : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
 
-        // Supplement with ONLINE-exam attempt scores for any online exams in the set
-        // whose results haven't been published into exam_marks yet, so their CAT/Mid
-        // Term columns still show real marks. Normalized to the exam_marks shape.
-        const onlineIds = onlineExamDocs.map((e: any) => String(e._id));
-        if (onlineIds.length) {
-            const attempts = await database.collection('online_exam_attempts')
-                .find({ examId: { $in: onlineIds }, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
-                .toArray().catch(() => []);
-            const onlineById: Record<string, any> = {}; onlineExamDocs.forEach((e: any) => onlineById[String(e._id)] = e);
-            const haveInMarks = new Set(allMarks.map((m: any) => `${String(m.examId)}|${String(m.studentId)}`));
-            attempts.forEach((a: any) => {
-                const key = `${String(a.examId)}|${String(a.studentId)}`;
-                if (haveInMarks.has(key)) return;   // already published to exam_marks
-                const ex = onlineById[String(a.examId)] || {};
-                const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
-                const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
-                allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total });
-            });
+            // Supplement with ONLINE-exam attempt scores for any online exams in the set
+            // whose results haven't been published into exam_marks yet, so their CAT/Mid
+            // Term columns still show real marks. Normalized to the exam_marks shape.
+            const onlineIds = onlineExamDocs.map((e: any) => String(e._id));
+            if (onlineIds.length) {
+                const attempts = await database.collection('online_exam_attempts')
+                    .find({ examId: { $in: onlineIds }, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
+                    .toArray().catch(() => []);
+                const onlineById: Record<string, any> = {}; onlineExamDocs.forEach((e: any) => onlineById[String(e._id)] = e);
+                const haveInMarks = new Set(allMarks.map((m: any) => `${String(m.examId)}|${String(m.studentId)}`));
+                attempts.forEach((a: any) => {
+                    const key = `${String(a.examId)}|${String(a.studentId)}`;
+                    if (haveInMarks.has(key)) return;   // already published to exam_marks
+                    const ex = onlineById[String(a.examId)] || {};
+                    const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
+                    const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
+                    allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total });
+                });
+            }
         }
 
         // Column visibility rule (airtight):
@@ -221,9 +262,11 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const students = await database.collection('students').find({}).toArray().catch(() => []);
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
         // Marks used for ranking: the End-Term (main) exam across ALL students. If for
-        // some reason that's empty, fall back to the full pinned exam set.
+        // some reason that's empty, fall back to the full pinned exam set. A computed
+        // exam's "main exam" marks ARE allMarks (already the whole cohort's average).
         const rankExamId = mainEff;
-        const rankMarksMain = await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
+        const rankMarksMain = isComputedExam ? allMarks
+            : await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
         // Normalized class identity for a student AT THE TIME OF THIS EXAM — prefer each
