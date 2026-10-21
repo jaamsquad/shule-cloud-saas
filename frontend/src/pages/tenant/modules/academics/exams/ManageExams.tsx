@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-    ClipboardCheck, Loader2, Pencil, FileSpreadsheet, Send, Undo2, BarChart3, Printer, Trash2, CalendarRange, CircleDot,
+    ClipboardCheck, Loader2, Pencil, FileSpreadsheet, Send, Undo2, BarChart3, Printer, Trash2, CalendarRange, CircleDot, Laptop,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -19,7 +19,8 @@ const border = { border: "0.5px solid #e5e7eb" };
 const fmtDate = (d: string | null | undefined) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 type ClassRow = { classId: string; className: string; students: number; subjects: number; marks: number; updatedAt: string | null; status: "Published" | "Pending"; publishedAt: string | null; publishedBy: string | null; changedBy: string | null };
-type ExamRow = { _id: string; title: string; examName: string; type: string; term: string; academicYear: string; classes: ClassRow[]; manual: boolean; examCategory: string };
+type OnlineExamRow = { _id: string; examName: string; subjectName: string; status: string };
+type ExamRow = { _id: string; title: string; examName: string; type: string; term: string; academicYear: string; classes: ClassRow[]; manual: boolean; examCategory: string; onlineExams: OnlineExamRow[] };
 
 export default function ManageExams() {
     const nav = useNavigate();
@@ -102,6 +103,7 @@ export default function ManageExams() {
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                         </label>
+                        <button onClick={() => nav("/exams/online")} className="h-10 px-3 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-white" style={{ ...border, color: INK }}><Laptop className="w-4 h-4" /> Online Exams</button>
                         <button onClick={() => nav("/exams/printouts")} className="h-10 px-3 rounded-xl text-sm font-bold flex items-center gap-1.5 bg-white" style={{ ...border, color: INK }}><Printer className="w-4 h-4" /> Printouts</button>
                     </div>
                 </div>
@@ -136,6 +138,22 @@ export default function ManageExams() {
                                             )}
                                         </div>
                                     </div>
+                                    {exam.onlineExams.length > 0 && (
+                                        <div className="mb-3 rounded-xl p-3 bg-indigo-50/60" style={border}>
+                                            <div className="flex items-center gap-1.5 text-[11px] font-black text-indigo-700 uppercase tracking-wide mb-2">
+                                                <Laptop className="w-3.5 h-3.5" /> {exam.onlineExams.length} subject{exam.onlineExams.length === 1 ? "" : "s"} sat online — roll up into this exam's column above
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {exam.onlineExams.map(oe => (
+                                                    <button key={oe._id} onClick={() => nav(`/exams/online`)} title={`${oe.examName} · ${oe.status} — open in Online Examinations to build, mark or publish`} className="h-7 px-2.5 rounded-full text-[11px] font-bold flex items-center gap-1 bg-white text-indigo-700" style={border}>
+                                                        {oe.subjectName || oe.examName}
+                                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${oe.status === "Published" ? "bg-emerald-50 text-emerald-700" : oe.status === "Closed" ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-700"}`}>{oe.status}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 mt-2">Managed under Online Examinations — build questions, mark submissions, then "Publish to Report Cards" writes the score here. This exam's own Publish results button below still controls whether it's visible on report cards.</p>
+                                        </div>
+                                    )}
                                     {exam.classes.length === 0 ? (
                                         <p className="text-xs text-slate-400 italic">No marks entered yet.</p>
                                     ) : (
