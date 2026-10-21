@@ -283,35 +283,41 @@ router.get('/online-exams/:id/marking', async (req: Request, res: Response) => {
             attempts: attempts.map((a: any) => ({
                 _id: String(a._id), studentName: a.studentName, status: a.status,
                 autoScore: a.autoScore, finalScore: a.finalScore, needsManual: a.needsManual,
-                // Only expose the student's answers to the manual questions + any saved awards.
-                answers: Object.fromEntries(manualQ.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
+                // Expose the student's answers to every question — manual ones need
+                // grading, auto ones can be reviewed and overridden by hand.
+                answers: Object.fromEntries(questions.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
                 marks: a.manualMarks || {}, comments: a.manualComments || {}, perQuestion: a.perQuestion || {},
+                overrides: a.manualOverrides || {},
             })),
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Save manual marks for one attempt. Recomputes finalScore = auto + manual.
+// Save marks for one attempt — manual-only questions always come from the teacher;
+// auto-marked questions use the computed award UNLESS the teacher explicitly
+// overrode it (sent a value for that question too), so a wrong auto-mark can be
+// corrected by hand. Recomputes finalScore = auto (or override) + manual.
 router.post('/online-exams/:id/marking/:attemptId', async (req: Request, res: Response) => {
     try {
         const database = db(req);
         const marks: Record<string, number> = req.body?.marks || {};
         const comments: Record<string, string> = req.body?.comments || {};
+        const overrides: Record<string, boolean> = req.body?.overrides || {};
         const attempt: any = await database.collection('online_exam_attempts').findOne({ _id: oid(req.params.attemptId)! });
         if (!attempt) return res.status(404).json({ message: 'Attempt not found' });
         const questions = await database.collection('online_exam_questions').find({ examId: req.params.id, deletedAt: { $exists: false } }).toArray();
 
-        // Auto portion (recompute so it's always correct) + manual awards (capped at max).
         let total = 0;
         for (const q of questions) {
             const qid = String(q._id);
             const isAuto = AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false);
-            if (isAuto) { total += markQuestion(q, attempt.answers?.[qid]).awarded; }
+            const overridden = isAuto && overrides[qid] && marks[qid] !== undefined && marks[qid] !== '' as any;
+            if (isAuto && !overridden) { total += markQuestion(q, attempt.answers?.[qid]).awarded; }
             else { total += Math.max(0, Math.min(Number(q.marks) || 0, Number(marks[qid]) || 0)); }
         }
         total = Math.round(total * 100) / 100;
         await database.collection('online_exam_attempts').updateOne({ _id: attempt._id }, {
-            $set: { manualMarks: marks, manualComments: comments, finalScore: total, needsManual: false, status: 'marked', markedAt: now() },
+            $set: { manualMarks: marks, manualComments: comments, manualOverrides: overrides, finalScore: total, needsManual: false, status: 'marked', markedAt: now() },
         });
         await audit(database, req, 'TEACHER_MARKED', req.params.id, { attemptId: req.params.attemptId, finalScore: total });
         res.json({ ok: true, finalScore: total });

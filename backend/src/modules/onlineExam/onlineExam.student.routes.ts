@@ -86,6 +86,7 @@ export function buildStudentExamRouter(authed: any) {
         if (attempt && ['submitted', 'auto_submitted', 'marked', 'published'].includes(attempt.status)) {
             return res.status(403).json({ message: 'You have already completed this exam.' });
         }
+        const resumed = !!attempt;   // an in-progress attempt already existed — continue it, don't restart.
         const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
         if (!attempt) {
             attempt = {
@@ -112,8 +113,9 @@ export function buildStudentExamRouter(authed: any) {
         });
         res.json({
             exam: { _id: exam._id, examName: exam.examName, subjectName: exam.subjectName, instructions: exam.instructions, durationMinutes: exam.durationMinutes, totalMarks: exam.totalMarks, settings: exam.settings },
-            attempt: { _id: attempt._id, status: attempt.status, answers: attempt.answers || {}, flagged: attempt.flagged || [], deadlineAt: attempt.deadlineAt, startedAt: attempt.startedAt },
+            attempt: { _id: attempt._id, status: attempt.status, answers: attempt.answers || {}, flagged: attempt.flagged || [], deadlineAt: attempt.deadlineAt, startedAt: attempt.startedAt, lastIndex: attempt.lastIndex || 0 },
             questions: safe,
+            resumed,
         });
     }));
 
@@ -126,6 +128,7 @@ export function buildStudentExamRouter(authed: any) {
         const set: any = { lastSavedAt: now() };
         if (req.body?.answers && typeof req.body.answers === 'object') set.answers = { ...(attempt.answers || {}), ...req.body.answers };
         if (Array.isArray(req.body?.flagged)) set.flagged = req.body.flagged;
+        if (Number.isInteger(req.body?.idx) && req.body.idx >= 0) set.lastIndex = req.body.idx;
         await db.collection('online_exam_attempts').updateOne({ _id: attempt._id }, { $set: set });
         res.json({ ok: true, savedAt: set.lastSavedAt });
     }));
