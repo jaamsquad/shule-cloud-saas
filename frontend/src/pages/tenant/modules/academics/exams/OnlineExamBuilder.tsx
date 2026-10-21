@@ -81,10 +81,13 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
         academicYear: "", term: "", termId: "",
         startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
     });
-    // Parent (main) assessments: existing CAT / Mid Term exams this online exam rolls
-    // up into. Every subject's online exam under the same parent shares one column.
+    // Parent (main) assessments: real exams (from the Exams module) this online exam
+    // rolls up into. Every subject's online exam under the same parent shares one
+    // column. Cards on this page are *online exams* (a different collection) — they
+    // never count as a parent on their own, so any real written-test/supplementary
+    // exam is offered here, not just ones whose name happens to say "CAT"/"Mid Term".
     const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
-    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
+    const parentExams = allExams.filter((e: any) => e.examCategory === "written_test" || e.examCategory === "supplementary" || /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
     const { data: years = [] } = useQuery<any[]>({ queryKey: ["v2_academic_years"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
     const { data: terms = [] } = useQuery<any[]>({ queryKey: ["v2_terms"], queryFn: async () => (await api.get("/v2/terms")).data || [] });
     const activeYear = years.find((y: any) => y.isActive);
@@ -150,7 +153,7 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
                             <option value="">— Select main assessment —</option>
                             {parentExams.map((e: any) => <option key={e._id} value={e._id}>{e.examName || e.name} · {e.type || e.examType}{e.term ? ` · ${e.term}` : ""}</option>)}
                         </select>
-                        {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No CAT / Mid Term exam found. Create one first in Create Exam, then teachers add their subject exams under it.</p>}
+                        {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No exam found to attach to. Create one first in Create Exam (e.g. a CAT or Mid Term), then add your online exams under it here.</p>}
                     </div>
                     <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
                     <div className="grid grid-cols-2 gap-3">
@@ -244,9 +247,9 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
     });
 
     // Attach an existing online exam to a parent (main) assessment so its marks roll
-    // up with the others. Parents = existing CAT / Mid Term / Mock exams.
+    // up with the others. Parents = any real exam from the Exams module.
     const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
-    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
+    const parentExams = allExams.filter((e: any) => e.examCategory === "written_test" || e.examCategory === "supplementary" || /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
     const attachParent = useMutation({
         mutationFn: async (parentExamId: string) => {
             const p = parentExams.find((x: any) => x._id === parentExamId);
