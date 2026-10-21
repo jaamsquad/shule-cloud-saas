@@ -155,31 +155,58 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
                         </select>
                         {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No exam found to attach to. Create one first in Create Exam (e.g. a CAT or Mid Term), then add your online exams under it here.</p>}
                     </div>
-                    <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
-                    <div className="grid grid-cols-2 gap-3">
-                        <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">{CATS.map(c => <option key={c}>{c}</option>)}</select>
-                        <select value={f.subjectId} onChange={e => setF({ ...f, subjectId: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Subject —</option>{subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}</select>
-                        <select value={f.classId} onChange={e => setF({ ...f, classId: e.target.value, streamId: "" })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Class —</option>{classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}</select>
-                        <select value={f.streamId} onChange={e => setF({ ...f, streamId: e.target.value })} disabled={!f.classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"><option value="">All streams</option>{streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}</select>
-                        <input value={f.durationMinutes} onChange={e => setF({ ...f, durationMinutes: Number(e.target.value) })} type="number" placeholder="Duration (min)" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
-                        <input value={f.passMark} onChange={e => setF({ ...f, passMark: Number(e.target.value) })} type="number" placeholder="Pass mark" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Exam Name</label>
+                        <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                        <select value={f.academicYear} onChange={e => setF({ ...f, academicYear: e.target.value, termId: "", term: "" })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                            <option value="">— Academic Year —</option>
-                            {years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}{y.isActive ? " (Active)" : ""}</option>)}
-                        </select>
-                        <select value={f.termId} onChange={e => {
-                            const term = terms.find((t: any) => String(t._id) === e.target.value);
-                            const year = years.find((y: any) => String(y._id) === String(term?.academicYearId));
-                            setF({ ...f, termId: e.target.value, term: term?.name || "", academicYear: year ? String(year.year) : f.academicYear });
-                        }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                            <option value="">— Term —</option>
-                            {yearTermOptions.map((t: any) => {
-                                const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
-                                return <option key={t._id} value={t._id}>{t.name}{year ? ` · ${year.year}` : ""}{t.isActive ? " (Active)" : ""}</option>;
-                            })}
-                        </select>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</label>
+                            <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">{CATS.map(c => <option key={c}>{c}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Subject</label>
+                            <select value={f.subjectId} onChange={e => setF({ ...f, subjectId: e.target.value })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Subject —</option>{subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Class</label>
+                            <select value={f.classId} onChange={e => setF({ ...f, classId: e.target.value, streamId: "" })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Class —</option>{classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Stream</label>
+                            <select value={f.streamId} onChange={e => setF({ ...f, streamId: e.target.value })} disabled={!f.classId} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"><option value="">All streams</option>{streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Duration (min)</label>
+                            <input value={f.durationMinutes} onChange={e => setF({ ...f, durationMinutes: Number(e.target.value) })} type="number" placeholder="Duration (min)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pass Mark</label>
+                            <input value={f.passMark} onChange={e => setF({ ...f, passMark: Number(e.target.value) })} type="number" placeholder="Pass mark" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Academic Year</label>
+                            <select value={f.academicYear} onChange={e => setF({ ...f, academicYear: e.target.value, termId: "", term: "" })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <option value="">— Academic Year —</option>
+                                {years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}{y.isActive ? " (Active)" : ""}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Term</label>
+                            <select value={f.termId} onChange={e => {
+                                const term = terms.find((t: any) => String(t._id) === e.target.value);
+                                const year = years.find((y: any) => String(y._id) === String(term?.academicYearId));
+                                setF({ ...f, termId: e.target.value, term: term?.name || "", academicYear: year ? String(year.year) : f.academicYear });
+                            }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <option value="">— Term —</option>
+                                {yearTermOptions.map((t: any) => {
+                                    const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
+                                    return <option key={t._id} value={t._id}>{t.name}{year ? ` · ${year.year}` : ""}{t.isActive ? " (Active)" : ""}</option>;
+                                })}
+                            </select>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
