@@ -427,35 +427,16 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // Subject rows for THIS student, with a column per exam in the set and an
         // AGGREGATE (average of the per-exam percentages). Group this student's marks
         // by subject, then per exam.
-        let mine = allMarks.filter((m: any) => String(m.studentId) === sid);
-        // Safety net: if the exam set yielded NO marks for this student (e.g. the
-        // generation pinned an exam the student wasn't marked in), fall back to ALL
-        // of this student's marks for the SAME TERM as the selected exam, so the card
-        // shows results instead of an empty table.
-        if (mine.length === 0) {
-            const selExam: any = exam || examMeta[examId];
-            const term = String(selExam?.term || '').toLowerCase();
-            const studentMarks = await onlyPublished(database, await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []));
-            const examsAll = await database.collection('exams').find({}).toArray().catch(() => []);
-            const eById: Record<string, any> = {}; examsAll.forEach((e: any) => eById[String(e._id)] = e);
-            const termMarks = studentMarks.filter((m: any) => {
-                const e = eById[String(m.examId)];
-                return term ? String(e?.term || '').toLowerCase() === term : true;
-            });
-            if (termMarks.length) {
-                mine = termMarks;
-                // Rebuild TYPE columns from the exams actually present in the fallback marks.
-                const byType: Record<string, string[]> = {};
-                termMarks.forEach((m: any) => {
-                    const ty = onlineMarkType(m) || typeOf(eById[String(m.examId)]) || 'EXAM';
-                    typeByExam[String(m.examId)] = ty;
-                    (byType[ty] ||= []).push(String(m.examId));
-                });
-                examColumns = Object.keys(byType)
-                    .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b))
-                    .map(ty => ({ type: ty, title: ty, examIds: Array.from(new Set(byType[ty])) }));
-            }
-        }
+        const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        // NOTE: there used to be a "safety net" here that, when this exam set had no
+        // marks for the student, fell back to ANY of their marks sharing the exam's
+        // term label — even from a completely different exam/year. That silently
+        // showed another exam's results on a card for an exam that genuinely has no
+        // marks yet (e.g. a freshly created exam), which looked like a data glitch.
+        // The pinned exam set already covers every legitimate component (the opened
+        // exam + the generation's main/additional assessments) via `allMarks` above,
+        // so if `mine` is still empty here the student truly has no marks for this
+        // exam — the card below renders that correctly as "-" per subject.
         // Group this student's marks by subject, then by assessment TYPE. A subject
         // may have several exams of the same type (e.g. two CATs) — keep them all so
         // the cell can average them.
