@@ -70,6 +70,7 @@ export default function ReportCardSettings() {
                     <Toggle on={!!s.showKcpe} onToggle={() => setTop("showKcpe", !s.showKcpe)} label="Show KCPE fields" hint="KCPE marks, rank, mean & value added row" />
                     <Toggle on={!!s.showPositions} onToggle={() => setTop("showPositions", !s.showPositions)} label="Show positions" hint="Class position & level position in the summary row" />
                     <Toggle on={!!s.showChange} onToggle={() => setTop("showChange", !s.showChange)} label='Show "Change" column' hint="Improvement or drop vs the previous exam, per subject" />
+                    <Toggle on={s.showHistory !== false} onToggle={() => setTop("showHistory", s.showHistory === false)} label="Show history grid & performance graph" hint="The Form/Grade × Term MP/MG table and line/bar chart at the bottom of the report card" />
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">

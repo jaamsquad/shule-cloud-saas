@@ -102,6 +102,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
     const showKcpe = showKcpeProp !== false && settings.showKcpe !== false;
     const showPositions = settings.showPositions !== false;
     const showChange = !!settings.showChange;
+    const showHistory = settings.showHistory !== false;
     // Arrow + colour for a change value (percentage points).
     const changeCell = (v: number | null | undefined) => {
         if (v === null || v === undefined) return "-";
@@ -242,7 +243,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                 )}
 
                 {/* Performance graph (B&W) — mean points per term. Shape (line/bar/area/dots) is a setting. */}
-                {chartBars.length > 1 && (() => {
+                {showHistory && chartBars.length > 1 && (() => {
                     const W = 180, H = 70, padL = 10, padR = 6, padT = 6, padB = 14;   // viewBox units
                     const n = chartBars.length;
                     const x = (i: number) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
@@ -274,7 +275,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                 })()}
 
                 {/* Historical grid — only the levels & terms that have data */}
-                {levels.length > 0 && terms.length > 0 && (
+                {showHistory && levels.length > 0 && terms.length > 0 && (
                     <table style={{ marginTop: 3, textAlign: "center" }}><tbody>
                         <tr style={{ fontWeight: 700 }}>
                             <td></td>

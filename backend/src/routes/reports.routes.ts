@@ -102,7 +102,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // Report-card display settings (KCPE/positions/columns/change).
         const rcSettingsDoc = await database.collection('report_card_settings').findOne({}).catch(() => null);
         const rcSettings = {
-            showKcpe: true, showPositions: true, showChange: false,
+            showKcpe: true, showPositions: true, showChange: false, showHistory: true,
             ...(rcSettingsDoc || {}),
             columns: { point: true, grade: true, pos: true, remarks: true, initials: true, ...(rcSettingsDoc?.columns || {}) },
         };
@@ -640,7 +640,10 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         // data, so only filled cells/bars are shown — and report which levels &
         // terms exist so the frontend renders just those columns.
         const grid: Record<string, { mp: number; mg: string }> = {};
-        const chart: Array<{ label: string; value: number }> = [];
+        // Keyed the same as `grid` so two histAgg entries for the same (level, term) —
+        // e.g. a leftover test exam alongside the real one — collapse to one chart point
+        // instead of plotting a duplicate, with the later-processed entry winning.
+        const chartByKey: Record<string, { label: string; value: number }> = {};
         const levelsSet = new Set<number>(); const termsSet = new Set<number>();
         const levelLabels: Record<number, string> = {};
         for (const v of Object.values(histAgg)) {
@@ -649,11 +652,13 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             if (lvl < 1 || v.term < 1) continue;
             const mp = RND(v.pts / v.n, 0);
             const ownPrefix = prefixWordOf(v.cls);
-            grid[`l${lvl}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n) };
-            chart.push({ label: `${ownPrefix.charAt(0)}${lvl}T${v.term}`, value: mp });
+            const key = `l${lvl}t${v.term}`;
+            grid[key] = { mp, mg: meanGrade(v.pts / v.n) };
+            chartByKey[key] = { label: `${ownPrefix.charAt(0)}${lvl}T${v.term}`, value: mp };
             levelsSet.add(lvl); termsSet.add(v.term);
             levelLabels[lvl] = ownPrefix;   // the word THIS level was actually saved under
         }
+        const chart = Object.values(chartByKey);
         const levels = Array.from(levelsSet).sort((a, b) => a - b);
         const terms = Array.from(termsSet).sort((a, b) => a - b);
         chart.sort((a, b) => a.label.localeCompare(b.label));
@@ -1939,6 +1944,7 @@ const DEFAULT_RC_SETTINGS = {
     showKcpe: true,
     showPositions: true,
     showChange: false,       // "Change" column: improvement/drop vs previous exam
+    showHistory: true,       // the Form/Grade × Term MP/MG history grid + performance graph
     columns: { point: true, grade: true, pos: true, remarks: true, initials: true },
     // Analysis (Merit List) column toggles.
     analysis: { avg: true, tm: true, mg: true, pg: true, stream: true, subjects: true },
