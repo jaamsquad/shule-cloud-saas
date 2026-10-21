@@ -27,6 +27,21 @@ router.get('/exam-publishing', async (req: Request, res: Response) => {
             d.collection('v2_classes').find({ deletedAt: { $exists: false } }, { projection: { name: 1, level: 1 } }).toArray().catch(() => [] as any[]),
         ]);
         const ids = exams.map((e: any) => String(e._id));
+
+        // Online exams that roll their marks up into one of these exams — so Manage
+        // Exams can show, per column, which subjects were sat online and link straight
+        // to where they're built/marked/published (Online Examinations).
+        const onlineExams = ids.length ? await d.collection('online_exams').find({
+            deletedAt: { $exists: false },
+            $or: [{ mainExamId: { $in: ids } }, { parentExamId: { $in: ids } }],
+        }).toArray().catch(() => []) : [];
+        const onlineByExam = new Map<string, any[]>();
+        for (const oe of onlineExams) {
+            const key = String(oe.mainExamId || oe.parentExamId);
+            (onlineByExam.get(key) || onlineByExam.set(key, []).get(key)!).push({
+                _id: String(oe._id), examName: oe.examName, subjectName: oe.subjectName, status: oe.status,
+            });
+        }
         // one row per exam × class: how many marks, students, subjects, last change
         const groups: any[] = ids.length ? await d.collection('exam_marks').aggregate([
             { $match: { examId: { $in: ids } } },
@@ -104,6 +119,7 @@ router.get('/exam-publishing', async (req: Request, res: Response) => {
                 _id: examId, title: formatExamName(e), examName: e.examName || e.name || 'Exam', type: e.type || '',
                 term: t, academicYear: y, classLevel: e.classLevel || '', createdAt: e.createdAt || null,
                 manual: e.publishing === 'manual', classes, examCategory: e.examCategory || 'written_test',
+                onlineExams: onlineByExam.get(examId) || [],
             });
         }
         const years = Object.keys(out).sort((a, b) => Number(b) - Number(a) || b.localeCompare(a)).map(yr => ({
