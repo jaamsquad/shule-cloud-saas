@@ -149,6 +149,11 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             // Otherwise keep the exam's own label (CAT 1 / CAT 2 / Mid Term / Mock …).
             return (raw || 'EXAM').toUpperCase().slice(0, 14);
         };
+        // A mark written when an online exam's results were published carries its OWN
+        // assessment type (CAT / Mid Term / End Term / …) even though it shares the
+        // PARENT exam's examId — give it that type so the report card gives it its own
+        // column instead of silently folding it under the parent's label.
+        const onlineMarkType = (m: any): string | null => (m?.source === 'online_exam' && m?.onlineCategory) ? typeOf({ type: m.onlineCategory }) : null;
         // Column order: the main exam's column first, then END-TERM, then every other
         // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…). `mainType` is
         // assigned below (in each branch) before this is ever called.
@@ -263,9 +268,19 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
                     const ex = onlineById[String(a.examId)] || {};
                     const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
                     const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
-                    allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total });
+                    allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total, source: 'online_exam', onlineCategory: ex.category || '' });
                 });
             }
+
+            // Marks published from an online exam into THIS exam's own id (merged under
+            // the parent so every subject lands in one report-card entry) may carry an
+            // assessment type different from the parent's — give those a column of
+            // their own, labelled by the online exam's own category.
+            const extraTypes = new Set<string>();
+            allMarks.forEach((m: any) => { const t = onlineMarkType(m); if (t && t !== mainType && !examIdsByType[t]) extraTypes.add(t); });
+            extraTypes.forEach(t => { examIdsByType[t] = examIds; examColumns.push({ type: t, title: t, examIds }); });
+            if (extraTypes.size) examColumns = examColumns.sort((a, b) => typeOrder(a.type) - typeOrder(b.type) || a.type.localeCompare(b.type, undefined, { numeric: true }));
+            multiExam = examColumns.length > 1;
         }
 
         // Column visibility rule (airtight):
@@ -432,7 +447,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
                 // Rebuild TYPE columns from the exams actually present in the fallback marks.
                 const byType: Record<string, string[]> = {};
                 termMarks.forEach((m: any) => {
-                    const ty = typeOf(eById[String(m.examId)]) || 'EXAM';
+                    const ty = onlineMarkType(m) || typeOf(eById[String(m.examId)]) || 'EXAM';
                     typeByExam[String(m.examId)] = ty;
                     (byType[ty] ||= []).push(String(m.examId));
                 });
@@ -447,7 +462,7 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
         const bySubject: Record<string, Record<string, any[]>> = {};
         for (const m of mine) {
             const sub = m.subjectName || m.subject || 'Subject';
-            const ty = typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
+            const ty = onlineMarkType(m) || typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
             ((bySubject[sub] ||= {})[ty] ||= []).push(m);
         }
         // ── "Change" column: this student's subject % vs the PREVIOUS exam ──────────

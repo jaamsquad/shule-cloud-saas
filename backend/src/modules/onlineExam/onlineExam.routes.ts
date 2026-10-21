@@ -377,6 +377,11 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
                             subjectId: exam.subjectId || subjectName, subjectName,
                             marksObtained: Number(score), totalMarks,
                             className: cls, updatedAt: now(), source: 'online_exam',
+                            // The online exam's OWN assessment type (CAT / Midterm / End
+                            // Term / …), kept distinct from the parent exam's type so the
+                            // report card can give it its own column instead of folding it
+                            // under the parent's label.
+                            onlineCategory: exam.category || '',
                         },
                         $setOnInsert: { createdAt: now(), classAtTime: cls, academicYear: exam.academicYear || String(new Date().getFullYear()) },
                     },
