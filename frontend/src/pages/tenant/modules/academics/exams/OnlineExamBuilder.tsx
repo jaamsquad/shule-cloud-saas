@@ -369,9 +369,10 @@ function MarkingPanel({ examId }: { examId: string }) {
     const [open, setOpen] = useState<string>("");   // attemptId being marked
     const [marks, setMarks] = useState<Record<string, any>>({});
     const [comments, setComments] = useState<Record<string, string>>({});
+    const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
     const save = useMutation({
-        mutationFn: async (attemptId: string) => (await api.post(`/online-exams/${examId}/marking/${attemptId}`, { marks, comments })).data,
+        mutationFn: async (attemptId: string) => (await api.post(`/online-exams/${examId}/marking/${attemptId}`, { marks, comments, overrides })).data,
         onSuccess: (d: any) => { toast.success(`Saved · final ${d.finalScore}`); setOpen(""); refetch(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
@@ -379,15 +380,13 @@ function MarkingPanel({ examId }: { examId: string }) {
     if (isLoading) return <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#5C67F2]" /></div>;
     if (attempts.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-400 font-bold">No submissions yet.</div>;
 
-    // When every question is auto-marked there's nothing to mark manually — but we
-    // still SHOW the submissions and their scores (read-only) so you can review them.
     const autoOnly = manualQs.length === 0;
 
     return (
         <div className="space-y-2">
             {autoOnly && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-blue-700 mb-2">
-                    All questions are auto-marked — scores below are final. Use “Publish to Report Cards” to release them.
+                    All questions are auto-marked. Scores are final unless you correct one by hand below — use “Publish to Report Cards” to release them.
                 </div>
             )}
             {attempts.map((a: any) => {
@@ -402,25 +401,31 @@ function MarkingPanel({ examId }: { examId: string }) {
                                     <p className="text-[11px] text-slate-400">Auto questions: {autoQs.filter(q => a.perQuestion?.[q._id]?.correct === true).length}/{autoQs.length} correct</p>
                                 )}
                             </div>
-                            {/* Only offer manual marking when there ARE manual questions. */}
-                            {!autoOnly
-                                ? <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
-                                : <span className="text-lg font-black text-emerald-600">{a.finalScore ?? a.autoScore ?? 0}</span>}
+                            <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); setOverrides(a.overrides || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
                         </div>
                         {editing && (
                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                                 {autoQs.length > 0 && a.perQuestion && (
                                     <div className="space-y-3 border-t border-slate-100 pt-3">
                                         <h3 className="text-sm font-bold text-slate-800">Auto-marked questions</h3>
+                                        <p className="text-[11px] text-slate-400 -mt-2">Correct a score by ticking Override and entering the mark you want instead.</p>
                                         {autoQs.map((q: any) => {
                                             const pq = a.perQuestion?.[q._id] || { awarded: 0, correct: null };
+                                            const isOverridden = !!overrides[q._id];
                                             return (
                                                 <div key={q._id} className="bg-slate-50 rounded-xl p-3">
                                                     <div className="flex items-center justify-between gap-2 mb-1">
                                                         <p className="text-xs font-bold text-slate-600 truncate">{q.questionText}</p>
-                                                        <span className="text-[11px] font-bold text-slate-500">{pq.awarded}/{q.marks}</span>
+                                                        <span className="text-[11px] font-bold text-slate-500">{isOverridden ? `${marks[q._id] ?? pq.awarded}` : pq.awarded}/{q.marks}</span>
                                                     </div>
-                                                    <p className="text-[11px] text-slate-500">{pq.correct === true ? "Correct" : pq.correct === false ? "Incorrect" : "Reviewed"}</p>
+                                                    <div className="bg-white rounded-lg border border-slate-200 p-2 text-xs text-slate-600 mb-2">{String(a.answers?.[q._id] ?? "") || <span className="text-slate-300">No answer</span>}</div>
+                                                    <p className="text-[11px] text-slate-500 mb-2">{pq.correct === true ? "Correct" : pq.correct === false ? "Incorrect" : "Reviewed"}</p>
+                                                    <label className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+                                                        <input type="checkbox" checked={isOverridden} onChange={e => setOverrides(o => ({ ...o, [q._id]: e.target.checked }))} /> Override this mark
+                                                    </label>
+                                                    {isOverridden && (
+                                                        <input type="number" min={0} max={q.marks} value={marks[q._id] ?? pq.awarded} onChange={e => setMarks(m => ({ ...m, [q._id]: e.target.value }))} className="w-24 h-9 mt-2 px-2 rounded-lg border border-slate-200 text-sm text-center" />
+                                                    )}
                                                 </div>
                                             );
                                         })}
