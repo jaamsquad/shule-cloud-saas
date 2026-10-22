@@ -7,6 +7,7 @@ import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport'
 import { onlyPublished, publishedView } from '../lib/examPublish';
 import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
 import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
+import { backfillOnlineCategoryForExam } from '../lib/onlineCategoryBackfill';
 import { averageAcrossSourceExams } from './analytics.routes';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -207,6 +208,10 @@ const scholarSheetHandler = async (req: Request, res: Response) => {
             // comes first so its column leads. De-duplicated.
             examIds = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
                 .filter((v, i, a) => v && a.indexOf(v) === i);
+            // Marks published by an online exam before its category was tracked on
+            // exam_marks itself are stuck under the parent's own column — recover it
+            // from the online exam doc that produced them, once.
+            await Promise.all(examIds.map(id => backfillOnlineCategoryForExam(database, id)));
             const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
             // Additional assessments may be regular exams OR online exams, so look in both
             // collections — otherwise online CAT/Mid Term docs are missed and their column
