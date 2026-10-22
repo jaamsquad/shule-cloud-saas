@@ -354,12 +354,27 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
             await database.collection('online_exams').updateOne({ _id: exam._id }, { $set: { mainExamId } });
         }
 
-        // 2) Write each submitted/marked attempt's score into exam_marks.
+        // 2) Write each submitted/marked attempt's score into exam_marks. If the SAME
+        //    subject already has a mark under this exam from another source (marks
+        //    entered directly for the main exam, or a baseline saved on an earlier
+        //    publish), blend the two into an average instead of overwriting — so a
+        //    subject with both a main-exam entry and an online exam shows the
+        //    combined result everywhere (report card, merit list, analysis, transcripts),
+        //    not just whichever was written last.
         const attempts = await database.collection('online_exam_attempts').find({
             examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] },
         }).toArray().catch(() => []);
         const totalMarks = Number(exam.totalMarks) || 100;
         const subjectName = exam.subjectName || 'Online Exam';
+        const subjectKey = exam.subjectId || subjectName;
+
+        const existingMarks = attempts.length
+            ? await database.collection('exam_marks').find({
+                examId: mainExamId, subjectId: subjectKey, studentId: { $in: attempts.map((a: any) => String(a.studentId)) },
+            }).toArray().catch(() => [])
+            : [];
+        const existingByStudent: Record<string, any> = {};
+        existingMarks.forEach((m: any) => { existingByStudent[String(m.studentId)] = m; });
 
         let written = 0, pending = 0;
         const ops = attempts.map((a: any) => {
@@ -368,20 +383,38 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
             if (score == null) { pending++; return null; }
             written++;
             const cls = a.className || exam.className || '';
+
+            // The non-online baseline to blend with: a mark saved once (on the first
+            // publish) and kept untouched on every later publish, so repeated
+            // publishes re-blend from the SAME original number instead of drifting.
+            const existing = existingByStudent[String(a.studentId)];
+            const manualObtained = existing ? (existing.manualMarksObtained ?? (existing.source !== 'online_exam' ? existing.marksObtained : undefined)) : undefined;
+            const manualTotal = existing ? (existing.manualTotalMarks ?? (existing.source !== 'online_exam' ? existing.totalMarks : undefined)) : undefined;
+            const hasManualBaseline = manualObtained != null && Number(manualTotal) > 0;
+
+            let finalObtained = Number(score), finalTotal = totalMarks;
+            if (hasManualBaseline) {
+                const manualPct = (Number(manualObtained) / Number(manualTotal)) * 100;
+                const onlinePct = totalMarks > 0 ? (Number(score) / totalMarks) * 100 : 0;
+                finalObtained = Math.round((manualPct + onlinePct) / 2);
+                finalTotal = 100;
+            }
+
             return {
                 updateOne: {
-                    filter: { studentId: String(a.studentId), examId: mainExamId, subjectId: exam.subjectId || subjectName },
+                    filter: { studentId: String(a.studentId), examId: mainExamId, subjectId: subjectKey },
                     update: {
                         $set: {
                             studentId: String(a.studentId), examId: mainExamId,
-                            subjectId: exam.subjectId || subjectName, subjectName,
-                            marksObtained: Number(score), totalMarks,
+                            subjectId: subjectKey, subjectName,
+                            marksObtained: finalObtained, totalMarks: finalTotal,
                             className: cls, updatedAt: now(), source: 'online_exam',
                             // The online exam's OWN assessment type (CAT / Midterm / End
                             // Term / …), kept distinct from the parent exam's type so the
                             // report card can give it its own column instead of folding it
                             // under the parent's label.
                             onlineCategory: exam.category || '',
+                            ...(hasManualBaseline ? { manualMarksObtained: manualObtained, manualTotalMarks: manualTotal, blendedWithManual: true } : {}),
                         },
                         $setOnInsert: { createdAt: now(), classAtTime: cls, academicYear: exam.academicYear || String(new Date().getFullYear()) },
                     },

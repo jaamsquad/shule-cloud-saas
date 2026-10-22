@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-    ClipboardCheck, Loader2, Pencil, FileSpreadsheet, Send, Undo2, BarChart3, Printer, Trash2, CalendarRange, CircleDot, Laptop,
+    ClipboardCheck, Loader2, Pencil, FileSpreadsheet, Send, Undo2, BarChart3, Printer, Trash2, CalendarRange, CircleDot, Laptop, Link2, X,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useModuleCrud } from "@/contexts/PermissionsContext";
@@ -136,6 +136,9 @@ export default function ManageExams() {
                                             {exam.examCategory !== "consolidated" && exam.examCategory !== "year_average" && (
                                                 <button onClick={() => nav("/exams/marks")} className="h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 bg-white" style={{ ...border, color: INK }}><FileSpreadsheet className="w-3.5 h-3.5" /> Enter marks</button>
                                             )}
+                                            {exam.examCategory !== "consolidated" && exam.examCategory !== "year_average" && (
+                                                <AttachOnlineExamButton exam={exam} onAttached={refresh} />
+                                            )}
                                         </div>
                                     </div>
                                     {exam.onlineExams.length > 0 && (
@@ -211,5 +214,59 @@ export default function ManageExams() {
                 ))}
             </div>
         </div>
+    );
+}
+
+// Attach an existing online exam (built under Online Examinations) to this exam as
+// its main assessment, straight from Manage Exams — so an admin doesn't have to go
+// find it under Online Examinations and attach it from there. Once attached, its
+// marks roll up into this exam's column on publish, and show on the report card,
+// merit list, analysis report and transcripts like any other subject of this exam.
+function AttachOnlineExamButton({ exam, onAttached }: { exam: ExamRow; onAttached: () => void }) {
+    const qc = useQueryClient();
+    const [open, setOpen] = useState(false);
+    const { data: online = [], isLoading } = useQuery({
+        queryKey: ["online_exams_for_attach"], enabled: open,
+        queryFn: async () => (await api.get("/online-exams")).data || [],
+    });
+    const attachedIds = new Set(exam.onlineExams.map(oe => oe._id));
+    const candidates = (online as any[]).filter(oe => !attachedIds.has(String(oe._id)) && String(oe.parentExamId || "") !== exam._id);
+
+    const attach = useMutation({
+        mutationFn: async (oe: any) => (await api.patch(`/online-exams/${oe._id}`, { parentExamId: exam._id, parentExamName: exam.examName })).data,
+        onSuccess: () => { toast.success("Attached — publish it under Online Examinations to send its marks here."); qc.invalidateQueries({ queryKey: ["online_exams_for_attach"] }); onAttached(); setOpen(false); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Could not attach"),
+    });
+
+    return (
+        <>
+            <button onClick={() => setOpen(true)} className="h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1 bg-white" style={{ ...border, color: INK }}><Link2 className="w-3.5 h-3.5" /> Attach online exam</button>
+            {open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-1">
+                            <h2 className="text-base font-black text-slate-800">Attach an online exam</h2>
+                            <button onClick={() => setOpen(false)} className="text-slate-400"><X className="w-4 h-4" /></button>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-3">Rolls its subject's marks up into <span className="font-bold">{exam.title}</span>'s column — on the report card, merit list, analysis report and transcripts.</p>
+                        {isLoading ? <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-400" /></div>
+                            : candidates.length === 0 ? <p className="text-xs text-slate-400 italic py-6 text-center">No other online exams to attach. Create one under Online Examinations first.</p>
+                            : (
+                                <div className="space-y-1.5">
+                                    {candidates.map((oe: any) => (
+                                        <div key={oe._id} className="flex items-center justify-between gap-2 rounded-xl p-2.5" style={border}>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-slate-700 truncate">{oe.examName}</p>
+                                                <p className="text-[11px] text-slate-400">{[oe.subjectName, oe.category, oe.className].filter(Boolean).join(" · ")}{oe.parentExamName ? ` · currently under ${oe.parentExamName}` : ""}</p>
+                                            </div>
+                                            <button disabled={attach.isPending} onClick={() => attach.mutate(oe)} className="h-8 px-3 rounded-lg text-xs font-bold text-white flex items-center gap-1 disabled:opacity-50 shrink-0" style={{ background: ACCENT }}>{attach.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />} Attach</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                    </div>
+                </div>
+            )}
+        </>
     );
 }
