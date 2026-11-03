@@ -68,6 +68,7 @@ router.post('/integrations/mpesa/test', async (req, res) => {
 
 // Register C2B validation/confirmation URLs with Safaricom.
 router.post('/integrations/mpesa/register-urls', async (req, res) => {
+    let storeNumber = '';
     try {
         const cfg = await resolveMpesaConfig(tdb(req));
         if (!cfg.callbackBase) return res.status(400).json({ message: 'Platform callback URL (MPESA_CALLBACK_URL) is not set by the operator.' });
@@ -86,16 +87,20 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         // Register against the STORE/TILL number, not the Head Office shortcode.
         // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
         // override via the request body (storeNumber) for edge cases.
-        const storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
+        storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
         const result = await registerC2BUrls(cfg, validationUrl, confirmationUrl, 'Completed', storeNumber);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
         res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
-        // Safaricom only lets a shortcode register once. A repeat attempt returning
-        // "already registered" means C2B is set up — treat it as success, not an error.
+        // Safaricom's own "duplicate registration" response (sandbox throttling, or
+        // registering the same shortcode again) still means the shortcode has OUR
+        // URLs registered — never a reason to leave it stuck on an old target. Record
+        // the number THIS attempt targeted (which may be a new store/till the admin
+        // just changed to) so the UI reflects what was actually just registered, and
+        // let the admin register again any time — nothing here blocks a retry.
         if (/already/i.test(e.message || '') && /register/i.test(e.message || '')) {
-            await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true } }, { upsert: true }).catch(() => { });
-            return res.json({ ok: true, alreadyRegistered: true, message: 'C2B URLs are already registered for this shortcode — direct payments will be captured.' });
+            await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), ...(storeNumber ? { registeredShortCode: storeNumber } : {}) } }, { upsert: true }).catch(() => { });
+            return res.json({ ok: true, alreadyRegistered: true, registeredShortCode: storeNumber || undefined, message: `C2B URLs are registered for ${storeNumber || 'this shortcode'} — direct payments will be captured. You can register again any time, e.g. after changing the Till Number.` });
         }
         if (/failed to obtain m-pesa token/i.test(e.message || '')) {
             // getAccessToken already retried 4x with backoff — a persistent failure
