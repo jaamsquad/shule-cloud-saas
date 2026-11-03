@@ -27,7 +27,7 @@ export const INTEGRATIONS_CONFIG = [
     },
     {
         key: "daraja", name: "M-PESA (Daraja)", category: "Payments", logo: Smartphone, color: "#00A651",
-        description: "Direct Safaricom Daraja API integration for M-PESA STK Push payments.",
+        description: "Direct Safaricom Daraja API integration — register one or more Paybill/Till accounts for STK Push and C2B payments.",
         docsUrl: "https://developer.safaricom.co.ke",
         testEndpoint: "/integrations/test/mpesa",
         webhook: "mpesa/callback",
@@ -364,12 +364,19 @@ export default function IntegrationsPage() {
         queryKey: ["integration_settings"],
         queryFn: async () => { const r = await api.get("/integration_settings"); return Array.isArray(r.data) ? r.data : []; },
     });
+    // M-PESA has its own multi-account page (not the generic one-doc-per-integration
+    // config this grid otherwise uses), so its card's status comes from here instead.
+    const { data: mpesaAccounts = [] } = useQuery<any[]>({
+        queryKey: ["mpesa_accounts"],
+        queryFn: async () => (await api.get("/integrations/mpesa/accounts")).data || [],
+    });
 
     const settingsMap = useMemo(() => {
         const m: Record<string, any> = {};
         allSettings.forEach((s: any) => { if (s.integration) m[s.integration] = s; });
+        if (mpesaAccounts.length) m.daraja = { enabled: mpesaAccounts.some((a: any) => a.enabled && a.configured) };
         return m;
-    }, [allSettings]);
+    }, [allSettings, mpesaAccounts]);
 
     const filtered = useMemo(() => {
         let list = INTEGRATIONS_CONFIG;
@@ -441,7 +448,7 @@ export default function IntegrationsPage() {
                                 const isConfig  = !!saved;
                                 return (
                                     <button key={intg.key}
-                                        onClick={() => navigate(`/integrations/${intg.key}`)}
+                                        onClick={() => navigate(intg.key === "daraja" ? "/integrations/mpesa-accounts" : `/integrations/${intg.key}`)}
                                         className={`bg-white rounded-2xl border-2 p-5 text-left hover:shadow-md transition-all group relative ${isActive ? "border-indigo-200 shadow-sm" : "border-gray-100 hover:border-gray-200"}`}>
 
                                         {/* Status badge */}

@@ -4,7 +4,11 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
+import { applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, pullTransactions } from '../services/mpesa.service';
+import {
+    listAccounts as listMpesaAccounts, getAccount as getMpesaAccount, getDefaultAccount as getDefaultMpesaAccount,
+    toConfig as toMpesaConfig, accountCodes, checkStkAndComplete,
+} from '../services/mpesaAccounts.service';
 import { applyScholarshipsToInvoice } from '../services/feeAid.service';
 import { feeStructureGuard, feeStructureConflicts, conflictMessage } from '../lib/feeStructureGuard';
 import { nextInvoiceNo, getInvoiceFormat, saveInvoiceFormat, previewInvoiceNo } from '../lib/invoiceNumbering';
@@ -182,18 +186,15 @@ router.put('/settings/invoice-numbering', requireRole('ADMIN'), async (req: Requ
 router.get('/fees/till-transactions', async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(tenantDb).catch(() => null as any);
-        const settings = await tenantDb.collection('mpesa_settings').findOne({}).catch(() => null as any);
-        // Match on every shortcode this school has ever been known by: the currently
-        // configured Paybill/Till, AND whatever number C2B URLs were actually
-        // registered against (registerC2BUrls lets the operator override the store
-        // number at registration time, so it can differ from cfg.shortcode/tillNumber
-        // if settings were edited afterwards — without this, real incoming C2B
-        // payments land in mpesa_c2b_payments tagged with the registered shortcode
-        // but never show up here because the filter only looked at the current config).
-        const codes = [cfg?.shortcode, cfg?.tillNumber, settings?.registeredShortCode]
-            .map((v: any) => String(v || '').trim()).filter(Boolean);
-        const uniqueCodes = [...new Set(codes)];
+        const accounts = await listMpesaAccounts(tenantDb).catch(() => []);
+        // Match on every shortcode ANY of this school's accounts has ever been known
+        // by: each account's configured Paybill/Till, AND whatever number C2B URLs
+        // were actually registered against (registration lets the operator override
+        // the store number, so it can differ from the saved shortcode/tillNumber if
+        // settings were edited afterwards — without this, real incoming C2B payments
+        // land in mpesa_c2b_payments tagged with the registered shortcode but never
+        // show up here because the filter only looked at the current config).
+        const uniqueCodes = [...new Set(accounts.flatMap(accountCodes))];
         const { code, phone, name, from, to } = req.query as any;
         const fromD = from ? new Date(from) : null;
         const toD = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59); return d; })() : null;
@@ -288,8 +289,9 @@ router.post('/fees/till-transactions/apply', async (req: Request, res: Response)
         // ResultURL). Only attempted when reconciliation credentials exist.
         let verification: 'queued' | 'unavailable' = 'unavailable';
         try {
-            const cfg = await resolveMpesaConfig(db);
-            if (cfg.initiator && cfg.securityCredential && platformCallbackBase()) {
+            const account = await getDefaultMpesaAccount(db);
+            const cfg = account && toMpesaConfig(account);
+            if (cfg?.initiator && cfg.securityCredential && platformCallbackBase()) {
                 const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
                 await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till payment verification' });
                 verification = 'queued';
@@ -315,9 +317,10 @@ router.post('/fees/till-transactions/verify', async (req: Request, res: Response
         const already = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode }, { transactionId: mpesaCode }] });
         if (already) return res.json({ status: 'recorded', amount: already.amount, message: `Already recorded (receipt ${already.receipt_no}).` });
 
-        const cfg = await resolveMpesaConfig(db);
-        if (!cfg.initiator || !cfg.securityCredential) {
-            return res.json({ status: 'unavailable', message: 'Automatic verification needs an API Initiator + Security Credential (Settings → M-PESA → Reconciliation). You can still record the payment manually from the SMS.' });
+        const account = await getDefaultMpesaAccount(db);
+        const cfg = account && toMpesaConfig(account);
+        if (!cfg?.initiator || !cfg.securityCredential) {
+            return res.json({ status: 'unavailable', message: 'Automatic verification needs an API Initiator + Security Credential on an M-PESA account (Integrations → M-PESA → Reconciliation). You can still record the payment manually from the SMS.' });
         }
         if (!platformCallbackBase()) return res.json({ status: 'unavailable', message: 'Platform callback URL is not configured by the operator.' });
 
@@ -348,13 +351,17 @@ router.get('/fees/till-transactions/verify-status', async (req: Request, res: Re
 router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const { invoice_id, invoiceId, studentId, phone, amount } = req.body || {};
+        const { invoice_id, invoiceId, studentId, phone, amount, accountId } = req.body || {};
         const invId = invoice_id || invoiceId;
         const amt = Number(amount) || 0;
         if (!phone || amt <= 0) return res.status(400).json({ message: 'A phone number and a valid amount are required.' });
 
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not set up for this school yet (Settings → M-PESA Integration).' });
+        // When this school has more than one M-PESA account, the cashier may pick
+        // which one the prompt is for; otherwise the default account is used.
+        const account = accountId ? await getMpesaAccount(db, String(accountId)) : await getDefaultMpesaAccount(db);
+        if (!account) return res.status(400).json({ message: 'M-PESA is not set up for this school yet (Integrations → M-PESA).' });
+        const cfg = toMpesaConfig(account);
+        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: `M-PESA account "${account.name}" is missing credentials (Integrations → M-PESA).` });
         if (!cfg.callbackBase) return res.status(400).json({ message: 'M-PESA callback URL is not configured by the operator.' });
 
         // Resolve the student (for account reference + records).
@@ -373,6 +380,7 @@ router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Requ
             checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose: 'fees',
             tenantDbName: (req as any).tenantContext?.databaseName, studentId: student ? String(student._id) : undefined,
             studentName: student?.studentName, registrationNo: regNo, invoiceId: invId || null,
+            accountId: String(account._id),
             amount: amt, phone, status: 'pending', applied: false, createdAt: new Date(),
         });
         res.json({ ok: true, checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Prompt sent — ask the parent to enter their M-PESA PIN.' });
@@ -394,12 +402,15 @@ router.get('/schools/:sid/payments/stk-status', requireRole('ADMIN'), async (req
 router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
-        if (cfg.env !== 'production') return res.status(400).json({ message: 'Sync only works in Production. Switch Environment to production in M-PESA settings.' });
-        // The Pull API must be registered (separate Daraja product) before querying.
-        const setRow: any = (await db.collection('mpesa_settings').findOne({})) || {};
-        if (!setRow.pullRegistered) return res.status(400).json({ message: 'The Pull API is not registered yet. Go to Settings → M-PESA Integration → "Register Pull API" first (and ensure the Pull product is activated for your shortcode on the Daraja portal).' });
+        const accounts = (await listMpesaAccounts(db)).filter(a => a.enabled !== false);
+        if (!accounts.length) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
+        const pullReady = accounts.filter(a => a.env === 'production' && a.pullRegistered);
+        if (!pullReady.length) {
+            const anyProd = accounts.some(a => a.env === 'production');
+            return res.status(400).json({ message: anyProd
+                ? 'The Pull API is not registered on any account yet. Go to Integrations → M-PESA → an account → "Register Pull API" first (and ensure the Pull product is activated for its shortcode on the Daraja portal).'
+                : 'Sync only works in Production. Switch at least one account\'s Environment to production in Integrations → M-PESA.' });
+        }
 
         // Default to the last 7 days if no range supplied.
         const { from, to } = req.body || {};
@@ -409,99 +420,90 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
         const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
         const meta = getMetaDb();
-        let imported = 0, matched = 0;
-        // For a Till, the money lands on the till number (PartyB), not the store
-        // number — query the till first, then fall back to the store/shortcode.
-        // Also try registeredShortCode: the number C2B URLs were actually registered
-        // against can differ from the currently-saved shortcode/tillNumber if an
-        // operator used the storeNumber override at registration time or edited
-        // settings afterwards — without it, Pull queries the wrong number and
-        // always reports "no transactions" even though payments are flowing fine.
-        const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
-        const candidates = Array.from(new Set([
-            ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
-            String(cfg.shortcode).trim(),
-            ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
-            ...(setRow.registeredShortCode ? [String(setRow.registeredShortCode).trim()] : []),
-        ].filter(Boolean)));
-        const codeSet = [cfg.shortcode, cfg.tillNumber, setRow.registeredShortCode].map(v => String(v || '').trim()).filter(Boolean);
+        let imported = 0, matched = 0, totalSeen = 0;
+        const perAccount: { account: string; queriedCode: string; seen: number }[] = [];
 
-        // Try each candidate number; use the first that returns transactions.
-        let queriedCode = candidates[0];
-        let totalSeen = 0;
-        for (const sc of candidates) {
-            let offset = 0, pages = 0, seenHere = 0;
-            while (pages < 20) {
-            const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset, sc);
-            // Response[0] is the array of transaction objects.
-            const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
-            if (!batch.length) break;
-            pages++; seenHere += batch.length;
-            for (const t of batch) {
-                const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
-                if (!transId) continue;
-                const amount = Number(t.amount ?? t.transactionAmount ?? t.TransAmount) || 0;
-                const msisdn = String(t.msisdn || t.MSISDN || t.phoneNumber || '');
-                const acct = String(t.billReferenceNumber || t.BillRefNumber || t.accountReference || '');
-                const when = t.trxDate || t.transactionDate || t.TransTime;
-                const upd = await meta.collection('mpesa_c2b_payments').updateOne(
-                    { TransID: transId },
-                    { $setOnInsert: {
-                        TransID: transId, BusinessShortCode: codeSet[0] || cfg.shortcode,
-                        TransAmount: amount, MSISDN: msisdn, BillRefNumber: acct,
-                        FirstName: t.firstName || t.FirstName || '', MiddleName: '', LastName: t.lastName || t.LastName || '',
-                        receivedAt: when ? new Date(when) : new Date(), source: 'pull',
-                    } },
-                    { upsert: true },
-                );
-                if (upd.upsertedCount) {
-                    imported++;
-                    // Auto-match by account number → apply to the student's fees.
-                    if (acct) {
-                        try {
-                            const stu = await db.collection('students').findOne({ $or: [{ registrationNo: acct }, { admNo: acct }] });
-                            if (stu) {
-                                const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode: transId }, { transactionId: transId }] });
-                                if (!dup) { await applyMpesaPayment(db, { studentId: String(stu._id), studentName: stu.studentName, registrationNo: acct, amount, receipt: transId, phone: msisdn }); matched++; }
-                            }
-                        } catch { /* skip match */ }
+        // Each account may have its own shortcode/till — pull each one separately.
+        for (const account of pullReady) {
+            const cfg = toMpesaConfig(account);
+            const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
+            // For a Till, the money lands on the till number (PartyB), not the store
+            // number — query the till first, then fall back to the store/shortcode.
+            // Also try registeredShortCode: the number C2B URLs were actually registered
+            // against can differ from the currently-saved shortcode/tillNumber if an
+            // operator used the storeNumber override at registration time or edited
+            // settings afterwards — without it, Pull queries the wrong number and
+            // always reports "no transactions" even though payments are flowing fine.
+            const candidates = Array.from(new Set([
+                ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+                String(cfg.shortcode).trim(),
+                ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+                ...(account.registeredShortCode ? [String(account.registeredShortCode).trim()] : []),
+            ].filter(Boolean)));
+            const codeSet = accountCodes(account);
+
+            let queriedCode = candidates[0] || '';
+            let seenForAccount = 0;
+            for (const sc of candidates) {
+                let offset = 0, pages = 0, seenHere = 0;
+                while (pages < 20) {
+                const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset, sc);
+                // Response[0] is the array of transaction objects.
+                const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
+                if (!batch.length) break;
+                pages++; seenHere += batch.length;
+                for (const t of batch) {
+                    const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
+                    if (!transId) continue;
+                    const amount = Number(t.amount ?? t.transactionAmount ?? t.TransAmount) || 0;
+                    const msisdn = String(t.msisdn || t.MSISDN || t.phoneNumber || '');
+                    const acct = String(t.billReferenceNumber || t.BillRefNumber || t.accountReference || '');
+                    const when = t.trxDate || t.transactionDate || t.TransTime;
+                    const upd = await meta.collection('mpesa_c2b_payments').updateOne(
+                        { TransID: transId },
+                        { $setOnInsert: {
+                            TransID: transId, BusinessShortCode: codeSet[0] || cfg.shortcode,
+                            TransAmount: amount, MSISDN: msisdn, BillRefNumber: acct,
+                            FirstName: t.firstName || t.FirstName || '', MiddleName: '', LastName: t.lastName || t.LastName || '',
+                            receivedAt: when ? new Date(when) : new Date(), source: 'pull',
+                        } },
+                        { upsert: true },
+                    );
+                    if (upd.upsertedCount) {
+                        imported++;
+                        // Auto-match by account number → apply to the student's fees.
+                        if (acct) {
+                            try {
+                                const stu = await db.collection('students').findOne({ $or: [{ registrationNo: acct }, { admNo: acct }] });
+                                if (stu) {
+                                    const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode: transId }, { transactionId: transId }] });
+                                    if (!dup) { await applyMpesaPayment(db, { studentId: String(stu._id), studentName: stu.studentName, registrationNo: acct, amount, receipt: transId, phone: msisdn }); matched++; }
+                                }
+                            } catch { /* skip match */ }
+                        }
                     }
                 }
+                offset += batch.length;
+                }
+                queriedCode = sc;
+                seenForAccount += seenHere;
+                if (seenHere > 0) break;   // found data on this number; stop trying others for this account
             }
-            offset += batch.length;
-            }
-            queriedCode = sc;
-            totalSeen += seenHere;
-            if (seenHere > 0) break;   // found data on this number; stop trying others
+            totalSeen += seenForAccount;
+            perAccount.push({ account: account.name, queriedCode, seen: seenForAccount });
         }
         res.json({
-            ok: true, imported, matched, totalSeen, shortcode: queriedCode, triedCodes: candidates, from: fmt(start), to: fmt(end),
+            ok: true, imported, matched, totalSeen, accounts: perAccount, from: fmt(start), to: fmt(end),
             message: imported
                 ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.`
                 : totalSeen
                     ? `Safaricom returned ${totalSeen} transaction(s) but all were already recorded.`
-                    : `Safaricom returned no transactions for number(s) ${candidates.join(', ')} in that period. For a Till, money lands on the till number (not the store number) — make sure the Till Number is filled in M-PESA settings, and widen the date range.`,
+                    : `Safaricom returned no transactions for any account in that period. For a Till, money lands on the till number (not the store number) — make sure the Till Number is filled in for each M-PESA account, and widen the date range.`,
         });
     } catch (e: any) {
-        const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Settings → M-PESA).` : e.message;
+        const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Integrations → M-PESA).` : e.message;
         res.status(400).json({ message: msg });
     }
-});
-
-// One-time Pull API registration for the school's shortcode.
-router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (req: Request, res: Response) => {
-    try {
-        const db = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'Configure your M-PESA credentials first.' });
-        if (!platformCallbackBase()) return res.status(400).json({ message: 'Platform callback URL is not configured by the operator.' });
-        const nominated = String(req.body?.nominatedNumber || '').replace(/\D/g, '');
-        if (!/^2547\d{8}$/.test(nominated) && !/^07\d{8}$/.test(nominated)) return res.status(400).json({ message: 'Provide the nominated phone number registered on the M-PESA org portal (e.g. 0712345678).' });
-        const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
-        const result = await registerPullUrl(cfg, `${base}/pesa/pull/result`, nominated.startsWith('07') ? '254' + nominated.slice(1) : nominated);
-        await db.collection('mpesa_settings').updateOne({}, { $set: { pullRegistered: true, pullRegisteredAt: new Date(), pullNominatedNumber: nominated } }, { upsert: true });
-        res.json({ ok: true, result, message: 'Pull API registered — you can now Sync transactions from Safaricom.' });
-    } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 // ── Org context for the CURRENT school (for the in-app branch switcher) ───────
@@ -761,19 +763,19 @@ router.post('/payments/:id/reverse', requireRole('ADMIN'), async (req: Request, 
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
-// Re-link C2B inbox rows that arrived BEFORE this school's mpesa_settings had the
+// Re-link C2B inbox rows that arrived BEFORE this school's M-PESA account had the
 // right shortcode on file (e.g. registered against a store number that differed
 // from the configured Paybill/Till at the time) — they were stored with no
-// tenantDbName and so never showed up in this Inbox. Re-resolves against the
-// school's current shortcode/tillNumber/registeredShortCode and claims any match.
+// tenantDbName and so never showed up in this Inbox. Re-resolves against every
+// account's current shortcode/tillNumber/registeredShortCode and claims any match.
 router.post('/payments/inbox/reclaim-orphans', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
         const tenant = (req as any).tenantContext;
         if (!tenant?.databaseName) return res.status(400).json({ message: 'No tenant context.' });
-        const s: any = (await tenantDb.collection('mpesa_settings').findOne({})) || {};
-        const codes = [s.shortcode, s.tillNumber, s.registeredShortCode].map((v: any) => String(v || '').trim()).filter(Boolean);
-        if (!codes.length) return res.status(400).json({ message: 'No M-PESA shortcode configured for this school.' });
+        const accounts = await listMpesaAccounts(tenantDb);
+        const codes = [...new Set(accounts.flatMap(accountCodes))];
+        if (!codes.length) return res.status(400).json({ message: 'No M-PESA account configured for this school.' });
 
         const meta = getMetaDb();
         const orphans = await meta.collection('c2b_inbox').find({ tenantDbName: null, BusinessShortCode: { $in: codes } }).toArray();
