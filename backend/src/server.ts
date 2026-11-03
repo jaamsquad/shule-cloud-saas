@@ -71,14 +71,6 @@ async function bootstrap() {
         // (cbcTerm.ts), called on every request.
         const { ensureNextAcademicYearAllTenants } = require('./lib/academicYears');
         setInterval(() => { ensureNextAcademicYearAllTenants().catch(() => {}); }, 6 * 60 * 60_000);
-
-        // ── M-PESA auto-sync ──────────────────────────────────────────────────
-        // Pull recent Till/Paybill transactions from Safaricom every 5 min for
-        // every tenant with the Pull API registered, so payments appear without
-        // anyone clicking "Sync".
-        const { runScheduledPullSync } = require('./services/autoSync.service');
-        setTimeout(() => { runScheduledPullSync().catch(() => {}); }, 20_000);
-        setInterval(() => { runScheduledPullSync().catch(() => {}); }, 5 * 60_000);
     } catch (error) {
         console.error('Server bootstrap failed:', error);
         process.exit(1);

@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Wallet, Search, Smartphone, Lock, Unlock, ArrowDownLeft, ArrowUpRight, ShieldOff, ShieldCheck } from "lucide-react";
+import { Loader2, Wallet, Search, Plus, Lock, Unlock, ArrowDownLeft, ArrowUpRight, ShieldOff, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -16,10 +16,8 @@ export default function AdminWallets() {
     const [studentSearch, setStudentSearch] = useState("");
     const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
     const [amount, setAmount] = useState("");
-    const [phone, setPhone] = useState("");
+    const [reference, setReference] = useState("");
     const [limit, setLimit] = useState("");
-    const [stk, setStk] = useState<"idle" | "waiting">("idle");
-    const pollRef = useRef<any>(null);
 
     const { data: summary } = useQuery({ queryKey: ["wallets_summary"], queryFn: async () => (await api.get("/wallets/summary")).data });
     const { data: wallets = [] } = useQuery({ queryKey: ["wallets"], queryFn: async () => { const r = await api.get("/wallets"); return Array.isArray(r.data) ? r.data : []; } });
@@ -33,22 +31,11 @@ export default function AdminWallets() {
 
     const invalidate = () => { qc.invalidateQueries({ queryKey: ["wallets"] }); qc.invalidateQueries({ queryKey: ["wallets_summary"] }); qc.invalidateQueries({ queryKey: ["wallet_detail", selected?.id] }); };
 
-    // Poll for the full STK lifetime (~2.5 min); only stop on a terminal result.
-    const pollStk = (cid: string, attempt: number) => {
-        if (attempt > 50) { setStk("idle"); toast.error("No confirmation received. If paid, it will reflect shortly — no need to retry."); return; }
-        pollRef.current = setTimeout(async () => {
-            try {
-                const r = await api.get(`/wallets/mpesa-status?checkoutRequestId=${encodeURIComponent(cid)}`);
-                if (r.data?.status === "completed") { setStk("idle"); setAmount(""); setPhone(""); toast.success("Wallet topped up via M-PESA"); invalidate(); return; }
-                if (r.data?.status === "failed") { setStk("idle"); toast.error(r.data?.message || "Top-up failed or cancelled"); return; }
-            } catch { /* transient — keep polling */ }
-            pollStk(cid, attempt + 1);
-        }, 3000);
-    };
-
+    // Manual top-up — record money the student/parent paid directly (cash, bank,
+    // or an M-PESA code received outside the system).
     const topup = useMutation({
-        mutationFn: async () => (await api.post(`/wallets/student/${selected!.id}/topup`, { amount: Number(amount), phone })).data,
-        onSuccess: (d: any) => { setStk("waiting"); toast.info("M-PESA prompt sent to the phone"); pollStk(d.checkoutRequestId, 0); },
+        mutationFn: async () => (await api.post(`/wallets/student/${selected!.id}/topup`, { amount: Number(amount), reference })).data,
+        onSuccess: () => { setAmount(""); setReference(""); toast.success("Wallet topped up"); invalidate(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
     const freeze = useMutation({
@@ -151,21 +138,17 @@ export default function AdminWallets() {
                             <p className="text-xs text-slate-400 font-mono mb-1">{wallet.walletId} · {wallet.code}</p>
                             <p className="text-2xl font-black text-indigo-600 mb-4">KSh {Number(wallet.balance || 0).toLocaleString()}</p>
 
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Top up via M-PESA</label>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Top up (record a payment received)</label>
                             {!walletEnabled ? (
                                 <div className="mb-3 flex items-center gap-2 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
                                     <ShieldOff className="w-4 h-4" /> Top-ups are disabled school-wide.
-                                </div>
-                            ) : stk === "waiting" ? (
-                                <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                    <Loader2 className="w-4 h-4 animate-spin" /> Awaiting M-PESA confirmation on the phone…
                                 </div>
                             ) : (
                                 <>
                                     <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (KSh)" className="w-full h-9 px-3 border border-slate-200 rounded-lg text-sm mb-2" />
                                     <div className="flex gap-2 mb-3">
-                                        <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="M-PESA phone e.g. 0712…" className="flex-1 h-9 px-3 border border-slate-200 rounded-lg text-sm" />
-                                        <button onClick={() => topup.mutate()} disabled={topup.isPending || !amount || !phone} className="h-9 px-3 bg-green-500 text-white text-xs font-bold rounded-lg inline-flex items-center gap-1 disabled:opacity-50"><Smartphone className="w-3.5 h-3.5" /> Prompt</button>
+                                        <input value={reference} onChange={e => setReference(e.target.value)} placeholder="Reference (optional)" className="flex-1 h-9 px-3 border border-slate-200 rounded-lg text-sm" />
+                                        <button onClick={() => topup.mutate()} disabled={topup.isPending || !amount} className="h-9 px-3 bg-green-500 text-white text-xs font-bold rounded-lg inline-flex items-center gap-1 disabled:opacity-50">{topup.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Credit</button>
                                     </div>
                                 </>
                             )}

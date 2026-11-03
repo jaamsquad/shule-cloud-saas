@@ -608,11 +608,10 @@ export default function Settings() {
 
                                 {/* ──────────── 11. CONNECTIONS (INTEGRATIONS) ──────────── */}
                                 <TabsContent value="integrations" className="m-0 space-y-6">
-                                    <Header title="Connections" desc="Link M-PESA, printers, and other tools." />
+                                    <Header title="Connections" desc="Link printers and other tools." />
                                     <Card className="border-0 shadow-soft bg-background/60 backdrop-blur-xl">
                                         <CardContent className="p-8 space-y-8">
                                             {[
-                                                { name: "M-PESA", desc: "Receive fee payments through M-PESA", icon: Wallet, color: "emerald", connected: !!integrations.mpesaConfig?.shortCode },
                                                 { name: "eTIMS (KRA)", desc: "Tax invoice integration with KRA", icon: FileEdit, color: "blue", connected: false },
                                                 { name: "Printer", desc: "Connect your receipt printer", icon: Database, color: "amber", connected: false },
                                                 { name: "Webhooks", desc: "Send event data to other systems", icon: Wifi, color: "violet", connected: false },

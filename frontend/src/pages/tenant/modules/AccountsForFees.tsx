@@ -2,9 +2,9 @@ import { useState, useRef, useCallback } from "react";
 import {
     Home, Plus, Trash2, Edit3, Loader2, AlertCircle,
     CheckCircle2, X, Save, Eye, EyeOff, Upload,
-    Building2, Smartphone, CreditCard, Zap, ToggleLeft, ToggleRight,
+    Building2, CreditCard, Zap, ToggleLeft, ToggleRight,
     Copy, Check, ShieldCheck, Globe, Lock,
-    FlaskConical, Rocket, AlertTriangle
+    FlaskConical
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -61,18 +61,6 @@ interface PayheroConfig {
     isEnabled: boolean;
 }
 
-interface DarajaConfig {
-    consumerKey: string;
-    consumerSecret: string;
-    shortcode: string;
-    passkey: string;
-    callbackUrl: string;
-    accountReference: string;
-    transactionDesc: string;
-    environment: "sandbox" | "production";
-    isEnabled: boolean;
-}
-
 interface StripeConfig {
     publishableKey: string;
     secretKey: string;
@@ -82,7 +70,7 @@ interface StripeConfig {
     isEnabled: boolean;
 }
 
-type GatewayTab = "bank" | "payhero" | "daraja" | "stripe";
+type GatewayTab = "bank" | "payhero" | "stripe";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GATEWAYS: {
@@ -91,7 +79,6 @@ const GATEWAYS: {
 }[] = [
         { id: "bank", label: "Bank Accounts", icon: <Building2 className="w-5 h-5" />, color: "#5C67F2", bg: "#eef0fe", desc: "Manual bank transfers" },
         { id: "payhero", label: "PayHero", icon: <Zap className="w-5 h-5" />, color: "#f59e0b", bg: "#fef3c7", desc: "Mobile money & cards", badge: "KE" },
-        { id: "daraja", label: "M-Pesa Daraja", icon: <Smartphone className="w-5 h-5" />, color: "#10b981", bg: "#d1fae5", desc: "STK Push payments", badge: "KE" },
         { id: "stripe", label: "Stripe", icon: <CreditCard className="w-5 h-5" />, color: "#6366f1", bg: "#ede9fe", desc: "International cards", badge: "INTL" },
     ];
 
@@ -153,13 +140,6 @@ export default function AccountsForFeesInvoice() {
         isEnabled: false,
     });
 
-    // ── Daraja state ──────────────────────────────────────────────────────────
-    const [darajaForm, setDarajaForm] = useState<DarajaConfig>({
-        consumerKey: "", consumerSecret: "", shortcode: "", passkey: "",
-        callbackUrl: "", accountReference: "", transactionDesc: "Fee Payment",
-        environment: "sandbox", isEnabled: false,
-    });
-
     // ── Stripe state ──────────────────────────────────────────────────────────
     const [stripeForm, setStripeForm] = useState<StripeConfig>({
         publishableKey: "", secretKey: "", webhookSecret: "",
@@ -180,15 +160,6 @@ export default function AccountsForFeesInvoice() {
         queryFn: async () => {
             const r = await api.get("/settings/gateways/payhero");
             if (r.data) setPayheroForm(p => ({ ...p, ...r.data }));
-            return r.data;
-        },
-    });
-
-    useQuery<DarajaConfig>({
-        queryKey: ["gateway_daraja"],
-        queryFn: async () => {
-            const r = await api.get("/settings/gateways/daraja");
-            if (r.data) setDarajaForm(p => ({ ...p, ...r.data }));
             return r.data;
         },
     });
@@ -279,18 +250,6 @@ export default function AccountsForFeesInvoice() {
         if (!payheroForm.username.trim()) { setGatewayError("Username is required."); return; }
         if (!payheroForm.password.trim()) { setGatewayError("Password is required."); return; }
         saveGateway.mutate({ type: "payhero", data: payheroForm });
-    };
-
-    const handleSaveDaraja = () => {
-        setGatewayError("");
-        const required: (keyof DarajaConfig)[] = ["consumerKey", "consumerSecret", "shortcode", "passkey", "callbackUrl", "accountReference"];
-        for (const f of required) {
-            if (!String(darajaForm[f]).trim()) {
-                setGatewayError(`${f.replace(/([A-Z])/g, ' $1')} is required.`);
-                return;
-            }
-        }
-        saveGateway.mutate({ type: "daraja", data: darajaForm });
     };
 
     const handleSaveStripe = () => {
@@ -727,154 +686,6 @@ export default function AccountsForFeesInvoice() {
                                 />
 
                                 <GatewaySaveBar onSave={handleSavePayhero} />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ════════════════════════════════════════════════
-                    M-PESA DARAJA
-                ════════════════════════════════════════════════ */}
-                {activeGateway === "daraja" && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-
-                            {/* Header */}
-                            <div className="px-8 py-5 border-b border-gray-50 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
-                                    <Smartphone className="w-6 h-6 text-emerald-500" />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-sm font-black text-slate-800">M-Pesa Daraja (STK Push)</h3>
-                                        <StatusBadge enabled={darajaForm.isEnabled} />
-                                    </div>
-                                    <p className="text-xs text-slate-400 font-medium mt-0.5">
-                                        Safaricom STK Push — parents pay directly from their M-Pesa.
-                                    </p>
-                                </div>
-                                <a href="https://developer.safaricom.co.ke" target="_blank" rel="noreferrer"
-                                    className="text-[10px] font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider">
-                                    Daraja Portal ↗
-                                </a>
-                            </div>
-
-                            <div className="px-8 py-6 space-y-5">
-
-                                <Toggle
-                                    label="Enable M-Pesa STK Push"
-                                    desc="Send automatic payment prompts to parents' M-Pesa phones"
-                                    value={darajaForm.isEnabled}
-                                    onChange={v => setDarajaForm(f => ({ ...f, isEnabled: v }))}
-                                />
-
-                                {/* Environment switcher */}
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Environment</label>
-                                    <div className="flex gap-3">
-                                        {(["sandbox", "production"] as const).map(env => (
-                                            <button
-                                                key={env}
-                                                onClick={() => setDarajaForm(f => ({ ...f, environment: env }))}
-                                                className={`flex-1 h-12 rounded-xl border-2 text-xs font-black uppercase tracking-widest transition-all ${darajaForm.environment === env
-                                                    ? env === "production"
-                                                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                                                        : "border-amber-300 bg-amber-50 text-amber-700"
-                                                    : "border-gray-100 text-slate-300 hover:border-gray-200"
-                                                    }`}
-                                            >
-                                                {env === "sandbox"
-                                                    ? <span className="inline-flex items-center justify-center gap-1.5"><FlaskConical className="w-4 h-4" />Sandbox — Testing</span>
-                                                    : <span className="inline-flex items-center justify-center gap-1.5"><Rocket className="w-4 h-4" />Production — Live</span>}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {darajaForm.environment === "sandbox" && (
-                                        <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                                            <p className="text-[11px] text-amber-600 font-bold">
-                                                <AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Sandbox mode is active — no real money moves. Use test credentials from the Daraja portal. Switch to Production when you go live.
-                                            </p>
-                                        </div>
-                                    )}
-                                    {darajaForm.environment === "production" && (
-                                        <div className="mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                                            <p className="text-[11px] text-emerald-700 font-bold">
-                                                <Rocket className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Production mode — real transactions will be processed. Ensure your credentials are correct.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Setup guide */}
-                                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
-                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-wider mb-2">Setup Steps</p>
-                                    <ol className="text-[11px] text-emerald-700 font-medium space-y-1 list-decimal list-inside">
-                                        <li>Create an app at <strong>developer.safaricom.co.ke</strong></li>
-                                        <li>Enable <strong>Lipa Na M-Pesa Online</strong> on the app</li>
-                                        <li>Copy the Consumer Key and Secret from the app credentials tab</li>
-                                        <li>Get your Passkey from the <strong>Lipa na M-Pesa</strong> section</li>
-                                        <li>Register your callback URL via the Daraja API or portal</li>
-                                    </ol>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-5">
-                                    <Field
-                                        label="Consumer Key" required secret secretKey="drj_ck" mono
-                                        value={darajaForm.consumerKey}
-                                        onChange={v => setDarajaForm(f => ({ ...f, consumerKey: v }))}
-                                        placeholder="App consumer key from Daraja"
-                                        hint="App credentials tab on Daraja portal"
-                                    />
-                                    <Field
-                                        label="Consumer Secret" required secret secretKey="drj_cs" mono
-                                        value={darajaForm.consumerSecret}
-                                        onChange={v => setDarajaForm(f => ({ ...f, consumerSecret: v }))}
-                                        placeholder="App consumer secret from Daraja"
-                                        hint="App credentials tab on Daraja portal"
-                                    />
-                                    <Field
-                                        label="Shortcode (Paybill / Till)" required
-                                        value={darajaForm.shortcode}
-                                        onChange={v => setDarajaForm(f => ({ ...f, shortcode: v }))}
-                                        placeholder="e.g. 174379"
-                                        hint="Your M-Pesa paybill or till number"
-                                    />
-                                    <Field
-                                        label="Lipa Na M-Pesa Passkey" required secret secretKey="drj_pk" mono
-                                        value={darajaForm.passkey}
-                                        onChange={v => setDarajaForm(f => ({ ...f, passkey: v }))}
-                                        placeholder="bfb279f9aa9bdbcf158a9564dd…"
-                                        hint="Daraja portal → your app → Lipa Na M-Pesa"
-                                    />
-                                    <Field
-                                        label="Account Reference" required
-                                        value={darajaForm.accountReference}
-                                        onChange={v => setDarajaForm(f => ({ ...f, accountReference: v }))}
-                                        placeholder="e.g. SchoolFees"
-                                        hint="Appears on parent's M-Pesa confirmation SMS"
-                                    />
-                                    <Field
-                                        label="Transaction Description"
-                                        value={darajaForm.transactionDesc}
-                                        onChange={v => setDarajaForm(f => ({ ...f, transactionDesc: v }))}
-                                        placeholder="e.g. Fee Payment"
-                                        hint="Short description sent with the STK push"
-                                    />
-                                    <Field
-                                        label="Callback URL" required colSpan={2}
-                                        value={darajaForm.callbackUrl}
-                                        onChange={v => setDarajaForm(f => ({ ...f, callbackUrl: v }))}
-                                        placeholder="https://yourschool.shulecloud.com/webhooks/mpesa"
-                                        hint="Safaricom POSTs STK push results here — must be HTTPS and publicly accessible"
-                                    />
-                                </div>
-
-                                <WebhookBox
-                                    url="https://yourschool.shulecloud.com/webhooks/mpesa"
-                                    events={["ResultCode: 0 (success)", "ResultCode: 1 (failed)", "ResultCode: 1032 (cancelled)"]}
-                                />
-
-                                <GatewaySaveBar onSave={handleSaveDaraja} />
                             </div>
                         </div>
                     </div>

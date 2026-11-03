@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import {
-    ensureWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits,
+    ensureWallet, debitWallet, creditWallet, getTransactions, setWalletStatus, setWalletLimits,
     getWalletSettings, saveWalletSettings,
 } from '../services/wallet.service';
-import { initiateStkTopup, checkStkAndComplete } from '../services/mpesaAccounts.service';
 
 const router = Router();
 const db = (req: any) => req.tenantDb || getMetaDb();
@@ -56,26 +55,16 @@ router.get('/wallets/student/:studentId/transactions', async (req, res) => {
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Top-up is M-PESA only — initiates an STK push; the wallet is credited on confirmation.
+// Manual top-up — staff record money the student/parent paid them directly
+// (cash, bank, or an M-PESA code they received outside the system).
 router.post('/wallets/student/:studentId/topup', async (req, res) => {
     try {
-        const { amount, phone } = req.body || {};
-        if (!phone || !amount || Number(amount) <= 0) return res.status(400).json({ message: 'An M-PESA phone number and a valid amount are required' });
+        const { amount, reference, description } = req.body || {};
+        if (!amount || Number(amount) <= 0) return res.status(400).json({ message: 'A valid amount is required' });
         if (!(await getWalletSettings(db(req))).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
-        const wallet = await ensureWallet(db(req), req.params.studentId);
-        const r = await initiateStkTopup(db(req), {
-            tenantDbName: (req as any).tenantContext?.databaseName,
-            studentId: req.params.studentId, phone, amount: Number(amount),
-            purpose: 'wallet', accountRef: wallet.code, studentName: wallet.studentName,
-        });
-        res.json(r);
+        const w = await creditWallet(db(req), req.params.studentId, Number(amount), { source: 'Manual', reference, description: description || 'Manual top-up', by: (req as any).user?.name || 'admin' });
+        res.json(w);
     } catch (e: any) { res.status(400).json({ message: e.message }); }
-});
-
-// Poll the status of an admin-initiated wallet top-up.
-router.get('/wallets/mpesa-status', async (req, res) => {
-    try { res.json(await checkStkAndComplete(db(req), String(req.query.checkoutRequestId || ''))); }
-    catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 router.post('/wallets/student/:studentId/deduct', async (req, res) => {

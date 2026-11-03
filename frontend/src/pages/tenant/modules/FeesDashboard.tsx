@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Home, Loader2, Clock, CreditCard, Wallet, Landmark, Printer, RefreshCw, Send, Search, CheckCircle2, XCircle, TrendingUp, Layers, Users, Banknote } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Home, Loader2, Clock, Wallet, Landmark, Printer, RefreshCw, Send, Search, TrendingUp, Layers, Users, Banknote } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -13,7 +13,7 @@ const money = (n: number) => `KSh ${Number(n || 0).toLocaleString("en-KE", { max
 const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 const when = (v: any) => { const d = new Date(v); return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); };
 const shortDay = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-const TABS = [{ k: "overdue", l: "Late Payment" }, { k: "records", l: "Student Fee Records" }, { k: "processing", l: "Payment in Process" }, { k: "edited", l: "Edited Fee Records" }] as const;
+const TABS = [{ k: "overdue", l: "Late Payment" }, { k: "records", l: "Student Fee Records" }, { k: "edited", l: "Edited Fee Records" }] as const;
 
 function StatCard({ icon: Icon, title, big, rows, color }: { icon: any; title: string; big: string; rows: [string, string][]; color: string }) {
     return (
@@ -54,9 +54,8 @@ export default function FeesDashboard() {
         >
             <div className="w-full space-y-5">
                 {/* top cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     <StatCard icon={Clock} color="#e11d48" title="Late Collection" big={money(c.overdue.amount)} rows={[["Late invoices", String(c.overdue.invoices)], ["Students", String(c.overdue.students)]]} />
-                    <StatCard icon={CreditCard} color="#0ea5e9" title="Online Payment (30 days)" big={money(c.online.amount)} rows={[["Online transactions", String(c.online.count)], ["Waiting / failed", `${c.online.pending} / ${c.online.failed}`], ["Total school students", String(c.online.totalStudents)]]} />
                     <StatCard icon={Wallet} color="#8b5cf6" title="Deposit Collection" big={money(c.deposit.held)} rows={[["Held in student wallets", money(c.deposit.held)], ["Students with a balance", String(c.deposit.students)]]} />
                     <StatCard icon={Landmark} color="#16a34a" title="School Collection" big={money(c.school.paid)} rows={[["Total invoiced", money(c.school.invoiced)], ["Outstanding", money(c.school.balance)], ["Students owing", String(c.school.studentsOwing)]]} />
                 </div>
@@ -116,7 +115,7 @@ export default function FeesDashboard() {
                     <div className="text-sm font-black text-slate-700 mb-2">Payment Quick View</div>
                     <div className="flex flex-wrap border-b border-slate-200">{TABS.map(t => <button key={t.k} onClick={() => setTab(t.k)} className={`px-5 py-3 text-sm font-bold -mb-px border-b-2 ${tab === t.k ? "border-[#5C67F2] text-[#5C67F2] bg-white rounded-t-lg" : "border-transparent text-slate-400 hover:text-slate-600"}`}>{t.l}</button>)}</div>
                     <div className="bg-white rounded-b-2xl rounded-tr-2xl border border-t-0 border-slate-100 shadow-sm p-4">
-                        {tab === "overdue" && <Overdue />}{tab === "records" && <Records />}{tab === "processing" && <Processing />}{tab === "edited" && <Edited />}
+                        {tab === "overdue" && <Overdue />}{tab === "records" && <Records />}{tab === "edited" && <Edited />}
                     </div>
                 </div>
             </div>
@@ -168,30 +167,6 @@ function Records() {
             </Toolbar>
             <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><Th>#</Th><Th>Student</Th><Th>Class</Th><Th right>Billed</Th><Th right>Paid</Th><Th right>Balance</Th><Th></Th></tr></thead>
                 <tbody>{data.length === 0 ? <Empty cols={7} loading={isLoading} text="No fee records found." /> : data.map((r, i) => <tr key={r.studentId} className="border-t border-slate-50"><td className="px-3 py-2 text-slate-400">{i + 1}</td><td className="px-3"><div className="font-bold text-slate-700">{r.studentName}</div><div className="text-[11px] text-slate-400">{r.registrationNo}</div></td><td className="px-3 text-slate-500">{r.className || "—"}</td><td className="px-3 text-right text-slate-500">{money(r.billed)}</td><td className="px-3 text-right text-emerald-700">{money(r.paid)}</td><td className={`px-3 text-right font-black ${r.balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>{r.balance > 0 ? money(r.balance) : "Cleared"}</td><td className="px-3 text-right"><Link to={`/fees/ledger?student=${r.studentId}`} className="text-xs font-bold text-[#5C67F2]">Ledger</Link></td></tr>)}</tbody></table></div>
-        </>
-    );
-}
-
-function Processing() {
-    const qc = useQueryClient(); const [days, setDays] = useState(3); const [q, setQ] = useState(""); const [checking, setChecking] = useState(false);
-    const { data = [], isLoading, refetch } = useQuery<any[]>({ queryKey: ["fees_processing", days], queryFn: async () => (await api.get("/fees/overview/processing", { params: { days } })).data });
-    const rows = data.filter(r => !q || `${r.studentName} ${r.registrationNo} ${r.phone} ${r.receipt}`.toLowerCase().includes(q.toLowerCase()));
-    const pending = data.filter(r => r.status === "pending");
-    const check = async () => {
-        if (!pending.length) { toast.info("Nothing is waiting."); return; } setChecking(true);
-        try { let done = 0; for (const p of pending) { const r = (await api.get("/schools/default/payments/stk-status", { params: { checkoutRequestId: p.checkoutRequestId } })).data; if (r.status === "completed") done++; } toast.success(done ? `${done} payment${done === 1 ? "" : "s"} confirmed and posted` : "Still waiting for the parents to confirm."); await refetch(); qc.invalidateQueries({ queryKey: ["fees_overview"] }); }
-        catch (e: any) { toast.error(e.response?.data?.message || "Could not check the status"); } finally { setChecking(false); }
-    };
-    const badge = (s: string) => s === "completed" ? "bg-emerald-100 text-emerald-700" : s === "failed" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700";
-    return (
-        <>
-            <Toolbar q={q} setQ={setQ}>
-                <select value={days} onChange={e => setDays(Number(e.target.value))} className="h-9 px-3 border border-slate-200 rounded-lg text-sm bg-white"><option value={1}>Last day</option><option value={3}>Last 3 days</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option></select>
-                <button onClick={() => refetch()} className="h-9 px-3 rounded-lg bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Refresh list</button>
-                <button onClick={check} disabled={checking || !pending.length} className="h-9 px-3 rounded-lg bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50">{checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Check status{pending.length ? ` (${pending.length})` : ""}</button>
-            </Toolbar>
-            <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><Th>#</Th><Th>Student</Th><Th>Purpose</Th><Th right>Amount</Th><Th>Phone</Th><Th>Started</Th><Th>Status</Th></tr></thead>
-                <tbody>{rows.length === 0 ? <Empty cols={7} loading={isLoading} text="No M-PESA payments in this period." /> : rows.map((r, i) => <tr key={r.checkoutRequestId} className="border-t border-slate-50"><td className="px-3 py-2 text-slate-400">{i + 1}</td><td className="px-3"><div className="font-bold text-slate-700">{r.studentName || "—"}</div><div className="text-[11px] text-slate-400">{r.registrationNo}</div></td><td className="px-3 text-slate-500 capitalize">{r.purpose}</td><td className="px-3 text-right font-bold">{money(r.amount)}</td><td className="px-3 text-slate-500">{r.phone}</td><td className="px-3 text-slate-500 whitespace-nowrap">{when(r.createdAt)}</td><td className="px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${badge(r.status)}`}>{r.status}</span>{r.receipt && <div className="text-[10px] text-slate-400 mt-0.5">{r.receipt}</div>}{r.status === "failed" && r.message && <div className="text-[10px] text-rose-400 mt-0.5 max-w-[180px]">{r.message}</div>}</td></tr>)}</tbody></table></div>
         </>
     );
 }

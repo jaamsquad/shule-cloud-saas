@@ -45,7 +45,6 @@ const ACTION_ROUTE: Record<string, string> = {
     viewPayments: "/fees/collect",
     viewDiscipline: "/students/discipline",
     viewAdmissions: "/students/admissions",
-    allocateMpesa: "/fees/payment-inbox",
     viewOverdue: "/library",
 };
 

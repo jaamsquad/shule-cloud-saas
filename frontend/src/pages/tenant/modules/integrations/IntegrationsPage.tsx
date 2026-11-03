@@ -26,30 +26,6 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "daraja", name: "M-PESA (Daraja)", category: "Payments", logo: Smartphone, color: "#00A651",
-        description: "Direct Safaricom Daraja API integration — register one or more Paybill/Till accounts for STK Push and C2B payments.",
-        docsUrl: "https://developer.safaricom.co.ke",
-        testEndpoint: "/integrations/test/mpesa",
-        webhook: "mpesa/callback",
-        guide: [
-            "Register at developer.safaricom.co.ke",
-            "Create an app and select Lipa Na M-Pesa Online (STK Push)",
-            "Get the Consumer Key and Consumer Secret from your app",
-            "Copy the Passkey for your shortcode from the Safaricom business portal",
-            "Choose Transaction Type: Paybill, or Till (Buy Goods)",
-            "For a Till: Business Shortcode = your Head Office/Store number, and set the Till Number",
-        ],
-        fields: [
-            { label: "Consumer Key",       field: "consumerKey",    masked: true,  hint: "From Safaricom Developer Portal" },
-            { label: "Consumer Secret",    field: "consumerSecret", masked: true,  hint: "From Safaricom Developer Portal" },
-            { label: "Transaction Type",   field: "txType",         type: "select", options: ["CustomerPayBillOnline", "CustomerBuyGoodsOnline"], hint: "Paybill or Till (Buy Goods)" },
-            { label: "Business Shortcode", field: "shortCode",      masked: false, placeholder: "174379", hint: "Paybill number — or, for a Till, your Head Office/Store number" },
-            { label: "Till Number",        field: "tillNumber",     masked: false, placeholder: "e.g. 5678901", hint: "Till/Buy Goods only — the till customers pay to. Leave blank for Paybill." },
-            { label: "Passkey",            field: "passkey",        masked: true,  hint: "From Safaricom business portal — must match this shortcode" },
-            { label: "Environment",        field: "environment",    type: "select", options: ["sandbox", "production"] },
-        ],
-    },
-    {
         key: "stripe", name: "Stripe", category: "Payments", logo: CreditCard, color: "#635BFF",
         description: "Accept international card payments — Visa, Mastercard, and more.",
         docsUrl: "https://stripe.com/docs",
@@ -323,7 +299,6 @@ const CATEGORIES = ["All", ...Array.from(new Set(INTEGRATIONS_CONFIG.map(i => i.
 // Maps our integration key → [simpleicons slug, brand hex]. Missing keys fall
 // back to the lucide icon defined in the config.
 export const BRAND_SLUG: Record<string, [string, string]> = {
-    daraja: ["safaricom", "1AB248"],
     stripe: ["stripe", "635BFF"],
     flutterwave: ["flutterwave", "FF9B00"],
     google_classroom: ["googleclassroom", "0F9D58"],
@@ -364,19 +339,11 @@ export default function IntegrationsPage() {
         queryKey: ["integration_settings"],
         queryFn: async () => { const r = await api.get("/integration_settings"); return Array.isArray(r.data) ? r.data : []; },
     });
-    // M-PESA has its own multi-account page (not the generic one-doc-per-integration
-    // config this grid otherwise uses), so its card's status comes from here instead.
-    const { data: mpesaAccounts = [] } = useQuery<any[]>({
-        queryKey: ["mpesa_accounts"],
-        queryFn: async () => (await api.get("/integrations/mpesa/accounts")).data || [],
-    });
-
     const settingsMap = useMemo(() => {
         const m: Record<string, any> = {};
         allSettings.forEach((s: any) => { if (s.integration) m[s.integration] = s; });
-        if (mpesaAccounts.length) m.daraja = { enabled: mpesaAccounts.some((a: any) => a.enabled && a.configured) };
         return m;
-    }, [allSettings, mpesaAccounts]);
+    }, [allSettings]);
 
     const filtered = useMemo(() => {
         let list = INTEGRATIONS_CONFIG;
@@ -448,7 +415,7 @@ export default function IntegrationsPage() {
                                 const isConfig  = !!saved;
                                 return (
                                     <button key={intg.key}
-                                        onClick={() => navigate(intg.key === "daraja" ? "/integrations/mpesa-accounts" : `/integrations/${intg.key}`)}
+                                        onClick={() => navigate(`/integrations/${intg.key}`)}
                                         className={`bg-white rounded-2xl border-2 p-5 text-left hover:shadow-md transition-all group relative ${isActive ? "border-indigo-200 shadow-sm" : "border-gray-100 hover:border-gray-200"}`}>
 
                                         {/* Status badge */}

@@ -1279,10 +1279,6 @@ router.get('/settings/gateways/:type', async (req, res) => {
         const config = { ...gateway.config };
         if (type === 'payhero' && config.apiKey) {
             config.apiKey = maskKey(decrypt(config.apiKey));
-        } else if (type === 'daraja') {
-            if (config.consumerKey) config.consumerKey = maskKey(decrypt(config.consumerKey));
-            if (config.consumerSecret) config.consumerSecret = maskKey(decrypt(config.consumerSecret));
-            if (config.passkey) config.passkey = maskKey(decrypt(config.passkey));
         } else if (type === 'stripe') {
             if (config.secretKey) config.secretKey = maskKey(decrypt(config.secretKey));
             if (config.webhookSecret) config.webhookSecret = maskKey(decrypt(config.webhookSecret));
@@ -1307,7 +1303,6 @@ router.post('/settings/gateways/:type', async (req, res) => {
             }
         };
         if (type === 'payhero') { encryptField('apiKey'); }
-        else if (type === 'daraja') { encryptField('consumerKey'); encryptField('consumerSecret'); encryptField('passkey'); }
         else if (type === 'stripe') { encryptField('secretKey'); encryptField('webhookSecret'); }
 
         await db.collection('gateways').updateOne(

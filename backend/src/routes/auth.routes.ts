@@ -5,7 +5,6 @@ import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits, getWalletSettings } from '../services/wallet.service';
 import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, platformCallbackBaseV1 } from '../services/mpesa.service';
-import { checkStkAndComplete, getAccount as getMpesaAccount, getDefaultAccount as getDefaultMpesaAccount, toConfig as toMpesaConfig } from '../services/mpesaAccounts.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
@@ -1704,47 +1703,9 @@ router.get('/student-portal/fee-structure', authed(async (req, res, db, decoded)
     res.json({ term, items });
 }));
 
-// ─── Shared M-PESA STK helpers (student & parent) ─────────────────────────────
-const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 'wallet' = 'fees') => {
-    const { phone, amount, invoiceId, accountId } = req.body || {};
-    if (!phone || !amount || Number(amount) <= 0) throw new Error('Phone number and a valid amount are required');
-    const account = accountId ? await getMpesaAccount(db, String(accountId)) : await getDefaultMpesaAccount(db);
-    if (!account) throw new Error('M-PESA payment is not set up for your school yet.');
-    const cfg = toMpesaConfig(account);
-    if (!isMpesaConfigured(cfg)) throw new Error('M-PESA payment is not set up for your school yet.');
-    if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured. Contact the school administrator.');
-
-    const student = isObjId(sid) ? await db.collection('students').findOne({ _id: new ObjectId(sid) }) : null;
-    const regNo = student?.registrationNo || student?.admNo || 'Fees';
-    const r = await stkPush(cfg, {
-        phone, amount: Number(amount),
-        accountRef: regNo,            // M-PESA account number = student reg number
-        description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
-        callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
-    });
-    await getMetaDb().collection('mpesa_transactions').insertOne({
-        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
-        tenantDbName: (req as any).tenantContext?.databaseName, studentId: sid, studentName: student?.studentName,
-        registrationNo: regNo, invoiceId: purpose === 'wallet' ? null : (invoiceId || null), amount: Number(amount), phone,
-        accountId: String(account._id),
-        status: 'pending', applied: false, createdAt: new Date(),
-    });
-    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on your phone to complete.' };
-};
-
-const checkStkStatus = (req: Request, db: Db) => checkStkAndComplete(db, String(req.query.checkoutRequestId || ''));
-
 // ─── Student Portal: fee account + pay ────────────────────────────────────────
 router.get('/student-portal/fees', authed(async (req, res, db, decoded) => {
     res.json(await buildFeesSummary(db, decoded.studentId));
-}));
-
-router.post('/student-portal/pay-mpesa', authed(async (req, res, db, decoded) => {
-    res.json(await initiateStk(req, db, decoded.studentId));
-}));
-
-router.get('/student-portal/mpesa-status', authed(async (req, res, db) => {
-    res.json(await checkStkStatus(req, db));
 }));
 
 // ─── Student Portal: wallet ───────────────────────────────────────────────────
@@ -1753,12 +1714,6 @@ router.get('/student-portal/wallet', authed(async (req, res, db, decoded) => {
     const transactions = await getTransactions(db, wallet.walletId);
     const settings = await getWalletSettings(db);
     res.json({ wallet, transactions, walletEnabled: settings.enabled });
-}));
-
-// Wallet top-up via M-PESA STK Push (credited on confirmation).
-router.post('/student-portal/wallet/topup', authed(async (req, res, db, decoded) => {
-    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
-    res.json(await initiateStk(req, db, decoded.studentId, 'wallet'));
 }));
 
 router.post('/student-portal/wallet/pay-fees', authed(async (req, res, db, decoded) => {
@@ -2722,25 +2677,12 @@ router.get('/parent-portal/fees', authed(async (req, res, db, decoded) => {
     res.json(await buildFeesSummary(db, parentStudentId(req, decoded)));
 }));
 
-router.post('/parent-portal/pay-mpesa', authed(async (req, res, db, decoded) => {
-    res.json(await initiateStk(req, db, parentStudentId(req, decoded)));
-}));
-
-router.get('/parent-portal/mpesa-status', authed(async (req, res, db) => {
-    res.json(await checkStkStatus(req, db));
-}));
-
 // ─── Parent Portal: wallet (for the selected child) ──────────────────────────
 router.get('/parent-portal/wallet', authed(async (req, res, db, decoded) => {
     const wallet = await ensureWallet(db, parentStudentId(req, decoded));
     const transactions = await getTransactions(db, wallet.walletId);
     const settings = await getWalletSettings(db);
     res.json({ wallet, transactions, walletEnabled: settings.enabled });
-}));
-
-router.post('/parent-portal/wallet/topup', authed(async (req, res, db, decoded) => {
-    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
-    res.json(await initiateStk(req, db, parentStudentId(req, decoded), 'wallet'));
 }));
 
 router.post('/parent-portal/wallet/status', authed(async (req, res, db, decoded) => {

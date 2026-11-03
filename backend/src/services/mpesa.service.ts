@@ -1,12 +1,12 @@
 import { Db, ObjectId } from 'mongodb';
 
 // ─── Safaricom Daraja (M-PESA) integration ──────────────────────────────────────
-// Pure Daraja API client functions (stkPush, registerC2BUrls, pullTransactions…)
-// — config-agnostic, taking a built MpesaConfig. Tenant/school M-PESA accounts
-// live in mpesaAccounts.service.ts (mpesa_accounts, supports multiple accounts
-// per school); resolveMpesaConfig below is the PLATFORM's own M-PESA (ShuleCloud's
-// own Paybill, used to collect subscription payments and SMS-wallet purchases),
-// stored as a singleton in the meta DB — not touched by the multi-account change.
+// School-side M-PESA (fee collection, wallet top-ups, Till/Paybill C2B capture)
+// has been removed entirely. What remains is strictly the PLATFORM's own M-PESA
+// — ShuleCloud's own Paybill, used to collect subscription payments from schools
+// and SMS-wallet purchases (resolveMpesaConfig below reads it as a singleton
+// from the meta DB — see owner.controller.ts, business.routes.ts,
+// smsWallet.routes.ts for where it's configured/used).
 
 export interface MpesaConfig {
     env: 'sandbox' | 'production';
@@ -21,11 +21,6 @@ export interface MpesaConfig {
     securityCredential?: string;    // pre-encrypted (school generates from cert)
     callbackBase: string;           // platform-level
     enabled?: boolean;
-    // Safaricom sometimes issues a SEPARATE Daraja app (its own Consumer Key/Secret)
-    // just for the C2B product, distinct from the one approved for STK Push. When
-    // set, C2B operations (registering URLs) sign with these instead of key/secret.
-    c2bKey?: string;
-    c2bSecret?: string;
 }
 
 const baseFor = (env: string) => env === 'production' ? 'https://api.safaricom.co.ke' : 'https://sandbox.safaricom.co.ke';
@@ -74,8 +69,6 @@ export const resolveMpesaConfig = async (db: Db): Promise<MpesaConfig> => {
         securityCredential: trim(s.securityCredential || ig.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL),
         callbackBase: platformCallbackBase(),
         enabled: s.enabled !== false && ig.enabled !== false,
-        c2bKey: trim(s.c2bConsumerKey || ig.c2bConsumerKey),
-        c2bSecret: trim(s.c2bConsumerSecret || ig.c2bConsumerSecret),
     };
 };
 
@@ -156,10 +149,8 @@ export async function getAccessToken(c: MpesaConfig): Promise<string> {
     return getAccessTokenFor(c, c.key, c.secret);
 }
 
-async function daraja(c: MpesaConfig, path: string, body: any, part: 'main' | 'c2b' = 'main') {
-    // The C2B product may have its own Daraja app; without one it uses the main app.
-    const useC2B = part === 'c2b' && c.c2bKey && c.c2bSecret;
-    const token = useC2B ? await getAccessTokenFor(c, c.c2bKey!, c.c2bSecret!) : await getAccessToken(c);
+async function daraja(c: MpesaConfig, path: string, body: any) {
+    const token = await getAccessToken(c);
     const resp = await fetch(`${c.base}${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -217,103 +208,6 @@ export async function stkQuery(c: MpesaConfig, checkoutRequestId: string) {
     const { data } = await daraja(c, '/mpesa/stkpushquery/v1/query', { BusinessShortCode: c.shortcode, Password: password, Timestamp: ts, CheckoutRequestID: checkoutRequestId });
     return data;
 }
-
-// ─── Transaction Status (secondary reconciliation) ─────────────────────────────
-export async function transactionStatus(c: MpesaConfig, opts: { transactionId: string; resultUrl: string; queueUrl: string; remarks?: string }) {
-    if (!c.initiator || !c.securityCredential) throw new Error('Transaction Status requires an Initiator and SecurityCredential in M-PESA settings.');
-    const { ok, status, data } = await daraja(c, '/mpesa/transactionstatus/v1/query', {
-        Initiator: c.initiator, SecurityCredential: c.securityCredential, CommandID: 'TransactionStatusQuery',
-        TransactionID: opts.transactionId, PartyA: c.shortcode, IdentifierType: '4',
-        ResultURL: opts.resultUrl, QueueTimeOutURL: opts.queueUrl, Remarks: opts.remarks || 'Status', Occasion: 'OK',
-    });
-    if (!ok) throw new Error(data?.errorMessage || `Transaction status failed (HTTP ${status})`);
-    return data;
-}
-
-export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, confirmationUrl: string, responseType: 'Completed' | 'Cancelled' = 'Completed', shortCode?: string) {
-    // C2B URLs must register to the STORE number (e.g. a Till's store/till number),
-    // NOT the Head Office number. Safaricom rejects/ignores registration on the HO.
-    // Caller passes the store number explicitly; default to the config shortcode.
-    const registerShortCode = String(shortCode || c.shortcode).trim();
-    const { ok, status, data } = await daraja(c, '/mpesa/c2b/v2/registerurl', { ShortCode: registerShortCode, ResponseType: responseType, ConfirmationURL: confirmationUrl, ValidationURL: validationUrl }, 'c2b');
-    if (!ok) throw new Error(explainC2BError({ status, body: data }, c.env));
-    return { ...data, registeredShortCode: registerShortCode };
-}
-
-/** Words Safaricom refuses in callback URLs (any case), e.g. "mpesa", "safaricom", "exe", "cmd", "sql", "query". */
-export const DARAJA_BLOCKED_URL_WORDS = /m-?pesa|safaricom|exe|cmd|sql|query/i;
-
-/** Reasons Safaricom would refuse (or never reach) a callback URL; empty when it looks fine. */
-export function callbackUrlProblems(url: string, environment: 'sandbox' | 'production'): string[] {
-    const problems: string[] = [];
-    let u: URL;
-    try { u = new URL(url); } catch { return [`"${url}" is not a valid address. Ask the platform operator to set MPESA_CALLBACK_URL to this server's public address.`]; }
-    const host = u.hostname.toLowerCase();
-    if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.lan')
-        || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.)/.test(host) || host === '::1' || !host.includes('.')) {
-        problems.push(`${u.origin} is a private address that Safaricom cannot reach. Ask the platform operator to set MPESA_CALLBACK_URL to a public HTTPS address, then try again.`);
-    }
-    if (u.protocol !== 'https:') {
-        problems.push(environment === 'production'
-            ? 'Live M-PESA only calls HTTPS addresses. The platform operator must put this server behind HTTPS and set MPESA_CALLBACK_URL to an https:// address.'
-            : 'Use an HTTPS address: Safaricom may refuse plain http:// callback URLs.');
-    }
-    const word = url.match(DARAJA_BLOCKED_URL_WORDS)?.[0];
-    if (word) problems.push(`The address contains "${word}", which Safaricom refuses in callback URLs. Ask the platform operator to use a domain without it.`);
-    return problems;
-}
-
-/** Plain-language reasons for the errors Safaricom returns when registering C2B URLs. */
-export function explainC2BError(err: { status?: number; body?: any; message?: string }, environment: 'sandbox' | 'production'): string {
-    const body = err.body ?? {};
-    const code = String(body.errorCode ?? body.ResponseCode ?? '');
-    const msg = String(body.errorMessage ?? body.ResponseDescription ?? err.message ?? 'Registration failed');
-    const status = err.status;
-    if (/already registered|duplicate/i.test(msg) || code === '500.003.1001') {
-        // The caller (registerC2BUrls' route) decides what this means: if the
-        // short code being targeted is the one already on record, it's a genuine
-        // no-op; if it's a DIFFERENT one, Safaricom refused to move the
-        // registration and the old number is still what's live. Keep this generic
-        // so that distinction is made where the "previously registered" state is
-        // actually known.
-        return `Safaricom says this short code already has C2B URLs registered (${msg}).`;
-    }
-    if (status === 401 || /access token|unauthori[sz]ed|401/i.test(`${code} ${msg}`)) return `Safaricom refused the API keys (${msg}). Check the Consumer Key and Secret (the C2B ones if you set them, else the main ones), and that the Daraja app has the C2B product${environment === 'production' ? ' for this short code' : ''}.`;
-    if (/shortcode|short code/i.test(msg)) return `Safaricom refused the short code (${msg}). Use your Paybill number, or for Buy Goods the store (head office) number. Sandbox uses its test short code, e.g. 600xxx.`;
-    if (/url/i.test(msg)) return `Safaricom refused the callback URLs (${msg}). They must be public HTTPS addresses without words like "mpesa", "safaricom", "exe", "cmd", "sql" or "query".`;
-    if (/network error|timeout/i.test(msg)) return `Safaricom could not be reached: ${msg}`;
-    return `Safaricom: ${msg}${code ? ` (code ${code})` : ''}`;
-}
-
-// ─── Pull Transactions API ─────────────────────────────────────────────────────
-// Lets a merchant retrieve the list of completed payments to their shortcode for
-// a date range — the proper way to reconcile till/paybill payments that did not
-// arrive via the C2B callback. Must be registered once before querying.
-
-/** One-time registration of the shortcode for the Pull API. */
-export async function registerPullUrl(c: MpesaConfig, callbackUrl: string, nominatedNumber: string) {
-    const { ok, status, data } = await daraja(c, '/pulltransactions/v1/register', {
-        ShortCode: c.shortcode, RequestType: 'Pull', NominatedNumber: nominatedNumber, CallBackURL: callbackUrl,
-    });
-    // "already registered" is a success state.
-    if (!ok && !/already.*register/i.test(JSON.stringify(data || ''))) throw new Error(data?.errorMessage || data?.ResponseDescription || `Pull register failed (HTTP ${status})`);
-    return data;
-}
-
-/** Query transactions to a shortcode between two dates (YYYY-MM-DD HH:mm:ss).
- * Pass `shortCode` to query a specific number (e.g. a Till's PartyB); defaults
- * to the config shortcode. */
-export async function pullTransactions(c: MpesaConfig, startDate: string, endDate: string, offset = 0, shortCode?: string) {
-    const { ok, status, data } = await daraja(c, '/pulltransactions/v1/query', {
-        ShortCode: shortCode || c.shortcode, StartDate: startDate, EndDate: endDate, OffSetValue: String(offset),
-    });
-    if (!ok) throw new Error(data?.errorMessage || data?.ResponseDescription || `Pull query failed (HTTP ${status})`);
-    // Response shape: { ResponseCode, ResponseMessage, Response: [ [ {transactionId, trxDate, msisdn, amount, ...} ] ] }
-    return data;
-}
-
-// NOTE: initiateStkTopup/checkStkAndComplete moved to mpesaAccounts.service.ts,
-// which resolves the right M-PESA ACCOUNT (not the old singleton config) to use.
 
 export const parseStkCallback = (stk: any) => {
     const items: any[] = stk?.CallbackMetadata?.Item || [];

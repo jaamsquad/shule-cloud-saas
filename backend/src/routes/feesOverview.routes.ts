@@ -65,18 +65,12 @@ const classOf = (s: any) => s?.studentClass || s?.currentClass || s?.statusPrevC
 // ── overview ─────────────────────────────────────────────────────────────────
 router.get('/fees/overview', async (req, res) => {
     try {
-        const d = dbOf(req); const tc = (req as any).tenantContext || {};
+        const d = dbOf(req);
         const [invoices, term] = await Promise.all([loadInvoices(req), currentTerm(d).catch(() => null)]);
-        const totalStudents = await d.collection('students').countDocuments({}).catch(() => 0);
 
         // school collection
         const invoiced = invoices.reduce((s, i) => s + i.total, 0), paid = invoices.reduce((s, i) => s + i.paid, 0), balance = invoices.reduce((s, i) => s + i.balance, 0);
         const overdue = invoices.filter(isOverdue);
-
-        // online (M-PESA STK) — the platform keeps these in the meta DB, tagged with this school's database
-        const since30 = new Date(Date.now() - 30 * 86400000);
-        const online: any[] = tc.databaseName ? await getMetaDb().collection('mpesa_transactions').find({ tenantDbName: tc.databaseName, createdAt: { $gte: since30 } }).toArray().catch(() => []) : [];
-        const onlineDone = online.filter(t => t.status === 'completed');
 
         // deposits (student wallets)
         const wallets: any[] = await d.collection('wallets').find({}).toArray().catch(() => []);
@@ -113,7 +107,6 @@ router.get('/fees/overview', async (req, res) => {
             term: term ? { label: term.label, year: term.year } : null,
             cards: {
                 overdue: { amount: round(overdue.reduce((s, i) => s + i.balance, 0)), invoices: overdue.length, students: new Set(overdue.map(i => i.sid)).size },
-                online: { count: onlineDone.length, amount: round(onlineDone.reduce((s, t) => s + num(t.amount), 0)), pending: online.filter(t => t.status === 'pending').length, failed: online.filter(t => t.status === 'failed').length, totalStudents },
                 deposit: { held: round(held.reduce((s, w) => s + num(w.balance), 0)), students: held.length },
                 school: { invoiced: round(invoiced), paid: round(paid), balance: round(balance), rate: invoiced > 0 ? Math.round((paid / invoiced) * 1000) / 10 : 0, invoices: invoices.length, studentsOwing: new Set(invoices.filter(i => i.balance > 0).map(i => i.sid)).size },
                 today: { amount: round(todayPays.reduce((s, p) => s + num(p.amount), 0)), transactions: todayPays.length },
@@ -146,14 +139,6 @@ router.get('/fees/overview/records', async (req, res) => {
         if (cls) rows = rows.filter(r => r.className.toLowerCase() === cls);
         if (q) rows = rows.filter(r => `${r.studentName} ${r.registrationNo}`.toLowerCase().includes(q));
         res.json(rows.sort((a, b) => b.balance - a.balance).slice(0, 500));
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-
-router.get('/fees/overview/processing', async (req, res) => {
-    try {
-        const tc = (req as any).tenantContext || {}; const days = Math.min(30, Math.max(1, parseInt(String(req.query.days)) || 3));
-        const rows: any[] = tc.databaseName ? await getMetaDb().collection('mpesa_transactions').find({ tenantDbName: tc.databaseName, createdAt: { $gte: new Date(Date.now() - days * 86400000) } }).toArray().catch(() => []) : [];
-        res.json(rows.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 300).map(t => ({ checkoutRequestId: t.checkoutRequestId, studentName: t.studentName || '', registrationNo: t.registrationNo || '', purpose: t.purpose || 'fees', amount: num(t.amount), phone: t.phone || '', status: t.status || 'pending', receipt: t.mpesaReceipt || '', message: t.resultDesc || '', createdAt: t.createdAt })));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

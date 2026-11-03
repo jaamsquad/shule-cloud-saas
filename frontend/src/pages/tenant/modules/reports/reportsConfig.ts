@@ -48,7 +48,6 @@ export const COLLECTION_REPORTS: Record<string, CollectionCfg> = {
   "absentees": { title: "Absentee Report", collection: "attendance", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
   "class-wise-attendance": { title: "Class-wise Attendance", collection: "attendance", columns: [{ key: "studentName", label: "Student" }, { key: "studentClass", label: "Class" }, { key: "date", label: "Date", type: "date" }, { key: "status", label: "Status" }] },
   "income-expense": { title: "Income & Expense", collection: "reports/income-expense-rows", columns: [{ key: "date", label: "Date", type: "date" }, { key: "type", label: "Type" }, { key: "category", label: "Category" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", type: "money" }] },
-  "mpesa-recon": { title: "M-PESA Reconciliation", collection: "mpesa_c2b_payments", columns: [{ key: "TransID", label: "Receipt" }, { key: "BillRefNumber", label: "Account" }, { key: "MSISDN", label: "Phone" }, { key: "TransAmount", label: "Amount", type: "money" }, { key: "receivedAt", label: "Received", type: "date" }] },
   "pos-sales": { title: "POS Sales Report", collection: "pos_orders", columns: [{ key: "orderNo", label: "Order" }, { key: "customerName", label: "Customer" }, { key: "total", label: "Total", type: "money" }, { key: "status", label: "Status" }, { key: "createdAt", label: "Date", type: "date" }] },
   "purchase-report": { title: "Purchase Report", collection: "purchases", columns: [{ key: "supplier", label: "Supplier" }, { key: "item", label: "Item" }, { key: "quantity", label: "Qty" }, { key: "cost", label: "Cost", type: "money" }, { key: "date", label: "Date", type: "date" }] },
   "member-activity": { title: "Member Activity", collection: "library_members", columns: [{ key: "name", label: "Member" }, { key: "memberType", label: "Type" }, { key: "booksIssued", label: "Books Issued" }, { key: "joinedAt", label: "Joined", type: "date" }] },
@@ -132,7 +131,6 @@ export const REPORT_MODULES: ReportModule[] = [
     { key: "income-expense", label: "Income & Expense", kind: "collection" },
     { key: "balance-sheet", label: "Balance Sheet", kind: "computed" },
     { key: "trial-balance", label: "Trial Balance", kind: "computed" },
-    { key: "mpesa-recon", label: "M-PESA Reconciliation", kind: "collection" },
     { key: "outstanding-balances", label: "Outstanding Balances", kind: "collection" },
   ]},
   { key: "HR & Payroll", icon: Briefcase, color: "#F59E0B", reports: [

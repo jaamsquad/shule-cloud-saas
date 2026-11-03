@@ -5,7 +5,7 @@ import {
     Zap, BookOpen, Info, TestTube
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, Navigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
@@ -56,9 +56,6 @@ export default function IntegrationDetail() {
             setConfig(rest);
         }
     }, [allSettings, key, loaded]);
-
-    // M-PESA has its own multi-account page now — redirect any stale link here.
-    if (key === "daraja") return <Navigate to="/integrations/mpesa-accounts" replace />;
 
     if (!intg) return (
         <div className="flex-1 flex items-center justify-center">

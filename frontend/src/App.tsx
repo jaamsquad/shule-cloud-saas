@@ -35,8 +35,6 @@ import TenantResolver from "./pages/public/TenantResolver";
 import Register from "./pages/public/Register";
 import Activate from "./pages/public/Activate";
 import StudentHistory from "./pages/tenant/modules/students/StudentHistory";
-import TillTransactions from "./pages/tenant/modules/TillTransactions";
-import PaymentInbox from "./pages/tenant/modules/PaymentInbox";
 
 // Tenant Auth
 import Login from "./pages/tenant/auth/Login";
@@ -203,7 +201,6 @@ import OrgLayout from "./pages/org/OrgLayout";
 import AccountSwitcher from "./pages/org/AccountSwitcher";
 import OrgCommunications from "./pages/org/OrgCommunications";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
-import MpesaAccounts from "./pages/tenant/modules/integrations/MpesaAccounts";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
 import LMSCourses from "./pages/tenant/modules/lms/LMSCourses";
@@ -645,7 +642,7 @@ const App = () => {
 
               {/* M-PESA integration */}
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
-              <Route path="/settings/mpesa" element={<Navigate to="/integrations/mpesa-accounts" replace />} />
+              <Route path="/settings/mpesa" element={<Navigate to="/integrations" replace />} />
               {/* The sidebar is the way around; old Home/Apps links land on the dashboard. */}
               <Route path="/home" element={<Navigate to="/dashboard" replace />} />
               <Route path="/apps" element={<Navigate to="/dashboard" replace />} />
@@ -855,7 +852,6 @@ const App = () => {
 
               {/* Integrations */}
               <Route path="/integrations" element={<IntegrationsPage />} />
-              <Route path="/integrations/mpesa-accounts" element={<MpesaAccounts />} />
               <Route path="/integrations/:key" element={<IntegrationDetail />} />
 
               {/* Roles & Permissions */}
@@ -897,8 +893,6 @@ const App = () => {
               <Route path="/behaviour/reports/psychomotor" element={<PsychomotorReport />} />
 
               {/* Finance */}
-              <Route path="/fees/till-transactions" element={<TillTransactions />} />
-              <Route path="/fees/payment-inbox" element={<PaymentInbox />} />
               <Route path="/fees/dashboard" element={<FeesDashboard />} />
               <Route path="/fees/generate-invoice" element={<GenerateFeesInvoice />} />
               <Route path="/fees/invoices" element={<GeneratedInvoices />} />

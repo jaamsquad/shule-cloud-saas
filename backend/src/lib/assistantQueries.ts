@@ -397,11 +397,6 @@ def('fees.month', 'Fees', "Collections this month.", async ({ db }) => {
     const total = await collections(db, start);
     return { id: 'fees.month', title: 'Collections This Month', summary: `KES ${total.toLocaleString()} collected this month.`, stat: { value: `KES ${total.toLocaleString()}`, label: 'This month' } };
 });
-def('fees.unallocatedMpesa', 'Fees', 'Unallocated M-PESA payments.', async ({ db }) => {
-    const rows = await db.collection('mpesa_c2b_payments').find({ $or: [{ allocated: { $ne: true } }, { studentId: { $in: [null, ''] } }] }).toArray().catch(() => []);
-    const total = rows.reduce((a: number, r: any) => a + num(r.amount ?? r.TransAmount), 0);
-    return { id: 'fees.unallocatedMpesa', title: 'Unallocated M-PESA', summary: `${rows.length} M-PESA payment(s) totalling KES ${total.toLocaleString()} are unallocated.`, stat: { value: rows.length, label: 'Unallocated' }, actions: [{ label: 'Allocate', icon: 'eye', action: 'allocateMpesa' }] };
-});
 def('finance.expensesToday', 'Fees', "Today's expenses.", async ({ db }) => {
     const start = new Date(); start.setHours(0, 0, 0, 0);
     const rows = (await db.collection('expenses').find({}).toArray().catch(() => [])).filter((e: any) => new Date(e.date || e.createdAt || 0) >= start);
