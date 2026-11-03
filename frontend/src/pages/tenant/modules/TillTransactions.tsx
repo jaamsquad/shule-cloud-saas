@@ -37,11 +37,13 @@ export default function TillTransactions() {
     // Trigger a server-side Pull-sync once when the page opens (best-effort),
     // so the freshest Safaricom transactions are fetched without a manual click.
     useEffect(() => { api.post("/fees/till-transactions/sync", {}).catch(() => { }); }, []);
-    // M-PESA integration status — to explain WHY direct till payments may be missing.
-    const { data: mpesa } = useQuery({
-        queryKey: ["mpesa_settings"],
-        queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
+    // M-PESA account(s) — to explain WHY direct till payments may be missing.
+    const { data: mpesaAccounts = [] } = useQuery<any[]>({
+        queryKey: ["mpesa_accounts"],
+        queryFn: async () => (await api.get("/integrations/mpesa/accounts")).data || [],
     });
+    const enabledAccounts = mpesaAccounts.filter(a => a.enabled);
+    const anyRegistered = enabledAccounts.some(a => a.registered);
     const rows: any[] = data?.data || [];
     const summary = data?.summary || { count: 0, total: 0 };
     // Did any directly-paid (C2B) transaction come through?
@@ -105,13 +107,13 @@ export default function TillTransactions() {
             </div>
 
             {/* Direct-payment (C2B) capture status — explains why manual till payments may be missing */}
-            {mpesa && !hasC2B && (
-                mpesa.registered ? (
+            {mpesaAccounts.length > 0 && !hasC2B && (
+                anyRegistered ? (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-5 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                         <div className="text-sm text-emerald-800">
                             <p className="font-bold">Direct payment capture is ON.</p>
-                            <p className="text-emerald-700/80 mt-0.5">Your C2B URLs are registered with Safaricom, so payments made directly to your {mpesa.txType === "CustomerBuyGoodsOnline" ? "Till" : "Paybill"} will appear here automatically. If a recent one is missing, it can take a moment — hit Refresh. (Note: Safaricom only sends these notifications in <b>Production</b>, and many <b>Till/Buy-Goods</b> shortcodes don't deliver C2B — Paybills do.)</p>
+                            <p className="text-emerald-700/80 mt-0.5">Your C2B URLs are registered with Safaricom, so payments made directly to your Till/Paybill will appear here automatically. If a recent one is missing, it can take a moment — hit Refresh. (Note: Safaricom only sends these notifications in <b>Production</b>, and many <b>Till/Buy-Goods</b> shortcodes don't deliver C2B — Paybills do.)</p>
                         </div>
                     </div>
                 ) : (
@@ -120,7 +122,7 @@ export default function TillTransactions() {
                         <div className="text-sm text-amber-800">
                             <p className="font-bold">Payments made directly to your Till/Paybill aren't being captured yet.</p>
                             <p className="text-amber-700/80 mt-0.5">To pull in transactions customers make on their own phones (Lipa na M-PESA → Paybill/Buy Goods), you must register your C2B notification URLs with Safaricom — one click.</p>
-                            <Link to="/integrations/daraja" className="inline-flex items-center gap-1.5 mt-2 h-9 px-4 rounded-xl bg-amber-600 text-white font-bold text-xs">Go to M-PESA Integration → Register C2B URLs</Link>
+                            <Link to="/integrations/mpesa-accounts" className="inline-flex items-center gap-1.5 mt-2 h-9 px-4 rounded-xl bg-amber-600 text-white font-bold text-xs">Go to M-PESA Accounts → Register C2B URLs</Link>
                         </div>
                     </div>
                 )

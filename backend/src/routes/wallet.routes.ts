@@ -4,7 +4,7 @@ import {
     ensureWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits,
     getWalletSettings, saveWalletSettings,
 } from '../services/wallet.service';
-import { initiateStkTopup, checkStkAndComplete } from '../services/mpesa.service';
+import { initiateStkTopup, checkStkAndComplete } from '../services/mpesaAccounts.service';
 
 const router = Router();
 const db = (req: any) => req.tenantDb || getMetaDb();

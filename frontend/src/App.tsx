@@ -203,6 +203,7 @@ import OrgLayout from "./pages/org/OrgLayout";
 import AccountSwitcher from "./pages/org/AccountSwitcher";
 import OrgCommunications from "./pages/org/OrgCommunications";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
+import MpesaAccounts from "./pages/tenant/modules/integrations/MpesaAccounts";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
 import LMSCourses from "./pages/tenant/modules/lms/LMSCourses";
@@ -644,7 +645,7 @@ const App = () => {
 
               {/* M-PESA integration */}
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
-              <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
+              <Route path="/settings/mpesa" element={<Navigate to="/integrations/mpesa-accounts" replace />} />
               {/* The sidebar is the way around; old Home/Apps links land on the dashboard. */}
               <Route path="/home" element={<Navigate to="/dashboard" replace />} />
               <Route path="/apps" element={<Navigate to="/dashboard" replace />} />
@@ -854,6 +855,7 @@ const App = () => {
 
               {/* Integrations */}
               <Route path="/integrations" element={<IntegrationsPage />} />
+              <Route path="/integrations/mpesa-accounts" element={<MpesaAccounts />} />
               <Route path="/integrations/:key" element={<IntegrationDetail />} />
 
               {/* Roles & Permissions */}

@@ -1,12 +1,12 @@
 import { Db, ObjectId } from 'mongodb';
-import { getMetaDb } from '../lib/mongodb';
-import { creditWallet } from './wallet.service';
 
-// ─── Safaricom Daraja (M-PESA) integration — PER-TENANT credentials ────────────
-// Each school stores its own Daraja credentials (Consumer Key/Secret, Shortcode,
-// Passkey, …) via the Integrations page. The platform only provides the public
-// callback base URL (env MPESA_CALLBACK_URL), since all callbacks route through
-// one platform endpoint and are matched back to the tenant via the stored txn.
+// ─── Safaricom Daraja (M-PESA) integration ──────────────────────────────────────
+// Pure Daraja API client functions (stkPush, registerC2BUrls, pullTransactions…)
+// — config-agnostic, taking a built MpesaConfig. Tenant/school M-PESA accounts
+// live in mpesaAccounts.service.ts (mpesa_accounts, supports multiple accounts
+// per school); resolveMpesaConfig below is the PLATFORM's own M-PESA (ShuleCloud's
+// own Paybill, used to collect subscription payments and SMS-wallet purchases),
+// stored as a singleton in the meta DB — not touched by the multi-account change.
 
 export interface MpesaConfig {
     env: 'sandbox' | 'production';
@@ -312,68 +312,8 @@ export async function pullTransactions(c: MpesaConfig, startDate: string, endDat
     return data;
 }
 
-// Initiate an STK push for a wallet top-up or fee payment and store the txn.
-export async function initiateStkTopup(db: Db, opts: { tenantDbName: string; studentId: string; phone: string; amount: number; purpose?: 'wallet' | 'fees'; accountRef?: string; studentName?: string; registrationNo?: string; invoiceId?: string }) {
-    const cfg = await resolveMpesaConfig(db);
-    if (!isMpesaConfigured(cfg)) throw new Error('M-PESA is not configured for this school.');
-    if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured.');
-    const purpose = opts.purpose || 'wallet';
-    const r = await stkPush(cfg, {
-        phone: opts.phone, amount: Number(opts.amount),
-        accountRef: opts.accountRef || opts.registrationNo || 'Wallet',
-        description: purpose === 'wallet' ? 'Wallet top-up' : 'School fees',
-        callbackUrl: `${platformCallbackBaseV1()}/mpesa/callback`,
-    });
-    await getMetaDb().collection('mpesa_transactions').insertOne({
-        checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
-        tenantDbName: opts.tenantDbName, studentId: opts.studentId, studentName: opts.studentName,
-        registrationNo: opts.registrationNo, invoiceId: opts.invoiceId || null, amount: Number(opts.amount), phone: opts.phone,
-        status: 'pending', applied: false, createdAt: new Date(),
-    });
-    return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on the phone to complete.' };
-}
-
-// Poll Daraja for an STK transaction and apply it (wallet credit OR fee payment).
-export async function checkStkAndComplete(db: Db, checkoutRequestId: string) {
-    const meta = getMetaDb();
-    const txn = await meta.collection('mpesa_transactions').findOne({ checkoutRequestId });
-    if (!txn) return { status: 'unknown' as const };
-    if (txn.status === 'completed') return { status: 'completed' as const, receipt: txn.mpesaReceipt };
-    if (txn.status === 'failed') return { status: 'failed' as const, message: txn.resultDesc };
-    try {
-        const cfg = await resolveMpesaConfig(db);
-        const q: any = await stkQuery(cfg, checkoutRequestId);
-        const code = Number(q.ResultCode);
-        console.log('[mpesa] STK query result:', JSON.stringify({ id: checkoutRequestId, ResultCode: q.ResultCode, ResultDesc: q.ResultDesc, errorMessage: q.errorMessage }));
-        if (code === 0) {
-            // The query confirms success but doesn't carry the receipt — that comes
-            // from the callback (stored as mpesaReceipt). Re-read to pick it up.
-            const fresh = await meta.collection('mpesa_transactions').findOne({ _id: txn._id });
-            const receipt = fresh?.mpesaReceipt || txn.mpesaReceipt || null;
-            const upd = await meta.collection('mpesa_transactions').updateOne(
-                { _id: txn._id, applied: { $ne: true } },
-                { $set: { status: 'completed', applied: true, resultDesc: q.ResultDesc, completedAt: new Date() } },
-            );
-            if (upd.modifiedCount > 0) {
-                const ref = receipt || checkoutRequestId;
-                if (txn.purpose === 'wallet') await creditWallet(db, txn.studentId, txn.amount, { source: 'M-PESA', reference: ref, by: 'mpesa' });
-                else await applyMpesaPayment(db, { studentId: txn.studentId, studentName: txn.studentName, registrationNo: txn.registrationNo, invoiceId: txn.invoiceId, amount: txn.amount, receipt: ref });
-            }
-            return { status: 'completed' as const, receipt };
-        }
-        // Daraja STK-query codes that mean "still being processed" — NOT a failure.
-        // The success/failure is then confirmed by the callback (or a later query).
-        // 1037 = no PIN entered yet / timeout pending; 1032 here can also appear
-        // transiently. Anything in the 500.001.1001 family is "processing".
-        const stillProcessing = code === 1037 || /processing|being processed|500\.001\.1001/i.test(String(q.ResultDesc || q.errorMessage || ''));
-        if (!isNaN(code) && code !== 0 && !stillProcessing) {
-            const msg = stkResultMessage(code, q.ResultDesc);
-            await meta.collection('mpesa_transactions').updateOne({ _id: txn._id }, { $set: { status: 'failed', resultDesc: msg } });
-            return { status: 'failed' as const, message: msg };
-        }
-    } catch { /* query failed transiently — treat as still pending */ }
-    return { status: 'pending' as const };
-}
+// NOTE: initiateStkTopup/checkStkAndComplete moved to mpesaAccounts.service.ts,
+// which resolves the right M-PESA ACCOUNT (not the old singleton config) to use.
 
 export const parseStkCallback = (stk: any) => {
     const items: any[] = stk?.CallbackMetadata?.Item || [];
