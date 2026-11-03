@@ -69,6 +69,7 @@ router.post('/integrations/mpesa/test', async (req, res) => {
 // Register C2B validation/confirmation URLs with Safaricom.
 router.post('/integrations/mpesa/register-urls', async (req, res) => {
     let storeNumber = '';
+    let previousShortCode = '';
     try {
         const cfg = await resolveMpesaConfig(tdb(req));
         if (!cfg.callbackBase) return res.status(400).json({ message: 'Platform callback URL (MPESA_CALLBACK_URL) is not set by the operator.' });
@@ -88,19 +89,33 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
         // override via the request body (storeNumber) for edge cases.
         storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
+        const prevSettings: any = await tdb(req).collection('mpesa_settings').findOne({});
+        previousShortCode = String(prevSettings?.registeredShortCode || '').trim();
         const result = await registerC2BUrls(cfg, validationUrl, confirmationUrl, 'Completed', storeNumber);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
         res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
-        // Safaricom's own "duplicate registration" response (sandbox throttling, or
-        // registering the same shortcode again) still means the shortcode has OUR
-        // URLs registered — never a reason to leave it stuck on an old target. Record
-        // the number THIS attempt targeted (which may be a new store/till the admin
-        // just changed to) so the UI reflects what was actually just registered, and
-        // let the admin register again any time — nothing here blocks a retry.
+        // Safaricom's "duplicate registration" response means this attempt was
+        // REJECTED — it does NOT mean the new number took effect. If the admin just
+        // changed the Till/Store number and is re-registering to point C2B at it,
+        // Safaricom's answer here tells us whether that actually happened:
+        //   - targeting the SAME number that's already registered → genuinely a
+        //     no-op, nothing to report as a problem.
+        //   - targeting a DIFFERENT number → Safaricom refused to move it; the OLD
+        //     number is still what's live, and only Safaricom support can change it.
+        //     Saying "success" here would be lying about what's actually registered.
         if (/already/i.test(e.message || '') && /register/i.test(e.message || '')) {
-            await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), ...(storeNumber ? { registeredShortCode: storeNumber } : {}) } }, { upsert: true }).catch(() => { });
-            return res.json({ ok: true, alreadyRegistered: true, registeredShortCode: storeNumber || undefined, message: `C2B URLs are registered for ${storeNumber || 'this shortcode'} — direct payments will be captured. You can register again any time, e.g. after changing the Till Number.` });
+            const samTarget = !!storeNumber && storeNumber === previousShortCode;
+            if (samTarget) {
+                await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true } }, { upsert: true }).catch(() => { });
+                return res.json({ ok: true, alreadyRegistered: true, registeredShortCode: storeNumber, message: `C2B URLs are already registered for ${storeNumber} — direct payments are being captured.` });
+            }
+            return res.status(409).json({
+                ok: false, alreadyRegistered: true, registeredShortCode: previousShortCode || undefined, attemptedShortCode: storeNumber,
+                message: previousShortCode
+                    ? `Safaricom refused to move the registration from ${previousShortCode} to ${storeNumber} — it still has ${previousShortCode} registered, not the new number. Safaricom's API doesn't let a shortcode's C2B URLs change once set; ask apisupport@safaricom.co.ke to remove the old registration (or point your Till Number back to ${previousShortCode} if that's the one actually meant to receive payments).`
+                    : `Safaricom says ${storeNumber} already has C2B URLs registered (from before this system tracked it), and refused this registration. Ask apisupport@safaricom.co.ke to confirm or remove the existing registration if it's not pointed at this system.`,
+            });
         }
         if (/failed to obtain m-pesa token/i.test(e.message || '')) {
             // getAccessToken already retried 4x with backoff — a persistent failure

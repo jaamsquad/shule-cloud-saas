@@ -270,10 +270,13 @@ export function explainC2BError(err: { status?: number; body?: any; message?: st
     const msg = String(body.errorMessage ?? body.ResponseDescription ?? err.message ?? 'Registration failed');
     const status = err.status;
     if (/already registered|duplicate/i.test(msg) || code === '500.003.1001') {
-        // Registering again is how you CHANGE the URLs for a shortcode — it is not
-        // a one-time lock. Safaricom's "already registered" response here still
-        // means the shortcode now has these URLs; treat it as success, not a block.
-        return `Safaricom confirms this short code has C2B URLs registered (${msg}). If you meant to change the Till/Store number or URLs, just register again with the new one — nothing here prevents a repeat registration.`;
+        // The caller (registerC2BUrls' route) decides what this means: if the
+        // short code being targeted is the one already on record, it's a genuine
+        // no-op; if it's a DIFFERENT one, Safaricom refused to move the
+        // registration and the old number is still what's live. Keep this generic
+        // so that distinction is made where the "previously registered" state is
+        // actually known.
+        return `Safaricom says this short code already has C2B URLs registered (${msg}).`;
     }
     if (status === 401 || /access token|unauthori[sz]ed|401/i.test(`${code} ${msg}`)) return `Safaricom refused the API keys (${msg}). Check the Consumer Key and Secret (the C2B ones if you set them, else the main ones), and that the Daraja app has the C2B product${environment === 'production' ? ' for this short code' : ''}.`;
     if (/shortcode|short code/i.test(msg)) return `Safaricom refused the short code (${msg}). Use your Paybill number, or for Buy Goods the store (head office) number. Sandbox uses its test short code, e.g. 600xxx.`;

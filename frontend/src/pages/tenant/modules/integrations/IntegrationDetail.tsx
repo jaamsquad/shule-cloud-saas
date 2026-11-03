@@ -60,9 +60,10 @@ export default function IntegrationDetail() {
                 : `C2B URLs registered with Safaricom${sc ? ` to store number ${sc}` : ""} — direct payments will now appear.`);
             qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
         } catch (e: any) {
-            toast.error(e.response?.data?.message || "Registration failed");
+            toast.error(e.response?.data?.message || "Registration failed", { duration: 12000 });
         } finally {
             setRegistering(false);
+            qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
         }
     };
     const registerPull = async () => {
