@@ -198,35 +198,46 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
         const fromD = from ? new Date(from) : null;
         const toD = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59); return d; })() : null;
 
-        type Row = { code: string; phone: string; name: string; account: string; amount: number; shortcode: string; paidAt: any; source: string };
+        type Row = { code: string; phone: string; name: string; account: string; amount: number; shortcode: string; paidAt: any; source: string; assigned: boolean };
         const all: Row[] = [];
 
-        // 1) Raw C2B confirmations (meta DB) for this school's shortcode/till.
-        if (uniqueCodes.length) {
-            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: uniqueCodes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
-            c2b.forEach((r: any) => all.push({
-                code: r.TransID || '', phone: r.MSISDN || '',
-                name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
-                account: r.BillRefNumber || '', amount: Number(r.TransAmount) || 0,
-                shortcode: r.BusinessShortCode || '', paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null), source: 'C2B',
-            }));
-        }
-
-        // 2) The tenant's applied payments (STK push, C2B and wallet flow through here).
-        //    This is where most real data lives, so the page works even without C2B URLs.
+        // 1) The tenant's applied payments (STK push, C2B and wallet flow through
+        //    here once matched to a student) — these are the ASSIGNED rows, and
+        //    take priority over a raw C2B confirmation of the same code (below),
+        //    so an already-assigned payment never shows as still needing one.
         const pays = await tenantDb.collection('payments').find({ is_voided: { $ne: true } }).sort({ createdAt: -1 }).limit(5000).toArray().catch(() => []);
+        const appliedCodes = new Set<string>();
         pays.forEach((p: any) => {
             const m = String(p.method || p.payment_mode || '').toUpperCase();
             if (!/MPESA|M-PESA|MOBILE|PAYBILL|TILL|WALLET/.test(m)) return;   // M-PESA / wallet only
+            const pcode = (p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '').toUpperCase();
+            if (pcode) appliedCodes.add(pcode);
             all.push({
                 code: p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '',
                 phone: p.phone || '', name: p.studentName || p.payerName || '—',
                 account: p.registrationNo || p.account || '', amount: Number(p.amount) || 0,
-                shortcode: uniqueCodes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA',
+                shortcode: uniqueCodes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA', assigned: true,
             });
         });
 
-        // Dedupe by M-PESA code (a C2B row and its applied payment can both appear).
+        // 2) Raw C2B confirmations (meta DB) for this school's shortcode/till that
+        //    haven't been applied to a student yet — these are the UNASSIGNED rows
+        //    the admin can act on directly from this page.
+        if (uniqueCodes.length) {
+            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: uniqueCodes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
+            c2b.forEach((r: any) => {
+                const code = String(r.TransID || '').toUpperCase();
+                if (code && appliedCodes.has(code)) return;   // already assigned — the payments row above already represents it
+                all.push({
+                    code: r.TransID || '', phone: r.MSISDN || '',
+                    name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
+                    account: r.BillRefNumber || '', amount: Number(r.TransAmount) || 0,
+                    shortcode: r.BusinessShortCode || '', paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null), source: 'C2B', assigned: false,
+                });
+            });
+        }
+
+        // Dedupe by M-PESA code (safety net — a code should only ever appear once above).
         const seen = new Set<string>();
         let data = all.filter(r => { const k = (r.code || '').toUpperCase(); if (k && seen.has(k)) return false; if (k) seen.add(k); return true; });
 
@@ -239,7 +250,8 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
 
         data.sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
         const total = data.reduce((s, d) => s + d.amount, 0);
-        res.json({ data, summary: { count: data.length, total }, configured: uniqueCodes.length > 0, shortcodes: uniqueCodes });
+        const unassigned = data.filter(d => !d.assigned).length;
+        res.json({ data, summary: { count: data.length, total, unassigned }, configured: uniqueCodes.length > 0, shortcodes: uniqueCodes });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
