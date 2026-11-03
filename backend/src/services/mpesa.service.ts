@@ -312,6 +312,50 @@ export async function pullTransactions(c: MpesaConfig, startDate: string, endDat
     return data;
 }
 
+// ─── Reversal (TransactionReversal) ────────────────────────────────────────────
+// Asks Safaricom to reverse a confirmed payment. Requires the configured M-PESA
+// product to include "Reversal" and an operator with the Reversal role whose
+// cert-encrypted password is in c.securityCredential. Note: ReceiverParty is
+// usually the shortcode the money sits on; RecieverIdentifierType is "11" for a
+// shortcode (Daraja's spelling, kept as-is).
+export async function reverseTransaction(c: MpesaConfig, opts: { transactionId: string; amount: number; resultUrl: string; queueUrl: string; remarks?: string; occasion?: string }) {
+    if (!c.initiator || !c.securityCredential) throw new Error('Reversal requires an Initiator and SecurityCredential in M-PESA settings.');
+    const { ok, status, data } = await daraja(c, '/mpesa/reversal/v1/request', {
+        Initiator: c.initiator, SecurityCredential: c.securityCredential, CommandID: 'TransactionReversal',
+        TransactionID: opts.transactionId, Amount: Math.max(1, Math.round(opts.amount)),
+        ReceiverParty: c.shortcode, RecieverIdentifierType: '11',
+        ResultURL: opts.resultUrl, QueueTimeOutURL: opts.queueUrl,
+        Remarks: (opts.remarks || 'Fee reversal').slice(0, 100), Occasion: (opts.occasion || 'OK').slice(0, 100),
+    });
+    if (!ok || (data?.ResponseCode && data.ResponseCode !== '0')) {
+        throw new Error(data?.errorMessage || data?.ResponseDescription || `Reversal request failed (HTTP ${status})`);
+    }
+    return data;
+}
+
+// ─── B2C (BusinessPayment / SalaryPayment / PromotionPayment) ──────────────────
+// Outgoing M-PESA — refunds and authorized disbursements. Separate Daraja product
+// with its own operator credentials; keep OFF behind a feature flag per tenant.
+export async function b2cPayment(c: MpesaConfig, opts: { phone: string; amount: number; commandId?: 'BusinessPayment' | 'SalaryPayment' | 'PromotionPayment'; resultUrl: string; queueUrl: string; remarks?: string; occasion?: string }) {
+    if (!c.initiator || !c.securityCredential) throw new Error('B2C requires an Initiator and SecurityCredential in M-PESA settings.');
+    const msisdn = normalizeMsisdn(opts.phone);
+    if (!/^254(7|1)\d{8}$/.test(msisdn)) throw new Error(`Invalid recipient phone "${opts.phone}".`);
+    const { ok, status, data } = await daraja(c, '/mpesa/b2c/v3/paymentrequest', {
+        OriginatorConversationID: `b2c-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        InitiatorName: c.initiator, SecurityCredential: c.securityCredential,
+        CommandID: opts.commandId || 'BusinessPayment',
+        Amount: Math.max(1, Math.round(opts.amount)),
+        PartyA: c.shortcode, PartyB: msisdn,
+        Remarks: (opts.remarks || 'Payment').slice(0, 100),
+        QueueTimeOutURL: opts.queueUrl, ResultURL: opts.resultUrl,
+        Occasion: (opts.occasion || '').slice(0, 100),
+    });
+    if (!ok || (data?.ResponseCode && data.ResponseCode !== '0')) {
+        throw new Error(data?.errorMessage || data?.ResponseDescription || `B2C request failed (HTTP ${status})`);
+    }
+    return data;
+}
+
 // NOTE: initiateStkTopup/checkStkAndComplete moved to mpesaAccounts.service.ts,
 // which resolves the right M-PESA ACCOUNT (not the old singleton config) to use.
 

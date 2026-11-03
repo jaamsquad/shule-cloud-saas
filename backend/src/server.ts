@@ -79,6 +79,13 @@ async function bootstrap() {
         const { runScheduledPullSync } = require('./services/autoSync.service');
         setTimeout(() => { runScheduledPullSync().catch(() => {}); }, 20_000);
         setInterval(() => { runScheduledPullSync().catch(() => {}); }, 5 * 60_000);
+
+        // ── STK pending sweep ─────────────────────────────────────────────────
+        // Every 2 min, query Safaricom for STK transactions still "pending" past
+        // their 60s cooldown and reconcile them so parents aren't stuck watching
+        // a spinner when a callback was lost.
+        const { sweepPendingStk } = require('./routes/mpesaOps.routes');
+        setInterval(() => { sweepPendingStk().catch((e: any) => console.error('[mpesa] sweep error:', e?.message)); }, 2 * 60_000);
     } catch (error) {
         console.error('Server bootstrap failed:', error);
         process.exit(1);

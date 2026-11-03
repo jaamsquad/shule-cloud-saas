@@ -45,6 +45,7 @@ import meetingsRoutes from './routes/meetings.routes';
 import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
+import mpesaOpsRoutes from './routes/mpesaOps.routes';
 import integrationsRoutes from './routes/integrations.routes';
 import kraRoutes from './routes/kra.routes';
 import departmentsRoutes from './routes/departments.routes';
@@ -387,6 +388,7 @@ app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)
 app.use('/api', mpesaRoutes);             // also served at /api/mpesa/callback (configured URL)
 app.use('/api/v1', integrationsRoutes);   // tenancy-aware M-PESA settings
+app.use('/api/v1', mpesaOpsRoutes);       // tenant-admin reversal/B2C/status-query + super-admin monitoring
 app.use('/api/v1', kraRoutes);              // KRA PIN Checker lookup (Add Employee)
 app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
