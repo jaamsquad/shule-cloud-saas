@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getMetaDb } from '../lib/mongodb';
-import { resolveMpesaConfig, getAccessToken, registerC2BUrls, isMpesaConfigured, platformCallbackBase, platformCallbackBaseV1 } from '../services/mpesa.service';
+import { resolveMpesaConfig, getAccessToken, registerC2BUrls, isMpesaConfigured, platformCallbackBase, platformCallbackBaseV1, callbackUrlProblems } from '../services/mpesa.service';
 
 const router = Router();
 const tdb = (req: any) => req.tenantDb || getMetaDb();
@@ -23,6 +23,9 @@ router.get('/integrations/mpesa/settings', async (req, res) => {
             consumerSecretSet: !!cfg.secret,
             passkeySet: !!cfg.passkey,
             securityCredentialSet: !!cfg.securityCredential,
+            // A separate Daraja app for C2B, only if Safaricom gave the school one.
+            c2bConsumerKeyMask: last4(cfg.c2bKey),
+            c2bConsumerSecretSet: !!cfg.c2bSecret,
             configured: isMpesaConfigured(cfg),
             // The v1 base — the UI appends /pesa/c2b/... to display the exact URLs
             // that Register sends to Safaricom, so the two must stay in lockstep.
@@ -45,7 +48,7 @@ router.put('/integrations/mpesa/settings', async (req, res) => {
         ['env', 'shortcode', 'tillNumber', 'txType', 'initiator'].forEach(k => { if (b[k] !== undefined) $set[k] = b[k]; });
         if (b.enabled !== undefined) $set.enabled = !!b.enabled;
         // Secrets: only overwrite when a non-empty value is provided (avoid wiping on save).
-        ['consumerKey', 'consumerSecret', 'passkey', 'securityCredential'].forEach(k => {
+        ['consumerKey', 'consumerSecret', 'passkey', 'securityCredential', 'c2bConsumerKey', 'c2bConsumerSecret'].forEach(k => {
             if (typeof b[k] === 'string' && b[k].trim()) $set[k] = b[k].trim();
         });
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set }, { upsert: true });
@@ -74,17 +77,23 @@ router.post('/integrations/mpesa/register-urls', async (req, res) => {
         // stray "mpesa" from the operator's callback base just in case. All callbacks
         // are registered on the canonical /v1/ mount (platformCallbackBaseV1).
         const safeBase = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
+        const validationUrl = `${safeBase}/pesa/c2b/validation`;
+        const confirmationUrl = `${safeBase}/pesa/c2b/confirmation`;
+        // Catch an unreachable/blocked callback URL before ever calling Safaricom,
+        // with a plain-language reason instead of a confusing Daraja rejection.
+        const problems = [...new Set([...callbackUrlProblems(validationUrl, cfg.env), ...callbackUrlProblems(confirmationUrl, cfg.env)])];
+        if (problems.length) return res.status(400).json({ message: problems.join(' ') });
         // Register against the STORE/TILL number, not the Head Office shortcode.
         // For a Buy Goods/Till the store number is `tillNumber`; allow an explicit
         // override via the request body (storeNumber) for edge cases.
         const storeNumber = String(req.body?.storeNumber || cfg.tillNumber || cfg.shortcode).trim();
-        const result = await registerC2BUrls(cfg, `${safeBase}/pesa/c2b/validation`, `${safeBase}/pesa/c2b/confirmation`, 'Completed', storeNumber);
+        const result = await registerC2BUrls(cfg, validationUrl, confirmationUrl, 'Completed', storeNumber);
         await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true, registeredAt: new Date(), registeredShortCode: storeNumber } }, { upsert: true });
         res.json({ ok: true, result, registeredShortCode: storeNumber });
     } catch (e: any) {
         // Safaricom only lets a shortcode register once. A repeat attempt returning
         // "already registered" means C2B is set up — treat it as success, not an error.
-        if (/already\s*registered/i.test(e.message || '')) {
+        if (/already/i.test(e.message || '') && /register/i.test(e.message || '')) {
             await tdb(req).collection('mpesa_settings').updateOne({}, { $set: { urlsRegistered: true } }, { upsert: true }).catch(() => { });
             return res.json({ ok: true, alreadyRegistered: true, message: 'C2B URLs are already registered for this shortcode — direct payments will be captured.' });
         }

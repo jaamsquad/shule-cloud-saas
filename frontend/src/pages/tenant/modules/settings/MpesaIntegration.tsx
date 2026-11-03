@@ -26,10 +26,10 @@ export default function MpesaIntegration() {
         mutationFn: async () => {
             // Only send secrets the user actually typed (leave existing ones intact).
             const payload: any = { env: form.env, txType: form.txType, enabled: form.enabled, shortcode: form.shortcode, tillNumber: form.tillNumber || "", initiator: form.initiator };
-            ["consumerKey", "consumerSecret", "passkey", "securityCredential"].forEach(k => { if (form[k]) payload[k] = form[k]; });
+            ["consumerKey", "consumerSecret", "passkey", "securityCredential", "c2bConsumerKey", "c2bConsumerSecret"].forEach(k => { if (form[k]) payload[k] = form[k]; });
             return api.put("/integrations/mpesa/settings", payload);
         },
-        onSuccess: () => { toast.success("M-PESA settings saved"); qc.invalidateQueries({ queryKey: ["mpesa_settings"] }); setForm((f: any) => ({ ...f, consumerKey: "", consumerSecret: "", passkey: "", securityCredential: "" })); },
+        onSuccess: () => { toast.success("M-PESA settings saved"); qc.invalidateQueries({ queryKey: ["mpesa_settings"] }); setForm((f: any) => ({ ...f, consumerKey: "", consumerSecret: "", passkey: "", securityCredential: "", c2bConsumerKey: "", c2bConsumerSecret: "" })); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Save failed"),
     });
 
@@ -127,6 +127,17 @@ export default function MpesaIntegration() {
                         {secretField("consumerKey", "Consumer Key", !!settings?.consumerKeyMask)}
                         {secretField("consumerSecret", "Consumer Secret", !!settings?.consumerSecretSet)}
                         {secretField("passkey", "Lipa na M-PESA Passkey", !!settings?.passkeySet)}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60"><h2 className="text-sm font-black text-slate-700">C2B App (optional — only if Safaricom gave you a separate one)</h2></div>
+                    <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <p className="md:col-span-2 text-[11px] text-slate-500 -mt-1 leading-snug">
+                            Safaricom sometimes approves a different Daraja app for C2B (Paybill/Till notifications) than the one used for the STK prompt. Leave these blank to register C2B with the same Consumer Key/Secret above.
+                        </p>
+                        {secretField("c2bConsumerKey", "C2B Consumer Key", !!settings?.c2bConsumerKeyMask)}
+                        {secretField("c2bConsumerSecret", "C2B Consumer Secret", !!settings?.c2bConsumerSecretSet)}
                     </div>
                 </div>
 

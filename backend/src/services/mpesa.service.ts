@@ -21,6 +21,11 @@ export interface MpesaConfig {
     securityCredential?: string;    // pre-encrypted (school generates from cert)
     callbackBase: string;           // platform-level
     enabled?: boolean;
+    // Safaricom sometimes issues a SEPARATE Daraja app (its own Consumer Key/Secret)
+    // just for the C2B product, distinct from the one approved for STK Push. When
+    // set, C2B operations (registering URLs) sign with these instead of key/secret.
+    c2bKey?: string;
+    c2bSecret?: string;
 }
 
 const baseFor = (env: string) => env === 'production' ? 'https://api.safaricom.co.ke' : 'https://sandbox.safaricom.co.ke';
@@ -69,6 +74,8 @@ export const resolveMpesaConfig = async (db: Db): Promise<MpesaConfig> => {
         securityCredential: trim(s.securityCredential || ig.securityCredential || process.env.MPESA_SECURITY_CREDENTIAL),
         callbackBase: platformCallbackBase(),
         enabled: s.enabled !== false && ig.enabled !== false,
+        c2bKey: trim(s.c2bConsumerKey || ig.c2bConsumerKey),
+        c2bSecret: trim(s.c2bConsumerSecret || ig.c2bConsumerSecret),
     };
 };
 
@@ -105,12 +112,15 @@ async function requestNewToken(c: MpesaConfig): Promise<{ ok: boolean; status: n
 // sandbox throttling.
 const looksMalformed = (v: string) => /\s/.test(v) || /[^\x20-\x7E]/.test(v);
 
-export async function getAccessToken(c: MpesaConfig): Promise<string> {
-    if (!c.key || !c.secret) throw new Error('M-PESA is not configured for this school.');
-    if (looksMalformed(c.key) || looksMalformed(c.secret)) {
+/** Obtains a token for an explicit key/secret pair — used both by getAccessToken
+ * (the school's main app) and by C2B operations when a separate C2B app was given. */
+async function getAccessTokenFor(c: Pick<MpesaConfig, 'base' | 'env'>, key: string, secret: string): Promise<string> {
+    if (!key || !secret) throw new Error('M-PESA is not configured for this school.');
+    if (looksMalformed(key) || looksMalformed(secret)) {
         throw new Error('Your Consumer Key or Consumer Secret contains whitespace or an invalid character (often from copy-pasting) — re-copy them from your Daraja app and re-save.');
     }
-    const cached = tokenCache.get(c.key);
+    const cacheKey = `${c.env}:${key}`;
+    const cached = tokenCache.get(cacheKey);
     if (cached && cached.expires > Date.now() + 60_000) return cached.token;
 
     // Safaricom's OAuth endpoint occasionally 400s a token request that
@@ -122,10 +132,10 @@ export async function getAccessToken(c: MpesaConfig): Promise<string> {
     const delays = [1200, 2500, 4000];
     let ok = false, status = 0, data: any = {};
     for (let attempt = 0; attempt <= delays.length; attempt++) {
-        ({ ok, status, data } = await requestNewToken(c));
+        ({ ok, status, data } = await requestNewToken({ ...c, key, secret } as MpesaConfig));
         if (ok) break;
         console.error(`[M-PESA] OAuth token request failed (attempt ${attempt + 1}/${delays.length + 1}):`, JSON.stringify({
-            status, base: c.base, env: c.env, keyTail: c.key.slice(-4), response: data,
+            status, base: c.base, env: c.env, keyTail: key.slice(-4), response: data,
         }));
         if (attempt < delays.length) await new Promise(r => setTimeout(r, delays[attempt]));
     }
@@ -138,12 +148,18 @@ export async function getAccessToken(c: MpesaConfig): Promise<string> {
                 : `HTTP ${status}`);
         throw new Error(`Failed to obtain M-PESA token: ${reason}`);
     }
-    tokenCache.set(c.key, { token: data.access_token, expires: Date.now() + Number(data.expires_in || 3599) * 1000 });
+    tokenCache.set(cacheKey, { token: data.access_token, expires: Date.now() + Number(data.expires_in || 3599) * 1000 });
     return data.access_token;
 }
 
-async function daraja(c: MpesaConfig, path: string, body: any) {
-    const token = await getAccessToken(c);
+export async function getAccessToken(c: MpesaConfig): Promise<string> {
+    return getAccessTokenFor(c, c.key, c.secret);
+}
+
+async function daraja(c: MpesaConfig, path: string, body: any, part: 'main' | 'c2b' = 'main') {
+    // The C2B product may have its own Daraja app; without one it uses the main app.
+    const useC2B = part === 'c2b' && c.c2bKey && c.c2bSecret;
+    const token = useC2B ? await getAccessTokenFor(c, c.c2bKey!, c.c2bSecret!) : await getAccessToken(c);
     const resp = await fetch(`${c.base}${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -219,9 +235,50 @@ export async function registerC2BUrls(c: MpesaConfig, validationUrl: string, con
     // NOT the Head Office number. Safaricom rejects/ignores registration on the HO.
     // Caller passes the store number explicitly; default to the config shortcode.
     const registerShortCode = String(shortCode || c.shortcode).trim();
-    const { ok, status, data } = await daraja(c, '/mpesa/c2b/v2/registerurl', { ShortCode: registerShortCode, ResponseType: responseType, ConfirmationURL: confirmationUrl, ValidationURL: validationUrl });
-    if (!ok) throw new Error(data?.errorMessage || `Register URL failed (HTTP ${status})`);
+    const { ok, status, data } = await daraja(c, '/mpesa/c2b/v2/registerurl', { ShortCode: registerShortCode, ResponseType: responseType, ConfirmationURL: confirmationUrl, ValidationURL: validationUrl }, 'c2b');
+    if (!ok) throw new Error(explainC2BError({ status, body: data }, c.env));
     return { ...data, registeredShortCode: registerShortCode };
+}
+
+/** Words Safaricom refuses in callback URLs (any case), e.g. "mpesa", "safaricom", "exe", "cmd", "sql", "query". */
+export const DARAJA_BLOCKED_URL_WORDS = /m-?pesa|safaricom|exe|cmd|sql|query/i;
+
+/** Reasons Safaricom would refuse (or never reach) a callback URL; empty when it looks fine. */
+export function callbackUrlProblems(url: string, environment: 'sandbox' | 'production'): string[] {
+    const problems: string[] = [];
+    let u: URL;
+    try { u = new URL(url); } catch { return [`"${url}" is not a valid address. Ask the platform operator to set MPESA_CALLBACK_URL to this server's public address.`]; }
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.lan')
+        || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.)/.test(host) || host === '::1' || !host.includes('.')) {
+        problems.push(`${u.origin} is a private address that Safaricom cannot reach. Ask the platform operator to set MPESA_CALLBACK_URL to a public HTTPS address, then try again.`);
+    }
+    if (u.protocol !== 'https:') {
+        problems.push(environment === 'production'
+            ? 'Live M-PESA only calls HTTPS addresses. The platform operator must put this server behind HTTPS and set MPESA_CALLBACK_URL to an https:// address.'
+            : 'Use an HTTPS address: Safaricom may refuse plain http:// callback URLs.');
+    }
+    const word = url.match(DARAJA_BLOCKED_URL_WORDS)?.[0];
+    if (word) problems.push(`The address contains "${word}", which Safaricom refuses in callback URLs. Ask the platform operator to use a domain without it.`);
+    return problems;
+}
+
+/** Plain-language reasons for the errors Safaricom returns when registering C2B URLs. */
+export function explainC2BError(err: { status?: number; body?: any; message?: string }, environment: 'sandbox' | 'production'): string {
+    const body = err.body ?? {};
+    const code = String(body.errorCode ?? body.ResponseCode ?? '');
+    const msg = String(body.errorMessage ?? body.ResponseDescription ?? err.message ?? 'Registration failed');
+    const status = err.status;
+    if (/already registered|duplicate/i.test(msg) || code === '500.003.1001') {
+        return environment === 'production'
+            ? 'Safaricom already has URLs registered for this short code. Live URLs can only be registered once: remove them on the Daraja portal (or ask apisupport@safaricom.co.ke), then register again.'
+            : `Safaricom says the URLs are already registered (${msg}). Sandbox registrations can be repeated; try again in a minute.`;
+    }
+    if (status === 401 || /access token|unauthori[sz]ed|401/i.test(`${code} ${msg}`)) return `Safaricom refused the API keys (${msg}). Check the Consumer Key and Secret (the C2B ones if you set them, else the main ones), and that the Daraja app has the C2B product${environment === 'production' ? ' for this short code' : ''}.`;
+    if (/shortcode|short code/i.test(msg)) return `Safaricom refused the short code (${msg}). Use your Paybill number, or for Buy Goods the store (head office) number. Sandbox uses its test short code, e.g. 600xxx.`;
+    if (/url/i.test(msg)) return `Safaricom refused the callback URLs (${msg}). They must be public HTTPS addresses without words like "mpesa", "safaricom", "exe", "cmd", "sql" or "query".`;
+    if (/network error|timeout/i.test(msg)) return `Safaricom could not be reached: ${msg}`;
+    return `Safaricom: ${msg}${code ? ` (code ${code})` : ''}`;
 }
 
 // ─── Pull Transactions API ─────────────────────────────────────────────────────
