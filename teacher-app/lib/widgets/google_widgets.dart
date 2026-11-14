@@ -94,7 +94,7 @@ class _GoogleLinkPanelState extends ConsumerState<GoogleLinkPanel> {
       icon: Icons.verified_user_outlined,
       child: async.when(
         loading: () => const Padding(padding: EdgeInsets.all(8), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
-        error: (e, _) => Text('Could not load sign-in settings.', style: const TextStyle(color: AppColors.slate500)),
+        error: (e, _) => const Text('Could not load sign-in settings.', style: TextStyle(color: AppColors.slate500)),
         data: (d) {
           final g = Map<String, dynamic>.from((d['google'] ?? {}) as Map);
           final enabled = g['enabled'] == true;

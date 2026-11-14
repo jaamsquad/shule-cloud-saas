@@ -23,7 +23,7 @@ class LocationService {
 
   /// A throttled position stream (distance-filtered per [TrackingConfig]).
   Stream<Position> positionStream() => Geolocator.getPositionStream(
-        locationSettings: LocationSettings(
+        locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: TrackingConfig.distanceFilterMeters,
         ),

@@ -61,6 +61,8 @@ export default function DashboardLayout() {
     // Desktop: sidebar starts open. Mobile: starts closed.
     const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
     const location = useLocation();
+    // The resource library has its own focused navigation and header.
+    const isStandaloneLibrary = ["/academics/resources", "/lms/lessons"].includes(location.pathname);
     useAuthGuard();
 
     // Close sidebar on route change on mobile
@@ -80,11 +82,11 @@ export default function DashboardLayout() {
 
     return (
         <div className="flex flex-col h-screen w-full bg-[#f8fafc] overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
-            <TopHeader onMenuClick={() => setSidebarOpen(v => !v)} />
+            {!isStandaloneLibrary && <TopHeader onMenuClick={() => setSidebarOpen(v => !v)} />}
 
             <div className="flex flex-1 overflow-hidden relative">
                 {/* ── Mobile overlay backdrop ─────────────────────────────── */}
-                {sidebarOpen && (
+                {!isStandaloneLibrary && sidebarOpen && (
                     <div
                         className="fixed inset-0 bg-black/40 z-20 md:hidden"
                         onClick={() => setSidebarOpen(false)}
@@ -93,14 +95,14 @@ export default function DashboardLayout() {
 
                 {/* ── Sidebar ─────────────────────────────────────────────── */}
                 {/* Desktop: pushes content. Mobile: overlays as drawer from left. */}
-                <div className={`
+                {!isStandaloneLibrary && <div className={`
                     transition-all duration-300 ease-in-out flex-shrink-0
                     md:relative md:top-0 md:z-auto
                     fixed left-0 top-16 bottom-0 z-30
                     ${sidebarOpen ? "w-64 translate-x-0" : "w-64 -translate-x-full md:w-0 md:translate-x-0 md:overflow-hidden"}
                 `}>
                     <AppSidebar />
-                </div>
+                </div>}
 
                 {/* ── Main content ─────────────────────────────────────────── */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
@@ -109,12 +111,14 @@ export default function DashboardLayout() {
                             <Outlet />
                         </PermissionGuard>
                     </div>
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-[#5C67F2]/5 rounded-full blur-[100px] pointer-events-none -mr-48 -mt-48" />
-                    <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FFC165]/5 rounded-full blur-[100px] pointer-events-none -ml-48 -mb-48" />
+                    {!isStandaloneLibrary && <>
+                        <div className="absolute top-0 right-0 w-96 h-96 bg-[#5C67F2]/5 rounded-full blur-[100px] pointer-events-none -mr-48 -mt-48" />
+                        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FFC165]/5 rounded-full blur-[100px] pointer-events-none -ml-48 -mb-48" />
+                    </>}
                 </main>
             </div>
             {/* Global floating Smart Assistant — button-driven live insights */}
-            <SmartAssistant />
+            {!isStandaloneLibrary && <SmartAssistant />}
         </div>
     );
 }

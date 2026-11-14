@@ -83,7 +83,7 @@ class _IncidentScreenState extends ConsumerState<IncidentScreen> {
           const Text('Incident Type', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _type,
+            initialValue: _type,
             hint: const Text('Select category…'),
             items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
             onChanged: (v) => setState(() => _type = v),

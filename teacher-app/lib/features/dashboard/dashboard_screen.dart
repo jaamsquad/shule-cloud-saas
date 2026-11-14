@@ -62,7 +62,7 @@ class DashboardScreen extends ConsumerWidget {
               child: _ResponsiveGrid(
                 columns: width >= 700 ? 5 : 3,
                 spacing: 8,
-                children: [
+                children: const [
                   _QuickAction(Icons.fact_check_outlined, 'Attendance', AppColors.teal, '/attendance'),
                   _QuickAction(Icons.groups_outlined, 'My Classes', AppColors.green, '/classes'),
                   _QuickAction(Icons.schedule_outlined, 'Timetable', AppColors.tertiary, '/timetable'),
