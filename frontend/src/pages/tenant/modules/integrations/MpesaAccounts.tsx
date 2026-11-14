@@ -226,13 +226,17 @@ function AccountForm({ id, account, onClose, onSaved }: { id: string | null; acc
                             </select>
                         </div>
                         <div>
-                            <label className={LABEL}>{form.txType === "CustomerBuyGoodsOnline" ? "Head Office / Store Number" : "Business Shortcode (Paybill)"}</label>
-                            <input value={form.shortcode || ""} onChange={e => set("shortcode", e.target.value)} placeholder="e.g. 174379" className={FIELD} />
+                            <label className={LABEL}>{form.txType === "CustomerBuyGoodsOnline" ? "Till Number" : "Business Shortcode (Paybill)"}</label>
+                            <input value={form.shortcode || ""} onChange={e => set("shortcode", e.target.value)} placeholder={form.txType === "CustomerBuyGoodsOnline" ? "e.g. 5678901" : "e.g. 174379"} className={FIELD} />
+                            {form.txType === "CustomerBuyGoodsOnline" && (
+                                <p className="text-[11px] text-gray-400 mt-1">The number customers dial on "Lipa na M-PESA → Buy Goods" (what Safaricom calls your <em>BusinessShortCode</em>).</p>
+                            )}
                         </div>
                         {form.txType === "CustomerBuyGoodsOnline" && (
                             <div>
-                                <label className={LABEL}>Till Number</label>
-                                <input value={form.tillNumber || ""} onChange={e => set("tillNumber", e.target.value)} placeholder="e.g. 5678901" className={FIELD} />
+                                <label className={LABEL}>Store Number <span className="font-normal text-gray-400">· optional</span></label>
+                                <input value={form.tillNumber || ""} onChange={e => set("tillNumber", e.target.value)} placeholder="leave blank for single-till" className={FIELD} />
+                                <p className="text-[11px] text-gray-400 mt-1">Only if Safaricom gave you a separate store/head-office number for a multi-till merchant. Leave blank otherwise.</p>
                             </div>
                         )}
                         {secretField("consumerKey", "Consumer Key", !!account?.consumerKeyMask)}
