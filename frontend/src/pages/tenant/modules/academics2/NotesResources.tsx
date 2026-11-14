@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import {
-    ArrowDownWideNarrow, ArrowRight, ArrowUpRight, Bell, BookMarked, BookOpen,
+    ArrowDownWideNarrow, ArrowLeft, ArrowRight, ArrowUpRight, Bell, BookMarked, BookOpen,
     BookOpenCheck, Check, ChevronDown, ClipboardCheck, Download, ExternalLink,
-    Eye, File, FileDown, FileText, GraduationCap, Home, LayoutDashboard,
+    Eye, File, FileDown, FileText, GraduationCap, Home,
     Loader2, Menu, MessageCircle, NotebookTabs, Pencil, Play, Search,
-    Settings, SlidersHorizontal, Sparkles, Trash2, Video, X, Link2, Users,
+    SlidersHorizontal, Sparkles, Trash2, Video, X, Link2, Users,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -25,13 +25,7 @@ const TYPES = [
 ];
 
 const NAV_ITEMS = [
-    { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { label: "Online Library", path: "/academics/resources", icon: BookOpen },
-    { label: "Lesson Plans", path: "/academics/lesson-plans", icon: NotebookTabs },
-    { label: "Assignments", path: "/academics/assignments", icon: ClipboardCheck },
-    { label: "Notices", path: "/communications/announcements", icon: Bell },
-    { label: "Subjects", path: "/academics/subjects", icon: GraduationCap },
-    { label: "Settings", path: "/settings", icon: Settings },
 ];
 
 const TONE_CLASS: Record<string, { text: string; bg: string; soft: string }> = {
@@ -60,6 +54,7 @@ function SidebarContent({
     schoolId,
     currentPath,
     onNavigate,
+    onBack,
 }: {
     collapsed?: boolean;
     schoolName: string;
@@ -67,6 +62,7 @@ function SidebarContent({
     schoolId?: string;
     currentPath: string;
     onNavigate: (path: string) => void;
+    onBack: () => void;
 }) {
     return (
         <div className="flex h-full flex-col text-white">
@@ -79,6 +75,12 @@ function SidebarContent({
                     <p className="mt-0.5 text-[11px] font-medium tracking-wide text-blue-100/75">Learn · Manage · Grow</p>
                 </div>}
             </div>
+
+            <button onClick={onBack} title={collapsed ? "Back to dashboard" : undefined}
+                className={`mx-3 mb-5 flex items-center gap-3 rounded-xl border border-white/15 px-3.5 py-3 text-left text-sm font-semibold text-blue-100 transition hover:bg-white/10 hover:text-white ${collapsed ? "justify-center px-0" : ""}`}>
+                <ArrowLeft className="h-[19px] w-[19px] shrink-0" />
+                {!collapsed && <span>Back to dashboard</span>}
+            </button>
 
             {!collapsed && <p className="px-6 pb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-blue-200/55">Learning space</p>}
             <nav className="space-y-1 px-3" aria-label="Learning library navigation">
@@ -193,27 +195,33 @@ export default function NotesResources() {
         setMobileMenuOpen(false);
         navigate(path);
     };
+    const goBack = () => {
+        const historyIndex = window.history.state?.idx;
+        if (typeof historyIndex === "number" && historyIndex > 0) navigate(-1);
+        else navigate("/dashboard");
+    };
     const typeCount = (key: string) => resources.filter((item: any) => item.type === key).length;
     const resetFilters = () => { setTypeFilter("ALL"); setClassFilter("ALL"); setSubjectFilter("ALL"); setSearch(""); };
 
     return (
-        <div className="min-h-full bg-[#f4f7fc] text-slate-900">
+        <div className="flex min-h-full bg-[#f4f7fc] text-slate-900">
             {mobileMenuOpen && <button data-app-chrome aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" onClick={() => setMobileMenuOpen(false)} />}
             <aside data-app-chrome className={`fixed inset-y-0 left-0 z-50 w-[270px] bg-[#102b5b] shadow-2xl transition-transform duration-300 lg:hidden ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
                 <div className="absolute right-3 top-3">
                     <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="rounded-lg p-2 text-blue-100 hover:bg-white/10"><X className="h-5 w-5" /></button>
                 </div>
-                <SidebarContent schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} />
+                <SidebarContent schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} onBack={goBack} />
             </aside>
 
             <div data-app-chrome className={`hidden shrink-0 bg-[#102b5b] transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${sidebarCollapsed ? "lg:w-[82px]" : "lg:w-[260px]"}`}>
-                <SidebarContent collapsed={sidebarCollapsed} schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} />
+                <SidebarContent collapsed={sidebarCollapsed} schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} onBack={goBack} />
             </div>
 
             <div className="min-w-0 flex-1">
                 <header data-app-chrome className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
                     <button onClick={() => { if (window.innerWidth >= 1024) setSidebarCollapsed(value => !value); else setMobileMenuOpen(true); }} aria-label="Toggle navigation"
                         className="rounded-xl p-2 text-[#16376e] transition hover:bg-blue-50"><Menu className="h-5 w-5" /></button>
+                    <button onClick={goBack} className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold text-[#16376e] transition hover:bg-blue-50 sm:px-3"><ArrowLeft className="h-4 w-4" /><span>Back</span></button>
                     <div className="hidden items-center gap-2 text-sm text-slate-400 sm:flex"><span>Academics</span><span>/</span><span className="font-bold text-slate-800">Online Library</span></div>
                     <div className="ml-auto flex items-center gap-3 sm:gap-5">
                         <button className="relative rounded-xl p-2 text-slate-500 hover:bg-slate-50" aria-label="Notifications"><Bell className="h-5 w-5" /><span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" /></button>
