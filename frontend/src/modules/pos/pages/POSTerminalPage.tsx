@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import posApi from '../lib/posApi'
 import { usePOSAuthStore } from '../stores/posAuthStore'
 import { usePOSCartStore } from '../stores/posCartStore'
-import { Search, ArrowLeft, Tag, Layers, RefreshCw, AlertTriangle, X, Plus, Minus, Trash2, LogOut, ShoppingCart } from 'lucide-react'
+import { Search, ArrowLeft, Tag, Layers, RefreshCw, AlertTriangle, X, Plus, Minus, Trash2, LogOut, ShoppingCart, Shirt, BookOpen, Trophy, ShoppingBag } from 'lucide-react'
 
 interface Variant { id: string; size: string | null; color: string | null; stock: number; price: number }
 interface Product { id: string; name: string; description: string | null; imageUrl: string | null; variants: Variant[]; category: { id: string; name: string } }
@@ -59,7 +59,7 @@ export default function POSTerminalPage() {
         amountPaid: paymentMethod === 'CASH' ? amountPaid : subtotal,
         source: 'POS',
       })
-      toast.success(`Order ${data.data.orderNumber} complete! ✅`)
+      toast.success(`Order ${data.data.orderNumber} complete!`)
       clearCart()
       setCustomerName('')
       setAmountPaid(0)
@@ -215,7 +215,11 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (p: Product,
       <div className="h-20 rounded-lg bg-gray-800 flex items-center justify-center overflow-hidden">
         {product.imageUrl
           ? <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
-          : <span className="text-3xl select-none">{product.category.name.toLowerCase().includes('uniform') ? '👕' : product.category.name.toLowerCase().includes('station') ? '📚' : product.category.name.toLowerCase().includes('sport') ? '⚽' : '🛍️'}</span>}
+          : (() => {
+              const cat = product.category.name.toLowerCase()
+              const CategoryIcon = cat.includes('uniform') ? Shirt : cat.includes('station') ? BookOpen : cat.includes('sport') ? Trophy : ShoppingBag
+              return <CategoryIcon className="w-8 h-8 text-slate-400" />
+            })()}
       </div>
       <div className="flex-1">
         <p className="text-xs font-medium text-white leading-tight line-clamp-2">{product.name}</p>

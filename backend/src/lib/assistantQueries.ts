@@ -199,7 +199,7 @@ def('students.birthdays', 'Students', 'Students with birthdays today.', async ({
     const bdays = filterStudents(all, filters).filter(s => { const d = new Date(s.dob || s.dateOfBirth || 0); return !isNaN(d.getTime()) && `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === md; });
     return {
         id: 'students.birthdays', title: 'Birthdays Today',
-        summary: bdays.length ? `🎉 ${bdays.length} student(s) have a birthday today!` : 'No student birthdays today.',
+        summary: bdays.length ? `${bdays.length} student(s) have a birthday today!` : 'No student birthdays today.',
         stat: { value: bdays.length, label: 'Birthdays' },
         breakdown: bdays.map(s => ({ label: s.studentName || s.name || 'Student', value: classOf(s) })),
         actions: [{ label: 'Send Wishes SMS', icon: 'message', action: 'sendSms', params: { template: 'birthday' } }],
@@ -319,7 +319,28 @@ async function classAttendanceRanking(db: Db, scope: ScopeResult, filters: Query
 }
 
 // ─── FEES & FINANCE ──────────────────────────────────────────────────────────
-async function feeBalances(db: Db, scope: ScopeResult) {
+/**
+ * Matches an invoice against a requested term string ("Term 2", "Term 2 2026"…), whether the
+ * invoice stores the term as a plain name/semester string or as an id pointing at `terms`.
+ * Returns null if no term was requested (caller then applies no term filter at all).
+ */
+async function resolveTermFilter(db: Db, term?: string): Promise<((inv: any) => boolean) | null> {
+    const want = NORM(term);
+    if (!want) return null;
+    const terms = await db.collection('terms').find({}).toArray().catch(() => []);
+    const matchingIds = new Set(
+        terms.filter((t: any) => { const n = NORM(t.name || t.title || t.term); return !!n && (want.includes(n) || n.includes(want)); })
+            .map((t: any) => String(t._id)),
+    );
+    return (inv: any) => {
+        const direct = NORM(inv.term || inv.semester || inv.termName);
+        if (direct && (want.includes(direct) || direct.includes(want))) return true;
+        const idRef = String(inv.semester_id ?? inv.term_id ?? inv.termId ?? '');
+        return idRef ? matchingIds.has(idRef) : false;
+    };
+}
+
+async function feeBalances(db: Db, scope: ScopeResult, filters: QueryFilters = {}) {
     const invoices = await db.collection('invoices').find({}).toArray().catch(() => []);
     // Scope invoices to visible students when not admin.
     let visible = invoices;
@@ -327,30 +348,33 @@ async function feeBalances(db: Db, scope: ScopeResult) {
         const ids = new Set((await db.collection('students').find(scope.studentFilter, { projection: { _id: 1 } }).toArray().catch(() => [])).map((s: any) => String(s._id)));
         visible = invoices.filter((i: any) => ids.has(String(i.studentId)));
     }
+    const termFilter = await resolveTermFilter(db, filters.term);
+    if (termFilter) visible = visible.filter(termFilter);
     const balOf = (i: any) => num(i.balance ?? (num(i.total_due ?? i.amount) - num(i.amount_paid ?? i.paid)));
     return { invoices: visible, balOf };
 }
 
-def('fees.outstanding', 'Fees', 'Outstanding fee balance.', async ({ db, scope }) => {
-    const { invoices, balOf } = await feeBalances(db, scope);
+def('fees.outstanding', 'Fees', 'Outstanding fee balance.', async ({ db, scope, filters }) => {
+    const { invoices, balOf } = await feeBalances(db, scope, filters);
     const total = invoices.reduce((a: number, i: any) => a + Math.max(0, balOf(i)), 0);
     const owing = invoices.filter((i: any) => balOf(i) > 0);
+    const period = filters.term ? ` for ${filters.term}` : '';
     return {
-        id: 'fees.outstanding', title: 'Outstanding Fees',
-        summary: `Total outstanding fee balance is KES ${total.toLocaleString()} across ${new Set(owing.map((i: any) => String(i.studentId))).size} students.`,
+        id: 'fees.outstanding', title: `Outstanding Fees${filters.term ? ` — ${filters.term}` : ''}`,
+        summary: `Total outstanding fee balance${period} is KES ${total.toLocaleString()} across ${new Set(owing.map((i: any) => String(i.studentId))).size} students.`,
         stat: { value: `KES ${total.toLocaleString()}`, label: 'Outstanding' },
         actions: [{ label: 'View Defaulters', icon: 'eye', action: 'viewDefaulters' }, { label: 'Send Reminders', icon: 'message', action: 'sendSms', params: { template: 'feeReminder' } }, { label: 'Export', icon: 'download', action: 'export' }],
     };
 });
 
-def('fees.defaulters', 'Fees', 'Top fee defaulters.', async ({ db, scope }) => {
-    const { invoices, balOf } = await feeBalances(db, scope);
+def('fees.defaulters', 'Fees', 'Top fee defaulters.', async ({ db, scope, filters }) => {
+    const { invoices, balOf } = await feeBalances(db, scope, filters);
     const byStudent: Record<string, { name: string; bal: number }> = {};
     invoices.forEach((i: any) => { const b = balOf(i); if (b > 0) { const k = String(i.studentId); (byStudent[k] ||= { name: i.studentName || 'Student', bal: 0 }); byStudent[k].bal += b; } });
     const top = Object.values(byStudent).sort((a, b) => b.bal - a.bal).slice(0, 15);
     return {
-        id: 'fees.defaulters', title: 'Top Fee Defaulters',
-        summary: `${top.length ? top[0].name : 'No one'} tops the defaulters list.`,
+        id: 'fees.defaulters', title: `Top Fee Defaulters${filters.term ? ` — ${filters.term}` : ''}`,
+        summary: `${top.length ? top[0].name : 'No one'} tops the defaulters list${filters.term ? ` for ${filters.term}` : ''}.`,
         breakdown: top.map(t => ({ label: t.name, value: `KES ${t.bal.toLocaleString()}` })),
         chart: { type: 'bar', title: 'Top balances', data: top.slice(0, 8).map(t => ({ label: t.name, value: Math.round(t.bal) })) },
         actions: [{ label: 'Send Reminders', icon: 'message', action: 'sendSms', params: { template: 'feeReminder' } }, { label: 'Export', icon: 'download', action: 'export' }],
@@ -415,7 +439,7 @@ def('staff.birthdays', 'Staff', 'Staff birthdays.', async ({ db, scope }) => {
     const staff = await db.collection('staff').find(scope.isAdmin ? {} : scope.staffFilter).toArray().catch(() => []);
     const now = new Date(); const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const bdays = staff.filter((s: any) => { const d = new Date(s.dob || s.dateOfBirth || 0); return !isNaN(d.getTime()) && `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === md; });
-    return { id: 'staff.birthdays', title: 'Staff Birthdays', summary: bdays.length ? `🎉 ${bdays.length} staff have a birthday today.` : 'No staff birthdays today.', stat: { value: bdays.length, label: 'Birthdays' }, breakdown: bdays.map((s: any) => ({ label: s.employeeName || s.name || 'Staff', value: s.designation || '' })) };
+    return { id: 'staff.birthdays', title: 'Staff Birthdays', summary: bdays.length ? `${bdays.length} staff have a birthday today.` : 'No staff birthdays today.', stat: { value: bdays.length, label: 'Birthdays' }, breakdown: bdays.map((s: any) => ({ label: s.employeeName || s.name || 'Staff', value: s.designation || '' })) };
 });
 
 // ─── ACADEMICS ───────────────────────────────────────────────────────────────

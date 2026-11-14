@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import posApi from '../../lib/posApi'
 import { format } from 'date-fns'
-import { Search, Plus, Loader2 } from 'lucide-react'
+import { Search, Plus, Loader2, X } from 'lucide-react'
 
 export default function POSAccounts() {
   const queryClient = useQueryClient()
@@ -98,7 +98,7 @@ export default function POSAccounts() {
                 <h2 className="text-base font-bold text-white">Top Up Account</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{selectedAccount.user?.name}</p>
               </div>
-              <button onClick={() => setSelectedAccount(null)} className="text-gray-500 hover:text-white text-lg">✕</button>
+              <button onClick={() => setSelectedAccount(null)} className="text-gray-500 hover:text-white text-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="bg-gray-800 rounded-xl p-3 flex items-center justify-between">
               <span className="text-sm text-gray-400">Current Balance:</span>

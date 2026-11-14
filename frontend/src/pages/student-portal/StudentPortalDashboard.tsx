@@ -4,7 +4,7 @@ import {
     Home, TrendingUp, CreditCard, FileText, Bell, LogOut,
     GraduationCap, BookOpen, ClipboardList, ChevronRight,
     Megaphone, Clock, CheckCircle2, AlertCircle, Receipt,
-    BarChart2, Award, Loader2, Smartphone, X, Check, Phone
+    BarChart2, Award, Loader2, Smartphone, X, Check, Phone, Hand, Pin, Landmark, Banknote
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
@@ -17,22 +17,13 @@ import {
 
 // ─── Student-scoped axios ─────────────────────────────────────────────────────
 import { API_ORIGIN } from "@/lib/config";
+import { useGrading } from "@/lib/grading";
 const sApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 sApi.interceptors.request.use(cfg => {
     const t = localStorage.getItem("student_token");
     if (t) cfg.headers.Authorization = `Bearer ${t}`;
     return cfg;
 });
-
-function grade(pct: number) {
-    if (pct >= 80) return "A";
-    if (pct >= 70) return "B+";
-    if (pct >= 60) return "B";
-    if (pct >= 50) return "C+";
-    if (pct >= 40) return "C";
-    if (pct >= 33) return "D";
-    return "F";
-}
 
 function gradeColor(pct: number) {
     if (pct >= 70) return "text-emerald-400";
@@ -62,7 +53,7 @@ export default function StudentPortalDashboard() {
     useEffect(() => {
         const info = localStorage.getItem("student_info");
         const token = localStorage.getItem("student_token");
-        if (!info || !token) { navigate("/student-portal"); return; }
+        if (!info || !token) { navigate("/login"); return; }
         setStudent(JSON.parse(info));
     }, [navigate]);
 
@@ -72,6 +63,12 @@ export default function StudentPortalDashboard() {
         queryFn: async () => { const r = await sApi.get("/auth/student-portal/exam-results"); return Array.isArray(r.data) ? r.data : []; },
         enabled: !!student,
     });
+
+    // The school's configured grading for this student's class (fetched with the portal token).
+    const grading = useGrading(student?.classId, student?.class, sApi);
+    const grade = (pct: number) => grading.grade(pct);
+    // Prefer the grade the server already worked out; compute only what it didn't send.
+    const examGrade = (e: { meanGrade?: string; grade?: string; average?: number }) => e?.meanGrade || e?.grade || grade(e?.average || 0);
 
     const { data: invoices = [], isLoading: loadFees } = useQuery({
         queryKey: ["sp_invoices"],
@@ -109,7 +106,7 @@ export default function StudentPortalDashboard() {
         localStorage.removeItem("student_token");
         localStorage.removeItem("student_info");
         toast.success("Logged out");
-        navigate("/student-portal");
+        navigate("/login");
     };
 
     const payMutation = useMutation({
@@ -183,7 +180,7 @@ export default function StudentPortalDashboard() {
                                 <p className="text-indigo-200 text-[10px] font-bold uppercase tracking-widest mb-0.5">
                                     {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                                 </p>
-                                <h2 className="text-xl font-black text-white">Welcome back, {student.name?.split(" ")[0]}! 👋</h2>
+                                <h2 className="text-xl font-black text-white">Welcome back, {student.name?.split(" ")[0]}! <Hand className="w-5 h-5 inline align-[-3px] text-white" /></h2>
                                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                                     <span className="bg-white/20 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full">{student.class || "N/A"}</span>
                                     <span className="bg-white/20 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full">ID: {student.registrationNo || "—"}</span>
@@ -224,7 +221,7 @@ export default function StudentPortalDashboard() {
                                         </div>
                                         <div className="text-right">
                                             <p className={`text-2xl font-black ${gradeColor(examResults[0].average)}`}>{examResults[0].average.toFixed(1)}%</p>
-                                            <p className={`text-sm font-black ${gradeColor(examResults[0].average)}`}>{grade(examResults[0].average)}</p>
+                                            <p className={`text-sm font-black ${gradeColor(examResults[0].average)}`}>{examGrade(examResults[0])}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setTab("exams")} className="w-full mt-3 text-[9px] text-indigo-400 font-black uppercase tracking-widest text-center hover:text-indigo-300 flex items-center justify-center gap-1">
@@ -296,7 +293,7 @@ export default function StudentPortalDashboard() {
                                             onClick={() => setExpandedExam(isExpanded ? null : exam.examId)}>
                                             <div className="flex items-center gap-3 text-left">
                                                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm ${exam.average >= 70 ? "bg-emerald-900/50 text-emerald-400" : exam.average >= 50 ? "bg-amber-900/50 text-amber-400" : "bg-rose-900/50 text-rose-400"}`}>
-                                                    {grade(exam.average)}
+                                                    {examGrade(exam)}
                                                 </div>
                                                 <div>
                                                     <p className="text-white font-black text-sm">{exam.examName}</p>
@@ -321,7 +318,7 @@ export default function StudentPortalDashboard() {
                                                                     <p className="text-white text-[11px] font-black truncate">{sub.name}</p>
                                                                     <div className="flex items-center gap-2 flex-shrink-0">
                                                                         <span className="text-[10px] font-black text-slate-300">{sub.marks}/{sub.outOf}</span>
-                                                                        <span className={`text-[10px] font-black ${gradeColor(pct)}`}>{grade(pct)}</span>
+                                                                        <span className={`text-[10px] font-black ${gradeColor(pct)}`}>{sub.grade || grade(pct)}</span>
                                                                     </div>
                                                                 </div>
                                                                 <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -389,7 +386,7 @@ export default function StudentPortalDashboard() {
                                                         <p className="text-slate-500 text-[9px] font-bold uppercase mt-0.5">{inv.term || inv.period || "—"} · {inv.created_at ? new Date(inv.created_at).toLocaleDateString("en-GB") : inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("en-GB") : "—"}</p>
                                                     </div>
                                                     <span className={`px-2.5 py-1 rounded-xl text-[8px] font-black uppercase flex-shrink-0 ${isPaid ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"}`}>
-                                                        {isPaid ? "✓ Paid" : "Unpaid"}
+                                                        {isPaid ? <><Check className="w-2.5 h-2.5 inline align-[-1px] mr-0.5" />Paid</> : "Unpaid"}
                                                     </span>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-2 text-center mb-3">
@@ -474,7 +471,7 @@ export default function StudentPortalDashboard() {
                                                             style={{ width: `${Math.min(e.average, 100)}%` }} />
                                                     </div>
                                                     <span className={`text-sm font-black w-10 text-right ${gradeColor(e.average)}`}>{e.average.toFixed(0)}%</span>
-                                                    <span className={`text-xs font-black w-5 ${gradeColor(e.average)}`}>{grade(e.average)}</span>
+                                                    <span className={`text-xs font-black w-5 ${gradeColor(e.average)}`}>{examGrade(e)}</span>
                                                 </div>
                                             </div>
                                         ))}
@@ -535,7 +532,7 @@ export default function StudentPortalDashboard() {
                                                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${ann.priority === "Urgent" ? "bg-rose-500 text-white" : ann.priority === "Important" ? "bg-amber-500 text-white" : "bg-white/10 text-slate-400"}`}>
                                                     {ann.priority || "Notice"}
                                                 </span>
-                                                {ann.isPinned && <span className="text-[8px] text-indigo-400 font-black">📌</span>}
+                                                {ann.isPinned && <Pin className="w-3 h-3 text-slate-400" />}
                                             </div>
                                             <p className="text-white font-black text-sm">{ann.title}</p>
                                             <p className="text-slate-400 text-[10px] font-medium mt-1 leading-relaxed">{ann.message}</p>
@@ -620,13 +617,13 @@ export default function StudentPortalDashboard() {
                                 {/* Payment method */}
                                 <div className="grid grid-cols-3 gap-2 mb-5">
                                     {[
-                                        { key: "MPESA", label: "M-PESA", icon: "📱" },
-                                        { key: "BANK", label: "Bank", icon: "🏦" },
-                                        { key: "CASH", label: "Cash", icon: "💵" },
+                                        { key: "MPESA", label: "M-PESA", icon: Smartphone },
+                                        { key: "BANK", label: "Bank", icon: Landmark },
+                                        { key: "CASH", label: "Cash", icon: Banknote },
                                     ].map(m => (
                                         <button key={m.key} onClick={() => setPayMethod(m.key)}
                                             className={`py-3 rounded-2xl border text-xs font-black uppercase tracking-wide transition-all flex flex-col items-center gap-1 ${payMethod === m.key ? "bg-green-500 border-green-400 text-white shadow-lg shadow-green-900/30" : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"}`}>
-                                            <span className="text-lg">{m.icon}</span>
+                                            <m.icon className="w-5 h-5" />
                                             {m.label}
                                         </button>
                                     ))}

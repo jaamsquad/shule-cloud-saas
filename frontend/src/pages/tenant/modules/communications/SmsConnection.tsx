@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Laptop, Smartphone, CheckCircle2, XCircle, MessageSquare, Send, Settings2,
-  Loader2, Inbox,
+  Loader2, Inbox, BatteryMedium,
 } from "lucide-react";
 import { toast } from "sonner";
 import { sms } from "@/lib/smsApi";
@@ -40,7 +40,7 @@ export default function SmsConnection({ onOpenDashboard }: { onOpenDashboard?: (
   const isApi = data?.provider === "api";
 
   const statCards = [
-    { label: "Available", value: bal?.configured ? (typeof bal.balance === "object" ? "—" : (bal.balance ?? "—")) : (isApi ? "—" : "Unlimited"), icon: MessageSquare, color: PURPLE, sub: bal?.configured ? (bal.vendor === "africas_talking" ? "Africa's Talking credit" : "Talksasa SMS units") : (isApi ? "Depends on API balance" : "Uses your SIM bundle") },
+    { label: "Available", value: bal?.configured ? (typeof bal.balance === "object" ? "—" : (bal.balance ?? "—")) : (isApi ? "—" : "Unlimited"), icon: MessageSquare, color: PURPLE, sub: bal?.vendor === "platform" ? "SMS Credits wallet (shared gateway)" : bal?.configured ? (bal.vendor === "africas_talking" ? "Africa's Talking credit" : "Talksasa SMS units") : (isApi ? "Depends on API balance" : "Uses your SIM bundle") },
     { label: "Sent", value: stats.sentToday ?? 0, icon: CheckCircle2, color: "#16a34a" },
     { label: "Pending", value: (stats.queued ?? 0) + (stats.sending ?? 0), icon: Inbox, color: "#d97706" },
     { label: "Failed", value: stats.failed ?? 0, icon: XCircle, color: "#dc2626" },
@@ -102,7 +102,7 @@ export default function SmsConnection({ onOpenDashboard }: { onOpenDashboard?: (
               <>
                 <p className="text-sm font-bold text-slate-700 mt-1">{device.name || "Android device"}</p>
                 <p className="text-[11px] text-slate-400">
-                  {device.simOperator ? `SIM: ${device.simOperator}` : "SIM info pending"}{device.phone ? ` · ${device.phone}` : ""}{device.battery != null ? ` · 🔋 ${device.battery}%` : ""}
+                  {device.simOperator ? `SIM: ${device.simOperator}` : "SIM info pending"}{device.phone ? ` · ${device.phone}` : ""}{device.battery != null && <> · <BatteryMedium className="w-3 h-3 inline-block align-[-2px]" /> {device.battery}%</>}
                 </p>
               </>
             )}

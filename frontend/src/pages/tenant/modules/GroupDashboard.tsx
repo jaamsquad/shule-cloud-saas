@@ -1,10 +1,7 @@
 import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Home, LayoutGrid, Loader2, Lock } from "lucide-react";
-import { toast } from "sonner";
-
-const PLAN_LOCK_MSG = "This feature is not included in your plan, contact for more @ 0726151104";
+import { ArrowRight, Home, LayoutGrid, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { navItems } from "@/components/AppSidebar";
 import { groupSlug } from "@/lib/groupSlug";
@@ -177,6 +174,7 @@ export default function GroupDashboard() {
     const children = (group.children || []).filter((c: any) => {
         if (c.path === "/logout" || c.path.startsWith("http")) return false;
         if (userHasSomePagePerm && c.pagePerm && !granted.includes(c.pagePerm)) return false;
+        if (planLocked(c)) return false;   // not in the school's plan — hidden, not greyed out
         return true;
     });
 
@@ -217,20 +215,6 @@ export default function GroupDashboard() {
                 <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Sections</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {children.map((c) => {
-                        if (planLocked(c)) {
-                            return (
-                                <button key={c.path} onClick={() => toast.message(PLAN_LOCK_MSG, { duration: 6000 })} title={PLAN_LOCK_MSG}
-                                    className="text-left bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center justify-between cursor-not-allowed opacity-70">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center">
-                                            <Icon className="w-5 h-5 opacity-60" strokeWidth={1.6} />
-                                        </div>
-                                        <span className="font-bold text-slate-400 text-sm">{c.label}</span>
-                                    </div>
-                                    <Lock className="w-4 h-4 text-amber-400" />
-                                </button>
-                            );
-                        }
                         return (
                             <Link key={c.path} to={c.path}
                                 className="group bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center justify-between hover:border-[#5C67F2] hover:shadow-md transition-all">

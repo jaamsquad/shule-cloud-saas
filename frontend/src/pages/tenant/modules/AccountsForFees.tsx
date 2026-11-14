@@ -3,7 +3,8 @@ import {
     Home, Plus, Trash2, Edit3, Loader2, AlertCircle,
     CheckCircle2, X, Save, Eye, EyeOff, Upload,
     Building2, Smartphone, CreditCard, Zap, ToggleLeft, ToggleRight,
-    Copy, Check, ShieldCheck, Globe, Lock
+    Copy, Check, ShieldCheck, Globe, Lock,
+    FlaskConical, Rocket, AlertTriangle
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -782,21 +783,23 @@ export default function AccountsForFeesInvoice() {
                                                     : "border-gray-100 text-slate-300 hover:border-gray-200"
                                                     }`}
                                             >
-                                                {env === "sandbox" ? "🧪 Sandbox — Testing" : "🚀 Production — Live"}
+                                                {env === "sandbox"
+                                                    ? <span className="inline-flex items-center justify-center gap-1.5"><FlaskConical className="w-4 h-4" />Sandbox — Testing</span>
+                                                    : <span className="inline-flex items-center justify-center gap-1.5"><Rocket className="w-4 h-4" />Production — Live</span>}
                                             </button>
                                         ))}
                                     </div>
                                     {darajaForm.environment === "sandbox" && (
                                         <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                                             <p className="text-[11px] text-amber-600 font-bold">
-                                                ⚠ Sandbox mode is active — no real money moves. Use test credentials from the Daraja portal. Switch to Production when you go live.
+                                                <AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Sandbox mode is active — no real money moves. Use test credentials from the Daraja portal. Switch to Production when you go live.
                                             </p>
                                         </div>
                                     )}
                                     {darajaForm.environment === "production" && (
                                         <div className="mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                                             <p className="text-[11px] text-emerald-700 font-bold">
-                                                🚀 Production mode — real transactions will be processed. Ensure your credentials are correct.
+                                                <Rocket className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Production mode — real transactions will be processed. Ensure your credentials are correct.
                                             </p>
                                         </div>
                                     )}
@@ -985,7 +988,7 @@ export default function AccountsForFeesInvoice() {
                                 {stripeForm.publishableKey.startsWith("pk_test") && (
                                     <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
                                         <p className="text-[11px] text-amber-600 font-bold">
-                                            🧪 Test mode detected (pk_test_ key). Use Stripe test card <code className="font-mono">4242 4242 4242 4242</code> to verify your integration before switching to live keys.
+                                            <FlaskConical className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" />Test mode detected (pk_test_ key). Use Stripe test card <code className="font-mono">4242 4242 4242 4242</code> to verify your integration before switching to live keys.
                                         </p>
                                     </div>
                                 )}

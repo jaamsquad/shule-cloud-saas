@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Clock, ArrowLeft, Link2, Check } from "lucide-react";
 import { MarketingNav, MarketingFooter, HeroBackdrop, PURPLE, NAVY } from "./MarketingChrome";
 import { blogPublic } from "@/lib/blogApi";
+import { applySeo, absUrl, isIndexableHost, SITE_URL } from "@/seo/seo";
 
 const fmt = (d: string) => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
 
@@ -49,15 +50,28 @@ export default function BlogPost() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [data]);
 
-  // Basic SEO: set document title / meta description from the post.
+  // SEO: title, description, canonical, robots, Open Graph and BlogPosting data from the post.
   useEffect(() => {
-    if (data?.post) {
-      document.title = `${data.post.seoTitle || data.post.title} · ShuleCloud`;
-      const m = document.querySelector('meta[name="description"]') || (() => { const el = document.createElement("meta"); el.setAttribute("name", "description"); document.head.appendChild(el); return el; })();
-      m.setAttribute("content", data.post.metaDescription || data.post.excerpt || "");
-    }
-    return () => { document.title = "ShuleCloud"; };
-  }, [data]);
+    if (isError) { applySeo({ title: "Article not found · ShuleCloud", robots: "noindex, follow", canonical: null, jsonLd: null }); return; }
+    const p = data?.post;
+    if (!p) return;
+    const own = absUrl(`/blogs/${p.slug || slug}`);
+    const canonical = p.canonicalUrl && /^https:\/\//i.test(String(p.canonicalUrl).trim()) ? String(p.canonicalUrl).trim() : own;
+    const hidden = (p.visibility && p.visibility !== "public") || !isIndexableHost();
+    const robots = hidden ? "noindex, nofollow" : p.robots && /noindex|nofollow/i.test(p.robots) ? String(p.robots) : null;
+    const description = p.metaDescription || p.excerpt || p.shortDescription || "";
+    const image = p.ogImage || p.featuredImage || undefined;
+    const ld: Record<string, unknown> = {
+      "@context": "https://schema.org", "@type": "BlogPosting",
+      headline: p.seoTitle || p.title, description, url: canonical, mainEntityOfPage: canonical,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    };
+    if (p.publishAt || p.createdAt) ld.datePublished = new Date(p.publishAt || p.createdAt).toISOString();
+    if (p.updatedAt) ld.dateModified = new Date(p.updatedAt).toISOString();
+    if (image) ld.image = absUrl(image);
+    if (p.author) ld.author = { "@type": "Person", name: p.author };
+    applySeo({ title: `${p.seoTitle || p.title} · ShuleCloud`, description, canonical, robots, type: "article", ...(image ? { image } : {}), jsonLd: ld });
+  }, [data, isError, slug]);
 
   const post = data?.post;
 

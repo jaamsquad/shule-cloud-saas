@@ -1,12 +1,13 @@
 // Robust ID-card printing — shared by the Student and Staff ID pages.
 //
-// Approach: instead of fighting the live DOM with @media-print visibility hacks
-// (which leave artifacts and print before images load), we render ONLY the cards
-// into a hidden same-origin <iframe>, copy the page's stylesheets so the cards look
-// identical, wait for every image (logos, QR codes, barcodes) to finish loading,
-// then call print() on the iframe and clean up. No sidebar, navbar, buttons or any
-// other UI is included — only the cards. Works in Chrome, Edge and Firefox, and in
-// the in-app WebView (no popup window, so no popup blockers).
+// Approach: render ONLY the cards (no sidebar, navbar, buttons or any other UI) into a
+// full standalone HTML document string, then hand it to outputHtmlDoc() — the same print
+// pipeline every other report in this app (report cards, dossiers, timetables, ...)
+// already uses successfully: a real popup window on desktop (falling back to a hidden
+// iframe only if the popup is blocked), or a rendered PDF download inside the mobile app.
+// An earlier version of this file rolled its own hidden-iframe-only print path, which
+// proved unreliable in some desktop builds — reusing the proven shared pipeline fixes that.
+import { outputHtmlDoc } from "@/lib/pdfDoc";
 
 /** Collect the current document's CSS (inline <style> + linked stylesheets) so the
  *  cloned cards keep their exact look. We inline rules where readable and fall back
@@ -41,7 +42,11 @@ const DEFAULT_LAYOUT: Required<PrintLayout> = { orientation: "portrait", columns
 function buildPrintCss(L: Required<PrintLayout>): string {
     return `
   @page { size: A4 ${L.orientation}; margin: ${L.marginMm}mm; }
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+  /* Without this, Windows "High contrast"/accent-colour forced-colour modes can silently
+     swap every authored colour (gradients, accents) for a system colour during print only —
+     the page looks right on screen but prints in the OS's accent colour instead of ours. */
+  :root { forced-color-adjust: none; color-scheme: light; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; forced-color-adjust: none !important; box-sizing: border-box; }
   html, body { background: #fff !important; margin: 0; padding: 0; }
   .print-sheet {
     display: grid;
@@ -68,32 +73,12 @@ function buildPrintCss(L: Required<PrintLayout>): string {
 `;
 }
 
-/** Wait until every <img> inside a root has loaded (or errored), so nothing prints blank. */
-function waitForImages(root: ParentNode, timeoutMs = 8000): Promise<void> {
-    const imgs = Array.from(root.querySelectorAll("img"));
-    if (!imgs.length) return Promise.resolve();
-    return Promise.race([
-        Promise.all(imgs.map(img =>
-            img.complete && img.naturalWidth > 0
-                ? Promise.resolve()
-                : new Promise<void>(res => { img.addEventListener("load", () => res(), { once: true }); img.addEventListener("error", () => res(), { once: true }); }),
-        )).then(() => undefined),
-        new Promise<void>(res => setTimeout(res, timeoutMs)),
-    ]);
-}
-
-/** Build the hidden iframe, drop the cards in, wait for images, print, then remove. */
-function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): void {
-    if (!cards.length) { alert("No cards available to print."); return; }
+/** Build a full standalone document of just the cards and hand it to the shared
+ *  print/PDF pipeline. Resolves once that pipeline has finished (the print dialog has
+ *  opened, or the PDF has been handed off on mobile), so callers can show a spinner. */
+function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayout = {}): Promise<void> {
+    if (!cards.length) { alert("No cards available to print."); return Promise.resolve(); }
     const L = { ...DEFAULT_LAYOUT, ...layout };
-
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) { iframe.remove(); alert("Could not open the print view."); return; }
 
     const sheet = document.createElement("div");
     sheet.className = "print-sheet";
@@ -108,33 +93,22 @@ function printNodes(cards: HTMLElement[], title = "ID Cards", layout: PrintLayou
         sheet.appendChild(clone);
     });
 
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
         ${collectStyles()}
         <style>${buildPrintCss(L)}</style>
-        </head><body></body></html>`);
-    doc.body.appendChild(sheet);
-    doc.close();
+        </head><body>${sheet.outerHTML}</body></html>`;
 
-    // Print only after images (logos/QR/barcodes) have loaded — never blank pages.
-    waitForImages(doc).then(() => {
-        const win = iframe.contentWindow!;
-        win.focus();
-        win.print();
-        // Clean up shortly after the print dialog is dismissed.
-        const cleanup = () => setTimeout(() => iframe.remove(), 500);
-        win.addEventListener("afterprint", cleanup, { once: true });
-        setTimeout(cleanup, 60000); // safety net if afterprint never fires
-    });
+    return outputHtmlDoc(title, html, { landscape: L.orientation === "landscape" });
 }
 
 /**
  * Print every card matched by `selector` (e.g. ".id-card" inside the grid).
- * Excludes elements flagged with [data-no-print].
+ * Excludes elements flagged with [data-no-print]. Resolves once the print dialog
+ * has opened — await it to drive a "preparing to print…" spinner.
  */
-export function printAllCards(selector: string, layout: PrintLayout = {}): void {
+export function printAllCards(selector: string, layout: PrintLayout = {}): Promise<void> {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(el => !el.hasAttribute("data-no-print"));
-    printNodes(cards, "ID Cards", layout);
+    return printNodes(cards, "ID Cards", layout);
 }
 
 /** How many cards a given selector currently has (for the modal's summary). */
@@ -144,10 +118,10 @@ export function countCards(selector: string): number {
 
 /**
  * Print a single card. Pass the card element itself, or any element inside it —
- * we walk up to the nearest `.id-card`.
+ * we walk up to the nearest `.id-card`. Resolves once the print dialog has opened.
  */
-export function printSingleCard(elementInsideCard: HTMLElement | null, layout: PrintLayout = {}): void {
-    if (!elementInsideCard) { alert("No card to print."); return; }
+export function printSingleCard(elementInsideCard: HTMLElement | null, layout: PrintLayout = {}): Promise<void> {
+    if (!elementInsideCard) { alert("No card to print."); return Promise.resolve(); }
     const card = elementInsideCard.closest<HTMLElement>(".id-card") || elementInsideCard;
-    printNodes([card], "ID Card", { columns: 1, ...layout });
+    return printNodes([card], "ID Card", { columns: 1, ...layout });
 }

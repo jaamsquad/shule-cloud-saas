@@ -251,7 +251,7 @@ export default function Exams() {
                                          <option value="">Select Period / Term</option>
                                          {periods.map((p: any) => (
                                              <option key={p._id} value={`${p.label} (${p.academicYear})`}>
-                                                 {p.label} ({p.academicYear}) {p.isCurrent ? "★ CURRENT" : ""}
+                                                 {p.label} ({p.academicYear}) {p.isCurrent ? "· CURRENT" : ""}
                                              </option>
                                          ))}
                                          {periods.length === 0 && (

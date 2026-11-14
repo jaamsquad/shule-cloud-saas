@@ -2,11 +2,8 @@ import { Home, History, ArrowRight, BookOpen, TrendingUp, Loader2, FileText } fr
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { useGradingForClasses } from "@/lib/grading";
 
-function grade(pct: number) {
-    if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B";
-    if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F";
-}
 function gradeColor(pct: number) { return pct >= 70 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-rose-600"; }
 
 export default function StudentHistoryPage() {
@@ -40,6 +37,9 @@ export default function StudentHistoryPage() {
         if (!marksByEnrollment[m.enrollmentId]) marksByEnrollment[m.enrollmentId] = [];
         marksByEnrollment[m.enrollmentId].push(m);
     });
+
+    // Configured grading for each enrollment's (historical) class.
+    const gradingFor = useGradingForClasses(enrollments.map(e => ({ classId: e.classId ? String(e.classId) : undefined, className: e.className })));
 
     // Compute summary per enrollment
     const enrollmentSummaries = enrollments.map(enroll => {
@@ -154,7 +154,7 @@ export default function StudentHistoryPage() {
                                                     {enroll.avg > 0 && (
                                                         <div className="text-right flex-shrink-0">
                                                             <p className={`text-xl font-black ${gradeColor(enroll.avg)}`}>{enroll.avg.toFixed(1)}%</p>
-                                                            <p className={`text-sm font-black ${gradeColor(enroll.avg)}`}>{grade(enroll.avg)}</p>
+                                                            <p className={`text-sm font-black ${gradeColor(enroll.avg)}`}>{gradingFor(enroll.classId ? String(enroll.classId) : undefined, enroll.className).grade(enroll.avg)}</p>
                                                         </div>
                                                     )}
                                                 </div>

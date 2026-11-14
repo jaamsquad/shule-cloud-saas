@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { RevenueModal, useRevenue } from "@/components/finance/RevenueList";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -308,6 +309,13 @@ export default function Dashboard() {
 
     // ── Metrics ───────────────────────────────────────────────────────────────
 
+    // "Total Students" only counts students currently Active — Transferred/Graduated
+    // students are no longer part of the live roster.
+    const activeStudents = useMemo(() =>
+        students.filter((s: any) => String(s.status || "Active").toLowerCase() === "active"),
+        [students]
+    );
+
     const studentsThisMonth = useMemo(() =>
         students.filter((s: any) => s.createdAt?.startsWith(currentMonthStr)).length,
         [students, currentMonthStr]
@@ -317,6 +325,12 @@ export default function Dashboard() {
         staff.filter((s: any) => s.createdAt?.startsWith(currentMonthStr)).length,
         [staff, currentMonthStr]
     );
+
+    // Money actually received this month (fee payments + other income), one row per receipt.
+    const monthFrom = `${currentMonthStr}-01`;
+    const monthTo = new Date().toISOString().slice(0, 10);
+    const { data: monthRevenue } = useRevenue(monthFrom, monthTo);
+    const [revenueOpen, setRevenueOpen] = useState(false);
 
     const finances = useMemo(() => {
         const thisMonthIncome = income.filter((i: any) => i.date?.startsWith(currentMonthStr));
@@ -331,7 +345,7 @@ export default function Dashboard() {
             acc + (parseFloat(inv.paid_amount || inv.amount_paid || 0)), 0
         );
 
-        const revenue = thisMonthIncome.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0) + invoiceRevenue;
+        const revenue = monthRevenue ? monthRevenue.total : thisMonthIncome.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0) + invoiceRevenue;
         const expenseTotal = thisMonthExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
         const profit = revenue - expenseTotal;
 
@@ -359,7 +373,7 @@ export default function Dashboard() {
         });
 
         return { revenue, expenseTotal, profit, chart1Data };
-    }, [income, expenses, invoices, currentMonthStr]);
+    }, [income, expenses, invoices, currentMonthStr, monthRevenue]);
 
     const classChartData = useMemo(() => {
         if (classes.length === 0) return [];
@@ -491,7 +505,7 @@ export default function Dashboard() {
                         <div className="flex flex-col items-end gap-1">
                             {loadingStudents
                                 ? <span className="text-4xl font-bold tracking-tight opacity-60">…</span>
-                                : <span className="text-4xl font-bold tracking-tight">{students.length}</span>
+                                : <span className="text-4xl font-bold tracking-tight">{activeStudents.length}</span>
                             }
                             <span className="text-xs font-semibold opacity-90">Live registry</span>
                         </div>
@@ -523,8 +537,9 @@ export default function Dashboard() {
                 )}
 
                 {/* Revenue */}
+                {revenueOpen && <RevenueModal from={monthFrom} to={monthTo} title={`Revenue — ${new Date().toLocaleString("en-GB", { month: "long", year: "numeric" })}`} onClose={() => setRevenueOpen(false)} />}
                 {canFinance && (
-                <div onClick={() => navigate("/accounts/statement")}
+                <div onClick={() => setRevenueOpen(true)} title="See every payment received this month"
                     className="bg-[#ff808b] rounded-3xl p-6 text-white shadow-sm flex flex-col justify-between h-36 cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all">
                     <h3 className="font-bold text-sm tracking-wide">Revenue</h3>
                     <div className="flex justify-between items-end">
@@ -702,8 +717,8 @@ export default function Dashboard() {
                             Welcome back, {userProfile?.name || "Administrator"}
                         </h3>
                         <p className="text-gray-600 text-sm font-medium leading-relaxed">
-                            {canStudents && students.length > 0
-                                ? `${students.length} students${canStaff ? ` and ${staff.length} staff members` : ""} registered. Your registers are live.`
+                            {canStudents && activeStudents.length > 0
+                                ? `${activeStudents.length} students${canStaff ? ` and ${staff.length} staff members` : ""} registered. Your registers are live.`
                                 : "Welcome to your dashboard. Use the menu to access your assigned areas."}
                         </p>
                     </div>

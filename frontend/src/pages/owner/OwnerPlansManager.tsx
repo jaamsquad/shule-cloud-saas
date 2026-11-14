@@ -28,8 +28,16 @@ const MODULE_LABEL: Record<string, string> = {
 };
 const moduleLabel = (m: string) => MODULE_LABEL[m] || m.charAt(0).toUpperCase() + m.slice(1);
 
-type PlanForm = { name: string; price: number; maxStudents: string; modules: string[]; description: string; isActive: boolean; durationDays: number; graceDays: number };
-const blank: PlanForm = { name: "", price: 0, maxStudents: "", modules: [], description: "", isActive: true, durationDays: 30, graceDays: 0 };
+type Cycle = "monthly" | "termly" | "yearly";
+// how the plan is billed: the price is per cycle; the cycle suggests the duration
+export const CYCLES: Record<Cycle, { label: string; short: string; word: string; days: number }> = {
+    monthly: { label: "Per month", short: "/mo", word: "month", days: 30 },
+    termly: { label: "Per term", short: "/term", word: "term", days: 120 },
+    yearly: { label: "Per year", short: "/yr", word: "year", days: 365 },
+};
+const cycleOf = (p: any): Cycle => (["monthly", "termly", "yearly"].includes(p?.billingCycle) ? p.billingCycle : "monthly");
+type PlanForm = { name: string; price: number; billingCycle: Cycle; maxStudents: string; modules: string[]; description: string; isActive: boolean; durationDays: number; graceDays: number };
+const blank: PlanForm = { name: "", price: 0, billingCycle: "monthly", maxStudents: "", modules: [], description: "", isActive: true, durationDays: 30, graceDays: 0 };
 
 export default function OwnerPlansManager() {
     const qc = useQueryClient();
@@ -60,7 +68,7 @@ export default function OwnerPlansManager() {
     const openEdit = (p: any) => {
         setEditId(p._id);
         setForm({
-            name: p.name || "", price: Number(p.priceMonthly ?? p.price ?? 0),
+            name: p.name || "", price: Number(p.priceMonthly ?? p.price ?? 0), billingCycle: cycleOf(p),
             maxStudents: p.limits?.maxStudents == null ? "" : String(p.limits.maxStudents),
             modules: Array.isArray(p.modules) ? p.modules : [], description: p.description || "",
             isActive: p.isActive !== false,
@@ -88,7 +96,7 @@ export default function OwnerPlansManager() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <h3 className="text-base font-black text-slate-800">{p.name}</h3>
-                                    <p className="text-xl font-black mt-1" style={{ color: PRIMARY }}>{ksh(p.priceMonthly ?? p.price)}<span className="text-xs text-slate-400 font-bold">/mo</span></p>
+                                    <p className="text-xl font-black mt-1" style={{ color: PRIMARY }}>{ksh(p.priceMonthly ?? p.price)}<span className="text-xs text-slate-400 font-bold">{CYCLES[cycleOf(p)].short}</span></p>
                                 </div>
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${p.isActive !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{p.isActive !== false ? "Active" : "Inactive"}</span>
                             </div>
@@ -117,7 +125,19 @@ export default function OwnerPlansManager() {
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                                 <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Plan Name</label><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Pro" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
-                                <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Price / month (KES)</label><input type="number" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                                <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Price / {CYCLES[form.billingCycle].word} (KES)</label><input type="number" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1">Billed</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(Object.keys(CYCLES) as Cycle[]).map(c => (
+                                        <button key={c} type="button" onClick={() => setForm(f => ({ ...f, billingCycle: c, durationDays: CYCLES[c].days }))}
+                                            className={`h-10 rounded-lg text-sm font-bold border ${form.billingCycle === c ? "text-white" : "bg-white text-slate-600 border-slate-200"}`} style={form.billingCycle === c ? { background: PRIMARY, borderColor: PRIMARY } : {}}>
+                                            {CYCLES[c].label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1">Schools pay this price every {CYCLES[form.billingCycle].word}. Changing it sets the duration to {CYCLES[form.billingCycle].days} days (you can still edit it).</p>
                             </div>
                             <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Max Students <span className="text-slate-400 font-normal">(blank = unlimited)</span></label><input type="number" value={form.maxStudents} onChange={(e) => setForm((f) => ({ ...f, maxStudents: e.target.value }))} placeholder="e.g. 500" className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
                             <div className="grid grid-cols-2 gap-3">

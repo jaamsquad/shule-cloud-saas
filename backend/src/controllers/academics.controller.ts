@@ -4,6 +4,8 @@ import { Db, ObjectId } from 'mongodb';
 import { syncParentToStudents, syncStudentToParents } from '../services/parent-student-sync.service';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
 import { applyAutoNumber } from '../lib/idNumbering';
+import { resolveGrading, meanGradeFromScale } from '../lib/grading';
+import { genderCompositionFor, genderViolation } from '../lib/genderPolicy';
 
 // ─── Database resolver ────────────────────────────────────────────────────────
 /**
@@ -47,6 +49,11 @@ export const bulkCreate = (collectionName: string) => async (req: Request, res: 
         const db = getRequestDb(req);
 
         if (collectionName === 'students') {
+            const genderComposition = await genderCompositionFor((req as any).tenantContext?.tenantId);
+            if (genderComposition === 'Boys' || genderComposition === 'Girls') {
+                const bad = items.find((i: any) => genderViolation(genderComposition, i.gender));
+                if (bad) return res.status(400).json({ message: genderViolation(genderComposition, bad.gender) });
+            }
             const regNos = items.map((i: any) => i.registrationNo).filter(Boolean);
             if (regNos.length > 0) {
                 const existing = await db.collection('students').find({
@@ -100,15 +107,24 @@ export const createItem = (collectionName: string) => async (req: Request, res: 
         const db = getRequestDb(req);
         const data = { ...req.body, createdAt: new Date() };
 
-        if (collectionName === 'exams') {
+        if (collectionName === 'students') {
+            const genderComposition = await genderCompositionFor((req as any).tenantContext?.tenantId);
+            const violation = genderViolation(genderComposition, data.gender);
+            if (violation) return res.status(400).json({ message: violation });
+        }
+
+        // The one-per-term/year duplicate guard only applies to Written test exams (CAT and
+        // Assignment are exempt, as before) — Consolidated/Supplementary/Year Average exams
+        // are built FROM other exams and are expected to coexist with them.
+        if (collectionName === 'exams' && (!req.body.examCategory || req.body.examCategory === 'written_test')) {
             const { type, term, academicYear } = req.body;
-            const normalizedType = (type || '').trim().toLowerCase();
+            const normalizedType = String(type || '').trim().toLowerCase();
             const isMultipleAllowed = normalizedType === 'cat' || normalizedType === 'assignment';
-            if (!isMultipleAllowed) {
+            if (!isMultipleAllowed && String(type || '').trim()) {
                 const existing = await db.collection('exams').findOne({
                     term,
                     academicYear,
-                    type: { $regex: new RegExp(`^${type.trim()}$`, 'i') }
+                    type: { $regex: new RegExp(`^${String(type).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 });
                 if (existing) {
                     return res.status(400).json({
@@ -181,6 +197,9 @@ export const updateItem = (collectionName: string) => async (req: Request, res: 
         const { id } = req.params;
         const data = { ...req.body, updatedAt: new Date() };
         delete data._id;
+        // A subject's name is locked to its catalog entry (Subjects → Subjects we offer) —
+        // only its code/short code/classification may be edited here.
+        if (collectionName === 'subjects') delete data.name;
 
         if (collectionName === 'exams') {
             const { type, term, academicYear } = req.body;
@@ -312,6 +331,8 @@ export const getExamReport = async (req: Request, res: Response) => {
         const marks = await db.collection('marks').find(query).toArray();
         const subjects = await db.collection('subjects').find({}).toArray();
 
+        // Mean grade from mean points on the school's configured grading scale.
+        const schoolScale = (await resolveGrading(db)).scale;
         const subjectAnalysis = subjects.map(sub => {
             const subMarks = marks.filter(m => m.subjectId.toString() === sub._id.toString());
             const entry = subMarks.length;
@@ -319,7 +340,7 @@ export const getExamReport = async (req: Request, res: Response) => {
             subMarks.forEach(m => { const g = m.grade || 'E'; distribution[g] = (distribution[g] || 0) + 1; });
             const totalPoints = subMarks.reduce((acc, m) => acc + (m.points || 0), 0);
             const ms = entry > 0 ? (totalPoints / entry).toFixed(2) : '0.00';
-            return { name: sub.name, entry, grades: distribution, ms, mg: entry > 0 ? 'B+' : '-', prev: (Number(ms) - 0.5).toFixed(2), dev: '+0.50' };
+            return { name: sub.name, entry, grades: distribution, ms, mg: entry > 0 ? meanGradeFromScale(schoolScale, Number(ms)) : '-', prev: (Number(ms) - 0.5).toFixed(2), dev: '+0.50' };
         });
 
         const staff = await db.collection('staff').find({ role: 'Teacher' }).toArray();

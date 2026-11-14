@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import posApi from '../../lib/posApi'
 import { format } from 'date-fns'
-import { Search, Eye, RefreshCw, XCircle } from 'lucide-react'
+import { Search, Eye, RefreshCw, XCircle, X } from 'lucide-react'
 
 export default function POSOrders() {
   const queryClient = useQueryClient()
@@ -116,7 +116,7 @@ export default function POSOrders() {
                 <h2 className="text-base font-bold text-white">Order Details</h2>
                 <p className="text-xs text-gray-500 font-mono mt-0.5">{selectedOrder.orderNumber}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-gray-500 hover:text-white text-lg">✕</button>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-500 hover:text-white text-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="space-y-1.5">

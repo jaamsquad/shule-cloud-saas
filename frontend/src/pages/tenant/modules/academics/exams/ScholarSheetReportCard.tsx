@@ -8,7 +8,13 @@ import { reportQr } from "@/lib/reportQr";
 // Subjects are curriculum-driven (from the class) and grades use the chosen
 // grading scale — both resolved by the backend /reports/scholar-sheet endpoint.
 // Designed to fit ONE A4 page via print media queries.
-export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, hideToolbar = false, preloaded }: { studentId: string; examId: string; showKcpe?: boolean; hideToolbar?: boolean; preloaded?: any }) {
+// `portal`: the student/parent portals pass everything in (data with its settings, the school
+// profile and a server-signed QR), so the card makes no admin API calls there.
+export type ChartType = "line" | "bar" | "area" | "dots";
+export const CHART_TYPES: { key: ChartType; label: string }[] = [
+    { key: "line", label: "Line" }, { key: "bar", label: "Bar" }, { key: "area", label: "Area" }, { key: "dots", label: "Dots" },
+];
+export default function ScholarSheetReportCard({ studentId, examId, showKcpe: showKcpeProp = true, chartType = "line", hideToolbar = false, preloaded, portal }: { studentId: string; examId: string; showKcpe?: boolean; chartType?: ChartType; hideToolbar?: boolean; preloaded?: any; portal?: { profile?: any; qrUrl?: string } }) {
     // When the parent page has already fetched the data (whole-class print), use
     // it directly so the card never shows a spinner mid-print. Otherwise fetch.
     const { data: fetched, isLoading } = useQuery({
@@ -22,14 +28,16 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
         queryKey: ["rc_settings"],
         queryFn: async () => (await api.get("/report-card-settings")).data,
         staleTime: 10_000,
+        enabled: !portal,
     });
     const data = preloaded || fetched;
     // the principal's signature and the school stamp (Institute Profile)
-    const { data: profile } = useQuery<any>({ queryKey: ["tenant_profile_global"], staleTime: 60_000, queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
+    const { data: adminProfile } = useQuery<any>({ queryKey: ["tenant_profile_global"], staleTime: 60_000, enabled: !portal, queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; } });
+    const profile = portal ? portal.profile : adminProfile;
     // QR (bottom centre) that opens the online verification page for this report card
-    const { data: qr } = useQuery({
+    const { data: adminQr } = useQuery({
         queryKey: ["rc_qr", studentId, examId, data?.termYear, data?.summary?.meanScore, data?.summary?.meanGrade],
-        enabled: !!studentId && !!data && !data.notReady,
+        enabled: !portal && !!studentId && !!data && !data.notReady,
         staleTime: 5 * 60_000,
         queryFn: () => reportQr({
             studentId, className: data.student?.className || "", term: data.termYear || "",
@@ -37,6 +45,8 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
             average: Number(data.summary?.meanScore) || null, grade: String(data.summary?.meanGrade || ""),
         }),
     });
+
+    const qr = portal ? portal.qrUrl : adminQr;
 
     if (!preloaded && isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>;
     if (!data) return <div className="p-8 text-center text-slate-400">No report data.</div>;
@@ -65,7 +75,9 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
     // History grid: render only the levels & terms that actually have data.
     const levels: number[] = d.levels?.length ? d.levels : [];
     const terms: number[] = d.terms?.length ? d.terms : [];
-    const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade"
+    const levelPrefix: string = d.levelSystem || "Form";   // "Form" | "Grade" — fallback only
+    const levelLabels: Record<number, string> = d.levelLabels || {};
+    const labelFor = (l: number) => levelLabels[l] || levelPrefix;   // the word that level was actually saved under
     const hist = (lvl: number, t: number) => d.history?.[`l${lvl}t${t}`];
 
     // ── Curriculum-aware rendering (driven by the backend-resolved config) ──────
@@ -90,6 +102,7 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
     const showKcpe = showKcpeProp !== false && settings.showKcpe !== false;
     const showPositions = settings.showPositions !== false;
     const showChange = !!settings.showChange;
+    const showHistory = settings.showHistory !== false;
     // Arrow + colour for a change value (percentage points).
     const changeCell = (v: number | null | undefined) => {
         if (v === null || v === undefined) return "-";
@@ -111,15 +124,33 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
             <style>{`
                 ${hideToolbar ? "" : "@page { size: A4 portrait; margin: 8mm; }"}
                 @media print { .no-print { display: none !important; } body { -webkit-print-color-adjust: exact; } .rc { break-inside: avoid; } }
-                .rc { width: 194mm; margin: 0 auto; color: #000; font-family: 'Times New Roman', Georgia, serif; font-size: 10px; line-height: 1.15; }
+                .rc { position: relative; width: 194mm; margin: 0 auto; color: #000; font-family: 'Times New Roman', Georgia, serif; font-size: 10px; line-height: 1.15; }
                 .rc table { width: 100%; border-collapse: collapse; }
                 .rc td, .rc th { border: 0.6px solid #000; padding: 1.5px 3px; }
                 .rc .nb td, .rc .nb th { border: none; }
                 .rc h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
                 .rc .muted { font-size: 9px; }
+                .rc-watermark { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: -1; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             `}</style>
 
             <div className="rc p-2">
+                {/* Watermark: faded school logo centred + the admission no. tiled diagonally */}
+                <div className="rc-watermark">
+                    {d.school.logo && (
+                        <img src={d.school.logo} alt="" style={{ position: "absolute", top: "50%", left: "50%", width: "130mm", height: "130mm", objectFit: "contain", opacity: 0.06, transform: "translate(-50%, -50%)" }} />
+                    )}
+                    {d.student.adm && Array.from({ length: 40 }).map((_, i) => {
+                        const cols = 5, r = Math.floor(i / cols), c = i % cols;
+                        const left = c * (194 / cols) + (r % 2 ? (194 / cols) / 2 : 0) - 10;
+                        const top = r * 34 - 10;
+                        return (
+                            <span key={i} style={{ position: "absolute", left: `${left}mm`, top: `${top}mm`, transform: "rotate(-30deg)", fontSize: 9, fontWeight: 700, color: "#000", opacity: 0.08, whiteSpace: "nowrap" }}>
+                                {d.student.adm}
+                            </span>
+                        );
+                    })}
+                </div>
+
                 {/* Header */}
                 <table className="nb"><tbody><tr>
                     <td style={{ width: "16mm", verticalAlign: "top" }}>{d.school.logo ? <img src={d.school.logo} alt="logo" style={{ width: "15mm", height: "15mm", objectFit: "contain" }} /> : null}</td>
@@ -211,23 +242,29 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                     </div>
                 )}
 
-                {/* Performance line graph (B&W) — mean points per term */}
-                {chartBars.length > 1 && (() => {
+                {/* Performance graph (B&W) — mean points per term. Shape (line/bar/area/dots) is a setting. */}
+                {showHistory && chartBars.length > 1 && (() => {
                     const W = 180, H = 70, padL = 10, padR = 6, padT = 6, padB = 14;   // viewBox units
                     const n = chartBars.length;
                     const x = (i: number) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
                     const y = (v: number) => padT + (H - padT - padB) * (1 - (maxChart ? v / maxChart : 0));
+                    const baseY = y(0);
                     const pts = chartBars.map((c: any, i: number) => `${x(i)},${y(c.value)}`).join(" ");
+                    const areaPts = `${x(0)},${baseY} ${pts} ${x(n - 1)},${baseY}`;
+                    const barW = Math.min(10, (W - padL - padR) / n * 0.5);
                     return (
                         <div style={{ border: "0.6px solid #000", marginTop: 3 }}>
                             <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "30mm" }} preserveAspectRatio="none">
                                 {/* gridlines */}
                                 {[0, 0.25, 0.5, 0.75, 1].map(g => <line key={g} x1={padL} x2={W - padR} y1={padT + (H - padT - padB) * g} y2={padT + (H - padT - padB) * g} stroke="#ddd" strokeWidth={0.3} />)}
-                                {/* the performance line */}
-                                <polyline points={pts} fill="none" stroke="#000" strokeWidth={0.8} />
+                                {chartType === "bar" && chartBars.map((c: any, i: number) => (
+                                    <rect key={`b${i}`} x={x(i) - barW / 2} y={y(c.value)} width={barW} height={Math.max(0, baseY - y(c.value))} fill={c.target ? "#ccc" : "#000"} />
+                                ))}
+                                {chartType === "area" && <polygon points={areaPts} fill="#000" fillOpacity={0.15} stroke="none" />}
+                                {(chartType === "line" || chartType === "area") && <polyline points={pts} fill="none" stroke="#000" strokeWidth={0.8} />}
                                 {chartBars.map((c: any, i: number) => (
                                     <g key={i}>
-                                        <circle cx={x(i)} cy={y(c.value)} r={1.2} fill="#000" />
+                                        {chartType !== "bar" && <circle cx={x(i)} cy={y(c.value)} r={1.2} fill="#000" />}
                                         {!c.target && <text x={x(i)} y={y(c.value) - 2} fontSize={5} textAnchor="middle">{c.value}</text>}
                                         <text x={x(i)} y={H - 4} fontSize={5} textAnchor="middle">{c.label}</text>
                                     </g>
@@ -238,11 +275,11 @@ export default function ScholarSheetReportCard({ studentId, examId, showKcpe: sh
                 })()}
 
                 {/* Historical grid — only the levels & terms that have data */}
-                {levels.length > 0 && terms.length > 0 && (
+                {showHistory && levels.length > 0 && terms.length > 0 && (
                     <table style={{ marginTop: 3, textAlign: "center" }}><tbody>
                         <tr style={{ fontWeight: 700 }}>
                             <td></td>
-                            {levels.map(l => <td key={l} colSpan={terms.length}>{levelPrefix} {l}</td>)}
+                            {levels.map(l => <td key={l} colSpan={terms.length}>{labelFor(l)} {l}</td>)}
                         </tr>
                         <tr style={{ fontWeight: 700 }}>
                             <td></td>

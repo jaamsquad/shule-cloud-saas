@@ -1,17 +1,21 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import StaffLogin from "./StaffLogin";
+import ToMainLogin from "../ToMainLogin";
 import StaffLayout from "./StaffLayout";
 import StaffDashboard from "./pages/StaffDashboard";
 import MyClasses from "./pages/MyClasses";
+import ClassStudents from "./pages/ClassStudents";
 import StaffTimetable from "./pages/StaffTimetable";
 import StaffMarksEntry from "./pages/StaffMarksEntry";
 import StaffCbc from "./pages/StaffCbc";
+import StaffSkillsAssess from "./pages/StaffSkillsAssess";
+import StaffSkillsReports from "./pages/StaffSkillsReports";
 import StaffResults from "./pages/StaffResults";
 import StaffAttendance from "./pages/StaffAttendance";
 import StaffMyAttendance from "./pages/StaffMyAttendance";
 import StaffLive from "./pages/StaffLive";
 import StaffContent from "./pages/StaffContent";
 import StaffResources from "./pages/StaffResources";
+import StaffCbcMaterials from "./pages/StaffCbcMaterials";
 import StaffLeave from "./pages/StaffLeave";
 import StaffMessageParents from "./pages/StaffMessageParents";
 import AnnouncementsView from "../AnnouncementsView";
@@ -22,15 +26,18 @@ import { staffApi, staffCalendarApi } from "./staffApi";
 export default function StaffApp() {
     return (
         <Routes>
-            <Route path="/login" element={<StaffLogin />} />
+            <Route path="/login" element={<ToMainLogin tokenKey="staff_token" />} />
             <Route path="/live/:meetingId" element={<LiveRoom />} />
             <Route element={<StaffLayout />}>
                 <Route path="/" element={<StaffDashboard />} />
                 <Route path="/my-attendance" element={<StaffMyAttendance />} />
                 <Route path="/classes" element={<MyClasses />} />
+                <Route path="/classes/:className" element={<ClassStudents />} />
                 <Route path="/timetable" element={<StaffTimetable />} />
                 <Route path="/marks" element={<StaffMarksEntry />} />
                 <Route path="/cbc" element={<StaffCbc />} />
+                <Route path="/skills/assess" element={<StaffSkillsAssess />} />
+                <Route path="/skills/print" element={<StaffSkillsReports />} />
                 <Route path="/results" element={<StaffResults />} />
                 <Route path="/attendance" element={<StaffAttendance />} />
                 <Route path="/live" element={<StaffLive />} />
@@ -38,6 +45,7 @@ export default function StaffApp() {
                 <Route path="/schemes" element={<StaffContent type="schemes" />} />
                 <Route path="/resources" element={<StaffContent type="resources" />} />
                 <Route path="/shared-resources" element={<StaffResources />} />
+                <Route path="/cbc-materials" element={<StaffCbcMaterials />} />
                 <Route path="/leave" element={<StaffLeave />} />
                 <Route path="/calendar" element={<CalendarPage apiClient={staffCalendarApi} />} />
                 <Route path="/calendar/events" element={<CalendarPage apiClient={staffCalendarApi} />} />

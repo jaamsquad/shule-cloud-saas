@@ -27,45 +27,87 @@ const toIsoDate = (v: any): string => {
 const toGender = (v: string): string => { const g = normTxt(v); return g.startsWith("f") ? "Female" : g.startsWith("m") ? "Male" : g ? "Other" : "Male"; };
 
 // One spreadsheet row → student fields. Portal login details are added at import time, once the registration number is final.
-const mapSheetRow = (item: any) => {
-    const pick = (...keys: string[]) => { for (const k of keys) { if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== "") return String(item[k]).trim(); } return ""; };
+// Column names are matched loosely (case, spaces, "_", "/" ignored), so both the ShuleCloud template and
+// other systems' exports (ADMNO, NAME, GRADE/FORM, STREAM, UPI, SHA, KCPE_SCORE, PRIMARY_PHONE …) import.
+const keyOf = (k: string) => String(k).toLowerCase().replace(/[^a-z0-9]/g, "");
+const mapSheetRow = (raw: any) => {
+    const item: Record<string, any> = {};
+    Object.entries(raw || {}).forEach(([k, v]) => { item[keyOf(k)] = v; });
+    const pick = (...keys: string[]) => { for (const k of keys) { const v = item[keyOf(k)]; if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim(); } return ""; };
+    // Like pick(), but keeps the cell's original type (Date / number) instead of stringifying —
+    // for date columns, which toIsoDate() needs to see as-is.
+    const pickRaw = (...keys: string[]) => { for (const k of keys) { const v = item[keyOf(k)]; if (v !== undefined && v !== null && String(v).trim() !== "") return v; } return undefined; };
     const father = { phone: pick("Father Phone", "Father Mobile", "fatherPhone"), email: pick("Father Email", "fatherEmail") };
     const mother = { phone: pick("Mother Phone", "Mother Mobile", "motherPhone"), email: pick("Mother Email", "motherEmail") };
+    const primaryPhone = pick("PRIMARY_PHONE", "Guardian Phone", "Parent Phone");
+    const guardianName = pick("GUARDIAN_NAME", "Guardian Name", "Guardian's Name", "Guardian", "Parent Name");
+    const guardianEmail = pick("GUARDIAN_EMAIL", "Guardian Email", "Guardian's Email");
+    const dayScholarFlag = pick("IS DAY SCHOLAR", "Is Day Scholar", "Day Scholar", "Boarding Status", "Residence");
+    // "GRADE/FORM" + "STREAM" → "Form 3 North"; a single "Class" column is used as is
+    const grade = pick("Class", "GRADE/FORM", "Grade", "Form", "studentClass");
+    const stream = pick("STREAM", "Stream");
+    const studentClass = grade && stream && !normTxt(grade).endsWith(normTxt(stream)) ? `${grade} ${stream}` : grade;
+    const reg = pick("Registration No", "ADMNO", "Adm No", "Admission Number", "registrationNo", "admNo");
     return {
-        studentName: pick("Student Name", "Name", "name", "studentName"),
-        registrationNo: pick("Registration No", "Adm No", "registrationNo", "admNo"),
-        admNo: pick("Admission No", "Adm No", "admNo"),
-        studentClass: pick("Class", "Grade", "studentClass"),
-        gender: toGender(pick("Gender", "gender")),
-        dob: toIsoDate(item["Date of Birth"] ?? item["DOB"] ?? item.dob),
-        email: pick("Email", "Student Email", "email"),
-        phone: pick("Phone", "Mobile", "phone"),
-        address: pick("Address", "Postal Address", "address"),
-        bloodGroup: pick("Blood Group", "bloodGroup"),
-        religion: pick("Religion", "religion"),
-        nationality: pick("Nationality", "nationality"),
-        previousSchool: pick("Previous School", "previousSchool"),
-        transportZone: pick("Transport Zone", "transportZone"),
-        admissionDate: toIsoDate(item["Admission Date"] ?? item.admissionDate) || new Date().toISOString().split("T")[0],
+        studentName: pick("Student Name", "NAME", "Full Name", "studentName"),
+        registrationNo: reg,
+        admNo: pick("Admission No", "ADMNO", "Adm No", "admNo"),
+        studentClass,
+        gender: toGender(pick("Gender", "Sex")),
+        dob: toIsoDate(pickRaw("Date of Birth", "DATE_OF_BIRTH", "DOB", "dob")),
+        email: pick("Email", "Student Email"),
+        phone: pick("Phone", "Mobile"),
+        address: pick("Address", "Postal Address", "Home Address"),
+        county: pick("County"),
+        house: pick("House"),
+        boarding: dayScholarFlag ? (/^(yes|y|true|day)/i.test(dayScholarFlag) ? "Day Scholar" : "Boarder") : "",
+        bloodGroup: pick("Blood Group"),
+        religion: pick("Religion"),
+        nationality: pick("Nationality"),
+        previousSchool: pick("Previous School", "PREVIOUS_SCHOOL"),
+        primarySchool: pick("PRIMARY_SCHOOL", "Primary School"),
+        transportZone: pick("Transport Zone"),
+        admissionDate: toIsoDate(pickRaw("Admission Date", "DATE_OF_ADMISSION", "Date of Admission", "admissionDate")) || new Date().toISOString().split("T")[0],
+        // national / exam numbers and other details
+        upi: pick("UPI", "UPI Number", "NEMIS UPI"),
+        shaNumber: pick("SHA", "SHA Number", "NHIF", "NHIF Number"),
+        indexNumber: pick("INDEX NUMBER", "Index No", "KCSE Index"),
+        birthCertNo: pick("BIRTH_CERT_NUMBER", "Birth Certificate No", "Birth Cert No", "Birth Certificate Number"),
+        placeOfBirth: pick("PLACE_OF_BIRTH", "Place of Birth"),
+        enrollmentForm: pick("ENROLLMENT_FORM", "Enrollment Form", "Entry Class"),
+        entryPosition: pick("ENTRY_POSITION", "Entry Position"),
+        kcpeYear: pick("KCPE_YEAR", "KCPE Year", "KPSEA Year"),
+        kcpeScore: pick("KCPE_SCORE", "KCPE Score", "KCPE Marks", "KPSEA Score"),
+        kcpeIndex: pick("KCPE_INDEX", "KCPE Index", "KPSEA Index"),
+        kcpeGrade: pick("KCPE_GRADE", "KCPE Grade"),
+        comments: pick("GENERALCOMMENTS", "General Comments", "Comments", "Remarks"),
         // Father / Guardian
-        fatherName: pick("Father Name", "Guardian", "fatherName"),
-        fatherNationalId: pick("Father National ID", "Father ID", "fatherNationalId"),
+        fatherName: pick("Father Name", "fatherName"),
+        fatherNationalId: pick("Father National ID", "Father ID"),
         fatherPhone: father.phone,
-        fatherOccupation: pick("Father Occupation", "fatherOccupation"),
+        fatherOccupation: pick("Father Occupation"),
         fatherEmail: father.email,
         // Mother
-        motherName: pick("Mother Name", "motherName"),
-        motherNationalId: pick("Mother National ID", "Mother ID", "motherNationalId"),
+        motherName: pick("Mother Name"),
+        motherNationalId: pick("Mother National ID", "Mother ID"),
         motherPhone: mother.phone,
-        motherOccupation: pick("Mother Occupation", "motherOccupation"),
+        motherOccupation: pick("Mother Occupation"),
         motherEmail: mother.email,
-        // General parent contact (used by receipts / result emails)
-        parentEmail: father.email || mother.email || pick("Parent Email"),
-        parentPhone: father.phone || mother.phone || pick("Parent Phone"),
-        status: pick("Status", "status") || "Active",
-        balance: Number(item["Balance"] || item.balance) || 0,
-        discount: String(item["Discount"] || item.discount || "0"),
-        avatar: item["Avatar"] || item.avatar || "",
+        guardianName,
+        guardianEmail,
+        guardianRelation: pick("GUARDIAN_RELATION", "Guardian Relation", "Relationship"),
+        guardianPhone: primaryPhone,
+        parentPhone2: pick("PRIMARY_PHONE_2"),
+        secondaryPhone: pick("SECONDARY_PHONE", "Secondary Phone"),
+        secondaryPhone2: pick("SECONDARY_PHONE_2"),
+        // General parent contact (used by receipts / result emails / SMS)
+        parentName: guardianName || pick("Father Name") || pick("Mother Name"),
+        parentEmail: father.email || mother.email || guardianEmail || pick("Parent Email"),
+        parentPhone: father.phone || mother.phone || primaryPhone || pick("SECONDARY_PHONE"),
+        status: pick("Status") || "Active",
+        balance: Number(pick("Balance")) || 0,
+        discount: pick("Discount") || "0",
+        avatar: pick("Avatar"),
     };
 };
 
@@ -86,7 +128,8 @@ export default function AddStudent() {
         gender: "Male",
         avatar: "",
         transportZone: "",
-        boarding: ""   // Boarder | Day Scholar
+        boarding: "",   // Boarder | Day Scholar
+        previousSchool: "", shaNumber: "", upi: "", birthCertNo: "", indexNumber: "", kcpeIndex: "", kcpeScore: "", kcpeYear: "", placeOfBirth: "",
     });
 
     // School profile drives the residence options (boarding / day / mixed).
@@ -219,15 +262,37 @@ export default function AddStudent() {
     const [previewFile, setPreviewFile] = useState("");
     const [importing, setImporting] = useState(false);
     const closeImport = () => { setShowImportModal(false); setPreviewRows(null); setPreviewFile(""); };
+    // Put every row without a (recognised) class — or all rows — into one class + stream at once
+    const [bulkClassId, setBulkClassId] = useState("");
+    const [bulkStreamId, setBulkStreamId] = useState("");
+    const [bulkAll, setBulkAll] = useState(false);
+    const applyBulkClass = () => {
+        const cls = v2Classes.find((c: any) => String(c._id) === bulkClassId); if (!cls) return;
+        const st = v2AllStreams.find((x: any) => String(x._id) === bulkStreamId);
+        const full = st ? (st.fullName || `${cls.name} ${st.name}`) : cls.name;
+        const n = (previewRows || []).filter(r => bulkAll || !resolveClass(r.studentClass)).length;
+        setPreviewRows(rs => rs ? rs.map(r => (bulkAll || !resolveClass(r.studentClass) ? { ...r, studentClass: full } : r)) : rs);
+        toast.success(`${n} student${n === 1 ? "" : "s"} put in ${full}`);
+    };
     const updatePreviewRow = (i: number, patch: any) => setPreviewRows(rs => rs ? rs.map((r, j) => j === i ? { ...r, ...patch } : r) : rs);
 
     // Match the typed class ("Form 1 East" / "Form 1") to the school's real class + stream.
     const resolveClass = (text: string) => {
         const t = normTxt(text);
         if (!t) return null;
-        const stream = v2AllStreams.find((s: any) => normTxt(s.fullName || `${s.className || ""} ${s.name}`) === t);
-        const cls = stream ? v2Classes.find((c: any) => String(c._id) === String(stream.classId)) : v2Classes.find((c: any) => normTxt(c.name) === t);
-        if (!cls) return null;
+        let stream = v2AllStreams.find((s: any) => normTxt(s.fullName || `${s.className || ""} ${s.name}`) === t);
+        let cls = stream ? v2Classes.find((c: any) => String(c._id) === String(stream.classId)) : v2Classes.find((c: any) => normTxt(c.name) === t);
+        if (!cls) {
+            // "Form 3 N" → class "Form 3" + the stream whose name starts with "N" (North)
+            cls = [...v2Classes].sort((a: any, b: any) => String(b.name).length - String(a.name).length).find((c: any) => t.startsWith(normTxt(c.name) + " "));
+            if (!cls) return null;
+            const rest = t.slice(normTxt(cls.name).length).trim();
+            const inClass = v2AllStreams.filter((s: any) => String(s.classId) === String(cls._id));
+            const hits = inClass.filter((s: any) => normTxt(s.name) === rest);
+            const starts = hits.length ? hits : inClass.filter((s: any) => normTxt(s.name).startsWith(rest));
+            if (starts.length !== 1) return null;
+            stream = starts[0];
+        }
         return {
             classId: String(cls._id), className: cls.name,
             streamId: stream ? String(stream._id) : null, stream: stream?.name || "", streamName: stream?.name || "",
@@ -312,11 +377,18 @@ export default function AddStudent() {
                     { header: "Gender", options: ["Male", "Female"] },
                     { header: "Date of Birth", text: true, hint: "YYYY-MM-DD" },
                     { header: "Email" }, { header: "Phone", text: true },
-                    { header: "Address", width: 28 },
+                    { header: "Address", width: 28 }, { header: "County", width: 18 }, { header: "House", width: 16 },
+                    { header: "Is Day Scholar", options: ["Yes", "No"], hint: "Yes = Day Scholar, No = Boarder." },
                     { header: "Blood Group", options: bloodGroups },
                     { header: "Religion", options: ["Christianity", "Islam", "Hinduism", "Other"], strict: false },
                     { header: "Nationality" }, { header: "Previous School", width: 24 }, { header: "Transport Zone" },
                     { header: "Admission Date", text: true, hint: "YYYY-MM-DD" },
+                    { header: "UPI", text: true, hint: "NEMIS UPI number." }, { header: "SHA Number", text: true, hint: "Social Health Authority number." },
+                    { header: "Index Number", text: true, hint: "KCSE / KJSEA index number." }, { header: "Birth Certificate No", text: true }, { header: "Place of Birth" },
+                    { header: "Enrollment Form", hint: "Class the student joined in." }, { header: "Entry Position", text: true },
+                    { header: "KCPE Year", text: true }, { header: "KCPE Score", text: true }, { header: "KCPE Index", text: true }, { header: "KCPE Grade" }, { header: "Primary School", width: 24 },
+                    { header: "Guardian Name", width: 22 }, { header: "Guardian Relation", options: ["Father", "Mother", "Guardian", "Uncle", "Aunt", "Grandparent", "Sibling", "Other"], strict: false }, { header: "Guardian Phone", text: true }, { header: "Guardian Email" }, { header: "Secondary Phone", text: true },
+                    { header: "Comments", width: 28 },
                     { header: "Father Name", width: 22 }, { header: "Father National ID", text: true }, { header: "Father Phone", text: true }, { header: "Father Occupation" }, { header: "Father Email" },
                     { header: "Mother Name", width: 22 }, { header: "Mother National ID", text: true }, { header: "Mother Phone", text: true }, { header: "Mother Occupation" }, { header: "Mother Email" },
                     { header: "Balance", hint: "Opening fee balance (number)." }, { header: "Discount", hint: "Percentage, e.g. 10." },
@@ -511,7 +583,15 @@ export default function AddStudent() {
                                 <SelectField label="OSC" placeholder="Select" options={['Yes', 'No']} />
                                 
                                 <InputField label="Any Identification Mark?" placeholder="Any Identification Mark?" />
-                                <InputField label="Previous School" placeholder="Previous School" />
+                                <InputField name="previousSchool" value={formData.previousSchool} onChange={handleChange} label="Previous School" placeholder="Previous School" />
+                                <InputField name="shaNumber" value={formData.shaNumber} onChange={handleChange} label="SHA Number" placeholder="Social Health Authority number" />
+                                <InputField name="upi" value={formData.upi} onChange={handleChange} label="UPI Number" placeholder="NEMIS UPI" />
+                                <InputField name="birthCertNo" value={formData.birthCertNo} onChange={handleChange} label="Birth Certificate No" placeholder="Birth certificate number" />
+                                <InputField name="placeOfBirth" value={formData.placeOfBirth} onChange={handleChange} label="Place of Birth" placeholder="Place of birth" />
+                                <InputField name="indexNumber" value={formData.indexNumber} onChange={handleChange} label="KCSE / KJSEA Index No" placeholder="Index number" />
+                                <InputField name="kcpeIndex" value={formData.kcpeIndex} onChange={handleChange} label="KCPE / KPSEA Index" placeholder="Primary exam index" />
+                                <InputField name="kcpeScore" value={formData.kcpeScore} onChange={handleChange} label="KCPE / KPSEA Score" placeholder="Marks" />
+                                <InputField name="kcpeYear" value={formData.kcpeYear} onChange={handleChange} label="KCPE / KPSEA Year" placeholder="e.g. 2023" />
                                 <SelectField label="Religion" placeholder="Religion" options={['Islam', 'Christianity', 'Other']} />
 
                                 <SelectField label="Blood Group" placeholder="Blood Group" options={['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']} />
@@ -587,7 +667,7 @@ export default function AddStudent() {
                                 onClick={() => setFormData({
                                     studentName: "", registrationNo: "", studentClass: "",
                                     admissionDate: "2026-05-15", discount: "0", phone: "", dob: "", gender: "Male",
-                                    avatar: "", transportZone: "",
+                                    avatar: "", transportZone: "", previousSchool: "", shaNumber: "", upi: "", birthCertNo: "", indexNumber: "", kcpeIndex: "", kcpeScore: "", kcpeYear: "", placeOfBirth: "",
                                     boarding: schoolType === "Boarding" ? "Boarder" : schoolType === "Day" ? "Day Scholar" : ""
                                 })}
                                 className="h-12 px-8 bg-[#FFC165] hover:bg-[#e0a855] text-gray-800 font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors"
@@ -637,6 +717,27 @@ export default function AddStudent() {
                                 {errorCount > 0 && <span className="px-3 py-1 rounded-full bg-red-50 text-red-600">{errorCount} with errors — will be skipped</span>}
                                 {autoReg && <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600">Blank registration numbers are generated automatically</span>}
                             </div>
+
+                            {/* Assign a class to rows that have none */}
+                            {(() => {
+                                const missing = previewRows.filter(r => !resolveClass(r.studentClass)).length;
+                                const streamsOf = v2AllStreams.filter((x: any) => String(x.classId) === bulkClassId);
+                                return (
+                                    <div className="mx-6 mb-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+                                        <span className="font-bold text-slate-700 mr-1">{missing ? `${missing} row${missing === 1 ? " has" : "s have"} no class (or one we couldn't find).` : "Every row has a class."} Put {bulkAll ? "all rows" : "them"} in:</span>
+                                        <select value={bulkClassId} onChange={e => { setBulkClassId(e.target.value); setBulkStreamId(""); }} className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-xs">
+                                            <option value="">Class…</option>
+                                            {v2Classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                        </select>
+                                        <select value={bulkStreamId} onChange={e => setBulkStreamId(e.target.value)} disabled={!bulkClassId} className="h-9 px-2 rounded-lg border border-slate-200 bg-white text-xs disabled:bg-slate-100">
+                                            <option value="">{streamsOf.length ? "No stream" : "—"}</option>
+                                            {streamsOf.map((x: any) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                                        </select>
+                                        <label className="flex items-center gap-1.5 text-slate-600"><input type="checkbox" checked={bulkAll} onChange={e => setBulkAll(e.target.checked)} className="w-3.5 h-3.5" /> all rows</label>
+                                        <button type="button" onClick={applyBulkClass} disabled={!bulkClassId || (!missing && !bulkAll)} className="h-9 px-4 rounded-lg bg-slate-900 text-white font-bold disabled:opacity-40">Apply</button>
+                                    </div>
+                                );
+                            })()}
 
                             {/* Table */}
                             <div className="px-6 overflow-auto max-h-[52vh]">
@@ -808,6 +909,7 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
         if (!filled.length) { toast.error("Add at least one student with a name and class."); return; }
         setSaving(true);
         let ok = 0, fail = 0;
+        let lastError = "";
         for (const r of filled) {
             try {
                 const cls = classes.find((c: any) => String(c._id) === String(r.classId));
@@ -833,11 +935,11 @@ function QuickAddStudents({ open, onOpenChange, classes, allStreams, activeYear,
                     lastPasswordReset: new Date().toISOString(),
                 });
                 ok++;
-            } catch { fail++; }
+            } catch (e: any) { fail++; lastError = e?.response?.data?.message || lastError; }
         }
         setSaving(false);
         if (ok) toast.success(`Admitted ${ok} student${ok > 1 ? "s" : ""}${fail ? ` · ${fail} failed` : ""}.`);
-        else toast.error("Could not admit students.");
+        else toast.error(lastError || "Could not admit students.");
         if (ok) { setRows([blank(), blank(), blank()]); onDone(); onOpenChange(false); }
     };
 

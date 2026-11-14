@@ -1,10 +1,9 @@
-import { Plus, Home, BookOpen, ArrowLeft, Loader2, Search, Trash2, Edit2, Table, LayoutGrid, List } from "lucide-react";
+import { Home, BookOpen, ArrowLeft, Loader2, Search, Edit2, LayoutGrid, List } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useState } from "react";
-import SubjectBulkGrid from "./subjects/SubjectBulkGrid";
 
 export default function AllSubjects() {
     const navigate = useNavigate();
@@ -13,25 +12,16 @@ export default function AllSubjects() {
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [view, setView] = useState<"grid" | "list">("grid");
     const [editingSubject, setEditingSubject] = useState<any>(null);
-    const [showBulk, setShowBulk] = useState(false);
 
     const { data: subjects = [], isLoading } = useQuery({
         queryKey: ["subjects"],
         queryFn: async () => { const r = await api.get("/academics/subjects"); return r.data; },
     });
 
-    const deleteMutation = useMutation({
-        mutationFn: (id: string) => api.delete(`/academics/subjects/${id}`),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["subjects"] });
-            toast.success("Subject node removed successfully!");
-        },
-        onError: () => toast.error("Failed to delete subject"),
-    });
-
+    // Name is never sent — it's locked to the built-in catalog entry (Subjects → Subjects we offer).
     const updateMutation = useMutation({
-        mutationFn: (data: { id: string; name: string; code: string; shortCode: string; category: string }) =>
-            api.patch(`/academics/subjects/${data.id}`, { name: data.name, code: data.code, shortCode: data.shortCode, category: data.category }),
+        mutationFn: (data: { id: string; code: string; shortCode: string; category: string }) =>
+            api.patch(`/academics/subjects/${data.id}`, { code: data.code, shortCode: data.shortCode, category: data.category }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects"] });
             toast.success("Subject node updated successfully!");
@@ -42,10 +32,8 @@ export default function AllSubjects() {
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!editingSubject?.name.trim()) return;
         updateMutation.mutate({
             id: editingSubject._id,
-            name: editingSubject.name.trim(),
             code: editingSubject.code?.trim() || "",
             shortCode: (editingSubject.shortCode || "").trim().toUpperCase(),
             category: editingSubject.category || "Core",
@@ -89,25 +77,12 @@ export default function AllSubjects() {
                         <button onClick={() => setView("list")} className={`px-3 h-9 rounded-lg ${view === "list" ? "bg-[#5C67F2] text-white" : "text-slate-400"}`}><List className="w-4 h-4" /></button>
                     </div>
                     <button
-                        onClick={() => setShowBulk(v => !v)}
-                        className={`h-11 px-5 font-black rounded-xl shadow-sm flex items-center gap-2 transition-all uppercase tracking-widest text-[10px] border ${showBulk ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-[#5C67F2] border-gray-100 hover:bg-slate-50"}`}
+                        onClick={() => navigate("/subjects/offered")}
+                        className="h-11 px-6 bg-[#1f2937] hover:bg-black text-white font-black rounded-xl shadow-sm flex items-center gap-2 transition-all uppercase tracking-widest text-[10px]"
                     >
-                        <Table className="w-4 h-4" /> Bulk Add
-                    </button>
-                    <button
-                        onClick={() => navigate("/subjects/new")}
-                        className="h-11 px-6 bg-[#5C67F2] hover:bg-[#4a54c4] text-white font-black rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 transition-all uppercase tracking-widest text-[10px]"
-                    >
-                        <Plus className="w-4 h-4" /> New Subject
+                        <BookOpen className="w-4 h-4" /> Choose subjects we offer
                     </button>
                 </div>
-
-                {/* Excel-style bulk add */}
-                {showBulk && (
-                    <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
-                        <SubjectBulkGrid onSaved={() => setShowBulk(false)} />
-                    </div>
-                )}
 
                 {/* Category Filter Pills */}
                 <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none">
@@ -154,7 +129,6 @@ export default function AllSubjects() {
                                             <td className="px-5 py-3">
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     <button onClick={() => setEditingSubject(s)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-[#5C67F2] flex items-center justify-center"><Edit2 className="w-4 h-4" /></button>
-                                                    <button onClick={() => deleteMutation.mutate(s._id)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:text-rose-500 flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -192,12 +166,6 @@ export default function AllSubjects() {
                                             >
                                                 <Edit2 className="w-3.5 h-3.5" />
                                             </button>
-                                            <button 
-                                                onClick={() => deleteMutation.mutate(s._id)}
-                                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-300 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -222,18 +190,18 @@ export default function AllSubjects() {
                         </div>
 
                         <form onSubmit={handleUpdate} className="space-y-6 relative z-10">
-                            {/* Subject Name */}
+                            {/* Subject Name — locked; it's picked from the built-in catalog under
+                                Subjects → Subjects we offer, not renamed here. */}
                             <div className="relative group">
-                                <div className="absolute -top-3 left-6 bg-[#5C67F2] text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md shadow-indigo-100 uppercase">
-                                    Subject Name*
+                                <div className="absolute -top-3 left-6 bg-slate-400 text-white text-[8px] px-3 py-1 rounded-full font-black tracking-widest z-10 shadow-md uppercase">
+                                    Subject Name
                                 </div>
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g. Mathematics"
+                                <input
+                                    type="text"
                                     value={editingSubject.name}
-                                    onChange={e => setEditingSubject({...editingSubject, name: e.target.value})}
-                                    required
-                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-[#5C67F2] text-slate-700 bg-slate-50/50 font-bold text-sm transition-all focus:bg-white focus:shadow-inner"
+                                    disabled
+                                    title="The subject name comes from the built-in catalog (Subjects → Subjects we offer) and can't be changed here."
+                                    className="w-full h-12 px-6 border-2 border-slate-50 rounded-2xl text-slate-500 bg-slate-100 font-bold text-sm cursor-not-allowed"
                                 />
                             </div>
 

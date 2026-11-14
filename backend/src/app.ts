@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
+import { appGate } from './middleware/appGate';
 import { tenancyMiddleware } from './middleware/tenancy';
 import onboardRoutes from './routes/onboard.routes';
 import authRoutes from './routes/auth.routes';
@@ -9,9 +10,16 @@ import schoolSecurityRoutes from './routes/schoolSecurity.routes';
 import ownerAuthRoutes from './routes/owner-auth.routes';
 import ownerRoutes from './routes/owner.routes';
 import { ownerBusinessRouter, publicDocsRouter } from './routes/business.routes';
+import ownerLibraryRoutes from './routes/ownerLibrary.routes';
 import academicsRoutes from './routes/academics.routes';
 import organizationRoutes from './routes/organization.routes';
 import analyticsRoutes from './routes/analytics.routes';
+import examPublishRoutes from './routes/examPublish.routes';
+import studentAnalysisRoutes from './routes/studentAnalysis.routes';
+import examPrintoutsRoutes from './routes/examPrintouts.routes';
+import curriculumCatalogRoutes from './routes/curriculumCatalog.routes';
+import classCatalogRoutes from './routes/classCatalog.routes';
+import dashboardsRoutes from './routes/dashboards.routes';
 import messagingRoutes from './routes/messaging.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import reportsRoutes from './routes/reports.routes';
@@ -20,6 +28,7 @@ import feeAidRoutes from './routes/feeAid.routes';
 import feesOverviewRoutes from './routes/feesOverview.routes';
 import questionImportRoutes from './modules/questionImport/questionImport.routes';
 import questionBankRoutes from './modules/questionBank/questionBank.routes';
+import questionPapersRoutes from './routes/questionPapers.routes';
 import onlineExamRoutes from './modules/onlineExam/onlineExam.routes';
 import examGeneratorRoutes from './modules/examGenerator/examGenerator.routes';
 import certificatesRoutes from './modules/certificates/certificates.routes';
@@ -36,11 +45,13 @@ import meetingsRoutes from './routes/meetings.routes';
 import walletRoutes from './routes/wallet.routes';
 import domainsRoutes from './routes/domains.routes';
 import mpesaRoutes from './routes/mpesa.routes';
+import mpesaOpsRoutes from './routes/mpesaOps.routes';
 import integrationsRoutes from './routes/integrations.routes';
 import kraRoutes from './routes/kra.routes';
 import departmentsRoutes from './routes/departments.routes';
 import markApprovalsRoutes from './routes/markApprovals.routes';
 import assistantRoutes from './routes/assistant.routes';
+import afeyRoutes from './routes/afey.routes';
 import curriculumRoutes from './routes/curriculum.routes';
 import gradingTemplatesRoutes from './routes/gradingTemplates.routes';
 import cafeteriaRoutes from './routes/cafeteria.routes';
@@ -57,6 +68,7 @@ import accountingRoutes from './modules/accounting/accounting.routes';
 import requestsRoutes from './modules/requests/requests.routes';
 import blogRoutes from './routes/blog.routes';
 import smsRoutes from './routes/sms.routes';
+import smsWalletRoutes from './routes/smsWallet.routes';
 import liveClassRoutes from './modules/liveclass/liveclass.routes';
 import calendarRoutes from './routes/calendar.routes';
 import driverRoutes from './routes/driver.routes';
@@ -119,9 +131,12 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
         const metaDb = getMetaDb();
         const sub = req.params.subdomain.toLowerCase().trim();
         const esc = sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // The mobile app looks schools up by ShuleCloud School ID (A482917M).
+        const { isSchoolId, normalizeSchoolId } = await import('./lib/schoolId');
+        const byId = isSchoolId(sub) ? await metaDb.collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(sub) }) : null;
         // Case/space-insensitive match — stored subdomain may be "Egerton" etc.
-        const tenant = await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
-        if (!tenant) return res.status(404).json({ message: 'School not found' });
+        const tenant = byId || await metaDb.collection('Tenant').findOne({ subdomain: { $regex: `^\\s*${esc}\\s*$`, $options: 'i' } });
+        if (!tenant) return res.status(404).json({ message: isSchoolId(sub) ? `No school has the ID ${normalizeSchoolId(sub)}. Check it with your school.` : 'School not found' });
 
         // If this school belongs to an organization, show the ORGANISATION's
         // logo + name on the login page; otherwise the school's own branding.
@@ -142,6 +157,8 @@ app.get('/api/v1/public/school/:subdomain', async (req, res) => {
             name, logo, tagline,
             address:    tenant.address || null,
             subdomain:  tenant.subdomain,
+            schoolId:   tenant.shulecloudId || null,
+            status:     tenant.status || null,
             organization,
         });
     } catch (e: any) {
@@ -331,16 +348,24 @@ app.use('/api/v1', organizationRoutes);
 
 // Global Tenancy Middleware
 app.use(tenancyMiddleware);
+app.use('/api/v1', appGate);   // apps the owner switched off for a school
 
 // API Routes
 app.use('/api/v1', academicsRoutes);
 app.use('/api/v1', analyticsRoutes);
+app.use('/api/v1', dashboardsRoutes);   // dashboard switcher: 8-4-4 exam overview, teacher subject classes
+app.use('/api/v1', curriculumCatalogRoutes);   // Subjects we offer, CBE pathways, CBC learning areas
+app.use('/api/v1', classCatalogRoutes);   // Classes we offer: built-in grade/level catalog
+app.use('/api/v1', examPrintoutsRoutes);   // Exams → Printouts: merit list, analysis, transcripts
+app.use('/api/v1', examPublishRoutes);   // Exams → Manage Exams: publish / unpublish results
+app.use('/api/v1', studentAnalysisRoutes); // Student profile → Analysis (published results) + targets
 app.use('/api/v1', messagingRoutes);
 app.use('/api/v1', attendanceRoutes);
 app.use('/api/v1', reportsRoutes);
 app.use('/api/v1', feesOverviewRoutes);         // Fees dashboard (overview, overdue, records, M-PESA in process…)
 app.use('/api/v1', feesRoutes);
 app.use('/api/v1', feeAidRoutes);
+app.use('/api/v1', questionPapersRoutes);          // Question Paper: import → bank → generate → papers
 app.use('/api/v1', questionImportRoutes);
 app.use('/api/v1', questionBankRoutes);
 app.use('/api/v1', onlineExamRoutes);
@@ -356,16 +381,19 @@ app.use('/api/v1', posRoutes);
 app.use('/api/v1', promotionScheduleRoutes);   // scheduled automatic promotion
 app.use('/api/v1', academicsV2Routes);
 app.use('/api/v1', communicationsRoutes);
-app.use('/api/v1', meetingsRoutes);              // Communication → meetings calendar + SMS/email templates
+app.use('/api/v1', meetingsRoutes);
+app.use('/api/v1/secretary', meetingsRoutes);    // Secretary → Meeting Management (same meetings, under the Secretary/Front Desk app)              // Communication → meetings calendar + SMS/email templates
 app.use('/api/v1', walletRoutes);
 app.use('/api/v1', domainsRoutes);
 app.use('/api/v1', mpesaRoutes);          // public callbacks (exempt from tenancy)
 app.use('/api', mpesaRoutes);             // also served at /api/mpesa/callback (configured URL)
 app.use('/api/v1', integrationsRoutes);   // tenancy-aware M-PESA settings
+app.use('/api/v1', mpesaOpsRoutes);       // tenant-admin reversal/B2C/status-query + super-admin monitoring
 app.use('/api/v1', kraRoutes);              // KRA PIN Checker lookup (Add Employee)
 app.use('/api/v1', departmentsRoutes);    // department management
 app.use('/api/v1', markApprovalsRoutes);  // HOD marks approval & moderation
 app.use('/api/v1', assistantRoutes);      // Smart Assistant (logic-based insights)
+app.use('/api/v1', afeyRoutes);           // Afey: top-bar AI helper (approve-before-send actions)
 app.use('/api/v1', curriculumRoutes);     // Curriculum engine (class → behavior config)
 app.use('/api/v1', gradingTemplatesRoutes); // Named grading-scale templates
 app.use('/api/v1', cafeteriaRoutes);      // kitchen meal service + canteen quick sale
@@ -383,6 +411,7 @@ app.use('/api/v1', accountingRoutes);     // Accounting / General Ledger
 app.use('/api/v1', requestsRoutes);       // Request Management & Approval Workflow
 app.use('/api/v1', blogRoutes);           // Blog (super-owner admin + public)
 app.use('/api/v1', smsRoutes);            // SMS gateway (school admin + Android app)
+app.use('/api/v1', smsWalletRoutes);      // SMS credit wallet (balance, ratio, M-PESA top-up)
 app.use('/api/v1', liveClassRoutes);      // Live Classes (Jitsi + BigBlueButton)
 app.use('/api/v1', calendarRoutes);       // School calendar module
 app.use('/api/v1', driverRoutes);         // ShuleCloud Driver app (transport/GPS)
@@ -392,6 +421,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/owner/business', ownerBusinessRouter);   // quotations / invoices / contracts (owner portal)
 app.use('/api/v1/public/docs', publicDocsRouter);         // their shareable, printable links (+ pay / accept / sign)
 app.use('/api/v1/owner/auth', ownerAuthRoutes);
+app.use('/api/v1/owner', ownerLibraryRoutes);   // owner-uploaded shared question bank + teaching resources
 app.use('/api/v1/owner', ownerRoutes);
 
 // Root path

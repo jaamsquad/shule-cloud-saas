@@ -26,7 +26,7 @@ class HomeworkScreen extends ConsumerWidget {
         loading: () => const SkeletonList(),
         error: (e, _) => ErrorView.fromError(e, onRetry: () => ref.invalidate(homeworkProvider)),
         data: (list) => list.isEmpty
-            ? const ErrorView(message: 'No homework right now. 🎉', icon: Icons.check_circle_outline)
+            ? const ErrorView(message: 'No homework right now.', icon: Icons.check_circle_outline)
             : ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: list.length,
@@ -254,7 +254,7 @@ class FeesScreen extends ConsumerWidget {
       if (!context.mounted) return;
       final ok = status == 'success' || status == 'completed' || status == 'paid';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'Payment received ✓' : 'Awaiting confirmation — check your fee balance shortly.'),
+        content: Text(ok ? 'Payment received' : 'Awaiting confirmation — check your fee balance shortly.'),
         backgroundColor: ok ? AppColors.primary : AppColors.tertiary,
       ));
       ref.invalidate(feesProvider);

@@ -1,12 +1,29 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Home, Loader2, Printer, Search, User, Phone, Mail, Users, ArrowLeft, Trophy, Wallet, GraduationCap } from "lucide-react";
+import { Home, Loader2, Printer, Search, User, Phone, Mail, Users, ArrowLeft, Trophy, Wallet, GraduationCap, ChevronDown } from "lucide-react";
 import api from "@/lib/api";
 import { useSchoolBrand, printBranded } from "@/lib/printDoc";
 
 const money = (n: number) => `KES ${Number(n || 0).toLocaleString("en-KE", { maximumFractionDigits: 0 })}`;
 const esc = (v: any) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+
+/** Columns the printed class list can carry (ticked ones are printed; the choice is remembered on this device). */
+type PrintCol = { key: string; label: string; right?: boolean; finance?: boolean; blank?: boolean; cell: (s: any) => string };
+const PRINT_COLS: PrintCol[] = [
+    { key: "reg", label: "Reg No", cell: s => esc(s.registrationNo) },
+    { key: "gender", label: "Gender", cell: s => esc(s.gender) },
+    { key: "contact", label: "Contact", cell: s => esc(s.phone) },
+    { key: "billed", label: "Billed", right: true, finance: true, cell: s => (s.feeBilled ? esc(money(s.feeBilled)) : "—") },
+    { key: "paid", label: "Paid", right: true, finance: true, cell: s => (s.feePaid ? esc(money(s.feePaid)) : "—") },
+    { key: "balance", label: "Fee balance", right: true, finance: true, cell: s => (s.feeDue > 0 ? esc(money(s.feeDue)) : "—") },
+    { key: "average", label: "Average", right: true, cell: s => (s.average != null ? s.average + "%" : "—") },
+    { key: "position", label: "Position", right: true, cell: s => esc(s.position ?? "—") },
+    { key: "signature", label: "Signature", blank: true, cell: () => "" },
+    { key: "remarks", label: "Remarks", blank: true, cell: () => "" },
+];
+const DEFAULT_COLS = ["reg", "gender", "contact", "balance", "average", "position"];
+const COLS_KEY = "class_list_print_cols";
 
 const SORTS: { v: string; l: string }[] = [
     { v: "name_asc", l: "Name (A-Z)" },
@@ -28,6 +45,9 @@ export default function ClassRoster() {
     const [sortBy, setSortBy] = useState("name_asc");
     const [search, setSearch] = useState("");
     const [examId, setExamId] = useState("");
+    const [printOpen, setPrintOpen] = useState(false);
+    const [cols, setCols] = useState<string[]>(() => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY) || "null"); return Array.isArray(v) ? v : DEFAULT_COLS; } catch { return DEFAULT_COLS; } });
+    const toggleCol = (k: string) => setCols(c => { const next = c.includes(k) ? c.filter(x => x !== k) : [...c, k]; try { localStorage.setItem(COLS_KEY, JSON.stringify(next)); } catch { /* private mode */ } return next; });
 
     const { data, isLoading, error } = useQuery<any>({
         queryKey: ["class_roster", streamId, examId],
@@ -76,17 +96,24 @@ export default function ClassRoster() {
     const examName = exams.find((e: any) => e._id === examId)?.name;
     const sortLabel = SORTS.find(s => s.v === sortBy)?.l || "";
 
+    const printable = PRINT_COLS.filter(c => !c.finance || finance);
     const print = () => {
+        const use = printable.filter(c => cols.includes(c.key));
+        const head = use.map(c => `<th${c.right ? ' style="text-align:right"' : ""}${c.blank ? ' style="width:22%"' : ""}>${c.label}</th>`).join("");
+        const balIdx = use.findIndex(c => c.key === "balance");
+        const foot = finance && balIdx >= 0
+            ? `<tfoot><tr><td colspan="${balIdx + 2}">Total fee balance (${summary.owing} owing)</td><td style="text-align:right">${esc(money(summary.feeDueTotal))}</td>${use.length - balIdx - 1 > 0 ? `<td colspan="${use.length - balIdx - 1}"></td>` : ""}</tr></tfoot>` : "";
         const body = `
           <div style="display:flex;justify-content:space-between;margin:0 0 10px;font-size:12px">
             <div><b>Class teacher:</b> ${esc(teacher?.name || "Not assigned")}${teacher?.phone ? ` · ${esc(teacher.phone)}` : ""}</div>
             <div><b>Students:</b> ${summary.total} (${summary.boys} boys, ${summary.girls} girls)</div>
           </div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:8px">Sorted by: ${esc(sortLabel)}${examName ? ` · Performance: ${esc(examName)}` : ""}${summary.classMean != null ? ` · Class mean: ${summary.classMean}%` : ""}</div>
-          <table><thead><tr><th>#</th><th>Student</th><th>Reg No</th><th>Gender</th><th>Contact</th>${finance ? `<th style="text-align:right">Fee balance</th>` : ""}<th style="text-align:right">Average</th><th style="text-align:right">Position</th></tr></thead><tbody>
-          ${rows.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.studentName)}</td><td>${esc(s.registrationNo)}</td><td>${esc(s.gender)}</td><td>${esc(s.phone)}</td>${finance ? `<td style="text-align:right">${s.feeDue > 0 ? esc(money(s.feeDue)) : "—"}</td>` : ""}<td style="text-align:right">${s.average != null ? s.average + "%" : "—"}</td><td style="text-align:right">${s.position ?? "—"}</td></tr>`).join("")}
-          </tbody>${finance ? `<tfoot><tr><td colspan="5">Total fee balance (${summary.owing} owing)</td><td style="text-align:right">${esc(money(summary.feeDueTotal))}</td><td colspan="2"></td></tr></tfoot>` : ""}</table>`;
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px">Sorted by: ${esc(sortLabel)}${examName ? ` · Performance: ${esc(examName)}` : ""}${summary.classMean != null && cols.includes("average") ? ` · Class mean: ${summary.classMean}%` : ""}</div>
+          <table><thead><tr><th>#</th><th>Student</th>${head}</tr></thead><tbody>
+          ${rows.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.studentName)}</td>${use.map(c => `<td${c.right ? ' style="text-align:right"' : ""}>${c.cell(s)}</td>`).join("")}</tr>`).join("")}
+          </tbody>${foot}</table>`;
         printBranded(school, `Class list — ${stream.name}`, body, "#5C67F2");
+        setPrintOpen(false);
     };
 
     return (
@@ -99,7 +126,27 @@ export default function ClassRoster() {
                     <Home className="w-4 h-4 text-gray-500 mr-2" />
                     <span className="text-gray-500 font-medium">- {stream.name}</span>
                 </div>
-                <button onClick={print} className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors"><Printer className="w-3.5 h-3.5" /> Print class list</button>
+                <div className="relative">
+                    <button onClick={() => setPrintOpen(o => !o)} className="h-9 px-5 bg-[#868DF4] hover:bg-[#5C67F2] text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-2 transition-colors"><Printer className="w-3.5 h-3.5" /> Print class list <ChevronDown className="w-3.5 h-3.5" /></button>
+                    {printOpen && (
+                        <div className="absolute right-0 top-11 z-30 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-4">
+                            <div className="text-[11px] font-bold text-slate-500 mb-2">Columns to print</div>
+                            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                <label className="flex items-center gap-2 text-sm text-slate-400"><input type="checkbox" checked disabled className="w-4 h-4" /> # and Student</label>
+                                {printable.map(c => (
+                                    <label key={c.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input type="checkbox" checked={cols.includes(c.key)} onChange={() => toggleCol(c.key)} className="w-4 h-4 accent-slate-800" />
+                                        {c.label}{c.blank && <span className="text-[10px] text-slate-400">(blank to fill in)</span>}
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <button onClick={() => setPrintOpen(false)} className="flex-1 h-9 rounded-xl text-xs font-bold text-slate-600 border border-slate-200">Cancel</button>
+                                <button onClick={print} className="flex-1 h-9 rounded-xl text-xs font-bold text-white bg-[#1f2937] flex items-center justify-center gap-1.5"><Printer className="w-3.5 h-3.5" /> Print</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="p-6 pt-0 w-full space-y-5">

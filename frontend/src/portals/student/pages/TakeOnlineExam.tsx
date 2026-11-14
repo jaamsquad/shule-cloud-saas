@@ -24,7 +24,10 @@ export default function TakeOnlineExam() {
     const [savedAt, setSavedAt] = useState<string>("");
     const submittedRef = useRef(false);
 
-    // Load / resume the attempt.
+    // Load / resume the attempt. If the student already had an in-progress attempt
+    // (they left and came back), skip the instructions gate, restore their last
+    // question, and keep the same deadline — the exam picks up exactly where they
+    // left it instead of restarting.
     useEffect(() => {
         (async () => {
             try {
@@ -32,7 +35,14 @@ export default function TakeOnlineExam() {
                 setExam(r.data.exam); setQuestions(r.data.questions);
                 setAnswers(r.data.attempt.answers || {}); setFlagged(r.data.attempt.flagged || []);
                 setDeadline(new Date(r.data.attempt.deadlineAt).getTime());
-                setPhase("instructions");
+                if (r.data.resumed && r.data.attempt.status === "in_progress") {
+                    setIdx(Math.min(Math.max(0, r.data.attempt.lastIndex || 0), Math.max(0, (r.data.questions || []).length - 1)));
+                    toast.message("Resuming where you left off.");
+                    setPhase("running");
+                    if ((r.data.exam?.settings || {}).requireFullScreen) { try { await document.documentElement.requestFullscreen(); } catch { /* ignore */ } }
+                } else {
+                    setPhase("instructions");
+                }
             } catch (e: any) { toast.error(e.response?.data?.message || "Cannot start exam"); onExit(); }
         })();
     }, [examId]);
@@ -60,14 +70,21 @@ export default function TakeOnlineExam() {
         return () => clearInterval(t);
     }, [phase, deadline, submit]);
 
-    // Autosave every 8s while running.
+    // Autosave every 8s while running — also saves the current question index so
+    // a student who leaves and comes back resumes on the same question.
     useEffect(() => {
         if (phase !== "running" || !settings.autosave) return;
         const t = setInterval(async () => {
-            try { const r = await api.post(`/student-portal/online-exams/${examId}/autosave`, { answers, flagged }); setSavedAt(new Date(r.data.savedAt).toLocaleTimeString()); } catch { /* offline — keep local */ }
+            try { const r = await api.post(`/student-portal/online-exams/${examId}/autosave`, { answers, flagged, idx }); setSavedAt(new Date(r.data.savedAt).toLocaleTimeString()); } catch { /* offline — keep local */ }
         }, 8000);
         return () => clearInterval(t);
-    }, [phase, answers, flagged, settings.autosave, api, examId]);
+    }, [phase, answers, flagged, idx, settings.autosave, api, examId]);
+
+    // Save the question index right away on navigation, not just on the next tick.
+    useEffect(() => {
+        if (phase !== "running" || !settings.autosave) return;
+        api.post(`/student-portal/online-exams/${examId}/autosave`, { idx }).catch(() => { /* offline — keep local */ });
+    }, [idx]);
 
     // Connection status.
     useEffect(() => {

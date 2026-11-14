@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PURPLE, NAVY, CONTACT_PHONE } from "./MarketingChrome";
 
@@ -42,7 +42,7 @@ export function DemoModal({ open, onClose }: { open: boolean; onClose: () => voi
 
         {done ? (
           <div className="text-center px-8 py-16">
-            <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl text-white" style={{ background: PURPLE }}>✓</div>
+            <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl text-white" style={{ background: PURPLE }}><Check className="w-7 h-7" /></div>
             <h3 className="text-xl font-black mb-1" style={{ color: NAVY }}>You're all set!</h3>
             <p className="text-slate-500 text-sm">Our team will contact you within 24 hours to book your demo.</p>
             <button onClick={close} className="mt-6 px-6 py-2.5 rounded-full font-bold text-white" style={{ background: PURPLE }}>Done</button>

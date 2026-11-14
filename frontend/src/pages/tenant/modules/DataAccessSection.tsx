@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { Check } from "lucide-react";
 
 /**
  * Data Access Control editor — embedded in the employee add/edit form.
@@ -95,7 +96,7 @@ function Multi({ label, options, selected, onToggle, searchable }: { label: stri
                 {options.map(o => (
                     <button type="button" key={o.id} onClick={() => toggle(o.id)}
                         className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-colors ${selected.includes(o.id) ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:border-[#5C67F2]"}`}>
-                        {selected.includes(o.id) ? "✓ " : ""}{o.label}
+                        {selected.includes(o.id) && <Check className="w-3 h-3 inline-block align-[-2px] mr-1" />}{o.label}
                     </button>
                 ))}
             </div>

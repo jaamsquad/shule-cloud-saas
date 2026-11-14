@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { Db } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
+import { resolveEmailRoute } from '../lib/emailRouting';
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 // Config now lives on the Integrations page (integration_settings). We merge the
@@ -129,10 +130,14 @@ export const sendEmail = async (
     { to, subject, message, html, from, attachments }: { to: string[]; subject: string; message?: string; html?: string; from?: string; attachments?: { filename: string; content: Buffer; contentType?: string }[] },
 ): Promise<SendResult[]> => {
     const s = await getCommSettings(db);
-    if (s.emailEnabled === false) throw new Error('Email sending is disabled in Communications → Settings.');
-    const transport = buildTransport(s);
-    const fromAddr = from || s.emailFromAddress || s.smtpUser || process.env.SMTP_USER;
-    const fromName = s.emailFromName || 'School';
+    // the school's own account or ShuleCloud's, as the owner set for this school (lib/emailRouting)
+    const route = await resolveEmailRoute(db, s);
+    if (s.emailEnabled === false && route.mode !== 'platform') throw new Error('Email sending is disabled in Communications → Settings.');
+    if (!route.smtp) throw new Error(route.reason || 'Email is not configured.');
+    const transport = buildTransport({ smtpHost: route.smtp.host, smtpPort: route.smtp.port, smtpUser: route.smtp.user, smtpPass: route.smtp.pass });
+    const fromAddr = route.via === 'platform' ? route.smtp.fromAddress : (from || route.smtp.fromAddress);
+    const fromName = route.smtp.fromName || 'School';
+    const replyTo = route.via === 'platform' ? (from || route.smtp.replyTo) : undefined;
     const recipients = uniq(to);
     const bodyHtml = html || (message ? plainToHtml(message) : '');
 
@@ -141,7 +146,7 @@ export const sendEmail = async (
         let result: SendResult;
         try {
             const info = await transport.sendMail({
-                from: `"${fromName}" <${fromAddr}>`, to: r, subject,
+                from: `"${fromName}" <${fromAddr}>`, to: r, subject, ...(replyTo ? { replyTo } : {}),
                 text: message || undefined, html: bodyHtml || undefined,
                 attachments: attachments && attachments.length ? attachments : undefined,
             });
@@ -152,7 +157,7 @@ export const sendEmail = async (
         results.push(result);
         db.collection('email_logs').insertOne({
             to: r, subject, status: result.status, error: result.error || null,
-            channel: 'email', createdAt: new Date(),
+            channel: 'email', via: route.via, createdAt: new Date(),
         }).catch(() => {});
     }
     return results;

@@ -1,4 +1,5 @@
 import { Db, ObjectId } from 'mongodb';
+import { schoolPrice } from '../lib/planPricing';
 
 /**
  * Put a school on a plan: creates/updates its TenantSubscription and switches the school's
@@ -29,7 +30,7 @@ export async function activateSubscription(meta: Db, opts: {
     await meta.collection('TenantSubscription').updateOne(
         { tenantId },
         {
-            $set: { tenantId, planId: plan?._id || opts.planId, planName, amount: opts.amount ?? plan?.price ?? 0, status: 'active', expiresAt, graceUntil, ...(opts.receipt ? { mpesaReceipt: opts.receipt } : {}), updatedAt: new Date() },
+            $set: { tenantId, planId: plan?._id || opts.planId, planName, amount: opts.amount ?? (plan ? schoolPrice(await meta.collection('Tenant').findOne({ _id: tenantId }), plan).price : 0), status: 'active', expiresAt, graceUntil, ...(opts.receipt ? { mpesaReceipt: opts.receipt } : {}), updatedAt: new Date() },
             $unset: { pendingPlanId: '', pendingPlanName: '' },
             $setOnInsert: { createdAt: new Date() },
         },

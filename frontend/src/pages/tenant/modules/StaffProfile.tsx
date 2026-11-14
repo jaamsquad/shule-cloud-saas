@@ -5,18 +5,22 @@ import {
     User, Mail, Phone, MapPin, Calendar, Briefcase,
     ArrowLeft, Loader2, Shield, GraduationCap,
     Edit, Camera, Download, BookOpen, School,
-    CreditCard, Hash, UserCheck, Key, ChevronRight, Printer
+    CreditCard, Hash, UserCheck, Key, ChevronRight, Printer,
+    PenTool, TrendingUp, X
 } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { openPrintDoc } from "@/lib/pdfDoc";
+import { prepareTransparentImage } from "@/lib/imageClean";
 
 export default function StaffProfile() {
     const { id } = useParams();
     const navigate = useNavigate();
     const qc = useQueryClient();
     const photoInputRef = useRef<HTMLInputElement>(null);
+    const signatureInputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
+    const [uploadingSignature, setUploadingSignature] = useState(false);
 
     // ── Queries ────────────────────────────────────────────────────────────────
     const { data: employee, isLoading } = useQuery({
@@ -46,6 +50,13 @@ export default function StaffProfile() {
         queryFn: async () => { const r = await api.get("/departments"); return Array.isArray(r.data) ? r.data : []; },
     });
 
+    // Per-subject class performance across this teacher's own assignments.
+    const { data: performance } = useQuery<{ subjects: { className: string; subjectName: string; average: number | null; studentsScored: number }[] }>({
+        queryKey: ["staff_performance", id],
+        queryFn: async () => (await api.get(`/staff/${id}/performance`)).data,
+        enabled: !!id && !!employee && (employee.subjectAssignments || []).length > 0,
+    });
+
     // ── Photo upload ──────────────────────────────────────────────────────────
     const photoMut = useMutation({
         mutationFn: (avatar: string) => api.patch(`/staff/${id}`, { avatar }),
@@ -61,6 +72,22 @@ export default function StaffProfile() {
         const reader = new FileReader();
         reader.onloadend = () => { photoMut.mutate(reader.result as string); setUploading(false); };
         reader.readAsDataURL(file);
+    };
+
+    // ── Signature upload (teachers — used as the class teacher's signature on report cards) ──
+    const signatureMut = useMutation({
+        mutationFn: (signature: string | null) => api.patch(`/staff/${id}`, { signature }),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ["staff_profile", id] }); qc.invalidateQueries({ queryKey: ["staff"] }); toast.success("Signature updated"); },
+        onError: () => toast.error("Failed to update signature"),
+    });
+    const handleSignatureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { toast.error("Signature image must be under 2 MB"); return; }
+        setUploadingSignature(true);
+        try { signatureMut.mutate(await prepareTransparentImage(file, 400)); }
+        catch { toast.error("That file is not a readable image."); }
+        finally { setUploadingSignature(false); e.target.value = ""; }
     };
 
     // ── Download / Print dossier ──────────────────────────────────────────────
@@ -182,11 +209,14 @@ export default function StaffProfile() {
     // ── Derived data ──────────────────────────────────────────────────────────
     const name = employee.employeeName || employee.name || `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || "Unknown";
     const photo = employee.avatar || employee.photo || null;
-    const classTeacher = classes.find((c: any) => c.classTeacherId === employee._id);
+    const classTeacher = classes.find((c: any) => String(c.classTeacherId || "") === String(employee._id));
     const assignments: any[] = employee.subjectAssignments || [];
     const grouped: Record<string, string[]> = {};
     assignments.forEach((a: any) => { if (!grouped[a.subjectName]) grouped[a.subjectName] = []; if (a.className) grouped[a.subjectName].push(a.className); });
     const hasPortal = !!employee.portalUsername;
+    // A "teacher" is anyone with subject assignments, a homeroom class, or a teaching-sounding
+    // designation — everyone else (bursar, secretary, security, ...) doesn't get teaching cards.
+    const isTeacher = assignments.length > 0 || !!classTeacher || /teach|tutor|instructor|lecturer/i.test(employee.designation || employee.role || "");
     // Departments this staff heads or belongs to.
     const myDepartments = departments.filter((d: any) => String(d.headOfDepartment) === String(employee._id))
         .map((d: any) => ({ name: d.name, role: "Head of Department", isHead: true }))
@@ -271,14 +301,19 @@ export default function StaffProfile() {
                         </div>
                     </div>
 
-                    {/* Quick stats strip */}
+                    {/* Quick stats strip — teaching stats only shown for teaching staff */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-                        {[
+                        {(isTeacher ? [
                             { label: "Subjects Taught", value: Object.keys(grouped).length, color: "text-[#5C67F2]" },
                             { label: "Classes", value: Array.from(new Set(assignments.map((a: any) => a.className).filter(Boolean))).length, color: "text-emerald-600" },
                             { label: "Departments", value: myDepartments.length, color: "text-teal-600" },
                             { label: "Class Teacher", value: classTeacher ? "Yes" : "No", color: classTeacher ? "text-amber-600" : "text-slate-400" },
-                        ].map(s => (
+                        ] : [
+                            { label: "Departments", value: myDepartments.length, color: "text-teal-600" },
+                            { label: "Portal Access", value: hasPortal ? "Active" : "Not Set", color: hasPortal ? "text-emerald-600" : "text-slate-400" },
+                            { label: "Status", value: employee.status || "Active", color: "text-[#5C67F2]" },
+                            { label: "Joined", value: employee.joiningDate || employee.joinDate ? new Date(employee.joiningDate || employee.joinDate).getFullYear() : "—", color: "text-orange-500" },
+                        ]).map(s => (
                             <div key={s.label} className="bg-slate-50 rounded-2xl p-4 text-center">
                                 <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{s.label}</p>
@@ -320,6 +355,34 @@ export default function StaffProfile() {
                                     {employee.nssfNo && <InfoRow icon={Hash} label="NSSF No." value={employee.nssfNo} color="text-gray-400" />}
                                     {employee.nhifNo && <InfoRow icon={Hash} label="NHIF No." value={employee.nhifNo} color="text-gray-400" />}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Signature — teachers only; used as the class teacher's signature on report cards */}
+                        {isTeacher && (
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+                                    <span className="w-1 h-4 bg-pink-400 rounded-full" /> Signature
+                                </h3>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-28 h-16 rounded-xl border border-dashed border-gray-200 bg-[repeating-conic-gradient(#f1f5f9_0%_25%,white_0%_50%)] bg-[length:12px_12px] flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        {employee.signature ? <img src={employee.signature} alt="Signature" className="max-w-full max-h-full object-contain" /> : <PenTool className="w-5 h-5 text-gray-300" />}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <button onClick={() => signatureInputRef.current?.click()} disabled={uploadingSignature}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#5C67F2]/10 hover:bg-[#5C67F2]/20 text-[#5C67F2] font-black text-[10px] uppercase rounded-lg transition-all">
+                                            {uploadingSignature ? <Loader2 className="w-3 h-3 animate-spin" /> : <PenTool className="w-3 h-3" />} {employee.signature ? "Replace" : "Upload"}
+                                        </button>
+                                        {employee.signature && (
+                                            <button onClick={() => signatureMut.mutate(null)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-500 font-black text-[10px] uppercase rounded-lg transition-all">
+                                                <X className="w-3 h-3" /> Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                    <input ref={signatureInputRef} type="file" accept="image/*" className="hidden" onChange={handleSignatureChange} />
+                                </div>
+                                {classTeacher && <p className="text-[10px] text-gray-400 mt-3">Printed on {classTeacher.levelName || classTeacher.name}'s report cards, next to the principal's.</p>}
                             </div>
                         )}
 
@@ -376,7 +439,8 @@ export default function StaffProfile() {
                             </div>
                         </div>
 
-                        {/* Teaching assignments */}
+                        {/* Teaching assignments — only for teaching staff; others don't need an empty-state card */}
+                        {(isTeacher || Object.keys(grouped).length > 0) && (
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
@@ -429,6 +493,35 @@ export default function StaffProfile() {
                                 </div>
                             )}
                         </div>
+                        )}
+
+                        {/* Subject performance — per (class, subject) this teacher is assigned to */}
+                        {isTeacher && performance && performance.subjects.length > 0 && (
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+                                <span className="w-1 h-4 bg-rose-400 rounded-full" /> Subject Performance
+                            </h3>
+                            <div className="space-y-2.5">
+                                {performance.subjects.map((s, i) => (
+                                    <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-black text-gray-800 truncate">{s.subjectName} <span className="text-gray-400 font-bold">· {s.className}</span></p>
+                                            <p className="text-[10px] text-gray-400 font-bold">{s.average != null ? `${s.studentsScored} student${s.studentsScored === 1 ? "" : "s"} scored` : "No marks recorded yet"}</p>
+                                        </div>
+                                        {s.average != null && (
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full ${s.average >= 70 ? "bg-emerald-500" : s.average >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${Math.min(100, s.average)}%` }} />
+                                                </div>
+                                                <span className={`text-sm font-black w-12 text-right ${s.average >= 70 ? "text-emerald-600" : s.average >= 50 ? "text-amber-600" : "text-rose-600"}`}>{s.average}%</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-3 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Class average across all recorded exams for each subject this teacher takes.</p>
+                        </div>
+                        )}
 
                         {/* Departments */}
                         {myDepartments.length > 0 && (

@@ -18,8 +18,11 @@ import { getMetaDb } from '../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { loadCurricula, canonicalCode } from '../lib/curriculum';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
-import { canonicalStatus } from '../lib/studentStatus';
+import { canonicalStatus, buildStatusUpdate } from '../lib/studentStatus';
+import { resolveGrading, makeGradingCache } from '../lib/grading';
 import { resolveStaffPermissions, permsToModules } from '../lib/permissions';
+import { syncCurrentTerm } from '../modules/cbc/cbcTerm';
+import { CLASS_FIELDS, resolveClassRoute } from '../services/promotion.service';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 const router = Router();
@@ -41,6 +44,7 @@ const auditLog = async (db: any, action: string, collection: string, docId: stri
 router.get('/v2/academic-years', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await syncCurrentTerm(db).catch(() => {});
         const years = await db.collection('academic_years').find({ deletedAt: { $exists: false } }).sort({ year: -1 }).toArray();
         res.json(years);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -62,16 +66,13 @@ router.post('/v2/academic-years', async (req, res) => {
 router.patch('/v2/academic-years/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { name, startDate, endDate, isActive } = req.body;
+        // Which year is "active" is never set by hand — see syncCurrentTerm (lib/cbcTerm):
+        // it's computed from each term's start date and advances on its own.
+        const { name, startDate, endDate } = req.body;
         const update: any = { updatedAt: now() };
         if (name !== undefined) update.name = name;
         if (startDate !== undefined) update.startDate = startDate;
         if (endDate !== undefined) update.endDate = endDate;
-        if (isActive !== undefined) {
-            // Only one year can be active
-            if (isActive) await db.collection('academic_years').updateMany({}, { $set: { isActive: false } });
-            update.isActive = isActive;
-        }
         await db.collection('academic_years').updateOne({ _id: toOid(req.params.id) }, { $set: update });
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -92,6 +93,7 @@ router.delete('/v2/academic-years/:id', async (req, res) => {
 router.get('/v2/terms', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await syncCurrentTerm(db).catch(() => {});
         const query: any = { deletedAt: { $exists: false } };
         if (req.query.academicYearId) query.academicYearId = req.query.academicYearId.toString();
         const terms = await db.collection('terms').find(query).sort({ termNumber: 1 }).toArray();
@@ -115,35 +117,69 @@ router.post('/v2/terms', async (req, res) => {
 router.patch('/v2/terms/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        // Which term is "active" is never set by hand — see syncCurrentTerm (lib/cbcTerm):
+        // it's computed from each term's start date and advances on its own. Editing a term's
+        // dates here naturally re-triggers that computation next time it's read.
         const update: any = { updatedAt: now() };
         ['name', 'termNumber', 'startDate', 'endDate', 'type'].forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
-
-        if (req.body.isActive !== undefined) {
-            if (req.body.isActive) {
-                // Deactivate ALL terms first — only one term can be active system-wide
-                await db.collection('terms').updateMany({}, { $set: { isActive: false } });
-                // Also find and activate the year that owns this term
-                const term = await db.collection('terms').findOne({ _id: toOid(req.params.id) });
-                if (term?.academicYearId) {
-                    await db.collection('academic_years').updateMany({}, { $set: { isActive: false } });
-                    await db.collection('academic_years').updateOne(
-                        { _id: toOid(term.academicYearId) },
-                        { $set: { isActive: true, updatedAt: now() } }
-                    );
-                }
-            }
-            update.isActive = req.body.isActive;
-        }
-
         await db.collection('terms').updateOne({ _id: toOid(req.params.id) }, { $set: update });
         res.json({ message: 'Updated' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+/**
+ * What a term can't be deleted out from under: exams held in it, fees invoiced for it, or
+ * students already promoted/graduated during its academic year. Each check matches both the
+ * precise id link (where a collection stores the term's own _id) and the looser name+year
+ * match (where it only stores "Term 1" + 2027 as plain fields) — the same two shapes used
+ * throughout the app (see resolveTermFilter in lib/assistantQueries.ts for the fees version).
+ */
+async function termUsageReasons(db: any, term: any): Promise<string[]> {
+    const termId = String(term._id);
+    const reasons: string[] = [];
+
+    const examCount = await db.collection('exams').countDocuments({
+        $or: [{ termId }, { term: term.name, academicYear: term.academicYear }],
+    }).catch(() => 0);
+    if (examCount) reasons.push(`${examCount} exam${examCount === 1 ? '' : 's'}`);
+
+    const invoiceCount = await db.collection('invoices').countDocuments({
+        $or: [
+            { semester_id: termId }, { term_id: termId }, { termId },
+            { term: term.name, academicYear: term.academicYear },
+            { semester: term.name, academicYear: term.academicYear },
+            { termName: term.name, academicYear: term.academicYear },
+        ],
+    }).catch(() => 0);
+    if (invoiceCount) reasons.push(`${invoiceCount} fee invoice${invoiceCount === 1 ? '' : 's'}`);
+
+    // Promotions/graduations are recorded per academic year, not per term, so any run or
+    // class-history entry tagged with this term's year means students have already moved
+    // under it — deleting one of its terms now would leave that history pointing nowhere.
+    const yearStr = String(term.academicYear ?? '');
+    const [promotionRuns, movedStudents] = await Promise.all([
+        db.collection('promotion_schedules').countDocuments({ 'options.academicYear': yearStr, status: { $in: ['completed', 'reverting', 'reverted'] } }).catch(() => 0),
+        db.collection('students').countDocuments({ 'classHistory.academicYear': yearStr }).catch(() => 0),
+    ]);
+    if (promotionRuns || movedStudents) reasons.push(`${movedStudents || promotionRuns} student${(movedStudents || promotionRuns) === 1 ? '' : 's'} already moved/graduated`);
+
+    return reasons;
+}
+
 router.delete('/v2/terms/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('terms').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        const term = await db.collection('terms').findOne({ _id: toOid(req.params.id) });
+        if (!term) return res.status(404).json({ message: 'Term not found' });
+        const reasons = await termUsageReasons(db, term);
+        if (reasons.length) {
+            return res.status(409).json({ message: `Can't delete ${term.name} ${term.academicYear || ''} — it already has ${reasons.join(', ')}. A term with real records can't be removed.` });
+        }
+        await db.collection('terms').updateOne({ _id: term._id }, { $set: { deletedAt: now() } });
+        // Recompute "current" right away (it may fall back to an earlier term), and let
+        // the self-heal in ensureNextAcademicYear (lib/academicYears.ts) recreate the gap
+        // this just left — dates copied from the matching term the year before.
+        await syncCurrentTerm(db).catch(() => {});
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -175,9 +211,21 @@ router.use(['/v2/classes', '/v2/streams', '/v2/enrollments/purge'], async (req, 
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
+/** Classes / streams soft-deleted in the past are removed for good (with a dead class's streams). */
+async function purgeSoftDeletedClasses(db: any) {
+    const dead: any[] = await db.collection('v2_classes').find({ deletedAt: { $exists: true } }, { projection: { _id: 1 } }).toArray().catch(() => []);
+    if (dead.length) {
+        const ids = dead.flatMap((c: any) => [String(c._id), c._id]);
+        await db.collection('v2_streams').deleteMany({ classId: { $in: ids } }).catch(() => {});
+        await db.collection('v2_classes').deleteMany({ deletedAt: { $exists: true } }).catch(() => {});
+    }
+    await db.collection('v2_streams').deleteMany({ deletedAt: { $exists: true } }).catch(() => {});
+}
+
 router.get('/v2/classes', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await purgeSoftDeletedClasses(db);   // classes deleted before deletion became permanent
         const classes = await db.collection('v2_classes').find({ deletedAt: { $exists: false } }).sort({ level: 1, name: 1 }).toArray();
         // Curriculum-aware: attach each class's resolved curriculum config so the
         // frontend gets behavior (terminology, assessment mode, report layout) from
@@ -231,7 +279,11 @@ router.patch('/v2/classes/:id', async (req, res) => {
 router.delete('/v2/classes/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('v2_classes').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        // Deleted for good (no soft delete): the class and its streams leave the database,
+        // so they never show again — not in lists, analytics or pickers.
+        const id = req.params.id;
+        await db.collection('v2_streams').deleteMany({ classId: { $in: [id, toOid(id)].filter(Boolean) as any[] } });
+        await db.collection('v2_classes').deleteOne({ _id: toOid(id) });
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -243,6 +295,7 @@ router.delete('/v2/classes/:id', async (req, res) => {
 router.get('/v2/streams', async (req, res) => {
     try {
         const db = getRequestDb(req);
+        await purgeSoftDeletedClasses(db);
         const query: any = { deletedAt: { $exists: false } };
         if (req.query.classId) query.classId = req.query.classId.toString();
         const { healStreamNames } = await import('../lib/classRename');
@@ -284,7 +337,7 @@ router.patch('/v2/streams/:id', async (req, res) => {
 router.delete('/v2/streams/:id', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        await db.collection('v2_streams').updateOne({ _id: toOid(req.params.id) }, { $set: { deletedAt: now() } });
+        await db.collection('v2_streams').deleteOne({ _id: toOid(req.params.id) });   // deleted for good
         res.json({ message: 'Deleted' });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
@@ -422,43 +475,120 @@ router.get('/v2/students/:id/history', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 // Promote selected students to a destination class + stream.
+// `toStreamId: "__keep__"` means "keep each student's own stream name" — e.g. a student
+// from "Form 3 North" promoted to Form 4 stays in a "North" stream, creating it under the
+// destination class automatically if Form 4 doesn't have one yet (same behaviour the
+// scheduled/auto-promotion flow already has — see services/promotion.service.ts).
+// Recorded as a completed `promotion_schedules` run (same shape the scheduled/auto
+// promotion flow writes) so it shows up as a recent promotion and can be undone —
+// reuses the existing GET /v2/promotion-schedules list and POST …/:id/revert.
+// The admin only ever picks the SOURCE class/students here — the destination class is
+// resolved the same way the automatic/scheduled promotion does (resolveClassRoute: the
+// class's own nextClassId, then the "Grade N → Grade N+1" name ladder, then the one class
+// a level up), and each student's stream follows them by name, created in the destination
+// class on first use. There is deliberately no "pick the destination class/stream" input.
 router.post('/v2/promotions', async (req, res) => {
     try {
         const db = getRequestDb(req);
-        const { studentIds, toClassId, toStreamId, academicYear } = req.body || {};
+        const { studentIds, fromClassId, academicYear } = req.body || {};
         if (!Array.isArray(studentIds) || !studentIds.length) return res.status(400).json({ message: 'No students selected' });
-        if (!toClassId) return res.status(400).json({ message: 'Destination class is required' });
+        if (!fromClassId) return res.status(400).json({ message: 'Source class is required' });
 
-        const [toClass, toStream] = await Promise.all([
-            db.collection('v2_classes').findOne({ _id: toOid(toClassId) }).catch(() => null),
-            toStreamId ? db.collection('v2_streams').findOne({ _id: toOid(toStreamId) }).catch(() => null) : null,
-        ]);
-        if (!toClass) return res.status(400).json({ message: 'Destination class not found' });
-        const fullClass = toStream ? (toStream.fullName || `${toClass.name} ${toStream.name}`) : toClass.name;
+        const classes = await db.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray();
+        const fromClass = classes.find((c: any) => String(c._id) === String(fromClassId));
+        if (!fromClass) return res.status(400).json({ message: 'Source class not found' });
+
+        const route = resolveClassRoute(fromClass, classes, true);
+        if (route.action === 'unresolved') return res.status(400).json({ message: `Can't tell what class follows ${fromClass.name}: ${(route as any).reason}. Set it in Class setup (next class or level) and try again.` });
+
+        const toClass: any = route.action === 'promote' ? (route as any).toClass : null;
         const year = academicYear || String(new Date().getFullYear());
+        const nrm = (v: any) => String(v ?? '').trim().toLowerCase();
+        const destStreams = toClass ? await db.collection('v2_streams').find({ classId: String(toClass._id), deletedAt: { $exists: false } }).toArray().catch(() => [] as any[]) : [];
+        // find-or-create cache so two students from the same stream in this batch don't
+        // each try to create their own duplicate "North" stream.
+        const streamByName = new Map<string, any>(destStreams.map((s: any) => [nrm(s.name), s]));
+        const by = String((req as any).user?.name || (req as any).user?.email || (req as any).user?.sub || 'admin');
 
-        let promoted = 0, skipped = 0;
+        const runId = new ObjectId();
+        const at = now();
+        let promoted = 0, graduated = 0, skipped = 0, streamsCreated = 0;
+
         for (const sid of studentIds) {
             const oid = toOid(String(sid));
             if (!oid) { skipped++; continue; }
             const student: any = await db.collection('students').findOne({ _id: oid }).catch(() => null);
             if (!student) { skipped++; continue; }
-            const fromClass = student.studentClass || student.currentClass || '';
-            // Append a history entry (immutable record of the class they left).
-            const historyEntry = { className: fromClass, classId: student.classId || '', streamId: student.streamId || '', streamName: student.stream || student.streamName || '', academicYear: student.academicYear || '', leftAt: now() };
+            const fromLabel = student.studentClass || student.currentClass || fromClass.name;
+            const lastPromotion = { runId: runId.toString(), at, toYear: year, from: fromLabel };
+
+            if (route.action === 'graduate') {
+                const { update } = buildStatusUpdate(student, 'Graduated', { reason: 'Completed the final class', by, extraSet: { graduatedAt: at, graduationYear: year, lastPromotion } });
+                if (!update) { skipped++; continue; }
+                const before: any = {}; for (const f of [...CLASS_FIELDS, 'status', 'lastPromotion']) before[f] = student[f] === undefined ? null : student[f];
+                await db.collection('students').updateOne({ _id: oid }, update);
+                await db.collection('promotion_run_items').insertOne({
+                    runId: runId.toString(), studentId: String(sid), name: student.studentName || student.name || '', adm: student.registrationNo || student.admNo || '',
+                    action: 'graduate', from: { classId: student.classId || '', streamId: student.streamId || '', label: fromLabel }, to: null, before, at,
+                });
+                graduated++;
+                continue;
+            }
+
+            // Promote: destination class is the resolved toClass; destination stream is
+            // the one named after the student's own stream, created in toClass if missing.
+            let destStream: any = null;
+            const ownStreamName = String(student.stream || student.streamName || '').trim();
+            if (ownStreamName) {
+                const key = nrm(ownStreamName);
+                destStream = streamByName.get(key);
+                if (!destStream) {
+                    const created = await db.collection('v2_streams').insertOne({
+                        classId: String(toClass._id), className: toClass.name, name: ownStreamName, fullName: `${toClass.name} ${ownStreamName}`,
+                        capacity: Number(toClass.capacity) || 40, classTeacherId: null, isActive: true, createdAt: at, autoCreatedByPromotion: true,
+                    });
+                    destStream = { _id: created.insertedId, name: ownStreamName, fullName: `${toClass.name} ${ownStreamName}` };
+                    streamByName.set(key, destStream);
+                    streamsCreated++;
+                }
+            }   // no stream on file for this student — leave them streamless in the new class
+            const destFull = destStream ? (destStream.fullName || `${toClass.name} ${destStream.name}`) : toClass.name;
+
+            // Snapshot every field the move touches, so this student can be put back
+            // exactly where they were if the run is reverted.
+            const before: any = {}; for (const f of [...CLASS_FIELDS, 'status', 'lastPromotion']) before[f] = student[f] === undefined ? null : student[f];
+            // Append a history entry (immutable record of the class they left), tagged
+            // with this run so a revert can remove exactly this line.
+            const historyEntry = { className: fromLabel, classId: student.classId || '', streamId: student.streamId || '', streamName: student.stream || student.streamName || '', academicYear: student.academicYear || '', leftAt: at, reason: 'Promoted', runId: runId.toString() };
             await db.collection('students').updateOne({ _id: oid }, {
                 $set: {
-                    studentClass: fullClass, currentClass: fullClass,
-                    classId: toClassId, className: toClass.name,
-                    streamId: toStreamId || null, stream: toStream?.name || '', streamName: toStream?.name || '',
-                    academicYear: year, updatedAt: now(),
+                    studentClass: destFull, currentClass: destFull,
+                    classId: String(toClass._id), className: toClass.name,
+                    streamId: destStream ? String(destStream._id) : null, stream: destStream?.name || '', streamName: destStream?.name || '',
+                    academicYear: year, updatedAt: at, lastPromotion,
                 },
                 $push: { classHistory: historyEntry } as any,
             });
+            await db.collection('promotion_run_items').insertOne({
+                runId: runId.toString(), studentId: String(sid), name: student.studentName || student.name || '', adm: student.registrationNo || student.admNo || '',
+                action: 'promote', from: { classId: student.classId || '', streamId: student.streamId || '', label: fromLabel },
+                to: { classId: String(toClass._id), streamId: destStream ? String(destStream._id) : null, label: destFull }, before, at,
+            });
             promoted++;
         }
-        await auditLog(db, 'BULK_PROMOTION', 'students', 'bulk', 'system', null, { toClassId, toStreamId, count: promoted });
-        res.json({ message: 'Promotion complete', promoted, skipped, total: studentIds.length, destination: fullClass });
+
+        const destinationLabel = route.action === 'graduate' ? 'Graduation' : toClass.name;
+        await db.collection('promotion_schedules').insertOne({
+            _id: runId, name: `Promote ${fromClass.name} → ${destinationLabel}`, runAt: at, manual: true,
+            options: { academicYear: year }, status: 'completed', startedAt: at, finishedAt: at,
+            result: { targetYear: year, promoted, graduated, skipped, changed: 0, errors: [], failed: 0, streamsCreated: [], unresolved: [] },
+            createdAt: at, createdBy: by,
+        });
+        await auditLog(db, 'BULK_PROMOTION', 'students', 'bulk', by, null, { fromClassId, toClassId: toClass ? String(toClass._id) : null, count: promoted + graduated, runId: runId.toString(), streamsCreated });
+        res.json({
+            message: route.action === 'graduate' ? 'Graduation complete' : 'Promotion complete',
+            promoted, graduated, skipped, total: studentIds.length, destination: destinationLabel, via: (route as any).via || '', runId: runId.toString(), streamsCreated,
+        });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -545,10 +675,11 @@ router.post('/v2/marks', async (req, res) => {
         const enrollment = await db.collection('student_enrollments').findOne({ _id: toOid(enrollmentId) });
         if (!enrollment) return res.status(404).json({ message: 'Enrollment not found' });
 
-        // Auto-calculate grade if not provided
+        // Auto-calculate grade if not provided — from the class's configured grading.
         const pct = totalMarks > 0 ? (Number(marksObtained) / Number(totalMarks)) * 100 : 0;
-        const autoGrade = grade || (pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'F');
-        const autoPoints = points || (pct >= 80 ? 4.0 : pct >= 70 ? 3.5 : pct >= 60 ? 3.0 : pct >= 50 ? 2.5 : pct >= 40 ? 2.0 : pct >= 33 ? 1.0 : 0.0);
+        const band = (await resolveGrading(db, enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined)).gradeOf(pct);
+        const autoGrade = grade || band.grade;
+        const autoPoints = points || band.points;
 
         const doc = {
             studentId, studentName: enrollment.studentName,
@@ -586,6 +717,7 @@ router.post('/v2/marks/bulk', async (req, res) => {
         if (!Array.isArray(marks) || !marks.length) return res.status(400).json({ message: 'marks array required' });
 
         let saved = 0; let skipped = 0;
+        const gradingFor = makeGradingCache(db);
         for (const mark of marks) {
             try {
                 const exam = await db.collection('v2_exams').findOne({ _id: toOid(mark.examId) });
@@ -595,8 +727,10 @@ router.post('/v2/marks/bulk', async (req, res) => {
                 if (!enrollment) { skipped++; continue; }
 
                 const pct = mark.totalMarks > 0 ? (Number(mark.marksObtained) / Number(mark.totalMarks)) * 100 : 0;
-                const g = pct >= 80 ? 'A' : pct >= 70 ? 'B+' : pct >= 60 ? 'B' : pct >= 50 ? 'C+' : pct >= 40 ? 'C' : pct >= 33 ? 'D' : 'F';
-                const p = pct >= 80 ? 4.0 : pct >= 70 ? 3.5 : pct >= 60 ? 3.0 : pct >= 50 ? 2.5 : pct >= 40 ? 2.0 : pct >= 33 ? 1.0 : 0.0;
+                // Grade + points from the class's configured grading.
+                const band = (await gradingFor(enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined)).gradeOf(pct);
+                const g = band.grade;
+                const p = band.points;
 
                 const doc = { ...mark, percentage: Math.round(pct * 100) / 100, grade: mark.grade || g, points: mark.points || p, academicYearId: enrollment.academicYearId, classId: enrollment.classId, streamId: enrollment.streamId, isApproved: false, isLocked: false, updatedAt: now() };
 
@@ -665,11 +799,16 @@ router.get('/v2/rankings', async (req, res) => {
             studentMap[m.studentId].totalOutOf += m.totalMarks;
         });
 
-        const rankings = Object.values(studentMap).map((s: any) => ({
-            ...s,
-            average: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0,
-            meanGrade: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) >= 0.8 ? 'A' : (s.totalMarks / s.totalOutOf) >= 0.7 ? 'B+' : (s.totalMarks / s.totalOutOf) >= 0.6 ? 'B' : (s.totalMarks / s.totalOutOf) >= 0.5 ? 'C+' : (s.totalMarks / s.totalOutOf) >= 0.4 ? 'C' : 'D' : 'F',
-        })).sort((a: any, b: any) => b.totalMarks - a.totalMarks).map((s: any, i: number) => ({ ...s, position: i + 1 }));
+        // Mean grade from each student's class grading (template → class → global → …).
+        const gradingFor = makeGradingCache(db);
+        const rankings = (await Promise.all(Object.values(studentMap).map(async (s: any) => {
+            const grading = await gradingFor(s.classId ? String(s.classId) : undefined, s.className || undefined);
+            return {
+                ...s,
+                average: s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0,
+                meanGrade: grading.gradeOf(s.totalOutOf > 0 ? (s.totalMarks / s.totalOutOf) * 100 : 0).grade,
+            };
+        }))).sort((a: any, b: any) => b.totalMarks - a.totalMarks).map((s: any, i: number) => ({ ...s, position: i + 1 }));
 
         res.json({ total: rankings.length, rankings });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -821,7 +960,8 @@ router.get('/v2/report-card/:enrollmentId', async (req, res) => {
         const overallMarks  = scoredSubjects.reduce((sum: number, s: any) => sum + (s.totalMarks  || 0), 0);
         const overallOutOf  = scoredSubjects.reduce((sum: number, s: any) => sum + (s.totalOutOf  || 0), 0);
         const overallPct    = overallOutOf > 0 ? (overallMarks / overallOutOf) * 100 : 0;
-        const meanGrade     = overallPct >= 80 ? 'A' : overallPct >= 70 ? 'B+' : overallPct >= 60 ? 'B' : overallPct >= 50 ? 'C+' : overallPct >= 40 ? 'C' : overallPct > 0 ? 'D' : '—';
+        const grading       = await resolveGrading(db, enrollment.classId ? String(enrollment.classId) : undefined, enrollment.className || undefined);
+        const meanGrade     = overallOutOf > 0 ? grading.gradeOf(overallPct).grade : '—';
 
         const savedCard = await db.collection('v2_report_cards').findOne({ enrollmentId });
 

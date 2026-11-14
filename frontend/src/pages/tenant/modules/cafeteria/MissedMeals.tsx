@@ -67,7 +67,7 @@ export default function MissedMeals() {
                             {isLoading ? (
                                 <tr><td colSpan={4} className="py-16 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-300" /></td></tr>
                             ) : rows.length === 0 ? (
-                                <tr><td colSpan={4} className="py-16 text-center text-emerald-600 text-xs font-black uppercase tracking-wide">Everyone was served — no missed meals 🎉</td></tr>
+                                <tr><td colSpan={4} className="py-16 text-center text-emerald-600 text-xs font-black uppercase tracking-wide">Everyone was served — no missed meals</td></tr>
                             ) : rows.map((r) => (
                                 <tr key={r._id} className="hover:bg-slate-50/50">
                                     <td className="py-3 px-4 text-slate-500">{r.admissionNo || "—"}</td>

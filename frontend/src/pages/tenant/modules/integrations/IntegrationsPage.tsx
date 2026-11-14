@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Home, Zap, ChevronRight, CheckCircle2, Settings } from "lucide-react";
+import { Home, Zap, ChevronRight, CheckCircle2, Settings, Smartphone, CreditCard, Waves, GraduationCap, Video, Monitor, MessageSquare, MessageCircle, Mail, Fingerprint, type LucideIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
@@ -7,7 +7,7 @@ import api from "@/lib/api";
 export const INTEGRATIONS_CONFIG = [
     // ── Payments ────────────────────────────────────────────────────────────
     {
-        key: "payhero", name: "PayHero", category: "Payments", logo: "🦸", color: "#F97316",
+        key: "payhero", name: "PayHero", category: "Payments", logo: Zap, color: "#F97316",
         description: "Accept M-PESA & card payments via PayHero — simplest Kenya payment API.",
         docsUrl: "https://payhero.co.ke/docs",
         testEndpoint: "/integrations/test/payhero",
@@ -26,8 +26,8 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "daraja", name: "M-PESA (Daraja)", category: "Payments", logo: "🟢", color: "#00A651",
-        description: "Direct Safaricom Daraja API integration for M-PESA STK Push payments.",
+        key: "daraja", name: "M-PESA (Daraja)", category: "Payments", logo: Smartphone, color: "#00A651",
+        description: "Direct Safaricom Daraja API integration — register one or more Paybill/Till accounts for STK Push and C2B payments.",
         docsUrl: "https://developer.safaricom.co.ke",
         testEndpoint: "/integrations/test/mpesa",
         webhook: "mpesa/callback",
@@ -50,7 +50,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "stripe", name: "Stripe", category: "Payments", logo: "💳", color: "#635BFF",
+        key: "stripe", name: "Stripe", category: "Payments", logo: CreditCard, color: "#635BFF",
         description: "Accept international card payments — Visa, Mastercard, and more.",
         docsUrl: "https://stripe.com/docs",
         testEndpoint: "/integrations/test/stripe",
@@ -68,7 +68,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "flutterwave", name: "Flutterwave", category: "Payments", logo: "🌊", color: "#F5A623",
+        key: "flutterwave", name: "Flutterwave", category: "Payments", logo: Waves, color: "#F5A623",
         description: "Multi-currency payments across Africa — M-PESA, cards, bank transfers.",
         docsUrl: "https://developer.flutterwave.com",
         testEndpoint: "/integrations/test/flutterwave",
@@ -87,7 +87,7 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── LMS / Video ──────────────────────────────────────────────────────────
     {
-        key: "google_classroom", name: "Google Classroom", category: "LMS", logo: "🎓", color: "#4285F4",
+        key: "google_classroom", name: "Google Classroom", category: "LMS", logo: GraduationCap, color: "#4285F4",
         description: "Sync assignments, classwork and announcements with Google Classroom.",
         docsUrl: "https://developers.google.com/classroom",
         testEndpoint: "/integrations/test/google",
@@ -104,7 +104,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "zoom", name: "Zoom", category: "Video Conferencing", logo: "🎥", color: "#2D8CFF",
+        key: "zoom", name: "Zoom", category: "Video Conferencing", logo: Video, color: "#2D8CFF",
         description: "Host virtual classes, parent meetings and staff training via Zoom.",
         docsUrl: "https://marketplace.zoom.us",
         testEndpoint: "/integrations/test/zoom",
@@ -120,7 +120,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "microsoft_teams", name: "Microsoft Teams", category: "Video Conferencing", logo: "💻", color: "#6264A7",
+        key: "microsoft_teams", name: "Microsoft Teams", category: "Video Conferencing", logo: Monitor, color: "#6264A7",
         description: "Create Teams meetings for virtual classes and staff collaboration.",
         docsUrl: "https://docs.microsoft.com/graph",
         testEndpoint: "/integrations/test/teams",
@@ -137,7 +137,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "jitsi", name: "Jitsi Meet (Custom)", category: "Video Conferencing", logo: "📹", color: "#0099FF",
+        key: "jitsi", name: "Jitsi Meet (Custom)", category: "Video Conferencing", logo: Video, color: "#0099FF",
         description: "Use your own hosted Jitsi server for private, unlimited live classes.",
         docsUrl: "https://jitsi.github.io/handbook",
         guide: [
@@ -154,7 +154,7 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── SMS ──────────────────────────────────────────────────────────────────
     {
-        key: "talksasa", name: "Talksasa SMS", category: "SMS", logo: "💬", color: "#2E7D32",
+        key: "talksasa", name: "Talksasa SMS", category: "SMS", logo: MessageSquare, color: "#2E7D32",
         description: "Send SMS and WhatsApp via Talksasa BulkSMS — fees, results, reminders.",
         docsUrl: "https://bulksms.talksasa.com",
         testEndpoint: "/integrations/test/talksasa",
@@ -170,7 +170,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "africas_talking", name: "Africa's Talking", category: "SMS", logo: "📱", color: "#E63946",
+        key: "africas_talking", name: "Africa's Talking", category: "SMS", logo: Smartphone, color: "#E63946",
         description: "Send SMS reminders, result alerts and bulk announcements.",
         docsUrl: "https://developers.africastalking.com",
         testEndpoint: "/integrations/test/at",
@@ -190,7 +190,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "twilio", name: "Twilio SMS", category: "SMS", logo: "🔴", color: "#F22F46",
+        key: "twilio", name: "Twilio SMS", category: "SMS", logo: MessageSquare, color: "#F22F46",
         description: "International SMS gateway — reliable delivery worldwide.",
         docsUrl: "https://www.twilio.com/docs",
         testEndpoint: "/integrations/test/twilio",
@@ -206,7 +206,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "infobip", name: "Infobip", category: "SMS", logo: "💬", color: "#FF4B4B",
+        key: "infobip", name: "Infobip", category: "SMS", logo: MessageSquare, color: "#FF4B4B",
         description: "Multi-channel messaging — SMS, WhatsApp, and Viber via Infobip.",
         docsUrl: "https://www.infobip.com/docs",
         guide: [
@@ -223,7 +223,7 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── WhatsApp ─────────────────────────────────────────────────────────────
     {
-        key: "whatsapp", name: "WhatsApp Business", category: "WhatsApp", logo: "💚", color: "#25D366",
+        key: "whatsapp", name: "WhatsApp Business", category: "WhatsApp", logo: MessageCircle, color: "#25D366",
         description: "Send fee receipts, results and alerts directly via WhatsApp.",
         docsUrl: "https://developers.facebook.com/docs/whatsapp",
         testEndpoint: "/integrations/test/whatsapp",
@@ -244,7 +244,7 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── Email ────────────────────────────────────────────────────────────────
     {
-        key: "sendgrid", name: "SendGrid", category: "Email", logo: "📧", color: "#1A82E2",
+        key: "sendgrid", name: "SendGrid", category: "Email", logo: Mail, color: "#1A82E2",
         description: "Reliable transactional and bulk email delivery.",
         docsUrl: "https://sendgrid.com/docs",
         testEndpoint: "/integrations/test/sendgrid",
@@ -261,7 +261,7 @@ export const INTEGRATIONS_CONFIG = [
         testExtra: "email",
     },
     {
-        key: "mailgun", name: "Mailgun", category: "Email", logo: "🔫", color: "#F06B26",
+        key: "mailgun", name: "Mailgun", category: "Email", logo: Mail, color: "#F06B26",
         description: "Developer-friendly transactional email via Mailgun.",
         docsUrl: "https://documentation.mailgun.com",
         guide: [
@@ -276,7 +276,7 @@ export const INTEGRATIONS_CONFIG = [
         ],
     },
     {
-        key: "smtp", name: "Custom SMTP", category: "Email", logo: "✉️", color: "#64748b",
+        key: "smtp", name: "Custom SMTP", category: "Email", logo: Mail, color: "#64748b",
         description: "Use your own SMTP server — Gmail, Outlook, or any mail server.",
         docsUrl: "#",
         testEndpoint: "/integrations/test/smtp",
@@ -298,7 +298,7 @@ export const INTEGRATIONS_CONFIG = [
 
     // ── Attendance ────────────────────────────────────────────────────────────
     {
-        key: "biometric", name: "Biometric Devices", category: "Attendance", logo: "👆", color: "#0EA5E9",
+        key: "biometric", name: "Biometric Devices", category: "Attendance", logo: Fingerprint, color: "#0EA5E9",
         description: "Connect ZKTeco / biometric fingerprint devices for automatic attendance.",
         docsUrl: "https://www.zkteco.com",
         guide: [
@@ -321,7 +321,7 @@ const CATEGORIES = ["All", ...Array.from(new Set(INTEGRATIONS_CONFIG.map(i => i.
 
 // Real brand marks via Simple Icons (open-source CC0 icon set, served from CDN).
 // Maps our integration key → [simpleicons slug, brand hex]. Missing keys fall
-// back to the emoji defined in the config.
+// back to the lucide icon defined in the config.
 export const BRAND_SLUG: Record<string, [string, string]> = {
     daraja: ["safaricom", "1AB248"],
     stripe: ["stripe", "635BFF"],
@@ -338,11 +338,11 @@ export const BRAND_SLUG: Record<string, [string, string]> = {
     smtp: ["maildotru", "168DE2"],
 };
 
-/** Renders a brand logo from Simple Icons, falling back to the emoji on error. */
-export function BrandLogo({ intgKey, emoji, color }: { intgKey: string; emoji: string; color: string }) {
+/** Renders a brand logo from Simple Icons, falling back to a neutral lucide icon on error. */
+export function BrandLogo({ intgKey, emoji: Fallback, color }: { intgKey: string; emoji: LucideIcon; color: string }) {
     const brand = BRAND_SLUG[intgKey];
     const [failed, setFailed] = useState(false);
-    if (!brand || failed) return <span className="text-2xl">{emoji}</span>;
+    if (!brand || failed) return <Fallback className="w-6 h-6 text-slate-500" />;
     const [slug, hex] = brand;
     return (
         <img
@@ -364,12 +364,19 @@ export default function IntegrationsPage() {
         queryKey: ["integration_settings"],
         queryFn: async () => { const r = await api.get("/integration_settings"); return Array.isArray(r.data) ? r.data : []; },
     });
+    // M-PESA has its own multi-account page (not the generic one-doc-per-integration
+    // config this grid otherwise uses), so its card's status comes from here instead.
+    const { data: mpesaAccounts = [] } = useQuery<any[]>({
+        queryKey: ["mpesa_accounts"],
+        queryFn: async () => (await api.get("/integrations/mpesa/accounts")).data || [],
+    });
 
     const settingsMap = useMemo(() => {
         const m: Record<string, any> = {};
         allSettings.forEach((s: any) => { if (s.integration) m[s.integration] = s; });
+        if (mpesaAccounts.length) m.daraja = { enabled: mpesaAccounts.some((a: any) => a.enabled && a.configured) };
         return m;
-    }, [allSettings]);
+    }, [allSettings, mpesaAccounts]);
 
     const filtered = useMemo(() => {
         let list = INTEGRATIONS_CONFIG;
@@ -441,7 +448,7 @@ export default function IntegrationsPage() {
                                 const isConfig  = !!saved;
                                 return (
                                     <button key={intg.key}
-                                        onClick={() => navigate(`/integrations/${intg.key}`)}
+                                        onClick={() => navigate(intg.key === "daraja" ? "/integrations/mpesa-accounts" : `/integrations/${intg.key}`)}
                                         className={`bg-white rounded-2xl border-2 p-5 text-left hover:shadow-md transition-all group relative ${isActive ? "border-indigo-200 shadow-sm" : "border-gray-100 hover:border-gray-200"}`}>
 
                                         {/* Status badge */}

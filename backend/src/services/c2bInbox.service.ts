@@ -23,25 +23,25 @@ function parseTransTime(t: string): Date | null {
     return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
 }
 
-/** Find the tenant (school) whose shortcode/till matches the callback. */
+/** Find the tenant (school) whose M-PESA account shortcode/till matches the callback. */
 async function resolveTenantForShortcode(shortcode: string) {
     const meta = getMetaDb();
     const sc = String(shortcode || '').trim();
     if (!sc) return null;
-    // Branch/Tenant mapping: a tenant's mpesa_settings holds shortcode + tillNumber,
-    // AND (separately) registeredShortCode — the number C2B URLs were actually
-    // registered against, which the operator can override at registration time and
-    // which can drift from shortcode/tillNumber if settings are edited afterwards.
-    // Match against all three, or a real Safaricom callback for an edited school
-    // silently resolves to no tenant and the payment vanishes from the Inbox.
+    // A tenant can have several M-PESA accounts (mpesa_accounts), each with its own
+    // shortcode/tillNumber AND (separately) registeredShortCode — the number C2B
+    // URLs were actually registered against, which can drift from the saved
+    // shortcode/tillNumber if settings were edited afterwards. Match against every
+    // account's codes, or a real Safaricom callback for an edited school silently
+    // resolves to no tenant and the payment vanishes from the Inbox.
     const tenants = await meta.collection('Tenant').find({ status: 'active' }).toArray();
     for (const t of tenants) {
         if (!t.databaseName) continue;
         try {
             const db = getTenantDb(t.databaseName);
-            const s: any = (await db.collection('mpesa_settings').findOne({})) || {};
-            const codes = [s.shortcode, s.tillNumber, s.registeredShortCode].map((v: any) => String(v || '').trim());
-            if (codes.includes(sc)) return { tenant: t, db };
+            const { listAccounts, accountCodes } = await import('./mpesaAccounts.service');
+            const accounts = await listAccounts(db);
+            if (accounts.some(a => accountCodes(a).includes(sc))) return { tenant: t, db };
         } catch { /* next */ }
     }
     return null;

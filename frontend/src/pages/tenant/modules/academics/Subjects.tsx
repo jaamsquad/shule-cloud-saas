@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Bookmark, Edit, Trash2, ChevronRight, BookmarkIcon, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, Plus, Bookmark, Edit, EyeOff, ChevronRight, BookmarkIcon, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,11 +48,12 @@ export default function Subjects() {
         },
     });
 
-    const deleteMutation = useMutation({
+    // Subjects are never deleted — disabling hides them from pickers while keeping past records intact.
+    const disableMutation = useMutation({
         mutationFn: (id: string) => api.delete(`/academics/subjects/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects-list"] });
-            toast.success("Subject deleted from registry");
+            toast.success("Subject disabled");
         },
     });
 
@@ -131,9 +132,11 @@ export default function Subjects() {
                                             <Button onClick={() => handleEdit(item)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
                                                 <Edit className="w-3.5 h-3.5" /> Edit
                                             </Button>
-                                            <Button onClick={() => deleteMutation.mutate(item._id)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
-                                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                                            </Button>
+                                            {item.offered !== false && (
+                                                <Button onClick={() => disableMutation.mutate(item._id)} variant="outline" size="sm" className="h-7 px-3 text-[11px] font-bold text-gray-600 bg-white border-gray-300 gap-1.5 rounded-sm shadow-none">
+                                                    <EyeOff className="w-3.5 h-3.5" /> Disable
+                                                </Button>
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -174,7 +177,7 @@ export default function Subjects() {
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-gray-500 font-bold text-[11px] uppercase tracking-tight">Name</Label>
-                                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="h-10 border-gray-200 rounded-sm focus-visible:ring-[#10b981]" placeholder="English" />
+                                <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} disabled={!!editing} title={editing ? "The subject name can't be changed once created." : undefined} className="h-10 border-gray-200 rounded-sm focus-visible:ring-[#10b981] disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed" placeholder="English" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-gray-500 font-bold text-[11px] uppercase tracking-tight">Abbreviation</Label>

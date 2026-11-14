@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Loader2, Trash2, ArrowLeft, Send, Settings, FileText, GripVertical, Check } from "lucide-react";
+import { Plus, Loader2, Trash2, ArrowLeft, Send, Settings, FileText, GripVertical, Check, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -81,10 +81,13 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
         academicYear: "", term: "", termId: "",
         startDate: "", startTime: "09:00", endDate: "", endTime: "10:00",
     });
-    // Parent (main) assessments: existing CAT / Mid Term exams this online exam rolls
-    // up into. Every subject's online exam under the same parent shares one column.
+    // Parent (main) assessments: real exams (from the Exams module) this online exam
+    // rolls up into. Every subject's online exam under the same parent shares one
+    // column. Cards on this page are *online exams* (a different collection) — they
+    // never count as a parent on their own, so any real written-test/supplementary
+    // exam is offered here, not just ones whose name happens to say "CAT"/"Mid Term".
     const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
-    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
+    const parentExams = allExams.filter((e: any) => e.examCategory === "written_test" || e.examCategory === "supplementary" || /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
     const { data: years = [] } = useQuery<any[]>({ queryKey: ["v2_academic_years"], queryFn: async () => (await api.get("/v2/academic-years")).data || [] });
     const { data: terms = [] } = useQuery<any[]>({ queryKey: ["v2_terms"], queryFn: async () => (await api.get("/v2/terms")).data || [] });
     const activeYear = years.find((y: any) => y.isActive);
@@ -150,33 +153,60 @@ function NewExamButton({ classes, subjects, onCreated }: any) {
                             <option value="">— Select main assessment —</option>
                             {parentExams.map((e: any) => <option key={e._id} value={e._id}>{e.examName || e.name} · {e.type || e.examType}{e.term ? ` · ${e.term}` : ""}</option>)}
                         </select>
-                        {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No CAT / Mid Term exam found. Create one first in Create Exam, then teachers add their subject exams under it.</p>}
+                        {parentExams.length === 0 && <p className="text-[11px] text-rose-500 mt-1">No exam found to attach to. Create one first in Create Exam (e.g. a CAT or Mid Term), then add your online exams under it here.</p>}
                     </div>
-                    <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
-                    <div className="grid grid-cols-2 gap-3">
-                        <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">{CATS.map(c => <option key={c}>{c}</option>)}</select>
-                        <select value={f.subjectId} onChange={e => setF({ ...f, subjectId: e.target.value })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Subject —</option>{subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}</select>
-                        <select value={f.classId} onChange={e => setF({ ...f, classId: e.target.value, streamId: "" })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Class —</option>{classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}</select>
-                        <select value={f.streamId} onChange={e => setF({ ...f, streamId: e.target.value })} disabled={!f.classId} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"><option value="">All streams</option>{streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}</select>
-                        <input value={f.durationMinutes} onChange={e => setF({ ...f, durationMinutes: Number(e.target.value) })} type="number" placeholder="Duration (min)" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
-                        <input value={f.passMark} onChange={e => setF({ ...f, passMark: Number(e.target.value) })} type="number" placeholder="Pass mark" className="h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Exam Name</label>
+                        <input value={f.examName} onChange={e => setF({ ...f, examName: e.target.value })} placeholder="This exam's name (e.g. Biology CAT)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                        <select value={f.academicYear} onChange={e => setF({ ...f, academicYear: e.target.value, termId: "", term: "" })} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                            <option value="">— Academic Year —</option>
-                            {years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}{y.isActive ? " (Active)" : ""}</option>)}
-                        </select>
-                        <select value={f.termId} onChange={e => {
-                            const term = terms.find((t: any) => String(t._id) === e.target.value);
-                            const year = years.find((y: any) => String(y._id) === String(term?.academicYearId));
-                            setF({ ...f, termId: e.target.value, term: term?.name || "", academicYear: year ? String(year.year) : f.academicYear });
-                        }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                            <option value="">— Term —</option>
-                            {yearTermOptions.map((t: any) => {
-                                const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
-                                return <option key={t._id} value={t._id}>{t.name}{year ? ` · ${year.year}` : ""}{t.isActive ? " (Active)" : ""}</option>;
-                            })}
-                        </select>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Category</label>
+                            <select value={f.category} onChange={e => setF({ ...f, category: e.target.value })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">{CATS.map(c => <option key={c}>{c}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Subject</label>
+                            <select value={f.subjectId} onChange={e => setF({ ...f, subjectId: e.target.value })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Subject —</option>{subjects.map((s: any) => <option key={s._id} value={s._id}>{s.name || s.subjectName}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Class</label>
+                            <select value={f.classId} onChange={e => setF({ ...f, classId: e.target.value, streamId: "" })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white"><option value="">— Class —</option>{classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Stream</label>
+                            <select value={f.streamId} onChange={e => setF({ ...f, streamId: e.target.value })} disabled={!f.classId} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white disabled:bg-slate-50"><option value="">All streams</option>{streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}</select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Duration (min)</label>
+                            <input value={f.durationMinutes} onChange={e => setF({ ...f, durationMinutes: Number(e.target.value) })} type="number" placeholder="Duration (min)" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pass Mark</label>
+                            <input value={f.passMark} onChange={e => setF({ ...f, passMark: Number(e.target.value) })} type="number" placeholder="Pass mark" className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Academic Year</label>
+                            <select value={f.academicYear} onChange={e => setF({ ...f, academicYear: e.target.value, termId: "", term: "" })} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <option value="">— Academic Year —</option>
+                                {years.map((y: any) => <option key={y._id} value={String(y.year)}>{y.year}{y.isActive ? " (Active)" : ""}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Term</label>
+                            <select value={f.termId} onChange={e => {
+                                const term = terms.find((t: any) => String(t._id) === e.target.value);
+                                const year = years.find((y: any) => String(y._id) === String(term?.academicYearId));
+                                setF({ ...f, termId: e.target.value, term: term?.name || "", academicYear: year ? String(year.year) : f.academicYear });
+                            }} className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                                <option value="">— Term —</option>
+                                {yearTermOptions.map((t: any) => {
+                                    const year = years.find((y: any) => String(y._id) === String(t.academicYearId));
+                                    return <option key={t._id} value={t._id}>{t.name}{year ? ` · ${year.year}` : ""}{t.isActive ? " (Active)" : ""}</option>;
+                                })}
+                            </select>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -244,9 +274,9 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
     });
 
     // Attach an existing online exam to a parent (main) assessment so its marks roll
-    // up with the others. Parents = existing CAT / Mid Term / Mock exams.
+    // up with the others. Parents = any real exam from the Exams module.
     const { data: allExams = [] } = useQuery<any[]>({ queryKey: ["exams_for_parent"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
-    const parentExams = allExams.filter((e: any) => /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
+    const parentExams = allExams.filter((e: any) => e.examCategory === "written_test" || e.examCategory === "supplementary" || /cat|mid\s*term|midterm|mock|assignment/i.test(String(e.type || e.examType || e.examName || "")));
     const attachParent = useMutation({
         mutationFn: async (parentExamId: string) => {
             const p = parentExams.find((x: any) => x._id === parentExamId);
@@ -324,8 +354,8 @@ function ExamEditor({ examId, classes, subjects, onBack }: any) {
                 {/* Schedule display */}
                 {exam?.startAt && exam?.endAt && (
                     <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 mb-4 text-xs font-bold text-slate-600">
-                        <p>📅 <strong>Start:</strong> {new Date(exam.startAt).toLocaleString()}</p>
-                        <p>📅 <strong>End:</strong> {new Date(exam.endAt).toLocaleString()}</p>
+                        <p className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400" /><strong>Start:</strong> {new Date(exam.startAt).toLocaleString()}</p>
+                        <p className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400" /><strong>End:</strong> {new Date(exam.endAt).toLocaleString()}</p>
                     </div>
                 )}
 
@@ -366,9 +396,10 @@ function MarkingPanel({ examId }: { examId: string }) {
     const [open, setOpen] = useState<string>("");   // attemptId being marked
     const [marks, setMarks] = useState<Record<string, any>>({});
     const [comments, setComments] = useState<Record<string, string>>({});
+    const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
     const save = useMutation({
-        mutationFn: async (attemptId: string) => (await api.post(`/online-exams/${examId}/marking/${attemptId}`, { marks, comments })).data,
+        mutationFn: async (attemptId: string) => (await api.post(`/online-exams/${examId}/marking/${attemptId}`, { marks, comments, overrides })).data,
         onSuccess: (d: any) => { toast.success(`Saved · final ${d.finalScore}`); setOpen(""); refetch(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
     });
@@ -376,15 +407,13 @@ function MarkingPanel({ examId }: { examId: string }) {
     if (isLoading) return <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#5C67F2]" /></div>;
     if (attempts.length === 0) return <div className="bg-white rounded-2xl border border-slate-100 py-10 text-center text-slate-400 font-bold">No submissions yet.</div>;
 
-    // When every question is auto-marked there's nothing to mark manually — but we
-    // still SHOW the submissions and their scores (read-only) so you can review them.
     const autoOnly = manualQs.length === 0;
 
     return (
         <div className="space-y-2">
             {autoOnly && (
                 <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5 text-xs font-bold text-blue-700 mb-2">
-                    All questions are auto-marked — scores below are final. Use “Publish to Report Cards” to release them.
+                    All questions are auto-marked. Scores are final unless you correct one by hand below — use “Publish to Report Cards” to release them.
                 </div>
             )}
             {attempts.map((a: any) => {
@@ -399,25 +428,31 @@ function MarkingPanel({ examId }: { examId: string }) {
                                     <p className="text-[11px] text-slate-400">Auto questions: {autoQs.filter(q => a.perQuestion?.[q._id]?.correct === true).length}/{autoQs.length} correct</p>
                                 )}
                             </div>
-                            {/* Only offer manual marking when there ARE manual questions. */}
-                            {!autoOnly
-                                ? <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
-                                : <span className="text-lg font-black text-emerald-600">{a.finalScore ?? a.autoScore ?? 0}</span>}
+                            <button onClick={() => { if (editing) setOpen(""); else { setOpen(a._id); setMarks(a.marks || {}); setComments(a.comments || {}); setOverrides(a.overrides || {}); } }} className="h-9 px-4 rounded-lg bg-[#5C67F2] text-white font-bold text-sm">{editing ? "Close" : "Mark"}</button>
                         </div>
                         {editing && (
                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                                 {autoQs.length > 0 && a.perQuestion && (
                                     <div className="space-y-3 border-t border-slate-100 pt-3">
                                         <h3 className="text-sm font-bold text-slate-800">Auto-marked questions</h3>
+                                        <p className="text-[11px] text-slate-400 -mt-2">Correct a score by ticking Override and entering the mark you want instead.</p>
                                         {autoQs.map((q: any) => {
                                             const pq = a.perQuestion?.[q._id] || { awarded: 0, correct: null };
+                                            const isOverridden = !!overrides[q._id];
                                             return (
                                                 <div key={q._id} className="bg-slate-50 rounded-xl p-3">
                                                     <div className="flex items-center justify-between gap-2 mb-1">
                                                         <p className="text-xs font-bold text-slate-600 truncate">{q.questionText}</p>
-                                                        <span className="text-[11px] font-bold text-slate-500">{pq.awarded}/{q.marks}</span>
+                                                        <span className="text-[11px] font-bold text-slate-500">{isOverridden ? `${marks[q._id] ?? pq.awarded}` : pq.awarded}/{q.marks}</span>
                                                     </div>
-                                                    <p className="text-[11px] text-slate-500">{pq.correct === true ? "Correct" : pq.correct === false ? "Incorrect" : "Reviewed"}</p>
+                                                    <div className="bg-white rounded-lg border border-slate-200 p-2 text-xs text-slate-600 mb-2">{String(a.answers?.[q._id] ?? "") || <span className="text-slate-300">No answer</span>}</div>
+                                                    <p className="text-[11px] text-slate-500 mb-2">{pq.correct === true ? "Correct" : pq.correct === false ? "Incorrect" : "Reviewed"}</p>
+                                                    <label className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+                                                        <input type="checkbox" checked={isOverridden} onChange={e => setOverrides(o => ({ ...o, [q._id]: e.target.checked }))} /> Override this mark
+                                                    </label>
+                                                    {isOverridden && (
+                                                        <input type="number" min={0} max={q.marks} value={marks[q._id] ?? pq.awarded} onChange={e => setMarks(m => ({ ...m, [q._id]: e.target.value }))} className="w-24 h-9 mt-2 px-2 rounded-lg border border-slate-200 text-sm text-center" />
+                                                    )}
                                                 </div>
                                             );
                                         })}

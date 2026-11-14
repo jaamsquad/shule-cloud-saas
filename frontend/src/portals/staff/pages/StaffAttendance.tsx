@@ -11,11 +11,12 @@ import CardScanner from "../components/CardScanner";
 // Normalise a registration/adm number for tolerant matching (case + spaces).
 const normReg = (v: any) => String(v ?? "").toLowerCase().replace(/\s+/g, "").trim();
 
-const STATUSES = ["Present", "Absent", "Late"];
+const STATUSES = ["Present", "Absent", "Late", "Excused"];
 const statusStyle = (active: boolean, s: string) =>
     active
         ? s === "Present" ? "bg-emerald-500 border-emerald-500 text-white"
             : s === "Late" ? "bg-amber-400 border-amber-400 text-white"
+            : s === "Excused" ? "bg-sky-500 border-sky-500 text-white"
                 : "bg-rose-500 border-rose-500 text-white"
         : "bg-white border-slate-200 text-slate-500 hover:border-slate-300";
 
@@ -43,7 +44,10 @@ export default function StaffAttendance() {
         retry: false,
     });
 
-    useEffect(() => { if (data?.students) setRows(data.students.map((s: any) => ({ ...s }))); }, [data]);
+    // Students signed out at the front desk that day and not yet marked → Excused (reason).
+    useEffect(() => {
+        if (data?.students) setRows(data.students.map((s: any) => !s.status && s.signout ? { ...s, status: "Excused", remarks: s.signout.reason || "Signed out" } : { ...s }));
+    }, [data]);
 
     const markedCount = rows.filter(r => r.status).length;
 
@@ -51,7 +55,7 @@ export default function StaffAttendance() {
         mutationFn: async () => (await api.post("/staff-portal/attendance", {
             className, subject: subject || "General", date,
             // Only send students who were actually marked (unmarked are skipped server-side too).
-            records: rows.filter(r => r.status).map(r => ({ studentId: r.studentId, status: r.status })),
+            records: rows.filter(r => r.status).map(r => ({ studentId: r.studentId, status: r.status, remarks: r.status === "Excused" ? r.remarks || "" : "" })),
         })).data,
         onSuccess: (d: any) => { toast.success(d.message || "Saved"); refetch(); },
         onError: (e: any) => toast.error(e.response?.data?.message || "Save failed"),
@@ -139,14 +143,16 @@ export default function StaffAttendance() {
                     ) : (
                         <>
                             <p className="text-[11px] text-slate-500 mb-2">
-                                No student is marked by default. Tap a status for each, or <b>Scan Card</b> to mark Present by camera. Only marked students are saved.
+                                No student is marked by default. Tap a status for each, or <b>Scan Card</b> to mark Present by camera. Only marked students are saved. Students signed out at the front desk today are already set to <b>Excused</b> with the reason.
                             </p>
                             <div className="space-y-1">
                                 {rows.map((r, i) => (
-                                    <div key={r.studentId} className={`flex items-center justify-between py-2 border-b border-black/5 ${!r.status ? "opacity-95" : ""}`}>
-                                        <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                    <div key={r.studentId} className={`flex flex-wrap items-center justify-between gap-2 py-2 border-b border-black/5 ${!r.status ? "opacity-95" : ""}`}>
+                                        <span className="text-sm font-semibold text-slate-700 flex flex-wrap items-center gap-2">
                                             {i + 1}. {r.name}
                                             {!r.status && <span className="text-[9px] font-black uppercase text-slate-300 border border-slate-200 rounded px-1.5 py-0.5">Unmarked</span>}
+                                            {r.signout && <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-100 rounded px-1.5 py-0.5" title={r.signout.pickedBy ? `Picked by ${r.signout.pickedBy}` : undefined}>{r.signout.label}{r.signout.timeOut ? ` · out ${r.signout.timeOut}` : ""}</span>}
+                                            {!r.signout && r.status === "Excused" && r.remarks && <span className="text-[10px] font-bold text-sky-700">({r.remarks})</span>}
                                         </span>
                                         <div className="flex gap-1">
                                             {STATUSES.map(s => (

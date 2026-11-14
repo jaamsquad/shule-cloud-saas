@@ -1,0 +1,110 @@
+name: Build ShuleCloud 360 APK
+
+# Builds the ShuleCloud 360 Flutter app in the cloud → installable Android APK artifact.
+# No Flutter or Android SDK needed locally.
+#
+# Signing (optional but recommended): add these repository secrets so every build is
+# signed with the same key and installs as an update over the previous one:
+#   SC360_KEYSTORE_BASE64   base64 of your upload keystore (.jks)
+#   SC360_KEYSTORE_PASSWORD keystore password
+#   SC360_KEY_ALIAS         key alias
+#   SC360_KEY_PASSWORD      key password
+# Without them the APK is signed with a throwaway debug key (fine for testing).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "shulecloud360-app/**"
+      - ".github/workflows/shulecloud360-app.yml"
+  pull_request:
+    paths:
+      - "shulecloud360-app/**"
+      - ".github/workflows/shulecloud360-app.yml"
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "API base URL"
+        required: false
+        default: "https://api.shulecloud.com/api/v1"
+      web_domain:
+        description: "School web domain"
+        required: false
+        default: "shulecloud.com"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shulecloud360-app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Fill in generated Android files (keeps everything already in the repo)
+        run: flutter create --platforms=android --org com.shulecloud --project-name shulecloud_360 .
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Release signing key (only when the secrets are set)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SC360_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SC360_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SC360_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SC360_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No signing secrets — the APK will be signed with a debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          {
+            echo "storeFile=upload-keystore.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+          echo "Signing with the ShuleCloud 360 release key."
+
+      - name: Build release APK
+        env:
+          API_BASE: ${{ github.event.inputs.api_base || 'https://api.shulecloud.com/api/v1' }}
+          WEB_DOMAIN: ${{ github.event.inputs.web_domain || 'shulecloud.com' }}
+        run: |
+          flutter build apk --release \
+            --dart-define=API_BASE="$API_BASE" \
+            --dart-define=WEB_DOMAIN="$WEB_DOMAIN"
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | tr '+' '-')
+          cp build/app/outputs/flutter-apk/app-release.apk "build/ShuleCloud360-$VERSION.apk"
+          ls -lh build/*.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shulecloud360-apk
+          path: shulecloud360-app/build/ShuleCloud360-*.apk
+          if-no-files-found: error

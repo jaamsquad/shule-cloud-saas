@@ -8,11 +8,19 @@ import { reportCardHtml, reportCardEmailHtml, htmlToPdf, closeReportBrowser } fr
 import { syncStudentToParents } from '../services/parent-student-sync.service';
 import { enforceCrud } from '../lib/permissions';
 import { resolveScope, scopeForCollection, mergeFilter } from '../lib/dataScope';
+import { marksWindow, examInWindow, isAdminRole, WINDOW_MESSAGE } from '../lib/examWindow';
 import { getRule, saveRule, previewNext, NumberKind } from '../lib/idNumbering';
+import { feeStructureGuard, feeStructureConflicts } from '../lib/feeStructureGuard';
+import { revenueLedger } from '../lib/revenueLedger';
+import { getClassTuition, saveClassTuition, getTuitionGrid, saveTuitionCells } from '../lib/classTuition';
 import { STUDENT_STATUSES, buildStatusUpdate, canonicalStatus, nextTransferRef } from '../lib/studentStatus';
 import { findSchoolAdmin, maskEmail, passwordLocked, recordPasswordFailure, issueOtp, cancelOtps, verifyOtp, OTP_TTL_MIN } from '../lib/purgeVerification';
 import { notifyOwner } from '../services/ownerNotify.service';
 import bcrypt from 'bcrypt';
+import { onlyPublished, lockedExamIds } from '../lib/examPublish';
+import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { papersForSubject, combinePapers, SubjectPaperDef } from '../lib/subjectPapers';
+import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
 
 const router = Router();
 
@@ -196,7 +204,11 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
         const tid = (req as any).tenantContext?.tenantId;
         const tenant = tid ? await getMetaDb().collection('Tenant').findOne({ _id: oid(tid) || (tid as any) }) : null;
         const grading = await db.collection('grading_criteria').findOne({}).catch(() => null);
+        // Each card is graded with the student's CLASS grading (template → class → global → …).
+        const gradingFor = makeGradingCache(db);
         const curriculum = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
+        const { classTeacherSignatureFor } = await import('../lib/classTeacherSignature');
+        const classTeacherSignature = await classTeacherSignatureFor(db, clsName);
 
         // Fail fast with a clear message if email isn't configured at all, instead
         // of reporting "20 failed" with no reason.
@@ -223,8 +235,9 @@ router.post('/exams/email-result-cards', async (req: Request, res) => {
             if (!email) email = st.parentEmail || st.fatherEmail || st.motherEmail || st.guardianEmail || '';
             if (!email) { skipped++; return; }
             try {
-                const marks = await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray();
-                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading };
+                const marks = await onlyPublished(db, await db.collection('exam_marks').find({ examId: String(examId), studentId: String(st._id) }).toArray());
+                if (!marks.length) { skipped++; return; }
+                const data = { school: tenant?.name, logo: tenant?.logo, address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '), signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature, template: tenant?.reportTemplate, curriculum, student: st, exam, className: clsName, marks, grading, scale: (await gradingFor(st.classId ? String(st.classId) : (classId ? String(classId) : undefined), st.studentClass || st.currentClass || clsName || undefined)).scale };
                 const pdf = await htmlToPdf(reportCardHtml(data));
                 await sendEmail(db, {
                     to: [email],
@@ -278,6 +291,9 @@ router.get('/search', async (req: Request, res) => {
 });
 
 // ─── Exams / Assessments ───────────────────────────────────────────────────
+// New exams wait for their results to be published per class (Exams → Manage Exams).
+const manualPublishing = (req: any, _res: any, next: any) => { if (req.body && typeof req.body === 'object') req.body.publishing = 'manual'; next(); };
+router.post(['/exams', '/assessments', '/academics/exams'], manualPublishing);
 router.get('/exams',              c.getItems('exams'));
 router.get('/exams/:id',          c.getItem('exams'));
 router.post('/exams',             c.createItem('exams'));
@@ -289,6 +305,33 @@ router.post('/assessments',       c.createItem('exams'));
 router.patch('/assessments/:id',  c.updateItem('exams'));
 router.delete('/assessments/:id', c.deleteItem('exams'));
 
+// ?for=marks → the exams a person may enter marks for: admins get all, everyone else only
+// this term's (lib/examWindow). Without the flag the list is unchanged.
+// Consolidated / Year Average are always excluded — their results are computed from
+// the marks of their source exams, so they are never themselves marks-enterable.
+const COMPUTED_EXAM_CATEGORIES = new Set(['consolidated', 'year_average']);
+router.get('/academics/exams', async (req, res, next) => {
+    if (req.query.for !== 'marks') return next();
+    delete (req.query as any).for;
+    const role = (req as any).tenantContext?.user?.role;
+    try {
+        const db = getRequestDb(req);
+        if (isAdminRole(role)) {
+            const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
+            return res.json(exams.filter((e: any) => !COMPUTED_EXAM_CATEGORIES.has(e.examCategory)));
+        }
+        const [win, locked] = await Promise.all([marksWindow(db), lockedExamIds(db)]);
+        const exams = await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray();
+        res.json(exams.filter((e: any) => !COMPUTED_EXAM_CATEGORIES.has(e.examCategory) && examInWindow(e, win) && !locked.has(String(e._id))));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.get('/academics/marks-window', async (req, res) => {
+    try {
+        const win = await marksWindow(getRequestDb(req));
+        const admin = isAdminRole((req as any).tenantContext?.user?.role);
+        res.json({ restricted: !!win && !admin, isAdmin: admin, term: win?.term || '', year: win?.year || '', label: win?.label || '' });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/academics/exams',              c.getItems('exams'));
 router.get('/academics/exams/:id',          c.getItem('exams'));
 router.post('/academics/exams',             c.createItem('exams'));
@@ -299,10 +342,36 @@ router.delete('/academics/exams/:id',       c.deleteItem('exams'));
 // Bare alias — several pages read a student's marks as GET /exam_marks?studentId=...
 router.get('/exam_marks',                    c.getItems('exam_marks'));
 router.get('/academics/exam-marks',          c.getItems('exam_marks'));
-router.post('/academics/exam-marks',         c.createItem('exam_marks'));
-router.patch('/academics/exam-marks/:id',    c.updateItem('exam_marks'));
+// Non-admins may only record marks for this term's exams.
+const marksWindowGuard = async (req: any, res: any, next: any) => {
+    try {
+        if (isAdminRole(req.tenantContext?.user?.role)) return next();
+        const db = getRequestDb(req);
+        const ids = new Set<string>();
+        const body = req.body || {};
+        if (Array.isArray(body.entries)) body.entries.forEach((e: any) => e?.examId && ids.add(String(e.examId)));
+        if (body.examId) ids.add(String(body.examId));
+        if (req.params?.id && !ids.size) {
+            const m: any = await db.collection('exam_marks').findOne({ _id: (ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : req.params.id) as any }).catch(() => null);
+            if (m?.examId) ids.add(String(m.examId));
+        }
+        const locked = ids.size ? await lockedExamIds(db) : null;
+        for (const id of ids) {
+            if (locked?.has(id)) return res.status(423).json({ message: 'Results for this exam have been published and locked. Ask an administrator to unpublish it before marks can be changed.', code: 'EXAM_LOCKED' });
+        }
+        const win = await marksWindow(db);
+        if (!win) return next();
+        for (const id of ids) {
+            const exam = await db.collection('exams').findOne({ _id: (ObjectId.isValid(id) ? new ObjectId(id) : id) as any }).catch(() => null);
+            if (exam && !examInWindow(exam, win)) return res.status(403).json({ message: WINDOW_MESSAGE(win), code: 'EXAM_OUTSIDE_TERM' });
+        }
+        next();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+};
+router.post('/academics/exam-marks',         marksWindowGuard, c.createItem('exam_marks'));
+router.patch('/academics/exam-marks/:id',    marksWindowGuard, c.updateItem('exam_marks'));
 router.delete('/academics/exam-marks/:id',   c.deleteItem('exam_marks'));
-router.post('/academics/exam-marks/bulk', async (req, res) => {
+router.post('/academics/exam-marks/bulk', marksWindowGuard, async (req, res) => {
     try {
         const db = getRequestDb(req);
         const { entries } = req.body;
@@ -345,17 +414,42 @@ router.post('/academics/exam-marks/bulk', async (req, res) => {
         const classByStudent: Record<string, { name: string; id: string }> = {};
         studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || '', id: String(s.classId || '') }; });
 
+        // Entries for a subject that has configured papers (General Settings → Subject Paper
+        // Ratios) carry a paperId instead of standing alone as the subject's score: fold each
+        // one into the doc's `papers` map and recombine, weighted by ratio and normalised by
+        // each paper's own "out of", so marksObtained/totalMarks always reflect every paper
+        // scored so far.
+        const paperEntries = entries.filter((e: any) => e.paperId && e.subjectId);
+        const papersBySubject = new Map<string, SubjectPaperDef[]>();
+        const existingBySubjectKey = new Map<string, any>();
+        if (paperEntries.length) {
+            const subjectIds = [...new Set(paperEntries.map((e: any) => String(e.subjectId)))];
+            await Promise.all(subjectIds.map(async (sid) => papersBySubject.set(sid, await papersForSubject(db, sid))));
+            const existing = await db.collection('exam_marks').find({
+                $or: paperEntries.map((e: any) => ({ studentId: e.studentId, subjectId: e.subjectId, examId: e.examId })),
+            }, { projection: { studentId: 1, subjectId: 1, examId: 1, papers: 1 } }).toArray().catch(() => []);
+            existing.forEach((d: any) => existingBySubjectKey.set(`${d.studentId}::${d.subjectId}::${d.examId}`, d));
+        }
+
         const ops = entries.map((entry: any) => {
             // Strip fields that must not appear in both $set and $setOnInsert (MongoDB conflict)
             const { _id, createdAt, __v, ...data } = entry;
             const cls = classByStudent[String(data.studentId)] || { name: data.className || '', id: '' };
+            let setData: any = { ...data, updatedAt: new Date() };
+            if (data.paperId) {
+                const key = `${data.studentId}::${data.subjectId}::${data.examId}`;
+                const papers = { ...(existingBySubjectKey.get(key)?.papers || {}) };
+                papers[data.paperId] = { marksObtained: Number(data.marksObtained) || 0, totalMarks: Number(data.totalMarks) || 0, label: data.paperLabel || '' };
+                const combined = combinePapers(papers, papersBySubject.get(String(data.subjectId)) || []) || { marksObtained: 0, totalMarks: 100 };
+                setData = { ...data, papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks, updatedAt: new Date() };
+            }
             return {
                 updateOne: {
                     filter: { studentId: data.studentId, subjectId: data.subjectId, examId: data.examId },
                     update: {
                         // classAtTime/academicYear set only on first insert, so re-saving
                         // marks never rewrites the historical class attribution.
-                        $set: { ...data, updatedAt: new Date() },
+                        $set: setData,
                         $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) },
                     },
                     upsert: true
@@ -416,15 +510,53 @@ router.patch('/academics/subject-groups/:id',      c.updateItem('subject_groups'
 router.delete('/academics/subject-groups/:id',     c.deleteItem('subject_groups'));
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
+// Subjects are disabled, never deleted — removing one would silently blank past marks/classes
+// that reference it. DELETE now just hides it, same as unticking it in Subjects we offer.
+const disableSubject = async (req: Request, res: any) => {
+    try {
+        const db = getRequestDb(req);
+        const { id } = req.params;
+        const idCandidates: any[] = [id];
+        try { idCandidates.push(new ObjectId(id)); } catch { /* not a valid ObjectId — string only */ }
+        const result = await db.collection('subjects').updateOne({ _id: { $in: idCandidates } }, { $set: { offered: false } });
+        if (!result.matchedCount) return res.status(404).json({ message: 'Subject not found' });
+        res.json({ message: 'Subject disabled' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error disabling subject', error });
+    }
+};
+
+// Subjects a school no longer offers (Subjects → Subjects we offer) are hidden from pickers;
+// ?all=1 lists every subject (with history), any other query keeps the generic filters.
+router.get(['/subjects', '/academics/subjects'], async (req, res, next) => {
+    if (req.query.all) { delete (req.query as any).all; return next(); }
+    if (Object.keys(req.query).length) return next();
+    try { res.json(await getRequestDb(req).collection('subjects').find({ offered: { $ne: false } }).toArray()); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 router.get('/subjects',              c.getItems('subjects'));
 router.post('/subjects',             c.createItem('subjects'));
 router.patch('/subjects/:id',        c.updateItem('subjects'));
-router.delete('/subjects/:id',       c.deleteItem('subjects'));
+// Subjects are never deleted — use Subjects → Subjects we offer to disable one instead.
+router.delete('/subjects/:id',       disableSubject);
 
 router.get('/academics/subjects',    c.getItems('subjects'));
 router.post('/academics/subjects',   c.createItem('subjects'));
 router.patch('/academics/subjects/:id',  c.updateItem('subjects'));
-router.delete('/academics/subjects/:id', c.deleteItem('subjects'));
+router.delete('/academics/subjects/:id', disableSubject);
+
+// ─── Subject Papers (e.g. Paper 1, Paper 2) ─────────────────────────────────
+// A subject can be split into weighted papers (Paper 1, Paper 2, Kar 1, ...),
+// each with its own max score ("out of") and ratio used to combine them.
+router.get('/subject-papers',              c.getItems('subject_papers'));
+router.post('/subject-papers',             c.createItem('subject_papers'));
+router.patch('/subject-papers/:id',        c.updateItem('subject_papers'));
+router.delete('/subject-papers/:id',       c.deleteItem('subject_papers'));
+
+router.get('/academics/subject-papers',    c.getItems('subject_papers'));
+router.post('/academics/subject-papers',   c.createItem('subject_papers'));
+router.patch('/academics/subject-papers/:id',  c.updateItem('subject_papers'));
+router.delete('/academics/subject-papers/:id', c.deleteItem('subject_papers'));
 
 // ─── Grades ──────────────────────────────────────────────────────────────────
 router.get('/grades',              c.getItems('grades'));
@@ -488,6 +620,25 @@ router.patch('/academics/curricula/:id',  c.updateItem('curricula'));
 router.delete('/academics/curricula/:id', c.deleteItem('curricula'));
 
 // ─── Students ────────────────────────────────────────────────────────────────
+// `/students/trash` MUST be registered before `/students/:id` — Express matches
+// routes in registration order, and `:id` would otherwise swallow "trash" as if
+// it were an id (and 500, since "trash" isn't a valid ObjectId), so the trash
+// list always 500'd and the dialog silently rendered "Trash is empty".
+const trashQuery = async (req: Request, db: Db, extra: any = {}) => {
+    const scope = await resolveScope(req, db);
+    return mergeFilter({ originalCollection: 'students', ...extra }, scopeForCollection('students', scope));
+};
+const toObjectId = (id: string): ObjectId | null => { try { return new ObjectId(id); } catch { return null; } };
+router.get('/students/trash', enforceCrud('students', 'delete'), async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const items = await db.collection('archives')
+            .find(await trashQuery(req, db), { projection: { portalPassword: 0, parentPortalPassword: 0 } })
+            .sort({ deletedAt: -1 }).toArray();
+        res.json(items);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.get('/students',              c.getItems('students'));
 router.get('/students/:id',          c.getItem('students'));
 router.post('/students',             enforceCrud('students', 'create'), enforcePlanLimit, c.createItem('students'));
@@ -514,6 +665,27 @@ router.put('/settings/numbering', enforceCrud('settings', 'update'), async (req,
         res.json(await numberingView(db));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+
+// School rules (Exams → Printouts → School Rules) used to keep its own separate list in a
+// `school_rules` collection; it now reads/writes the same `rules_regulations` document as
+// General Settings → Rules & Regulations, so the two screens always show the same list.
+// One-time, lazy: if a school already saved rules the old way and hasn't touched Rules &
+// Regulations yet, carry that list over the first time anyone asks for it (see the
+// `/rules_regulations` route below).
+async function migrateLegacySchoolRules(req: any, res: any, next: any) {
+    try {
+        const db = getRequestDb(req);
+        const already = await db.collection('rules_regulations').countDocuments();
+        if (!already) {
+            const legacy = await db.collection('school_rules').findOne({ _id: 'rules' as any });
+            if (Array.isArray(legacy?.rules) && legacy.rules.length) {
+                const content = legacy.rules.map((r: any, i: number) => `${i + 1}. ${String(r ?? '').trim()}`).join('\n');
+                await db.collection('rules_regulations').insertOne({ content, createdAt: new Date(), migratedFrom: 'school_rules' });
+            }
+        }
+    } catch { /* non-fatal — fall through to the normal list either way */ }
+    next();
+}
 
 // ─── Student lifecycle status (Active / Transferred / Graduated) ─────────────
 // See lib/studentStatus.ts: Transferred / Graduated students are taken out of their class
@@ -597,24 +769,10 @@ router.delete('/students/:id/transfer', enforceCrud('students', 'update'), async
 
 // ─── Student trash (soft delete) ─────────────────────────────────────────────
 // DELETE /students/:id moves the record into `archives` (see deleteItem), which hides
-// it everywhere. These endpoints list that trash, restore from it, or erase for good.
+// it everywhere. These endpoints restore from the trash or erase for good — the trash
+// LIST itself (GET /students/trash) is registered up with the other /students routes,
+// above /students/:id (see the comment there for why).
 // Credentials are never sent to the browser. Scoped users only see their own students.
-const trashQuery = async (req: Request, db: Db, extra: any = {}) => {
-    const scope = await resolveScope(req, db);
-    return mergeFilter({ originalCollection: 'students', ...extra }, scopeForCollection('students', scope));
-};
-const toObjectId = (id: string): ObjectId | null => { try { return new ObjectId(id); } catch { return null; } };
-
-router.get('/students/trash', enforceCrud('students', 'delete'), async (req, res) => {
-    try {
-        const db = getRequestDb(req);
-        const items = await db.collection('archives')
-            .find(await trashQuery(req, db), { projection: { portalPassword: 0, parentPortalPassword: 0 } })
-            .sort({ deletedAt: -1 }).toArray();
-        res.json(items);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
-
 router.post('/students/trash/:id/restore', enforceCrud('students', 'delete'), async (req, res) => {
     try {
         const db = getRequestDb(req);
@@ -722,6 +880,30 @@ router.get('/staff/:id',             async (req, res) => {
         res.json(item);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
+// Per-subject average performance across this teacher's own (class, subject) assignments —
+// shown on their profile page. Looks at the latest ~6 exams' marks for each assignment and
+// reports the class average %, not just this teacher's own grading (there's no per-marker
+// field on exam_marks), so it reads as "how classes this teacher teaches are performing".
+router.get('/staff/:id/performance', async (req, res) => {
+    try {
+        const db = getRequestDb(req);
+        const staff = await db.collection('staff').findOne({ _id: new ObjectId(req.params.id) });
+        if (!staff) return res.status(404).json({ message: 'Staff not found' });
+        const assignments: any[] = Array.isArray(staff.subjectAssignments) ? staff.subjectAssignments : [];
+        const pairs = Array.from(new Map(assignments
+            .filter(a => a.subjectName && a.className)
+            .map(a => [`${a.className}|${a.subjectName}`, { className: a.className, subjectName: a.subjectName }])).values());
+        const subjects = await Promise.all(pairs.map(async ({ className, subjectName }) => {
+            const marks = await db.collection('exam_marks').find({ className, subjectName }).toArray().catch(() => []);
+            const scored = marks.filter((m: any) => Number(m.totalMarks) > 0 && m.marksObtained != null);
+            if (!scored.length) return { className, subjectName, average: null, studentsScored: 0 };
+            const pct = scored.reduce((a: number, m: any) => a + (Number(m.marksObtained) / Number(m.totalMarks)) * 100, 0) / scored.length;
+            return { className, subjectName, average: Math.round(pct * 10) / 10, studentsScored: scored.length };
+        }));
+        res.json({ subjects });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 router.post('/staff',                enforceCrud('employees', 'create'), c.createItem('staff'));
 router.patch('/staff/:id',           enforceCrud('employees', 'update'), c.updateItem('staff'));
 router.put('/staff/:id',             enforceCrud('employees', 'update'), c.updateItem('staff'));
@@ -732,7 +914,7 @@ router.post('/staff/bulk',           enforceCrud('employees', 'create'), c.bulkC
 router.get('/tenant_profile',        c.getItems('tenant_profile'));
 
 // ─── Rules & Regulations ─────────────────────────────────────────────────────
-router.get('/rules_regulations',     c.getItems('rules_regulations'));
+router.get('/rules_regulations',     migrateLegacySchoolRules, c.getItems('rules_regulations'));
 router.post('/rules_regulations',    c.createItem('rules_regulations'));
 router.patch('/rules_regulations/:id', c.updateItem('rules_regulations'));
 
@@ -750,13 +932,35 @@ router.get('/audit-trails',             c.getItems('audit_trails'));
 router.get('/academics/audit_trails',   c.getItems('audit_trails'));
 router.get('/academics/audit-trails',   c.getItems('audit_trails'));
 
+// Owner-uploaded teaching resources (notes/PDFs/videos), shared with every school — read-only
+// here; the owner manages them from the Owner Portal (routes/ownerLibrary.routes.ts). Only
+// resources this school actually offers the subject/class for are shown (see
+// lib/globalResourceScope.ts) — a resource tagged "Mathematics, Grade 10" never reaches a
+// school that doesn't teach Grade 10 or doesn't offer Mathematics.
+router.get('/global-resources', async (req, res) => {
+    try {
+        const d = getRequestDb(req);
+        const q: any = req.query;
+        const and: any[] = [];
+        if (q.subject) and.push({ subjectName: new RegExp(`^${String(q.subject).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.className) and.push({ className: new RegExp(`^${String(q.className).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+        if (q.type) and.push({ type: String(q.type) });
+        const filter = and.length ? { $and: and } : {};
+        const [rows, scope] = await Promise.all([
+            getMetaDb().collection('global_resources').find(filter).sort({ createdAt: -1 }).toArray(),
+            schoolScope(d),
+        ]);
+        res.json(rows.filter((r: any) => visibleToSchool(r, scope)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
 // ─── Other Collections ────────────────────────────────────────────────────────
 // Collection → sidebar module key, for CRUD enforcement on the generic routes.
 // Only collections with sensitive writes are gated; others stay admin-only by
 // virtue of the module not being visible to non-admins.
 const COLLECTION_MODULE: Record<string, string> = {
     classes: 'classes', streams: 'classes', levels: 'classes', sessions: 'classes',
-    invoices: 'fees', fee_particulars: 'fees', fee_structures: 'fees', discount_types: 'fees', fee_accounts: 'fees', transactions: 'fees',
+    invoices: 'fees', fee_particulars: 'fees', fee_structures: 'fees', discount_types: 'fees', discount_settings: 'fees', fee_accounts: 'fees', transactions: 'fees',
     chart_of_accounts: 'accounts', income: 'accounts', expenses: 'accounts',
     enrollments: 'students', admissions: 'students', parents: 'students',
     student_transfers: 'students', student_discipline: 'students', student_medical: 'students', student_documents: 'students',
@@ -768,11 +972,13 @@ const COLLECTION_MODULE: Record<string, string> = {
     lms_courses: 'live_class', lms_lessons: 'live_class', lms_quizzes: 'live_class',
 };
 
-['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','transport_settings','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs','term_settings','term_breaks','term_holidays','term_activities','assets','attendance','audit_logs','login_logs','leave_requests','salary_payments','purchases','student_enrollments','library_members','library_books','library_issues','pos_products','pos_orders','transport_pickups','form_templates','mpesa_c2b_payments','accounting_journals'].forEach(col => {
+['enrollments','transactions','invoices','classes','streams','sessions','levels','staff_subjects','chart_of_accounts','income','expenses','fee_particulars','fee_structures','periods','discount_types','discount_settings','fee_accounts','theme_settings','homework','weekdays','timetable_periods','rooms','timetables','timetable_slots','substitutions','constraints','transport_zones','buses','transport_settings','live_meetings','curriculum_frameworks','academic_resources','academic_assignments','lesson_plans','schemes_of_work','student_transfers','student_discipline','student_medical','student_documents','hostels','hostel_rooms','hostel_beds','hostel_allocations','hostel_attendance_records','hostel_fees','hostel_settings','announcements','sms_logs','email_logs','messages','message_threads','communication_settings','integration_settings','lms_courses','lms_lessons','lms_quizzes','lms_quiz_attempts','lms_enrollments','role_permissions','admissions','roles','stream_templates','grade_templates','curriculum_settings','report_card_generations','portal_requisitions','portal_clearances','portal_registrations','parents','notification_settings','communication_prefs','email_logs','whatsapp_logs','term_settings','term_breaks','term_holidays','term_activities','assets','attendance','audit_logs','login_logs','leave_requests','salary_payments','purchases','student_enrollments','library_members','library_books','library_issues','pos_products','pos_orders','transport_pickups','form_templates','mpesa_c2b_payments','accounting_journals'].forEach(col => {
     const mk = COLLECTION_MODULE[col];
     const cr = mk ? [enforceCrud(mk, 'create')] : [];
     const up = mk ? [enforceCrud(mk, 'update')] : [];
     const de = mk ? [enforceCrud(mk, 'delete')] : [];
+    // a class may sit in only one fee structure per term (lib/feeStructureGuard)
+    if (col === 'fee_structures') { cr.push(feeStructureGuard); up.push(feeStructureGuard); }
 
     router.get(`/${col}`,    c.getItems(col));
     router.get(`/${col}/:id`, c.getItem(col));
@@ -787,25 +993,76 @@ const COLLECTION_MODULE: Record<string, string> = {
     router.delete(`/academics/${col}/:id`, ...de, c.deleteItem(col));
 });
 
-// Effective grading scale for a class: the class-specific grading_criteria if one
-// exists, otherwise the global (classId-less) record. Used by report cards / mark
-// sheets so each class can have its own grading or share one global scale.
+// Tuition per class, optionally a different price per term (Fees → Class Tuition) — lib/classTuition.
+// Tuition is priced by TERM NUMBER (hard-coded Term 1/2/3, same every year), not by a specific
+// year's term document — callers may still pass a real term's id (termId) for convenience and
+// it's resolved to that term's number here.
+async function resolveTermNumber(db: any, req: any): Promise<string> {
+    if (req.query?.termNumber || req.body?.termNumber) return String(req.query?.termNumber || req.body?.termNumber);
+    const termId = String(req.query?.termId || req.body?.termId || '');
+    if (!termId) return '';
+    try { const t = await db.collection('terms').findOne({ _id: new ObjectId(termId) }); return t?.termNumber ? String(t.termNumber) : ''; }
+    catch { return ''; }
+}
+router.get('/fees/class-tuition', async (req, res) => {
+    try { res.json({ classes: await getClassTuition(getRequestDb(req), await resolveTermNumber(getRequestDb(req), req)) }); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/fees/class-tuition', enforceCrud('fees', 'update'), async (req, res) => {
+    try {
+        const amounts = req.body?.amounts;
+        if (!amounts || typeof amounts !== 'object' || Array.isArray(amounts)) return res.status(400).json({ message: 'amounts must be an object of { classId: amount }' });
+        const by = (req as any).tenantContext?.user?.name || undefined;
+        res.json({ classes: await saveClassTuition(getRequestDb(req), amounts, by, await resolveTermNumber(getRequestDb(req), req)) });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.get('/fees/class-tuition/grid', async (req, res) => {
+    try { res.json(await getTuitionGrid(getRequestDb(req))); }
+    catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/fees/class-tuition/grid', enforceCrud('fees', 'update'), async (req, res) => {
+    try {
+        const cells = req.body?.cells;
+        if (!Array.isArray(cells)) return res.status(400).json({ message: 'cells must be a list of { classId, termNumber, amount }' });
+        const by = (req as any).tenantContext?.user?.name || undefined;
+        await saveTuitionCells(getRequestDb(req), cells, by);
+        res.json(await getTuitionGrid(getRequestDb(req)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+// Money received in a period, one row per receipt with its source and payment mode
+// (dashboard Revenue card → list, Accounts → Account Statement) — lib/revenueLedger.
+router.get('/accounts/revenue', async (req, res) => {
+    try {
+        const day = (v: any) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+        res.json(await revenueLedger(getRequestDb(req), day(req.query.from), day(req.query.to)));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Which classes already have a fee structure for a term — the structure form greys them out.
+router.post('/fee_structures/check', async (req, res) => {
+    try {
+        const conflicts = await feeStructureConflicts(getRequestDb(req), req.body || {}, req.body?.excludeId || null);
+        res.json({ conflicts });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Effective grading scale for a class — the configured grading via lib/grading
+// (class template → class grading_criteria → global → curriculum settings → default).
+// Used by report cards / mark sheets so each class follows its assigned grading.
 router.get('/grading-scale', async (req, res) => {
     try {
         const db = getRequestDb(req);
         const classId = String(req.query.classId || '').trim();
+        const className = String(req.query.className || '').trim();
+        const g = await resolveGrading(db, classId || undefined, className || undefined);
+        const scope: 'class' | 'global' | 'none' = g.source === 'template' || g.source === 'class' ? 'class' : g.source === 'default' ? 'none' : 'global';
+        const grades = g.scale.map(b => ({ grade: b.grade, from: b.from, upto: b.upto, remark: b.remark }));
+        // Pass mark: from the class's / global grading_criteria row, as before.
         let rec: any = null;
         if (classId) rec = await db.collection('grading_criteria').findOne({ classId }).catch(() => null);
-        let scope: 'class' | 'global' = 'class';
-        if (!rec) { rec = await db.collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null); scope = 'global'; }
+        if (!rec) rec = await db.collection('grading_criteria').findOne({ $or: [{ classId: { $exists: false } }, { classId: null }, { classId: '' }] }).catch(() => null);
         if (!rec) rec = await db.collection('grading_criteria').findOne({}).catch(() => null);
-        const grades = (rec?.grades || rec?.gradingScale || []).map((g: any) => ({
-            grade: g.grade ?? g.name ?? g.label ?? '',
-            from: Number(g.from ?? g.minPercent ?? g.min ?? 0),
-            upto: Number(g.upto ?? g.maxPercent ?? g.max ?? 100),
-            remark: g.remark ?? g.status ?? g.label ?? '',
-        })).sort((a: any, b: any) => b.upto - a.upto);
-        res.json({ scope: rec ? scope : 'none', classId: classId || null, grades, passMark: Number(rec?.failCriteria?.overallPercent ?? rec?.passMark ?? 50) });
+        res.json({ scope, source: g.source, templateName: g.templateName || null, classId: classId || null, grades, passMark: Number(rec?.failCriteria?.overallPercent ?? rec?.passMark ?? 50) });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

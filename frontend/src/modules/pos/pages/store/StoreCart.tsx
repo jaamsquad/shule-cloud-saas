@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { usePOSCartStore } from '../../stores/posCartStore'
-import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react'
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, Shirt } from 'lucide-react'
 
 export default function StoreCart() {
   const cart = usePOSCartStore()
@@ -35,7 +35,7 @@ export default function StoreCart() {
             <div key={item.variantId} className="bg-gray-900 border border-gray-800 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-4 w-full sm:w-auto">
                 <div className="w-16 h-16 rounded-xl bg-gray-800 flex items-center justify-center text-3xl shrink-0">
-                  {item.imageUrl ? <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover rounded-xl" /> : '👕'}
+                  {item.imageUrl ? <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover rounded-xl" /> : <Shirt className="w-7 h-7 text-slate-400" />}
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-white text-sm line-clamp-1">{item.productName}</h3>

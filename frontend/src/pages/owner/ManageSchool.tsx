@@ -8,6 +8,9 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
+import SchoolAppsCard from "@/components/owner/SchoolAppsCard";
+import SchoolPricingCard from "@/components/owner/SchoolPricingCard";
+import SchoolEmailCard from "@/components/owner/SchoolEmailCard";
 
 const PRIMARY = "#534AB7";
 const ksh = (n: any) => `KES ${Number(n || 0).toLocaleString()}`;
@@ -193,11 +196,17 @@ export default function ManageSchool() {
                         <select value={school.plan?._id || ""} onChange={(e) => assignPlan.mutate(e.target.value)}
                             className="h-10 px-3 rounded-lg text-sm font-bold text-slate-700 min-w-[200px]" style={{ border: "0.5px solid #e5e7eb" }}>
                             <option value="">— No plan —</option>
-                            {(school.allPlans || []).map((p: any) => <option key={p._id} value={p._id}>{p.name} ({ksh(p.price)}/mo)</option>)}
+                            {(school.allPlans || []).map((p: any) => <option key={p._id} value={p._id}>{p.name} ({ksh(p.price)}{p.per || "/mo"})</option>)}
                         </select>
-                        {school.plan && <span className="text-xs text-slate-500">Current: <b>{school.plan.name}</b> · {ksh(school.plan.price)}/mo · {school.plan.maxStudents ?? "∞"} students</span>}
+                        {school.plan && <span className="text-xs text-slate-500">Current: <b>{school.plan.name}</b> · {ksh(school.plan.price)}{school.plan.per || "/mo"}{school.plan.listPrice !== undefined && Number(school.plan.listPrice) !== Number(school.plan.price) ? <span className="text-emerald-600 font-bold"> (standard {ksh(school.plan.listPrice)})</span> : null} · {school.plan.maxStudents ?? "∞"} students</span>}
                     </div>
                 </div>
+
+                {/* This school's own prices + discount */}
+                <SchoolPricingCard schoolId={String(id)} plans={school.allPlans || []} pricing={school.pricing} currentPlanId={school.plan?._id} />
+
+                {/* Which email account the school's emails go out through */}
+                <SchoolEmailCard schoolId={String(id)} info={school.emailSending} />
 
                 {/* Message the school directly */}
                 <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
@@ -230,10 +239,13 @@ export default function ManageSchool() {
                     </button>
                 </div>
 
+                {/* Apps switched off for this school */}
+                <SchoolAppsCard schoolId={String(id)} disabledApps={school.disabledApps || []} color={PRIMARY} />
+
                 {/* Module access toggles */}
                 <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
                     <div className="flex items-center justify-between mb-3">
-                        <div><h3 className="text-sm font-black text-slate-800">Module Access</h3><p className="text-[11px] text-slate-400">Restrict which modules this school can use</p></div>
+                        <div><h3 className="text-sm font-black text-slate-800">Plan modules</h3><p className="text-[11px] text-slate-400">Modules in this school’s plan — the rest show locked with an upgrade message</p></div>
                         <button onClick={() => saveModules.mutate()} disabled={saveModules.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveModules.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
                     </div>
                     <div className="flex flex-wrap gap-2">

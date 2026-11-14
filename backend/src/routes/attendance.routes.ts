@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getMetaDb } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import { resolveScope, mergeFilter } from '../lib/dataScope';
+import { signoutsOn, affectsLesson, excusedLabel } from '../lib/signoutAttendance';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -71,9 +72,22 @@ router.get('/schools/:sid/attendance/students', async (req: Request, res: Respon
         const attendanceRecords = await db.collection('student_attendance').find(query).toArray();
         const attendanceMap = new Map(attendanceRecords.map(a => [a.studentId.toString(), a]));
 
+        // Students signed out at the front desk that day (Excused with the reason). For a lesson,
+        // only if the lesson ends after the student left.
+        let lessonEnd: string | null = null;
+        if (period_id) {
+            const pid = String(period_id);
+            const per: any = await db.collection('timetable_periods').findOne(ObjectId.isValid(pid) ? { $or: [{ _id: new ObjectId(pid) }, { _id: pid as any }] } : { _id: pid as any }).catch(() => null);
+            lessonEnd = per?.end_time || per?.endTime || null;
+        }
+        const signouts = await signoutsOn(db, String(date), activeStudents.map(s => s._id.toString()));
+
         const data = activeStudents.map(s => {
             const att = attendanceMap.get(s._id.toString()) || null;
+            const so = signouts.get(s._id.toString());
+            const signout = so && affectsLesson(so, lessonEnd) ? { reason: so.reason, time_out: so.timeOut, picked_by: so.pickedBy, label: excusedLabel(so) } : null;
             return {
+                signout,
                 student_id: s._id.toString(),
                 student_name: s.name || s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Unnamed Student',
                 admission_no: s.admissionNo || s.registrationNo || s.admNo || 'N/A',

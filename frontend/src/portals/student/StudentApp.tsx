@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import StudentLogin from "./StudentLogin";
+import ToMainLogin from "../ToMainLogin";
 import StudentLayout from "./StudentLayout";
 import PersonalProfile from "./pages/PersonalProfile";
 import Registration from "./pages/Registration";
@@ -21,7 +21,7 @@ import Receipts from "./pages/Receipts";
 export default function StudentApp() {
     return (
         <Routes>
-            <Route path="/login" element={<StudentLogin />} />
+            <Route path="/login" element={<ToMainLogin tokenKey="student_token" />} />
             <Route path="/live/:meetingId" element={<LiveRoom />} />
 
             <Route element={<StudentLayout />}>

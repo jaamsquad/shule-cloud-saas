@@ -62,6 +62,16 @@ async function bootstrap() {
         const { sendDueMeetingReminders } = require('./routes/meetings.routes');
         setInterval(() => { sendDueMeetingReminders().catch(() => {}); }, 60_000);
 
+        // ── Academic year/term auto-creation + advance + promotion ─────────────
+        // Keeps every school one academic year ahead (Term 1/2/3 carried forward from the
+        // latest year's own dates), advances the active term/year as dates arrive, and —
+        // only on a year rollover (never a plain term-to-term move) — auto-promotes
+        // students up the Grade/Form ladder (promotion.service.ts). All for tenants nobody
+        // is actively viewing — active ones self-heal on their own via syncCurrentTerm()
+        // (cbcTerm.ts), called on every request.
+        const { ensureNextAcademicYearAllTenants } = require('./lib/academicYears');
+        setInterval(() => { ensureNextAcademicYearAllTenants().catch(() => {}); }, 6 * 60 * 60_000);
+
         // ── M-PESA auto-sync ──────────────────────────────────────────────────
         // Pull recent Till/Paybill transactions from Safaricom every 5 min for
         // every tenant with the Pull API registered, so payments appear without
@@ -69,6 +79,13 @@ async function bootstrap() {
         const { runScheduledPullSync } = require('./services/autoSync.service');
         setTimeout(() => { runScheduledPullSync().catch(() => {}); }, 20_000);
         setInterval(() => { runScheduledPullSync().catch(() => {}); }, 5 * 60_000);
+
+        // ── STK pending sweep ─────────────────────────────────────────────────
+        // Every 2 min, query Safaricom for STK transactions still "pending" past
+        // their 60s cooldown and reconcile them so parents aren't stuck watching
+        // a spinner when a callback was lost.
+        const { sweepPendingStk } = require('./routes/mpesaOps.routes');
+        setInterval(() => { sweepPendingStk().catch((e: any) => console.error('[mpesa] sweep error:', e?.message)); }, 2 * 60_000);
     } catch (error) {
         console.error('Server bootstrap failed:', error);
         process.exit(1);

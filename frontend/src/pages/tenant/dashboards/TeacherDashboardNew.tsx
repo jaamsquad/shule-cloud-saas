@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
     BookOpen, Users, ClipboardList, Calendar, Bell,
-    TrendingUp, ChevronRight, Video, FileText, CheckCircle2
+    TrendingUp, ChevronRight, Video, FileText, CheckCircle2, Hand
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -55,7 +55,7 @@ export default function TeacherDashboardNew() {
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{greet}</p>
-                        <h1 className="text-xl font-black text-slate-900">{teacherName} <span>👋</span></h1>
+                        <h1 className="text-xl font-black text-slate-900">{teacherName} <Hand className="w-5 h-5 inline align-[-3px] text-slate-400" /></h1>
                         <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">{now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
                     </div>
                     <span className="px-3 py-1.5 bg-indigo-50 text-[#5C67F2] border border-indigo-100 rounded-2xl text-[9px] font-black uppercase tracking-widest">Teacher</span>

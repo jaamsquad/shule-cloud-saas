@@ -19,6 +19,8 @@ interface StudentAttendanceRecord {
         check_in: string | null;
         remarks: string;
     } | null;
+    /** Signed out at the front desk that day (shown as Excused with the reason). */
+    signout?: { reason: string; time_out: string; picked_by: string; label: string } | null;
 }
 
 // "" = unmarked (the teacher/admin has not chosen a status yet). Unmarked students
@@ -87,9 +89,14 @@ export default function StudentsAttendance() {
     // Sync state with fetched data
     useEffect(() => {
         const initialMap: Record<string, { status: AttStatus; remarks: string }> = {};
+        let prefilled = false;
         studentsData.forEach(s => {
             if (s.attendance) {
                 initialMap[s.student_id] = { status: s.attendance.status, remarks: s.attendance.remarks || "" };
+            } else if (s.signout) {
+                // Signed out at the front desk → Excused with the reason (not yet saved).
+                initialMap[s.student_id] = { status: "EXCUSED", remarks: s.signout.reason || "Signed out" };
+                prefilled = true;
             } else {
                 initialMap[s.student_id] = { status: "", remarks: "" }; // unmarked by default — must be set explicitly
             }
@@ -98,7 +105,7 @@ export default function StudentsAttendance() {
             if (JSON.stringify(prev) === JSON.stringify(initialMap)) {
                 return prev;
             }
-            setIsDirty(false);
+            setIsDirty(prefilled);
             return initialMap;
         });
     }, [studentsData]);
@@ -340,6 +347,11 @@ export default function StudentsAttendance() {
                                             </td>
                                             <td className="py-4 px-6">
                                                 <div className="font-bold text-sm text-gray-900">{student.student_name}</div>
+                                                {student.signout && (
+                                                    <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-1.5 py-0.5" title={student.signout.picked_by ? `Picked by ${student.signout.picked_by}` : undefined}>
+                                                        {student.signout.label}{student.signout.time_out ? ` · out ${student.signout.time_out}` : ""}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="py-4 px-6 font-mono text-xs font-semibold text-gray-500">{student.admission_no}</td>
                                             <td className="py-4 px-6">

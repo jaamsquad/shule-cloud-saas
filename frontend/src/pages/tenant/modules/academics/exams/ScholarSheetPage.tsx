@@ -2,8 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { GraduationCap, FileText, Printer, Users, Loader2 } from "lucide-react";
 import api from "@/lib/api";
-import { formatExamName } from "@/lib/examName";
-import ScholarSheetReportCard from "./ScholarSheetReportCard";
+import ScholarSheetReportCard, { CHART_TYPES, type ChartType } from "./ScholarSheetReportCard";
 
 // ScholarSheet entry: pick a class → exam → student (or the whole class), then
 // render/print the A4 card(s). Print outputs ONLY the report(s) — sidebar, header
@@ -12,13 +11,16 @@ export default function ScholarSheetPage() {
     // Class + stream are SEPARATE (v2 model): pick Form 4, then East/South.
     const [classId, setClassId] = useState("");
     const [streamId, setStreamId] = useState("");
+    const [yearFilter, setYearFilter] = useState("");   // "" = all years
     const [examId, setExamId] = useState("");
     const [studentId, setStudentId] = useState("");
     const [studentSearch, setStudentSearch] = useState("");   // searchable student box
     const [studentOpen, setStudentOpen] = useState(false);
     const [wholeClass, setWholeClass] = useState(false);
+    const [hideEmptyCards, setHideEmptyCards] = useState(false);   // skip students with no marks at all
     // KCPE field visibility toggles.
     const [showKcpe, setShowKcpe] = useState(true);
+    const [chartType, setChartType] = useState<ChartType>("line");   // performance graph shape
     // Deep-link from a student's Academic History: ?studentId=&examId= opens that
     // exact card directly (used for viewing previous-class ScholarSheets).
     const [deepLink, setDeepLink] = useState<{ studentId: string; examId: string } | null>(null);
@@ -71,14 +73,54 @@ export default function ScholarSheetPage() {
     }, [classId, v2classes, legacyClasses]);
     const effectiveClassId = String(resolvedClass?._id || classId || "");
     const { data: v2streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", effectiveClassId], enabled: !!effectiveClassId, queryFn: async () => (await api.get("/v2/streams", { params: { classId: effectiveClassId } })).data || [] });
-    const { data: exams = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
+    const { data: examsRaw = [] } = useQuery<any[]>({ queryKey: ["exams"], queryFn: async () => (await api.get("/academics/exams")).data || [] });
     const { data: students = [] } = useQuery<any[]>({ queryKey: ["students"], queryFn: async () => (await api.get("/students")).data || [] });
+
+    // Most recent exam first — by year, then term number, then creation time — so the
+    // just-previous exam sits at the top of the list (and can be auto-selected below).
+    const termNum = (t: any) => Number(String(t ?? "").match(/\d+/)?.[0]) || 0;
+    const exams = useMemo(() => [...examsRaw].sort((a: any, b: any) =>
+        (Number(b.academicYear) || 0) - (Number(a.academicYear) || 0)
+        || termNum(b.term) - termNum(a.term)
+        || String(b.createdAt || "").localeCompare(String(a.createdAt || ""))), [examsRaw]);
+
+    // Every year that has an exam, newest first — a quick way to jump straight to the
+    // exams of one year instead of scanning the whole (potentially multi-year) list.
+    const examYears = useMemo(() => [...new Set(exams.map((e: any) => String(e.academicYear || "")).filter(Boolean))]
+        .sort((a, b) => Number(b) - Number(a)), [exams]);
+    const examsForYear = useMemo(() => yearFilter ? exams.filter((e: any) => String(e.academicYear || "") === yearFilter) : exams, [exams, yearFilter]);
+
+    // Default to the just-previous (most recent) exam/year once the list has loaded,
+    // unless a deep link or the user has already picked one.
+    useEffect(() => {
+        if (!examId && !deepLink && exams.length) { setExamId(exams[0]._id); setYearFilter(String(exams[0].academicYear || "")); }
+    }, [exams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Switching the year jumps the exam picker to that year's most recent exam.
+    const onYearFilter = (y: string) => {
+        setYearFilter(y);
+        const list = y ? exams.filter((e: any) => String(e.academicYear || "") === y) : exams;
+        setExamId(list[0]?._id || "");
+    };
 
     const cls = v2classes.find((c: any) => String(c._id) === String(classId));
     const legacyClass = legacyClasses.find((c: any) => String(c._id) === String(classId));
     const stream = v2streams.find((s: any) => String(s._id) === String(streamId));
     const classNameSource = cls || legacyClass;
-    const classLabel = classNameSource ? (stream ? (stream.fullName || `${classNameSource.name || classNameSource.levelName || classNameSource.className} ${stream.name}`) : (classNameSource.name || classNameSource.levelName || classNameSource.className)) : "";
+    const classOnlyLabel = classNameSource ? (classNameSource.name || classNameSource.levelName || classNameSource.className) : "";
+    const classLabel = classNameSource ? (stream ? (stream.fullName || `${classOnlyLabel} ${stream.name}`) : classOnlyLabel) : "";
+    // Exams grouped "Form 3 – Term 1 (2026)" (recency-first, matching examsForYear's
+    // order) with just the exam's own name/type underneath — easier to scan than one
+    // flat list once a class has several terms' (or years') worth of exams.
+    const examGroups = useMemo(() => {
+        const g = new Map<string, any[]>();
+        examsForYear.forEach((ex: any) => {
+            const t = termNum(ex.term);
+            const key = `${classOnlyLabel || "Exams"} – Term ${t || "?"} (${ex.academicYear || "—"})`;
+            (g.get(key) || (g.set(key, []).get(key) as any[])).push(ex);
+        });
+        return [...g.entries()];
+    }, [examsForYear, classOnlyLabel]); // eslint-disable-line react-hooks/exhaustive-deps
     const classStudents = useMemo(() => {
         if (!classId || (!cls && !legacyClass)) return [];
         const source = cls || legacyClass;
@@ -122,7 +164,10 @@ export default function ScholarSheetPage() {
     // A card is "not ready" when its class has no generated report card for this term.
     const isNotReady = (i: number) => cardQueries[i]?.data?.notReady === true;
     const notReadyCount = cardQueries.filter(q => q.data?.notReady === true).length;
-    const readyCount = cardQueries.filter(q => q.isSuccess && !q.data?.notReady).length;
+    // "Empty" = loaded fine, but the student has no marks at all for this exam set.
+    const isEmptyCard = (i: number) => { const d = cardQueries[i]?.data; return !!d && !d.notReady && (!Array.isArray(d.subjects) || d.subjects.length === 0); };
+    const emptyCount = cardQueries.filter((q, i) => q.isSuccess && isEmptyCard(i)).length;
+    const readyCount = cardQueries.filter((q, i) => q.isSuccess && !q.data?.notReady && !(hideEmptyCards && isEmptyCard(i))).length;
     const noneReady = allLoaded && cardQueries.length > 0 && readyCount === 0;
 
     // Reliable print: copy the rendered cards' HTML into a fresh window with a
@@ -157,7 +202,7 @@ export default function ScholarSheetPage() {
                     <button onClick={() => { setDeepLink(null); }} className="text-sm font-bold text-[#5C67F2]">Open full ScholarSheet →</button>
                 </div>
                 <div className="ss-card bg-white shadow-sm max-w-[210mm] mx-auto">
-                    <ScholarSheetReportCard studentId={deepLink.studentId} examId={deepLink.examId} showKcpe={showKcpe} />
+                    <ScholarSheetReportCard studentId={deepLink.studentId} examId={deepLink.examId} showKcpe={showKcpe} chartType={chartType} />
                 </div>
             </div>
         );
@@ -189,7 +234,7 @@ export default function ScholarSheetPage() {
 
             <div className="ss-no-print bg-white border-b border-slate-100 p-4">
                 <h1 className="text-xl font-black text-slate-900 flex items-center gap-2 mb-3"><FileText className="w-5 h-5 text-[#2E7D32]" /> ScholarSheet — Report Card</h1>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-4xl">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 max-w-5xl">
                     {/* Class (Form 4) */}
                     <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); setStudentId(""); setStudentSearch(""); }} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
                         <option value="">— Class —</option>
@@ -200,10 +245,21 @@ export default function ScholarSheetPage() {
                         <option value="">All streams</option>
                         {v2streams.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                     </select>
-                    {/* Exam */}
+                    {/* Year — narrows the exam list below to one year, so a class with exams
+                        spanning several years (e.g. a promoted cohort's old + new exams) is
+                        easy to search. */}
+                    <select value={yearFilter} onChange={e => onYearFilter(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
+                        <option value="">All years</option>
+                        {examYears.map((y: string) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    {/* Exam — grouped "Form 3 – Term 1 (2026)" with the exam's own name below it. */}
                     <select value={examId} onChange={e => setExamId(e.target.value)} className="h-11 px-3 rounded-xl border border-slate-200 text-sm bg-white">
-                        <option value="">— Exam —</option>
-                        {exams.map((ex: any) => <option key={ex._id} value={ex._id}>{formatExamName(ex, classLabel || undefined)}</option>)}
+                        <option value="">Exam</option>
+                        {examGroups.map(([group, list]) => (
+                            <optgroup key={group} label={group}>
+                                {list.map((ex: any) => <option key={ex._id} value={ex._id}>{String(ex.examType || ex.type || ex.examName || ex.name || "Exam").toUpperCase()}</option>)}
+                            </optgroup>
+                        ))}
                     </select>
                     {/* Searchable student box */}
                     <div className="relative">
@@ -241,6 +297,16 @@ export default function ScholarSheetPage() {
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
                         <input type="checkbox" checked={wholeClass} onChange={e => { setWholeClass(e.target.checked); setStudentId(""); }} /> <Users className="w-4 h-4" /> Whole class ({classStudents.length})
                     </label>
+                    <label className={`flex items-center gap-2 text-sm font-bold ${wholeClass ? "text-slate-600" : "text-slate-300"}`}>
+                        <input type="checkbox" checked={hideEmptyCards} disabled={!wholeClass} onChange={e => setHideEmptyCards(e.target.checked)} /> Don't show empty report cards
+                        {hideEmptyCards && allLoaded && emptyCount > 0 && <span className="text-xs font-bold text-slate-400">({emptyCount} hidden)</span>}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                        Performance graph:
+                        <select value={chartType} onChange={e => setChartType(e.target.value as ChartType)} className="h-9 px-2.5 rounded-lg border border-slate-200 text-sm bg-white">
+                            {CHART_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                        </select>
+                    </label>
                     <button onClick={printAll} disabled={!ready || !allLoaded || noneReady} className="ml-auto h-10 px-5 rounded-xl bg-slate-800 text-white text-sm font-bold flex items-center gap-1.5 disabled:opacity-40">
                         {ready && !allLoaded ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         {ready && !allLoaded ? `Loading ${loadedCount}/${renderList.length}…` : `Print ${wholeClass ? `Class (${readyCount} ready)` : "Report"}`}
@@ -259,11 +325,14 @@ export default function ScholarSheetPage() {
 
             {ready ? (
                 <div ref={printRef} className="ss-print-area p-4 print:p-0">
-                    {renderList.map((s: any, i: number) => (
-                        <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
-                            <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} hideToolbar preloaded={cardQueries[i]?.data} />
-                        </div>
-                    ))}
+                    {renderList.map((s: any, i: number) => {
+                        if (hideEmptyCards && isEmptyCard(i)) return null;
+                        return (
+                            <div key={s._id} className={`ss-card bg-white shadow-sm max-w-[210mm] mx-auto mb-4 print:shadow-none print:mb-0 ${isNotReady(i) ? "ss-not-ready" : ""}`}>
+                                <ScholarSheetReportCard studentId={s._id} examId={examId} showKcpe={showKcpe} chartType={chartType} hideToolbar preloaded={cardQueries[i]?.data} />
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="ss-no-print py-24 text-center text-slate-400">

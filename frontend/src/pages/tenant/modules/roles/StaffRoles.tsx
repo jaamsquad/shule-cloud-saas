@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, Loader2, Check, Users, Copy, Save, UserPlus, X, Crown, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
-import { PERMISSION_GROUPS, DEFAULT_ROLE_PERMISSIONS, MIS_ROLE_GROUPS, MIS_ROLES } from "@/lib/permissions";
+import { DEFAULT_ROLE_PERMISSIONS, MIS_ROLE_GROUPS } from "@/lib/permissions";
+import AppPermissions from "./AppPermissions";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
@@ -36,26 +37,7 @@ export default function StaffRoles() {
         /* eslint-disable-next-line */
     }, [scope, selected, staffId, roleDocs, staff]);
 
-    // Modules a user can act on, derived from the granted permission groups.
-    const CRUD_MODULES: { key: string; label: string }[] = [
-        { key: "students", label: "Students" }, { key: "employees", label: "Employees" },
-        { key: "classes", label: "Classes" }, { key: "subjects", label: "Subjects" },
-        { key: "fees", label: "Fees" }, { key: "accounts", label: "Accounts" },
-        { key: "exams", label: "Exams" }, { key: "attendance", label: "Attendance" },
-        { key: "sports", label: "Sports" }, { key: "trips", label: "Trips" },
-        { key: "frontdesk", label: "Front Desk" }, { key: "secretary", label: "Secretary" },
-        { key: "library", label: "Library" }, { key: "transport", label: "Transport" },
-        { key: "communications", label: "Communications" },
-    ];
-    const hasCrud = (mod: string, act: string) => isAllCrud || (crud[mod] || []).includes(act);
-    const toggleCrud = (mod: string, act: string) => setCrud(c => {
-        const cur = new Set(c[mod] || []);
-        cur.has(act) ? cur.delete(act) : cur.add(act);
-        return { ...c, [mod]: Array.from(cur) };
-    });
-
     const isAll = perms.includes("*");
-    const isAllCrud = isAll; // full-access roles get all CRUD everywhere
     const has = (c: string) => isAll || perms.includes(c);
     const toggle = (c: string) => setPerms(p => p.includes(c) ? p.filter(x => x !== c) : [...p.filter(x => x !== "*"), c]);
     const toggleAll = () => setPerms(isAll ? [] : ["*"]);
@@ -102,7 +84,7 @@ export default function StaffRoles() {
         <div className="flex-1 bg-[#f8fafc] min-h-screen p-6">
             <div className="flex items-center gap-3 mb-5">
                 <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><Shield className="w-5 h-5 text-indigo-600" /></div>
-                <div><h1 className="text-xl font-black text-slate-800">Role Management</h1><p className="text-xs text-slate-500">Assign permissions to roles and staff to roles — the staff portal adapts automatically</p></div>
+                <div><h1 className="text-xl font-black text-slate-800">Roles & Permissions</h1><p className="text-xs text-slate-500">Give each role the apps it may open — people only see and manage the apps their role allows</p></div>
             </div>
 
             {/* Scope switcher: assign permissions to a ROLE, or directly to a STAFF member */}
@@ -164,68 +146,7 @@ export default function StaffRoles() {
                             <span className={`w-10 h-5 rounded-full relative ${isAll ? "bg-emerald-500" : "bg-slate-300"}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isAll ? "left-5" : "left-0.5"}`} /></span>
                         </button>
 
-                        <div className={`space-y-4 ${isAll ? "opacity-40 pointer-events-none" : ""}`}>
-                            {PERMISSION_GROUPS.map(g => {
-                                const codes = g.perms.map(p => p.code);
-                                const allOn = codes.every(c => has(c));
-                                const onCount = codes.filter(c => has(c)).length;
-                                const isOpen = !collapsed.has(g.group);
-                                return (
-                                    <div key={g.group} className="border border-slate-100 rounded-xl overflow-hidden">
-                                        <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50/60">
-                                            <button onClick={() => toggleCollapse(g.group)} className="flex items-center gap-2 flex-1 text-left">
-                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
-                                                <span className="text-xs font-black text-slate-600 uppercase">{g.group}</span>
-                                                <span className="text-[10px] font-bold text-slate-400">{onCount}/{codes.length}</span>
-                                            </button>
-                                            <button onClick={() => toggleGroup(codes)} className="text-[10px] font-black text-[#5C67F2] uppercase tracking-wide px-2">{allOn ? "Clear all" : "Select all"}</button>
-                                        </div>
-                                        {isOpen && (
-                                            <div className="flex flex-wrap gap-1.5 p-3">
-                                                {g.perms.map(p => (
-                                                    <button key={p.code} onClick={() => toggle(p.code)} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${has(p.code) ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-600 border-slate-200 hover:border-[#5C67F2]"}`}>
-                                                        {has(p.code) && <Check className="w-3 h-3" />} {p.name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* CRUD matrix — what this role/staff may create, update, delete per module */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                        <p className="text-xs font-black text-slate-500 uppercase mb-1">Create / Update / Delete</p>
-                        <p className="text-[11px] text-slate-400 mb-3">Viewing is allowed wherever a module is visible. Tick what this {scope === "staff" ? "staff member" : "role"} may also create, edit or delete. {isAllCrud && "Full-access roles have all actions."}</p>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <thead>
-                                    <tr className="text-[10px] font-black uppercase text-slate-400 tracking-wide border-b border-slate-100">
-                                        <th className="py-2 pr-3">Module</th>
-                                        <th className="py-2 px-2 text-center">Create</th>
-                                        <th className="py-2 px-2 text-center">Update</th>
-                                        <th className="py-2 px-2 text-center">Delete</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {CRUD_MODULES.map(m => (
-                                        <tr key={m.key} className="border-b border-slate-50">
-                                            <td className="py-2 pr-3 font-bold text-slate-700">{m.label}</td>
-                                            {["create", "update", "delete"].map(act => (
-                                                <td key={act} className="py-2 px-2 text-center">
-                                                    <button onClick={() => toggleCrud(m.key, act)} disabled={isAllCrud}
-                                                        className={`w-6 h-6 rounded-md border inline-flex items-center justify-center ${hasCrud(m.key, act) ? "bg-[#5C67F2] border-[#5C67F2] text-white" : "bg-white border-slate-200 text-transparent hover:border-[#5C67F2]"} ${isAllCrud ? "opacity-60" : ""}`}>
-                                                        <Check className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <AppPermissions perms={perms} setPerms={fn => setPerms(fn)} crud={crud} setCrud={fn => setCrud(fn)} disabled={isAll} />
                     </div>
 
                     {/* Assigned staff (role scope only) */}

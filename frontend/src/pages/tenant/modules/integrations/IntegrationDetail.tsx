@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import {
     ArrowLeft, Check, Loader2, ExternalLink, RefreshCw, CheckCircle2,
     XCircle, AlertCircle, Eye, EyeOff, Copy, ChevronRight, Settings,
-    Zap, BookOpen, Info, TestTube, Plug, DownloadCloud
+    Zap, BookOpen, Info, TestTube
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Navigate } from "react-router-dom";
 import api from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config";
 import { toast } from "sonner";
@@ -31,9 +31,6 @@ export default function IntegrationDetail() {
     const [testEmail, setTestEmail]   = useState("");
     const [activeTab, setActiveTab]   = useState<"config" | "guide" | "webhook">("config");
     const [loaded, setLoaded]         = useState(false);
-    const [registering, setRegistering] = useState(false);   // C2B URL registration (daraja only)
-
-    const isDaraja = key === "daraja";
 
     // SMS gateways share one priority order. Switching one ON while another is on asks what to do.
     const isSmsApi = SMS_API_KEYS.includes(key || "");
@@ -41,44 +38,6 @@ export default function IntegrationDetail() {
     const [choiceOpen, setChoiceOpen] = useState(false);
     const [smsChoice, setSmsChoice] = useState<SmsChoice | null>(null);   // applied when Save is pressed
     const otherSmsOn = (smsState?.providers || []).filter(p => p.key !== key && p.ready);
-    // M-PESA C2B registration status (only relevant for Daraja).
-    const { data: mpesaStatus } = useQuery({
-        queryKey: ["mpesa_settings"],
-        queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
-        enabled: isDaraja,
-    });
-    const [pullNumber, setPullNumber] = useState("");
-    const [registeringPull, setRegisteringPull] = useState(false);
-    const registerC2B = async () => {
-        if (dirty) { toast.error("Save your credentials first, then register."); return; }
-        setRegistering(true);
-        try {
-            const r = await api.post("/integrations/mpesa/register-urls", {});
-            const sc = r.data?.registeredShortCode;
-            toast.success(r.data?.alreadyRegistered
-                ? `C2B URLs already registered${sc ? ` to store number ${sc}` : ""} — direct payments are being captured.`
-                : `C2B URLs registered with Safaricom${sc ? ` to store number ${sc}` : ""} — direct payments will now appear.`);
-            qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
-        } catch (e: any) {
-            toast.error(e.response?.data?.message || "Registration failed");
-        } finally {
-            setRegistering(false);
-        }
-    };
-    const registerPull = async () => {
-        if (dirty) { toast.error("Save your credentials first, then register."); return; }
-        if (!pullNumber.trim()) { toast.error("Enter the nominated phone number from your M-PESA org portal."); return; }
-        setRegisteringPull(true);
-        try {
-            const r = await api.post("/integrations/mpesa/register-pull", { nominatedNumber: pullNumber.trim() });
-            toast.success(r.data?.message || "Pull API registered.");
-            qc.invalidateQueries({ queryKey: ["mpesa_settings"] });
-        } catch (e: any) {
-            toast.error(e.response?.data?.message || "Pull registration failed");
-        } finally {
-            setRegisteringPull(false);
-        }
-    };
 
     // ── Load saved settings ────────────────────────────────────────────────
     const { data: allSettings = [] } = useQuery({
@@ -97,6 +56,9 @@ export default function IntegrationDetail() {
             setConfig(rest);
         }
     }, [allSettings, key, loaded]);
+
+    // M-PESA has its own multi-account page now — redirect any stale link here.
+    if (key === "daraja") return <Navigate to="/integrations/mpesa-accounts" replace />;
 
     if (!intg) return (
         <div className="flex-1 flex items-center justify-center">
@@ -193,6 +155,8 @@ export default function IntegrationDetail() {
                     </button>
                 </div>
             </div>
+
+            {needsEmail && <EmailRouteNotice />}
 
             {/* ── Integration hero ───────────────────────────────────── */}
             <div className="px-4 sm:px-8 py-6" style={{ background: `linear-gradient(135deg, ${intg.color}08 0%, transparent 70%)` }}>
@@ -352,78 +316,6 @@ export default function IntegrationDetail() {
                             </div>
                         )}
 
-                        {/* C2B URL registration — captures payments made directly to the Till/Paybill */}
-                        {isDaraja && (
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
-                                <h2 className="text-sm font-black text-gray-800 mb-2 flex items-center gap-2">
-                                    <Plug className="w-4 h-4 text-[#00A651]" /> Direct Till / Paybill Payments (C2B)
-                                </h2>
-                                <p className="text-xs text-gray-500 font-medium mb-3 leading-relaxed">
-                                    Register your C2B notification URLs with Safaricom so payments customers make on their own phones
-                                    (Lipa na M-PESA → Paybill / Buy Goods) are captured automatically and shown under <b>Fees → Till / Paybill Transactions</b>.
-                                </p>
-                                {mpesaStatus?.callbackBase ? (
-                                    <div className="text-[11px] font-mono text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1 mb-3 break-all">
-                                        {/* /pesa not /mpesa — Safaricom rejects URLs containing the word "mpesa" */}
-                                        <div>Validation:&nbsp;&nbsp;{mpesaStatus.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/validation</div>
-                                        <div>Confirmation: {mpesaStatus.callbackBase.replace(/mpesa/gi, "pesa")}/pesa/c2b/confirmation</div>
-                                    </div>
-                                ) : (
-                                    <div className="text-xs text-amber-600 font-medium mb-3 flex items-center gap-1.5">
-                                        <AlertCircle className="w-3.5 h-3.5" /> The platform callback URL isn't set by the operator yet — registration can't proceed.
-                                    </div>
-                                )}
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <button onClick={registerC2B} disabled={registering || !mpesaStatus?.callbackBase}
-                                        className="flex items-center gap-2 px-5 py-2.5 bg-[#00A651] hover:bg-[#008f46] text-white font-bold text-sm rounded-xl transition-all shadow-sm disabled:opacity-50">
-                                        {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plug className="w-4 h-4" />}
-                                        {registering ? "Registering…" : "Register C2B URLs"}
-                                    </button>
-                                    {mpesaStatus?.registered && (
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600">
-                                            <CheckCircle2 className="w-4 h-4" /> URLs registered{mpesaStatus.registeredShortCode ? ` to ${mpesaStatus.registeredShortCode}` : ""}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="text-[11px] text-gray-500 font-medium mt-3 leading-relaxed bg-amber-50 border border-amber-100 rounded-lg p-2.5">
-                                    <b>Important (Safaricom):</b> C2B must register to your <b>Store / Till number</b>, not the Head Office number.
-                                    This uses your <b>Till Number</b> field — make sure it holds the store number Safaricom gave you (e.g. <b>6774375</b>), then register.
-                                </div>
-                                <p className="text-[11px] text-gray-400 font-medium mt-2 leading-relaxed">
-                                    Note: Safaricom only delivers these notifications in <b>Production</b>. Save your credentials (Environment = <b>production</b>) before registering.
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Pull Transactions — reconcile by fetching a date range from Safaricom */}
-                        {isDaraja && (
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
-                                <h2 className="text-sm font-black text-gray-800 mb-2 flex items-center gap-2">
-                                    <DownloadCloud className="w-4 h-4 text-[#0E7490]" /> Reconcile Transactions (Pull API)
-                                </h2>
-                                <p className="text-xs text-gray-500 font-medium mb-3 leading-relaxed">
-                                    A backup that <b>pulls</b> any payments to your Till/Paybill that didn't arrive via callback. Register once, then use
-                                    the <b>Sync from Safaricom</b> button on the Till Transactions page to fetch a date range.
-                                </p>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <input value={pullNumber} onChange={e => setPullNumber(e.target.value)} placeholder="Nominated phone e.g. 0712345678"
-                                        className="h-10 px-3 border border-gray-200 rounded-xl text-sm w-56 focus:outline-none focus:border-[#0E7490]" />
-                                    <button onClick={registerPull} disabled={registeringPull}
-                                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0E7490] hover:bg-[#0b5e74] text-white font-bold text-sm rounded-xl transition-all shadow-sm disabled:opacity-50">
-                                        {registeringPull ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
-                                        {registeringPull ? "Registering…" : "Register Pull API"}
-                                    </button>
-                                    {mpesaStatus?.pullRegistered && (
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600"><CheckCircle2 className="w-4 h-4" /> Pull registered</span>
-                                    )}
-                                </div>
-                                <p className="text-[11px] text-gray-400 font-medium mt-3 leading-relaxed">
-                                    The <b>nominated number</b> must be an operator phone registered on your M-PESA org portal. Pull API is a separate Daraja product —
-                                    activate it for your shortcode on the Daraja portal if registration is rejected.
-                                </p>
-                            </div>
-                        )}
-
                         {/* Danger zone */}
                         {settingsId && (
                             <div className="bg-red-50 border border-red-100 rounded-2xl p-5">
@@ -553,5 +445,23 @@ export default function IntegrationDetail() {
                 </div>
             )}
         </div>
+    );
+}
+
+/** Which email account the school's emails actually use — ShuleCloud decides this per school. */
+function EmailRouteNotice() {
+    const { data } = useQuery<any>({ queryKey: ["email_route"], queryFn: async () => (await api.get("/communications/email-route")).data, staleTime: 30_000 });
+    if (!data) return null;
+    const text = data.mode === "platform"
+        ? "ShuleCloud sends your school's emails from its own email account (in your school's name, with replies coming back to you). The settings on this page are not used."
+        : data.mode === "custom"
+            ? (data.via === "school" ? "Your school's emails go out from your own email account set here." : "ShuleCloud has set your school to use its own email account, but it isn't set up yet — no emails are sent until you add it here.")
+            : data.via === "school" ? "Your school's emails go out from your own email account set here."
+                : data.via === "platform" ? "You haven't set up your own email yet, so emails go out through ShuleCloud's email in your school's name. Add yours here to use it instead." : (data.reason || "Email is not set up yet.");
+    const warn = data.via === "none";
+    return (
+        <div className="px-4 sm:px-8 pt-4"><div className={`max-w-4xl mx-auto rounded-xl border px-4 py-3 text-sm font-semibold ${warn ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-indigo-800"}`}>
+            {text}{data.from && !warn ? <span className="block text-xs font-bold opacity-70 mt-0.5">Sending as: {data.from}</span> : null}
+        </div></div>
     );
 }

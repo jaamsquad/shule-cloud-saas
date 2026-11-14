@@ -1,6 +1,7 @@
 ﻿import { Request, Response } from 'express';
 import { getMetaDb } from '../../lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { resolveGrading } from '../../lib/grading';
 const getRequestDb = (req: any) => req.tenantDb || getMetaDb();
 
 // Helper to get db & ensure tenancy
@@ -10,8 +11,9 @@ const getTenancyQuery = (req: Request) => {
     return { tenantId: new ObjectId(tenantId) };
 };
 
-// Default grading scale
-const DEFAULT_GRADING_SCALE = [
+// The 5-point A+/A/B… scale this module used to insert for every school. A saved scale
+// identical to it was never chosen by the school, so it's treated as "not set".
+const LEGACY_AUTO_SCALE = [
     { min_percent: 90, max_percent: 100, grade: "A+", label: "Excellent", points: 5.0 },
     { min_percent: 80, max_percent: 89, grade: "A", label: "Very Good", points: 4.0 },
     { min_percent: 70, max_percent: 79, grade: "B", label: "Good", points: 3.0 },
@@ -19,12 +21,28 @@ const DEFAULT_GRADING_SCALE = [
     { min_percent: 50, max_percent: 59, grade: "D", label: "Pass", points: 1.0 },
     { min_percent: 0, max_percent: 49, grade: "F", label: "Fail", points: 0.0 }
 ];
+const isLegacyAuto = (scales: any) => {
+    if (!Array.isArray(scales) || scales.length !== LEGACY_AUTO_SCALE.length) return false;
+    return scales.every((s: any, i: number) => {
+        const d: any = LEGACY_AUTO_SCALE[i];
+        return s && s.grade === d.grade && Number(s.min_percent) === d.min_percent && Number(s.max_percent) === d.max_percent && Number(s.points) === d.points;
+    });
+};
+/** A class-test scale the school actually saved (else null → use the configured grading). */
+const savedTestScale = async (db: any, tenantId: ObjectId) => {
+    const doc = await db.collection('grading_scales').findOne({ tenantId });
+    return doc && Array.isArray(doc.scales) && doc.scales.length && !isLegacyAuto(doc.scales) ? doc : null;
+};
+/** The configured grading (class template → class → global → curriculum → default) in this module's shape. */
+const configuredAsTestScale = async (db: any, classId?: string, className?: string) =>
+    (await resolveGrading(db, classId, className)).scale.map(b => ({ min_percent: b.from, max_percent: b.upto, grade: b.grade, label: b.remark, points: b.points }));
 
-const calculateGrade = async (db: any, tenantId: ObjectId, percentage: number) => {
-    const scaleDoc = await db.collection('grading_scales').findOne({ tenantId });
-    const scales = scaleDoc?.scales || DEFAULT_GRADING_SCALE;
-    const match = scales.find((s: any) => percentage >= s.min_percent && percentage <= s.max_percent);
-    return match ? match.grade : "F";
+/** pct → grade for a class test: the school's saved class-test scale, else the class's configured grading. */
+const testGrader = async (db: any, tenantId: ObjectId, classId?: string, className?: string): Promise<(pct: number) => string> => {
+    const saved = await savedTestScale(db, tenantId);
+    if (saved) return (percentage: number) => saved.scales.find((s: any) => percentage >= s.min_percent && percentage <= s.max_percent)?.grade || "F";
+    const grading = await resolveGrading(db, classId, className);
+    return (percentage: number) => grading.gradeOf(percentage).grade;
 };
 
 export class ClassTestsController {
@@ -33,10 +51,13 @@ export class ClassTestsController {
         try {
             const db = getRequestDb(req);
             const query = getTenancyQuery(req);
-            let scale: any = await db.collection('grading_scales').findOne(query);
+            // The school's own class-test scale if it saved one; otherwise the configured
+            // grading (nothing is written — no hard-coded default is stored).
+            let scale: any = await savedTestScale(db, query.tenantId);
             if (!scale) {
-                scale = { ...query, scales: DEFAULT_GRADING_SCALE };
-                await db.collection('grading_scales').insertOne(scale);
+                const classId = req.query.class_id ? String(req.query.class_id) : undefined;
+                const className = req.query.class_name ? String(req.query.class_name) : undefined;
+                scale = { ...query, scales: await configuredAsTestScale(db, classId, className) };
             }
             res.json({ data: scale });
         } catch (error: any) {
@@ -208,6 +229,16 @@ export class ClassTestsController {
             let saved = 0;
             let updated = 0;
 
+            // The test's class (id + name) so grades follow that class's configured grading.
+            const testClassId = test.class_id || test.classId ? String(test.class_id || test.classId) : undefined;
+            let testClassName: string | undefined = test.class_name || test.className || undefined;
+            if (!testClassName && testClassId && ObjectId.isValid(testClassId)) {
+                const classDoc: any = await db.collection('classes').findOne({ _id: new ObjectId(testClassId) }).catch(() => null);
+                testClassName = classDoc?.levelName || classDoc?.name || undefined;
+            }
+
+            const calculateGrade = await testGrader(db, tenantQuery.tenantId, testClassId, testClassName);
+
             for (const record of records) {
                 const marksObtained = Number(record.marks_obtained);
                 if (marksObtained > test.total_marks) {
@@ -215,7 +246,7 @@ export class ClassTestsController {
                 }
 
                 const percentage = Math.round((marksObtained / test.total_marks) * 100);
-                const grade = await calculateGrade(db, tenantQuery.tenantId, percentage);
+                const grade = calculateGrade(percentage);
 
                 const query = {
                     test_id: new ObjectId(test_id),

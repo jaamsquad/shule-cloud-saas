@@ -1,4 +1,4 @@
-import { Plus, Home, BookOpen, Loader2, Search, Trash2, Edit2, Sparkles, LayoutGrid, Type } from "lucide-react";
+import { Plus, Home, BookOpen, Loader2, Search, EyeOff, Edit2, Sparkles, LayoutGrid, Type } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
@@ -37,13 +37,14 @@ export default function CoCurricularActivities() {
         onError: (err: any) => toast.error(err?.response?.data?.message || "Failed to create activity"),
     });
 
-    const deleteMutation = useMutation({
+    // Activities are never deleted — disabling hides them from pickers while keeping past records intact.
+    const disableMutation = useMutation({
         mutationFn: (id: string) => api.delete(`/academics/subjects/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["subjects"] });
-            toast.success("Activity node removed successfully!");
+            toast.success("Activity node disabled!");
         },
-        onError: () => toast.error("Failed to delete activity"),
+        onError: () => toast.error("Failed to disable activity"),
     });
 
     const updateMutation = useMutation({
@@ -171,12 +172,14 @@ export default function CoCurricularActivities() {
                                             >
                                                 <Edit2 className="w-3.5 h-3.5" />
                                             </button>
-                                            <button 
-                                                onClick={() => deleteMutation.mutate(s._id)}
-                                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-300 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                            {s.offered !== false && (
+                                                <button
+                                                    onClick={() => disableMutation.mutate(s._id)}
+                                                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-300 hover:text-red-500 transition-colors"
+                                                >
+                                                    <EyeOff className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

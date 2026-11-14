@@ -57,7 +57,7 @@ export default function ClearanceRequest() {
                         {requested && (
                             <div className={`mb-4 rounded px-4 py-2.5 text-sm font-semibold ${allCleared ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                                 {allCleared
-                                    ? "✓ You have been fully cleared by all departments."
+                                    ? <><CheckCircle2 className="w-4 h-4 inline align-[-3px] mr-1.5" />You have been fully cleared by all departments.</>
                                     : "Your clearance is being processed by the departments below."}
                             </div>
                         )}

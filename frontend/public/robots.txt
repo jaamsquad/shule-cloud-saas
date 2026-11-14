@@ -1,14 +1,27 @@
+# ShuleCloud — https://shulecloud.com
+#
+# robots.txt only asks well-behaved crawlers to stay out of the areas below; it is not access
+# control. Every private page (school dashboards, student, parent, staff, exam and finance data)
+# needs a login and is protected by the API, not by this file.
+# School subdomains (*.shulecloud.com) are additionally marked noindex via _headers.
+
 User-agent: Googlebot
-Allow: /
-
 User-agent: Bingbot
-Allow: /
-
 User-agent: Twitterbot
-Allow: /
-
 User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /owner
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /activate
+Disallow: /reset-password
+Disallow: /find-school
+Disallow: /application
+Disallow: /lnk/
+Disallow: /*/certificate/verify/
+Disallow: /*/report/verify/
+Disallow: /*/result/
+
+Sitemap: https://shulecloud.com/sitemap.xml

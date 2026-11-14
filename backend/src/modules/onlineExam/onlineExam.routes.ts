@@ -283,35 +283,41 @@ router.get('/online-exams/:id/marking', async (req: Request, res: Response) => {
             attempts: attempts.map((a: any) => ({
                 _id: String(a._id), studentName: a.studentName, status: a.status,
                 autoScore: a.autoScore, finalScore: a.finalScore, needsManual: a.needsManual,
-                // Only expose the student's answers to the manual questions + any saved awards.
-                answers: Object.fromEntries(manualQ.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
+                // Expose the student's answers to every question — manual ones need
+                // grading, auto ones can be reviewed and overridden by hand.
+                answers: Object.fromEntries(questions.map((q: any) => [String(q._id), a.answers?.[String(q._id)] ?? ''])),
                 marks: a.manualMarks || {}, comments: a.manualComments || {}, perQuestion: a.perQuestion || {},
+                overrides: a.manualOverrides || {},
             })),
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Save manual marks for one attempt. Recomputes finalScore = auto + manual.
+// Save marks for one attempt — manual-only questions always come from the teacher;
+// auto-marked questions use the computed award UNLESS the teacher explicitly
+// overrode it (sent a value for that question too), so a wrong auto-mark can be
+// corrected by hand. Recomputes finalScore = auto (or override) + manual.
 router.post('/online-exams/:id/marking/:attemptId', async (req: Request, res: Response) => {
     try {
         const database = db(req);
         const marks: Record<string, number> = req.body?.marks || {};
         const comments: Record<string, string> = req.body?.comments || {};
+        const overrides: Record<string, boolean> = req.body?.overrides || {};
         const attempt: any = await database.collection('online_exam_attempts').findOne({ _id: oid(req.params.attemptId)! });
         if (!attempt) return res.status(404).json({ message: 'Attempt not found' });
         const questions = await database.collection('online_exam_questions').find({ examId: req.params.id, deletedAt: { $exists: false } }).toArray();
 
-        // Auto portion (recompute so it's always correct) + manual awards (capped at max).
         let total = 0;
         for (const q of questions) {
             const qid = String(q._id);
             const isAuto = AUTO_TYPES.includes(q.type) || (q.type === 'fill_blank' && q.autoMark !== false);
-            if (isAuto) { total += markQuestion(q, attempt.answers?.[qid]).awarded; }
+            const overridden = isAuto && overrides[qid] && marks[qid] !== undefined && marks[qid] !== '' as any;
+            if (isAuto && !overridden) { total += markQuestion(q, attempt.answers?.[qid]).awarded; }
             else { total += Math.max(0, Math.min(Number(q.marks) || 0, Number(marks[qid]) || 0)); }
         }
         total = Math.round(total * 100) / 100;
         await database.collection('online_exam_attempts').updateOne({ _id: attempt._id }, {
-            $set: { manualMarks: marks, manualComments: comments, finalScore: total, needsManual: false, status: 'marked', markedAt: now() },
+            $set: { manualMarks: marks, manualComments: comments, manualOverrides: overrides, finalScore: total, needsManual: false, status: 'marked', markedAt: now() },
         });
         await audit(database, req, 'TEACHER_MARKED', req.params.id, { attemptId: req.params.attemptId, finalScore: total });
         res.json({ ok: true, finalScore: total });
@@ -348,12 +354,27 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
             await database.collection('online_exams').updateOne({ _id: exam._id }, { $set: { mainExamId } });
         }
 
-        // 2) Write each submitted/marked attempt's score into exam_marks.
+        // 2) Write each submitted/marked attempt's score into exam_marks. If the SAME
+        //    subject already has a mark under this exam from another source (marks
+        //    entered directly for the main exam, or a baseline saved on an earlier
+        //    publish), blend the two into an average instead of overwriting — so a
+        //    subject with both a main-exam entry and an online exam shows the
+        //    combined result everywhere (report card, merit list, analysis, transcripts),
+        //    not just whichever was written last.
         const attempts = await database.collection('online_exam_attempts').find({
             examId: req.params.id, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] },
         }).toArray().catch(() => []);
         const totalMarks = Number(exam.totalMarks) || 100;
         const subjectName = exam.subjectName || 'Online Exam';
+        const subjectKey = exam.subjectId || subjectName;
+
+        const existingMarks = attempts.length
+            ? await database.collection('exam_marks').find({
+                examId: mainExamId, subjectId: subjectKey, studentId: { $in: attempts.map((a: any) => String(a.studentId)) },
+            }).toArray().catch(() => [])
+            : [];
+        const existingByStudent: Record<string, any> = {};
+        existingMarks.forEach((m: any) => { existingByStudent[String(m.studentId)] = m; });
 
         let written = 0, pending = 0;
         const ops = attempts.map((a: any) => {
@@ -362,15 +383,38 @@ router.post('/online-exams/:id/publish-results', async (req: Request, res: Respo
             if (score == null) { pending++; return null; }
             written++;
             const cls = a.className || exam.className || '';
+
+            // The non-online baseline to blend with: a mark saved once (on the first
+            // publish) and kept untouched on every later publish, so repeated
+            // publishes re-blend from the SAME original number instead of drifting.
+            const existing = existingByStudent[String(a.studentId)];
+            const manualObtained = existing ? (existing.manualMarksObtained ?? (existing.source !== 'online_exam' ? existing.marksObtained : undefined)) : undefined;
+            const manualTotal = existing ? (existing.manualTotalMarks ?? (existing.source !== 'online_exam' ? existing.totalMarks : undefined)) : undefined;
+            const hasManualBaseline = manualObtained != null && Number(manualTotal) > 0;
+
+            let finalObtained = Number(score), finalTotal = totalMarks;
+            if (hasManualBaseline) {
+                const manualPct = (Number(manualObtained) / Number(manualTotal)) * 100;
+                const onlinePct = totalMarks > 0 ? (Number(score) / totalMarks) * 100 : 0;
+                finalObtained = Math.round((manualPct + onlinePct) / 2);
+                finalTotal = 100;
+            }
+
             return {
                 updateOne: {
-                    filter: { studentId: String(a.studentId), examId: mainExamId, subjectId: exam.subjectId || subjectName },
+                    filter: { studentId: String(a.studentId), examId: mainExamId, subjectId: subjectKey },
                     update: {
                         $set: {
                             studentId: String(a.studentId), examId: mainExamId,
-                            subjectId: exam.subjectId || subjectName, subjectName,
-                            marksObtained: Number(score), totalMarks,
+                            subjectId: subjectKey, subjectName,
+                            marksObtained: finalObtained, totalMarks: finalTotal,
                             className: cls, updatedAt: now(), source: 'online_exam',
+                            // The online exam's OWN assessment type (CAT / Midterm / End
+                            // Term / …), kept distinct from the parent exam's type so the
+                            // report card can give it its own column instead of folding it
+                            // under the parent's label.
+                            onlineCategory: exam.category || '',
+                            ...(hasManualBaseline ? { manualMarksObtained: manualObtained, manualTotalMarks: manualTotal, blendedWithManual: true } : {}),
                         },
                         $setOnInsert: { createdAt: now(), classAtTime: cls, academicYear: exam.academicYear || String(new Date().getFullYear()) },
                     },

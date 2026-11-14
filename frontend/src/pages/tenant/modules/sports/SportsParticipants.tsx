@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Check, Loader2, Search } from "lucide-react";
+import { Users, Check, Loader2, Search, UserPlus, Award } from "lucide-react";
+import { useModuleCrud } from "@/contexts/PermissionsContext";
+import { AddStudentsModal, SportCertificatesModal } from "./SportTools";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
@@ -36,6 +38,21 @@ export default function SportsParticipants() {
         return s?.studentClass || s?.currentClass || "—";
     };
 
+    const { data: sportList = [] } = useQuery<any[]>({
+        queryKey: ["sports_list"],
+        queryFn: async () => { try { const r = await api.get("/sports"); return Array.isArray(r.data) ? r.data : []; } catch { return []; } },
+    });
+    const canAdd = useModuleCrud("sports").canCreate;
+    const canCert = useModuleCrud("certificates").canCreate;
+    const [tool, setTool] = useState<{ kind: "add" | "cert"; sportId: string } | null>(null);
+    const toolSport = tool ? sportList.find((s: any) => String(s._id) === tool.sportId) : null;
+    // the buttons act on the sport picked in the filter (or the only sport there is)
+    const openTool = (kind: "add" | "cert") => {
+        const sp = sportList.find((s: any) => s.name === sportFilter) || (sportList.length === 1 ? sportList[0] : null);
+        if (!sp) { toast.info("Pick a sport in the 'All Sports' filter first"); return; }
+        setTool({ kind, sportId: String(sp._id) });
+    };
+
     const approve = useMutation({
         mutationFn: async (id: string) => api.patch(`/sports-enrollments/${id}`, { approvalStatus: "approved" }),
         onSuccess: () => { toast.success("Approved"); qc.invalidateQueries({ queryKey: ["sports_enrollments"] }); },
@@ -68,13 +85,17 @@ export default function SportsParticipants() {
             <div className="max-w-6xl mx-auto">
                 <div className="flex items-center gap-4 mb-6">
                     <div className="w-12 h-12 rounded-2xl bg-[#5C67F2] flex items-center justify-center text-white"><Users className="w-6 h-6" /></div>
-                    <div><h1 className="text-xl font-black text-slate-800">Registered Participants</h1><p className="text-xs text-slate-500">Students enrolled per sport, with payment & approval status</p></div>
+                    <div className="flex-1 min-w-0"><h1 className="text-xl font-black text-slate-800">Registered Participants</h1><p className="text-xs text-slate-500">Students enrolled per sport, with payment & approval status</p></div>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                        {canAdd && <button onClick={() => openTool("add")} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2"><UserPlus className="w-4 h-4" /> Add Students</button>}
+                        {canCert && <button onClick={() => openTool("cert")} className="h-10 px-4 bg-amber-500 text-white rounded-xl text-sm font-bold flex items-center gap-2"><Award className="w-4 h-4" /> Certificates</button>}
+                    </div>
                 </div>
 
                 {/* Filter + sort */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap gap-3">
                     <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search student, adm, sport, class…" className="w-full h-10 pl-10 pr-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#5C67F2]" /></div>
-                    <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)} className="h-10 px-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600"><option value="">All Sports</option>{sports.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+                    <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)} className="h-10 px-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600"><option value="">All Sports</option>{[...new Set([...sportList.map((s: any) => s.name), ...sports])].filter(Boolean).map((s: any) => <option key={s} value={s}>{s}</option>)}</select>
                     <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="h-10 px-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600"><option value="">All Classes</option>{classes.map((c) => <option key={c} value={c}>{c}</option>)}</select>
                     <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-10 px-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600"><option value="student">Sort: Student</option><option value="sport">Sort: Sport</option><option value="class">Sort: Class</option></select>
                 </div>
@@ -110,6 +131,8 @@ export default function SportsParticipants() {
                     </table>
                 </div>
             </div>
+            {tool?.kind === "add" && toolSport && <AddStudentsModal sport={toolSport} onClose={() => setTool(null)} />}
+            {tool?.kind === "cert" && toolSport && <SportCertificatesModal sport={toolSport} onClose={() => setTool(null)} />}
         </div>
     );
 }

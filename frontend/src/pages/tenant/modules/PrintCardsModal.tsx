@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Printer, LayoutGrid } from "lucide-react";
+import { X, Printer, LayoutGrid, Loader2 } from "lucide-react";
 import { printAllCards, type PrintLayout } from "./printCards";
 
 // Preset "cards per A4 page" options → the grid layout that achieves them.
@@ -23,6 +23,7 @@ export default function PrintCardsModal({ open, onClose, selector, total }: {
     const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
     const [columns, setColumns] = useState(2);
     const [advanced, setAdvanced] = useState(false);
+    const [isPreparing, setIsPreparing] = useState(false);
 
     if (!open) return null;
 
@@ -34,9 +35,14 @@ export default function PrintCardsModal({ open, onClose, selector, total }: {
         setScale(L.scale ?? 1);
     };
 
-    const doPrint = () => {
-        printAllCards(selector, { orientation, columns, gapMm: gap, marginMm: margin, scale });
-        onClose();
+    const doPrint = async () => {
+        setIsPreparing(true);
+        try {
+            await printAllCards(selector, { orientation, columns, gapMm: gap, marginMm: margin, scale });
+        } finally {
+            setIsPreparing(false);
+            onClose();
+        }
     };
 
     // A4 preview proportions (210×297 portrait). Show a grid of card placeholders.
@@ -111,9 +117,9 @@ export default function PrintCardsModal({ open, onClose, selector, total }: {
                 </div>
 
                 <div className="flex gap-2 px-6 py-4 border-t border-slate-100">
-                    <button onClick={onClose} className="h-11 px-5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm">Cancel</button>
-                    <button onClick={doPrint} disabled={!total} className="h-11 px-6 rounded-xl text-white font-bold text-sm flex items-center gap-2 ml-auto disabled:opacity-50 bg-[#5C67F2]">
-                        <Printer className="w-4 h-4" /> Print {total} Card{total === 1 ? "" : "s"}
+                    <button onClick={onClose} disabled={isPreparing} className="h-11 px-5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm disabled:opacity-50">Cancel</button>
+                    <button onClick={doPrint} disabled={!total || isPreparing} className="h-11 px-6 rounded-xl text-white font-bold text-sm flex items-center gap-2 ml-auto disabled:opacity-70 bg-[#5C67F2]">
+                        {isPreparing ? <><Loader2 className="w-4 h-4 animate-spin" /> Preparing to print…</> : <><Printer className="w-4 h-4" /> Print {total} Card{total === 1 ? "" : "s"}</>}
                     </button>
                 </div>
             </div>

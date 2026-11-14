@@ -54,7 +54,7 @@ function checklist(p: SkillPrint, r: SkillReport, th: any) {
       ${sub.areas.map(a => { const sc = scaleOf(p, a.scale).ratings; const w = (54 / sc.length).toFixed(2);
         return `<table class="grid fx"><colgroup><col style="width:46%">${sc.map(() => `<col style="width:${w}%">`).join("")}</colgroup>
         <tr class="ah" style="background:${th.head}"><td>${esc(a.area).toUpperCase()}</td>${sc.map(x => `<td class="c">${esc(x.short)}</td>`).join("")}</tr>
-        ${a.skills.map(s => `<tr><td>${esc(s.name)}</td>${sc.map(x => `<td class="c tick">${s.ratings[p.term] === x.code ? "✓" : ""}</td>`).join("")}</tr>`).join("")}</table>`; }).join("")}`).join("");
+        ${a.skills.map(s => `<tr><td>${esc(s.name)}</td>${sc.map(x => `<td class="c tick">${s.ratings[p.term] === x.code ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg>' : ""}</td>`).join("")}</tr>`).join("")}</table>`; }).join("")}`).join("");
 }
 
 function bars(p: SkillPrint, r: SkillReport, th: any) {

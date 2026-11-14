@@ -19,6 +19,8 @@ export const cbc = {
     terms: () => api.get("/cbc/terms").then(r => r.data as { terms: TermOption[]; current: TermOption | null; canChoose: boolean }),
     stats: (t: TermParams = {}) => api.get("/cbc/stats", { params: t }).then(r => r.data),
     seed: () => api.post("/cbc/seed").then(r => r.data),
+    loadKicdAreas: () => api.post("/cbc/learning-areas/load").then(r => r.data),
+    roster: (activityId: string) => api.get("/cbc/roster", { params: { activityId } }).then(r => (Array.isArray(r.data) ? r.data : [])),
     progress: (id: string, t: TermParams = {}) => api.get(`/cbc/progress/${id}`, { params: t }).then(r => r.data),
     reportCard: (id: string, t: TermParams = {}) => api.get(`/cbc/report-card/${id}`, { params: t }).then(r => r.data),
     settings: () => api.get("/cbc/settings").then(r => r.data),

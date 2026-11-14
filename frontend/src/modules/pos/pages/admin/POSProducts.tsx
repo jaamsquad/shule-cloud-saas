@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import posApi from '../../lib/posApi'
-import { Plus, Edit, Trash2, Search, Loader2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Loader2, ShoppingBag, X } from 'lucide-react'
 
 interface VariantInput { id?: string; size: string; color: string; stock: number; price: number }
 
@@ -102,7 +102,7 @@ export default function POSProducts() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-gray-800 flex items-center justify-center text-lg shrink-0">
-                          {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover rounded-lg" /> : '🛍️'}
+                          {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover rounded-lg" /> : <ShoppingBag className="w-4 h-4 text-slate-400" />}
                         </div>
                         <div>
                           <p className="font-semibold text-white text-sm">{p.name}</p>
@@ -145,7 +145,7 @@ export default function POSProducts() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-800">
               <h2 className="text-base font-bold text-white">{selectedProduct ? 'Edit Product' : 'New Product'}</h2>
-              <button onClick={closeModal} className="text-gray-500 hover:text-white text-lg">✕</button>
+              <button onClick={closeModal} className="text-gray-500 hover:text-white text-lg"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={e => { e.preventDefault(); if (!name || !categoryId) { toast.error('Name and Category required'); return } saveProduct({ name, description, categoryId, imageUrl, variants }) }}
               className="flex-1 overflow-y-auto p-6 space-y-4">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import api from "@/lib/api";
 import { FCard, FButton, FField, FInput, FSelect, inputCls, FModal, FEmpty, FLoading, FBadge, FStat, Tone } from "@/components/fees/FeesUI";
-import TemplatePicker from "@/components/comm/TemplatePicker";
+import TemplatePicker, { CommApiBase } from "@/components/comm/TemplatePicker";
 import { CommShell } from "./MessageTemplates";
 
 // Communication → Meetings: the school calendar. Create a meeting, choose who is invited
@@ -67,11 +67,12 @@ const audienceLabel = (a: any) => {
 
 // ── People picker (multi) ────────────────────────────────────────────────────
 function PeoplePicker({ value, onChange }: { value: Contact[]; onChange: (v: Contact[]) => void }) {
+    const base = useContext(CommApiBase);
     const [q, setQ] = useState("");
     const [type, setType] = useState("all");
     const { data = [], isFetching } = useQuery<Contact[]>({
         queryKey: ["comm_contacts", q, type], enabled: q.trim().length >= 2,
-        queryFn: async () => (await api.get("/communications/contacts", { params: { q, type } })).data || [],
+        queryFn: async () => (await api.get(`${base}/communications/contacts`, { params: { q, type } })).data || [],
     });
     const chosen = new Set(value.map(v => v.id));
     return (
@@ -116,6 +117,7 @@ function PeoplePicker({ value, onChange }: { value: Contact[]; onChange: (v: Con
 
 // ── Notify panel ─────────────────────────────────────────────────────────────
 function NotifyPanel({ meeting, onSent }: { meeting: any; onSent: () => void }) {
+    const base = useContext(CommApiBase);
     const cancelled = meeting.status === "cancelled";
     const sentBefore = (meeting.notifications || []).length > 0;
     const [kind, setKind] = useState<string>(cancelled ? "cancel" : sentBefore ? "reminder" : "invite");
@@ -130,7 +132,7 @@ function NotifyPanel({ meeting, onSent }: { meeting: any; onSent: () => void }) 
 
     const { data: preview, isLoading } = useQuery<any>({
         queryKey: ["meeting_recipients", meeting._id, JSON.stringify(meeting.audience)],
-        queryFn: async () => (await api.post("/meetings/recipients/preview", { audience: meeting.audience })).data,
+        queryFn: async () => (await api.post(`${base}/meetings/recipients/preview`, { audience: meeting.audience })).data,
     });
 
     const send = async () => {
@@ -138,7 +140,7 @@ function NotifyPanel({ meeting, onSent }: { meeting: any; onSent: () => void }) 
         if (!confirm(`Send this ${kind} to ${preview?.total ?? "the"} invited people?`)) return;
         setSending(true);
         try {
-            const r = await api.post(`/meetings/${meeting._id}/notify`, { kind, sms: useSms, email: useEmail, smsText: smsText || undefined, emailSubject: emailSubject || undefined, emailBody: emailBody || undefined, templateIds: tplIds });
+            const r = await api.post(`${base}/meetings/${meeting._id}/notify`, { kind, sms: useSms, email: useEmail, smsText: smsText || undefined, emailSubject: emailSubject || undefined, emailBody: emailBody || undefined, templateIds: tplIds });
             const d = r.data;
             const parts = [d.sms && `SMS: ${d.sms.sent + d.sms.queued} sent/queued${d.sms.failed ? `, ${d.sms.failed} failed` : ""}`, d.email && `Email: ${d.email.sent} sent${d.email.failed ? `, ${d.email.failed} failed` : ""}`].filter(Boolean);
             (d.sms?.failed || d.email?.failed ? toast.warning : toast.success)(parts.join(" · ") || "Sent", { duration: 7000 });
@@ -196,8 +198,9 @@ function NotifyPanel({ meeting, onSent }: { meeting: any; onSent: () => void }) 
     );
 }
 
-export default function Meetings() {
+export default function Meetings({ section }: { section?: "secretary" } = {}) {
     const qc = useQueryClient();
+    const base = useContext(CommApiBase);
     const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
     const [form, setForm] = useState<MForm | null>(null);
     const [saving, setSaving] = useState(false);
@@ -209,11 +212,11 @@ export default function Meetings() {
     const rangeEnd = days[41];
     const { data: meetings = [], isLoading } = useQuery<any[]>({
         queryKey: ["meetings", ymd(gridStart)],
-        queryFn: async () => { const to = new Date(rangeEnd); to.setDate(to.getDate() + 1); return (await api.get("/meetings", { params: { from: gridStart.toISOString(), to: to.toISOString() } })).data || []; },
+        queryFn: async () => { const to = new Date(rangeEnd); to.setDate(to.getDate() + 1); return (await api.get(`${base}/meetings`, { params: { from: gridStart.toISOString(), to: to.toISOString() } })).data || []; },
     });
     const { data: upcoming = [] } = useQuery<any[]>({
         queryKey: ["meetings_upcoming"],
-        queryFn: async () => (await api.get("/meetings", { params: { from: new Date().toISOString() } })).data || [],
+        queryFn: async () => (await api.get(`${base}/meetings`, { params: { from: new Date().toISOString() } })).data || [],
     });
     const { data: classes = [] } = useQuery<any[]>({ queryKey: ["v2_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const open = useMemo(() => [...meetings, ...upcoming].find(m => m._id === openId) || null, [meetings, upcoming, openId]);
@@ -233,8 +236,8 @@ export default function Meetings() {
         setSaving(true);
         try {
             let id = form._id;
-            if (id) { const r = await api.put(`/meetings/${id}`, toBody(form)); if (r.data?.rescheduled) toast.info("Date changed — send an update so people know."); }
-            else id = (await api.post("/meetings", toBody(form))).data._id;
+            if (id) { const r = await api.put(`${base}/meetings/${id}`, toBody(form)); if (r.data?.rescheduled) toast.info("Date changed — send an update so people know."); }
+            else id = (await api.post(`${base}/meetings`, toBody(form))).data._id;
             toast.success(form._id ? "Meeting saved" : "Meeting created");
             setForm(null); refresh();
             if (andNotify && id) setOpenId(String(id));
@@ -243,12 +246,12 @@ export default function Meetings() {
     };
     const cancelMeeting = async (m: any) => {
         if (!confirm(`Cancel "${m.title}"? You can then send a cancellation notice.`)) return;
-        try { await api.post(`/meetings/${m._id}/cancel`); toast.success("Meeting cancelled — you can notify people below."); refresh(); }
+        try { await api.post(`${base}/meetings/${m._id}/cancel`); toast.success("Meeting cancelled — you can notify people below."); refresh(); }
         catch (e: any) { toast.error(e.response?.data?.message || "Failed"); }
     };
     const deleteMeeting = async (m: any) => {
         if (!confirm(`Delete "${m.title}" from the calendar?`)) return;
-        try { await api.delete(`/meetings/${m._id}`); toast.success("Deleted"); setOpenId(null); refresh(); }
+        try { await api.delete(`${base}/meetings/${m._id}`); toast.success("Deleted"); setOpenId(null); refresh(); }
         catch (e: any) { toast.error(e.response?.data?.message || "Failed"); }
     };
 
@@ -258,7 +261,8 @@ export default function Meetings() {
     const tone = (m: any): Tone => (m.status === "cancelled" ? "rose" : new Date(m.end) < today ? "slate" : "emerald");
 
     return (
-        <CommShell active="meetings" title="Meetings" icon={CalendarDays}
+        <CommShell active="meetings" title={section === "secretary" ? "Meeting Management" : "Meetings"} icon={CalendarDays}
+            section={section === "secretary" ? "Secretary" : "Communication"} nav={section !== "secretary"}
             subtitle="The school calendar — plan meetings and notify staff and parents by SMS or email."
             actions={<FButton icon={Plus} onClick={() => setForm(blank())}>New meeting</FButton>}>
             <div className="grid lg:grid-cols-[1fr_320px] gap-5">

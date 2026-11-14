@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ShoppingBag, ArrowRight, ShieldCheck, Truck, RefreshCcw } from 'lucide-react'
+import { ShoppingBag, ArrowRight, ShieldCheck, Truck, RefreshCcw, Shirt, BookOpen, Trophy } from 'lucide-react'
 
 export default function StoreFront() {
   return (
@@ -32,21 +32,21 @@ export default function StoreFront() {
           <div className="flex-1 max-w-sm md:max-w-md select-none relative z-10">
             <div className="bg-gray-900/60 backdrop-blur border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">👕</span>
+                <Shirt className="w-8 h-8 text-slate-400" />
                 <div>
                   <p className="text-xs text-gray-500">Official Wear</p>
                   <p className="text-sm font-bold text-white">Prefect & Regular Uniforms</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-3xl">📚</span>
+                <BookOpen className="w-8 h-8 text-slate-400" />
                 <div>
                   <p className="text-xs text-gray-500">Classroom Sets</p>
                   <p className="text-sm font-bold text-white">Full Textbooks & Exercise Kits</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-3xl">⚽</span>
+                <Trophy className="w-8 h-8 text-slate-400" />
                 <div>
                   <p className="text-xs text-gray-500">Sportswear</p>
                   <p className="text-sm font-bold text-white">Tracksuits, Shorts & Socks</p>
@@ -71,16 +71,16 @@ export default function StoreFront() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
-            { title: 'School Uniforms', label: 'Blazers, shirts, skirts, trousers', emoji: '👕', id: '1' },
-            { title: 'Books & Stationery', label: 'Exercise notebooks, textbooks, geometry kits', emoji: '📚', id: '2' },
-            { title: 'Sportswear & Badges', label: 'Tracksuits, sports socks, active shorts', emoji: '⚽', id: '3' },
+            { title: 'School Uniforms', label: 'Blazers, shirts, skirts, trousers', icon: Shirt, id: '1' },
+            { title: 'Books & Stationery', label: 'Exercise notebooks, textbooks, geometry kits', icon: BookOpen, id: '2' },
+            { title: 'Sportswear & Badges', label: 'Tracksuits, sports socks, active shorts', icon: Trophy, id: '3' },
           ].map(c => (
             <Link
               key={c.title}
               to={`/store/products?category=${c.id}`}
               className="bg-gray-900 border border-gray-800 rounded-2xl p-6 hover:border-indigo-500 transition-all flex items-center gap-4 hover:-translate-y-0.5 duration-150"
             >
-              <span className="text-4xl">{c.emoji}</span>
+              <c.icon className="w-9 h-9 text-slate-400 shrink-0" />
               <div>
                 <h3 className="font-bold text-white text-base">{c.title}</h3>
                 <p className="text-xs text-gray-500 mt-1">{c.label}</p>

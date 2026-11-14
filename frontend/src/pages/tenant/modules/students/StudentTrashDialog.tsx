@@ -13,7 +13,7 @@ export default function StudentTrashDialog({ onClose }: { onClose: () => void })
     const queryClient = useQueryClient();
     const [search, setSearch] = useState("");
 
-    const { data: trash = [], isLoading } = useQuery<any[]>({
+    const { data: trash = [], isLoading, isError, error } = useQuery<any[]>({
         queryKey: STUDENT_TRASH_KEY,
         queryFn: async () => (await api.get("/students/trash")).data || [],
     });
@@ -66,6 +66,11 @@ export default function StudentTrashDialog({ onClose }: { onClose: () => void })
                 <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-[#f4f7f6]">
                     {isLoading ? (
                         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-[#5C67F2]" /></div>
+                    ) : isError ? (
+                        <div className="text-center p-10 bg-white rounded-2xl border border-red-100">
+                            <p className="font-bold text-red-500">Could not load the trash.</p>
+                            <p className="text-xs text-slate-400 mt-1">{(error as any)?.response?.data?.message || (error as any)?.message || "Please try again."}</p>
+                        </div>
                     ) : rows.length === 0 ? (
                         <div className="text-center p-10 bg-white rounded-2xl border border-gray-100">
                             <p className="font-bold text-slate-400">{trash.length === 0 ? "Trash is empty." : "No deleted students match your search."}</p>

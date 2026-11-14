@@ -1,0 +1,28 @@
+# Cloudflare Pages response headers (https://developers.cloudflare.com/pages/configuration/headers/)
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/sitemap-*
+  Content-Type: application/xml; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+# School portals and other subdomains (egerton.shulecloud.com, students.egerton.shulecloud.com,
+# owner., www.) are private apps or duplicates of the main site: keep them out of search results.
+https://:sub.shulecloud.com/*
+  X-Robots-Tag: noindex, nofollow
+
+https://:portal.:sub.shulecloud.com/*
+  X-Robots-Tag: noindex, nofollow
+
+# Cloudflare Pages preview / *.pages.dev copies of the site
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:branch.:project.pages.dev/*
+  X-Robots-Tag: noindex

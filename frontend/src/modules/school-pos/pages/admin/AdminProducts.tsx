@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'sonner'
 import api from '@/lib/api'
 import {
-  Plus, Edit, Trash2, Search, Loader2
+  Plus, Edit, Trash2, Search, Loader2, Shirt, X
 } from 'lucide-react'
 
 interface VariantInput { id?: string; size: string; color: string; stock: number; price: number }
@@ -163,7 +163,7 @@ export default function AdminProducts() {
                       <div className="w-9 h-9 rounded bg-gray-800 flex items-center justify-center text-lg">
                         {p.imageUrl ? (
                           <img src={p.imageUrl} className="w-full h-full object-cover rounded" />
-                        ) : '👕'}
+                        ) : <Shirt className="w-4 h-4 text-slate-400" />}
                       </div>
                       <div>
                         <p className="font-semibold text-white text-sm">{p.name}</p>
@@ -200,7 +200,7 @@ export default function AdminProducts() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-800">
               <h2 className="text-base font-bold text-white">{selectedProduct ? 'Edit Product' : 'New Product'}</h2>
-              <button onClick={closeModal} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={closeModal} className="text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">

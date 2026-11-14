@@ -9,6 +9,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { API_ORIGIN } from "@/lib/config";
+import FileViewer from "@/portals/FileViewer";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { toast } from "sonner";
 
@@ -117,6 +119,7 @@ export default function NotesResources() {
     const [sortBy, setSortBy] = useState("newest");
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [videoOpen, setVideoOpen] = useState<{ src: string; title: string } | null>(null);
+    const [viewing, setViewing] = useState<{ src: string; name?: string; title?: string } | null>(null);
     const [preview, setPreview] = useState<any | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -140,6 +143,10 @@ export default function NotesResources() {
         queryKey: ["tenant_profile_global"],
         queryFn: async () => { const r = await api.get("/auth/tenant/profile"); return Array.isArray(r.data) ? r.data[0] : r.data; },
     });
+    const { data: globalResources = [] } = useQuery({
+        queryKey: ["global_resources"],
+        queryFn: async () => { const r = await api.get("/global-resources"); return Array.isArray(r.data) ? r.data : []; },
+    });
     const delMut = useMutation({
         mutationFn: (id: string) => api.delete(`/academic_resources/${id}`),
         onSuccess: () => { qc.invalidateQueries({ queryKey: ["academic_resources"] }); toast.success("Resource removed"); setConfirmDelete(null); },
@@ -151,6 +158,8 @@ export default function NotesResources() {
     const currentPath = window.location.pathname === "/lms/lessons" ? "/academics/resources" : window.location.pathname;
     const initials = (currentUser?.name || "School Admin").split(/\s+/).map((part: string) => part[0]).slice(0, 2).join("").toUpperCase();
     const getTypeConfig = (type: string) => TYPES.find(t => t.key === type) || TYPES[TYPES.length - 1];
+    const isViewable = (src?: string, name?: string) => /\.(pdf|png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(name || src || "") || /^data:(application\/pdf|image\/)/i.test(src || "");
+    const resolveGlobalFileUrl = (path: string) => /^https?:\/\//i.test(path) ? path : `${API_ORIGIN.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
     const getLabel = (item: any, fields: string[]) => {
         if (typeof item === "string") return item;
         return fields.map(field => item?.[field]).find(Boolean) || "";
@@ -189,20 +198,20 @@ export default function NotesResources() {
 
     return (
         <div className="min-h-full bg-[#f4f7fc] text-slate-900">
-            {mobileMenuOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" onClick={() => setMobileMenuOpen(false)} />}
-            <aside className={`fixed inset-y-0 left-0 z-50 w-[270px] bg-[#102b5b] shadow-2xl transition-transform duration-300 lg:hidden ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+            {mobileMenuOpen && <button data-app-chrome aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" onClick={() => setMobileMenuOpen(false)} />}
+            <aside data-app-chrome className={`fixed inset-y-0 left-0 z-50 w-[270px] bg-[#102b5b] shadow-2xl transition-transform duration-300 lg:hidden ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
                 <div className="absolute right-3 top-3">
                     <button onClick={() => setMobileMenuOpen(false)} aria-label="Close menu" className="rounded-lg p-2 text-blue-100 hover:bg-white/10"><X className="h-5 w-5" /></button>
                 </div>
                 <SidebarContent schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} />
             </aside>
 
-            <div className={`hidden shrink-0 bg-[#102b5b] transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${sidebarCollapsed ? "lg:w-[82px]" : "lg:w-[260px]"}`}>
+            <div data-app-chrome className={`hidden shrink-0 bg-[#102b5b] transition-[width] duration-300 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${sidebarCollapsed ? "lg:w-[82px]" : "lg:w-[260px]"}`}>
                 <SidebarContent collapsed={sidebarCollapsed} schoolName={schoolName} schoolLogo={schoolLogo} schoolId={schoolId} currentPath={currentPath} onNavigate={navigateFromSidebar} />
             </div>
 
             <div className="min-w-0 flex-1">
-                <header className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+                <header data-app-chrome className="sticky top-0 z-30 flex h-[68px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
                     <button onClick={() => { if (window.innerWidth >= 1024) setSidebarCollapsed(value => !value); else setMobileMenuOpen(true); }} aria-label="Toggle navigation"
                         className="rounded-xl p-2 text-[#16376e] transition hover:bg-blue-50"><Menu className="h-5 w-5" /></button>
                     <div className="hidden items-center gap-2 text-sm text-slate-400 sm:flex"><span>Academics</span><span>/</span><span className="font-bold text-slate-800">Online Library</span></div>
@@ -251,6 +260,27 @@ export default function NotesResources() {
                             </div>
                         </div>
                     </section>
+
+                    {globalResources.length > 0 && <section className="mb-6 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><GraduationCap className="h-5 w-5" /></span><div><h2 className="text-sm font-extrabold text-[#102b5b] sm:text-base">ShuleCloud Library</h2><p className="mt-0.5 text-[11px] text-slate-500">Curated resources shared with every school</p></div></div>
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold text-blue-700">{globalResources.length} shared</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {globalResources.map((resource: any) => {
+                                const type = getTypeConfig(resource.type);
+                                const palette = TONE_CLASS[type.tone];
+                                const Icon = type.icon;
+                                const fileUrl = resource.fileUrl ? resolveGlobalFileUrl(resource.fileUrl) : "";
+                                return <article key={resource._id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition hover:border-blue-200 hover:shadow-md">
+                                    <div className={`relative flex h-16 items-center justify-center ${palette.soft}`}><Icon className={`h-6 w-6 ${palette.text}`} /><span className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-600">{resource.type || "Resource"}</span></div>
+                                    <div className="p-3.5"><h3 className="truncate text-sm font-bold text-[#102b5b]">{resource.title || "Untitled resource"}</h3><p className="mt-1 truncate text-[10px] font-semibold uppercase text-slate-400">{resource.subjectName || "All subjects"}{resource.className ? ` · ${resource.className}` : " · All grades"}</p>{resource.description && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{resource.description}</p>}
+                                        <div className="mt-3 flex flex-wrap gap-2">{fileUrl && (isViewable(fileUrl, resource.fileName) ? <button onClick={() => setViewing({ src: fileUrl, name: resource.fileName, title: resource.title })} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"><Eye className="h-3.5 w-3.5" />Preview file</button> : <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"><Download className="h-3.5 w-3.5" />Open file</a>)}{!fileUrl && resource.url && <a href={resource.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"><ExternalLink className="h-3.5 w-3.5" />Open link</a>}{resource.videoUrl && <button onClick={() => setVideoOpen({ src: getVideoEmbedUrl(resource.videoUrl), title: resource.title })} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"><Video className="h-3.5 w-3.5" />Watch</button>}</div>
+                                    </div>
+                                </article>;
+                            })}
+                        </div>
+                    </section>}
 
                     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_270px]">
                         <section id="resource-catalog" className="min-w-0 scroll-mt-24">
@@ -343,11 +373,12 @@ export default function NotesResources() {
                 <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
                     <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white/95 p-5 backdrop-blur sm:p-6"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700">Resource preview</p><h2 className="mt-1 truncate text-xl font-extrabold text-[#102b5b]">{preview.title}</h2><p className="mt-1 text-xs text-slate-500">{[preview.type, preview.subjectName, preview.className].filter(Boolean).join(" · ")}</p></div><button onClick={() => setPreview(null)} aria-label="Close preview" className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"><X className="h-5 w-5" /></button></div>
                     <div className="space-y-4 p-5 sm:p-6">{preview.introduction && <div><h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Introduction</h3><p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{preview.introduction}</p></div>}{preview.description && <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{preview.description}</p>}{preview.objectives && <div className="rounded-xl bg-blue-50 p-4"><h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-blue-800">Learning objectives</h3><p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{preview.objectives}</p></div>}{preview.lessonNotes && <div><h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Lesson notes</h3><p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{preview.lessonNotes}</p></div>}{preview.assignment && <div className="rounded-xl bg-amber-50 p-4"><h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-800">Assignment</h3><p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{preview.assignment}</p></div>}
-                        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">{preview.fileData && <a href={preview.fileData} target="_blank" rel="noopener noreferrer" download={preview.fileName} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"><Download className="h-4 w-4" />{preview.fileName ? "Open / download file" : "Open file"}</a>}{preview.url && <a href={preview.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200 px-4 text-xs font-bold text-blue-700 hover:bg-blue-50"><ExternalLink className="h-4 w-4" />Open resource</a>}{preview.videoUrl && <button onClick={() => { setVideoOpen({ src: getVideoEmbedUrl(preview.videoUrl), title: preview.title }); setPreview(null); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200 px-4 text-xs font-bold text-blue-700 hover:bg-blue-50"><Play className="h-4 w-4" />Watch video</button>}</div>
+                        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">{preview.fileData && (isViewable(preview.fileData, preview.fileName) ? <button onClick={() => setViewing({ src: preview.fileData, name: preview.fileName, title: preview.title })} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"><Eye className="h-4 w-4" />Preview file</button> : <a href={preview.fileData} target="_blank" rel="noopener noreferrer" download={preview.fileName} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700"><Download className="h-4 w-4" />{preview.fileName ? "Open / download file" : "Open file"}</a>)}{preview.url && <a href={preview.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200 px-4 text-xs font-bold text-blue-700 hover:bg-blue-50"><ExternalLink className="h-4 w-4" />Open resource</a>}{preview.videoUrl && <button onClick={() => { setVideoOpen({ src: getVideoEmbedUrl(preview.videoUrl), title: preview.title }); setPreview(null); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200 px-4 text-xs font-bold text-blue-700 hover:bg-blue-50"><Play className="h-4 w-4" />Watch video</button>}</div>
                     </div>
                 </div>
             </div>}
 
+            <FileViewer open={!!viewing} src={viewing?.src} name={viewing?.name} title={viewing?.title} onClose={() => setViewing(null)} />
             {videoOpen && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-3 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setVideoOpen(null); }}><div className="w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">{videoOpen.title}</p><p className="text-[10px] text-slate-400">Lesson video</p></div><button onClick={() => setVideoOpen(null)} aria-label="Close video" className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:text-slate-900"><X className="h-4 w-4" /></button></div><div className="aspect-video bg-black"><iframe title={videoOpen.title} src={videoOpen.src} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ border: 0 }} /></div></div></div>}
         </div>
     );

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
-import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, getOwnerAuditLogs, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, getPlatformKra, setPlatformKra, testPlatformKra, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
+import { getTenants, getPlans, createPlan, updatePlan, deletePlan, getRevenueReport, getBillingPayments, getOwnerStats, getOwnerRevenue, getSchoolsSummary, getOwnerRoles, listOwnerUsers, createOwnerUser, updateOwnerUser, deleteOwnerUser, getSchoolDetail, assignSchoolPlan, setSchoolPricing, setSchoolEmailMode, setSchoolStatus, updateSchool, resetSchoolPassword, resetOrgPassword, setSchoolModules, impersonateSchool, messageSchool, getOwnerAuditLogs, listContactMessages, updateContactMessage, getPublicSettings, setPublicSettings, getPlatformMpesa, setPlatformMpesa, getPlatformSmsPricing, setPlatformSmsPricing, getPlatformMeeting, setPlatformMeeting, testPlatformMeeting, getPlatformKra, setPlatformKra, testPlatformKra, listReminders, createReminder, updateReminder, deleteReminder, getCompanyEmail, setCompanyEmail, sendBroadcast, sendTenantNotification, listPlatformNotifications, getOwnerProfile, updateOwnerProfile, listOwnerContacts, sendOwnerToOwner } from '../controllers/owner.controller';
 
 const router = Router();
 
@@ -59,6 +59,8 @@ router.get('/schools/summary', getSchoolsSummary);   // GET /api/v1/owner/school
 // ─── Single-school management ────────────────────────────────────────────────
 router.get('/schools/:id', getSchoolDetail);
 router.post('/schools/:id/plan', assignSchoolPlan);
+router.put('/schools/:id/pricing', setSchoolPricing);
+router.post('/schools/:id/email-mode', setSchoolEmailMode);
 router.post('/schools/:id/status', setSchoolStatus);
 router.patch('/schools/:id', updateSchool);
 router.post('/schools/:id/reset-password', resetSchoolPassword);
@@ -81,6 +83,8 @@ router.post('/public-settings', setPublicSettings);
 // ─── Platform M-PESA (Daraja) for subscription billing ───────────────────────
 router.get('/mpesa-settings', getPlatformMpesa);
 router.post('/mpesa-settings', setPlatformMpesa);
+router.get('/sms-pricing', getPlatformSmsPricing);
+router.post('/sms-pricing', setPlatformSmsPricing);
 router.get('/meeting-settings', getPlatformMeeting);
 router.post('/meeting-settings', setPlatformMeeting);
 router.post('/meeting-settings/test', testPlatformMeeting);
@@ -95,6 +99,29 @@ router.get('/reminders', listReminders);
 router.post('/reminders', createReminder);
 router.patch('/reminders/:id', updateReminder);
 router.delete('/reminders/:id', deleteReminder);
+
+// ─── Apps switched off for one school (hidden for everyone there, admins included) ─
+router.post('/schools/:id/apps', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Your role does not allow this action.' });
+    try {
+        const { APP_MODULES, CORE_APPS, forgetDisabledApps } = await import('../lib/permissions');
+        const list = Array.isArray(req.body?.disabledApps) ? req.body.disabledApps.map(String) : null;
+        if (!list) return res.status(400).json({ message: 'disabledApps must be a list' });
+        const unknown = list.filter((a: string) => !APP_MODULES[a]);
+        if (unknown.length) return res.status(400).json({ message: `Unknown app: ${unknown.join(', ')}` });
+        if (list.some((a: string) => CORE_APPS.includes(a))) return res.status(400).json({ message: 'School Overview and Administration cannot be turned off.' });
+        const id = new ObjectId(req.params.id);
+        const r = await getMetaDb().collection('Tenant').updateOne({ _id: id }, { $set: { disabledApps: Array.from(new Set(list)), updatedAt: new Date() } });
+        if (!r.matchedCount) return res.status(404).json({ message: 'School not found' });
+        forgetDisabledApps(req.params.id);
+        try {
+            const { ownerAudit } = await import('../controllers/owner.controller');
+            await ownerAudit(req as any, 'SCHOOL_APPS_UPDATED', 'Tenant', { schoolId: req.params.id, disabledApps: list });
+        } catch { /* audit is best-effort */ }
+        res.json({ message: 'Saved', disabledApps: list });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
 
 // ─── School sign-in security: 2FA policy + Google sign-in (owner / super_owner) ─
 const ownerOf = (req: any) => { try { return jwt.verify(String(req.headers.authorization || '').split(' ')[1], process.env.OWNER_JWT_SECRET || 'owner_secret') as any; } catch { return null; } };
@@ -121,6 +148,59 @@ router.post('/school-auth', async (req, res) => {
             if (!smtp?.host || !smtp?.user || !smtp?.pass) return res.status(400).json({ message: 'Set up Company email (SMTP) first — sign-in codes need a mailbox to come from.' });
         }
         await saveSchoolAuthPolicy(req.body || {});
+        res.json({ message: 'Saved' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+
+// ─── AI assistant (Groq) — owner sets the key and model for every school ─────
+router.get('/ai-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { getAiConfig, publicAiConfig } = await import('../lib/aiAssistant');
+        const cfg = publicAiConfig(await getAiConfig());
+        const day = new Date().toISOString().slice(0, 10);
+        const usage = await getMetaDb().collection('ai_usage').aggregate([{ $match: { day } }, { $group: { _id: null, requests: { $sum: '$count' }, tokens: { $sum: '$tokens' }, schools: { $sum: 1 } } }]).toArray();
+        const off = await getMetaDb().collection('Tenant').countDocuments({ aiEnabled: false });
+        res.json({ ...cfg, today: usage[0] || { requests: 0, tokens: 0, schools: 0 }, schoolsOff: off });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/ai-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Only an owner can change the AI settings.' });
+    try {
+        const { saveAiConfig } = await import('../lib/aiAssistant');
+        await saveAiConfig(req.body || {});
+        const { ownerAudit } = await import('../controllers/owner.controller');
+        await ownerAudit(req as any, 'AI_SETTINGS_UPDATED', 'Platform', { enabled: req.body?.enabled, model: req.body?.model, keyChanged: !!req.body?.apiKey || !!req.body?.clearKey, dailyLimit: req.body?.dailyLimit });
+        res.json({ message: 'Saved' });
+    } catch (e: any) { res.status(400).json({ message: e.message }); }
+});
+router.post('/ai-settings/test', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { testAi } = await import('../lib/aiAssistant');
+        const reply = await testAi(req.body || {});
+        res.json({ ok: true, message: `Connected — the model replied "${reply.slice(0, 40)}".` });
+    } catch (e: any) { res.status(400).json({ ok: false, message: e.message }); }
+});
+
+// ─── Google Calendar (OAuth) — owner sets the Google Cloud OAuth client every school's
+// "Connect Google Calendar" button uses. The secret is never sent back to the browser. ────
+router.get('/calendar-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+        const { googleCalendarEnv, publicGoogleCalendarConfig } = await import('../lib/googleCalendar');
+        res.json(publicGoogleCalendarConfig(await googleCalendarEnv()));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.post('/calendar-settings', async (req, res) => {
+    const c = ownerOf(req); if (!c) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['super_owner', 'owner'].includes(String(c.role || '').toLowerCase())) return res.status(403).json({ message: 'Only an owner can change the Google Calendar settings.' });
+    try {
+        const { saveGoogleCalendarConfig } = await import('../lib/googleCalendar');
+        await saveGoogleCalendarConfig(req.body || {});
+        const { ownerAudit } = await import('../controllers/owner.controller');
+        await ownerAudit(req as any, 'GOOGLE_CALENDAR_SETTINGS_UPDATED', 'Platform', { clientIdChanged: !!req.body?.clientId, secretChanged: !!req.body?.clientSecret || !!req.body?.clearSecret, redirectUriChanged: !!req.body?.redirectUri });
         res.json({ message: 'Saved' });
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });

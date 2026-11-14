@@ -4,8 +4,13 @@ import { ObjectId, Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../services/communications.service';
 import { accessibleStudentIds } from '../lib/dataScope';
-import { resolveMpesaConfig, applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, checkStkAndComplete, pullTransactions, registerPullUrl } from '../services/mpesa.service';
+import { applyMpesaPayment, transactionStatus, platformCallbackBase, platformCallbackBaseV1, stkPush, isMpesaConfigured, pullTransactions } from '../services/mpesa.service';
+import {
+    listAccounts as listMpesaAccounts, getAccount as getMpesaAccount, getDefaultAccount as getDefaultMpesaAccount,
+    toConfig as toMpesaConfig, accountCodes, checkStkAndComplete,
+} from '../services/mpesaAccounts.service';
 import { applyScholarshipsToInvoice } from '../services/feeAid.service';
+import { feeStructureGuard, feeStructureConflicts, conflictMessage } from '../lib/feeStructureGuard';
 import { nextInvoiceNo, getInvoiceFormat, saveInvoiceFormat, previewInvoiceNo } from '../lib/invoiceNumbering';
 const getRequestDb = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
 
@@ -181,51 +186,59 @@ router.put('/settings/invoice-numbering', requireRole('ADMIN'), async (req: Requ
 router.get('/fees/till-transactions', async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(tenantDb).catch(() => null as any);
-        const settings = await tenantDb.collection('mpesa_settings').findOne({}).catch(() => null as any);
-        // Match on every shortcode this school has ever been known by: the currently
-        // configured Paybill/Till, AND whatever number C2B URLs were actually
-        // registered against (registerC2BUrls lets the operator override the store
-        // number at registration time, so it can differ from cfg.shortcode/tillNumber
-        // if settings were edited afterwards — without this, real incoming C2B
-        // payments land in mpesa_c2b_payments tagged with the registered shortcode
-        // but never show up here because the filter only looked at the current config).
-        const codes = [cfg?.shortcode, cfg?.tillNumber, settings?.registeredShortCode]
-            .map((v: any) => String(v || '').trim()).filter(Boolean);
-        const uniqueCodes = [...new Set(codes)];
+        const accounts = await listMpesaAccounts(tenantDb).catch(() => []);
+        // Match on every shortcode ANY of this school's accounts has ever been known
+        // by: each account's configured Paybill/Till, AND whatever number C2B URLs
+        // were actually registered against (registration lets the operator override
+        // the store number, so it can differ from the saved shortcode/tillNumber if
+        // settings were edited afterwards — without this, real incoming C2B payments
+        // land in mpesa_c2b_payments tagged with the registered shortcode but never
+        // show up here because the filter only looked at the current config).
+        const uniqueCodes = [...new Set(accounts.flatMap(accountCodes))];
         const { code, phone, name, from, to } = req.query as any;
         const fromD = from ? new Date(from) : null;
         const toD = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59); return d; })() : null;
 
-        type Row = { code: string; phone: string; name: string; account: string; amount: number; shortcode: string; paidAt: any; source: string };
+        type Row = { code: string; phone: string; name: string; account: string; amount: number; shortcode: string; paidAt: any; source: string; assigned: boolean };
         const all: Row[] = [];
 
-        // 1) Raw C2B confirmations (meta DB) for this school's shortcode/till.
-        if (uniqueCodes.length) {
-            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: uniqueCodes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
-            c2b.forEach((r: any) => all.push({
-                code: r.TransID || '', phone: r.MSISDN || '',
-                name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
-                account: r.BillRefNumber || '', amount: Number(r.TransAmount) || 0,
-                shortcode: r.BusinessShortCode || '', paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null), source: 'C2B',
-            }));
-        }
-
-        // 2) The tenant's applied payments (STK push, C2B and wallet flow through here).
-        //    This is where most real data lives, so the page works even without C2B URLs.
+        // 1) The tenant's applied payments (STK push, C2B and wallet flow through
+        //    here once matched to a student) — these are the ASSIGNED rows, and
+        //    take priority over a raw C2B confirmation of the same code (below),
+        //    so an already-assigned payment never shows as still needing one.
         const pays = await tenantDb.collection('payments').find({ is_voided: { $ne: true } }).sort({ createdAt: -1 }).limit(5000).toArray().catch(() => []);
+        const appliedCodes = new Set<string>();
         pays.forEach((p: any) => {
             const m = String(p.method || p.payment_mode || '').toUpperCase();
             if (!/MPESA|M-PESA|MOBILE|PAYBILL|TILL|WALLET/.test(m)) return;   // M-PESA / wallet only
+            const pcode = (p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '').toUpperCase();
+            if (pcode) appliedCodes.add(pcode);
             all.push({
                 code: p.mpesaCode || p.transactionId || p.reference || p.receipt_no || '',
                 phone: p.phone || '', name: p.studentName || p.payerName || '—',
                 account: p.registrationNo || p.account || '', amount: Number(p.amount) || 0,
-                shortcode: uniqueCodes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA',
+                shortcode: uniqueCodes[0] || '', paidAt: p.payment_date || p.createdAt || null, source: m.includes('WALLET') ? 'Wallet' : 'M-PESA', assigned: true,
             });
         });
 
-        // Dedupe by M-PESA code (a C2B row and its applied payment can both appear).
+        // 2) Raw C2B confirmations (meta DB) for this school's shortcode/till that
+        //    haven't been applied to a student yet — these are the UNASSIGNED rows
+        //    the admin can act on directly from this page.
+        if (uniqueCodes.length) {
+            const c2b = await getMetaDb().collection('mpesa_c2b_payments').find({ BusinessShortCode: { $in: uniqueCodes } }).sort({ receivedAt: -1 }).limit(3000).toArray().catch(() => []);
+            c2b.forEach((r: any) => {
+                const code = String(r.TransID || '').toUpperCase();
+                if (code && appliedCodes.has(code)) return;   // already assigned — the payments row above already represents it
+                all.push({
+                    code: r.TransID || '', phone: r.MSISDN || '',
+                    name: [r.FirstName, r.MiddleName, r.LastName].filter(Boolean).join(' ').trim() || '—',
+                    account: r.BillRefNumber || '', amount: Number(r.TransAmount) || 0,
+                    shortcode: r.BusinessShortCode || '', paidAt: r.receivedAt || (r.TransTime ? parseMpesaTime(r.TransTime) : null), source: 'C2B', assigned: false,
+                });
+            });
+        }
+
+        // Dedupe by M-PESA code (safety net — a code should only ever appear once above).
         const seen = new Set<string>();
         let data = all.filter(r => { const k = (r.code || '').toUpperCase(); if (k && seen.has(k)) return false; if (k) seen.add(k); return true; });
 
@@ -238,7 +251,8 @@ router.get('/fees/till-transactions', async (req: Request, res: Response) => {
 
         data.sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
         const total = data.reduce((s, d) => s + d.amount, 0);
-        res.json({ data, summary: { count: data.length, total }, configured: uniqueCodes.length > 0, shortcodes: uniqueCodes });
+        const unassigned = data.filter(d => !d.assigned).length;
+        res.json({ data, summary: { count: data.length, total, unassigned }, configured: uniqueCodes.length > 0, shortcodes: uniqueCodes });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -275,8 +289,9 @@ router.post('/fees/till-transactions/apply', async (req: Request, res: Response)
         // ResultURL). Only attempted when reconciliation credentials exist.
         let verification: 'queued' | 'unavailable' = 'unavailable';
         try {
-            const cfg = await resolveMpesaConfig(db);
-            if (cfg.initiator && cfg.securityCredential && platformCallbackBase()) {
+            const account = await getDefaultMpesaAccount(db);
+            const cfg = account && toMpesaConfig(account);
+            if (cfg?.initiator && cfg.securityCredential && platformCallbackBase()) {
                 const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
                 await transactionStatus(cfg, { transactionId: mpesaCode, resultUrl: `${base}/pesa/transaction-status/result`, queueUrl: `${base}/pesa/timeout`, remarks: 'Till payment verification' });
                 verification = 'queued';
@@ -302,9 +317,10 @@ router.post('/fees/till-transactions/verify', async (req: Request, res: Response
         const already = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode }, { transactionId: mpesaCode }] });
         if (already) return res.json({ status: 'recorded', amount: already.amount, message: `Already recorded (receipt ${already.receipt_no}).` });
 
-        const cfg = await resolveMpesaConfig(db);
-        if (!cfg.initiator || !cfg.securityCredential) {
-            return res.json({ status: 'unavailable', message: 'Automatic verification needs an API Initiator + Security Credential (Settings → M-PESA → Reconciliation). You can still record the payment manually from the SMS.' });
+        const account = await getDefaultMpesaAccount(db);
+        const cfg = account && toMpesaConfig(account);
+        if (!cfg?.initiator || !cfg.securityCredential) {
+            return res.json({ status: 'unavailable', message: 'Automatic verification needs an API Initiator + Security Credential on an M-PESA account (Integrations → M-PESA → Reconciliation). You can still record the payment manually from the SMS.' });
         }
         if (!platformCallbackBase()) return res.json({ status: 'unavailable', message: 'Platform callback URL is not configured by the operator.' });
 
@@ -335,13 +351,17 @@ router.get('/fees/till-transactions/verify-status', async (req: Request, res: Re
 router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const { invoice_id, invoiceId, studentId, phone, amount } = req.body || {};
+        const { invoice_id, invoiceId, studentId, phone, amount, accountId } = req.body || {};
         const invId = invoice_id || invoiceId;
         const amt = Number(amount) || 0;
         if (!phone || amt <= 0) return res.status(400).json({ message: 'A phone number and a valid amount are required.' });
 
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not set up for this school yet (Settings → M-PESA Integration).' });
+        // When this school has more than one M-PESA account, the cashier may pick
+        // which one the prompt is for; otherwise the default account is used.
+        const account = accountId ? await getMpesaAccount(db, String(accountId)) : await getDefaultMpesaAccount(db);
+        if (!account) return res.status(400).json({ message: 'M-PESA is not set up for this school yet (Integrations → M-PESA).' });
+        const cfg = toMpesaConfig(account);
+        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: `M-PESA account "${account.name}" is missing credentials (Integrations → M-PESA).` });
         if (!cfg.callbackBase) return res.status(400).json({ message: 'M-PESA callback URL is not configured by the operator.' });
 
         // Resolve the student (for account reference + records).
@@ -360,6 +380,7 @@ router.post('/schools/:sid/payments/stk', requireRole('ADMIN'), async (req: Requ
             checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose: 'fees',
             tenantDbName: (req as any).tenantContext?.databaseName, studentId: student ? String(student._id) : undefined,
             studentName: student?.studentName, registrationNo: regNo, invoiceId: invId || null,
+            accountId: String(account._id),
             amount: amt, phone, status: 'pending', applied: false, createdAt: new Date(),
         });
         res.json({ ok: true, checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Prompt sent — ask the parent to enter their M-PESA PIN.' });
@@ -381,12 +402,15 @@ router.get('/schools/:sid/payments/stk-status', requireRole('ADMIN'), async (req
 router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const db = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
-        if (cfg.env !== 'production') return res.status(400).json({ message: 'Sync only works in Production. Switch Environment to production in M-PESA settings.' });
-        // The Pull API must be registered (separate Daraja product) before querying.
-        const setRow: any = (await db.collection('mpesa_settings').findOne({})) || {};
-        if (!setRow.pullRegistered) return res.status(400).json({ message: 'The Pull API is not registered yet. Go to Settings → M-PESA Integration → "Register Pull API" first (and ensure the Pull product is activated for your shortcode on the Daraja portal).' });
+        const accounts = (await listMpesaAccounts(db)).filter(a => a.enabled !== false);
+        if (!accounts.length) return res.status(400).json({ message: 'M-PESA is not configured for this school.' });
+        const pullReady = accounts.filter(a => a.env === 'production' && a.pullRegistered);
+        if (!pullReady.length) {
+            const anyProd = accounts.some(a => a.env === 'production');
+            return res.status(400).json({ message: anyProd
+                ? 'The Pull API is not registered on any account yet. Go to Integrations → M-PESA → an account → "Register Pull API" first (and ensure the Pull product is activated for its shortcode on the Daraja portal).'
+                : 'Sync only works in Production. Switch at least one account\'s Environment to production in Integrations → M-PESA.' });
+        }
 
         // Default to the last 7 days if no range supplied.
         const { from, to } = req.body || {};
@@ -396,99 +420,90 @@ router.post('/fees/till-transactions/sync', requireRole('ADMIN'), async (req: Re
         const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 
         const meta = getMetaDb();
-        let imported = 0, matched = 0;
-        // For a Till, the money lands on the till number (PartyB), not the store
-        // number — query the till first, then fall back to the store/shortcode.
-        // Also try registeredShortCode: the number C2B URLs were actually registered
-        // against can differ from the currently-saved shortcode/tillNumber if an
-        // operator used the storeNumber override at registration time or edited
-        // settings afterwards — without it, Pull queries the wrong number and
-        // always reports "no transactions" even though payments are flowing fine.
-        const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
-        const candidates = Array.from(new Set([
-            ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
-            String(cfg.shortcode).trim(),
-            ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
-            ...(setRow.registeredShortCode ? [String(setRow.registeredShortCode).trim()] : []),
-        ].filter(Boolean)));
-        const codeSet = [cfg.shortcode, cfg.tillNumber, setRow.registeredShortCode].map(v => String(v || '').trim()).filter(Boolean);
+        let imported = 0, matched = 0, totalSeen = 0;
+        const perAccount: { account: string; queriedCode: string; seen: number }[] = [];
 
-        // Try each candidate number; use the first that returns transactions.
-        let queriedCode = candidates[0];
-        let totalSeen = 0;
-        for (const sc of candidates) {
-            let offset = 0, pages = 0, seenHere = 0;
-            while (pages < 20) {
-            const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset, sc);
-            // Response[0] is the array of transaction objects.
-            const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
-            if (!batch.length) break;
-            pages++; seenHere += batch.length;
-            for (const t of batch) {
-                const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
-                if (!transId) continue;
-                const amount = Number(t.amount ?? t.transactionAmount ?? t.TransAmount) || 0;
-                const msisdn = String(t.msisdn || t.MSISDN || t.phoneNumber || '');
-                const acct = String(t.billReferenceNumber || t.BillRefNumber || t.accountReference || '');
-                const when = t.trxDate || t.transactionDate || t.TransTime;
-                const upd = await meta.collection('mpesa_c2b_payments').updateOne(
-                    { TransID: transId },
-                    { $setOnInsert: {
-                        TransID: transId, BusinessShortCode: codeSet[0] || cfg.shortcode,
-                        TransAmount: amount, MSISDN: msisdn, BillRefNumber: acct,
-                        FirstName: t.firstName || t.FirstName || '', MiddleName: '', LastName: t.lastName || t.LastName || '',
-                        receivedAt: when ? new Date(when) : new Date(), source: 'pull',
-                    } },
-                    { upsert: true },
-                );
-                if (upd.upsertedCount) {
-                    imported++;
-                    // Auto-match by account number → apply to the student's fees.
-                    if (acct) {
-                        try {
-                            const stu = await db.collection('students').findOne({ $or: [{ registrationNo: acct }, { admNo: acct }] });
-                            if (stu) {
-                                const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode: transId }, { transactionId: transId }] });
-                                if (!dup) { await applyMpesaPayment(db, { studentId: String(stu._id), studentName: stu.studentName, registrationNo: acct, amount, receipt: transId, phone: msisdn }); matched++; }
-                            }
-                        } catch { /* skip match */ }
+        // Each account may have its own shortcode/till — pull each one separately.
+        for (const account of pullReady) {
+            const cfg = toMpesaConfig(account);
+            const isBuyGoods = cfg.txType === 'CustomerBuyGoodsOnline';
+            // For a Till, the money lands on the till number (PartyB), not the store
+            // number — query the till first, then fall back to the store/shortcode.
+            // Also try registeredShortCode: the number C2B URLs were actually registered
+            // against can differ from the currently-saved shortcode/tillNumber if an
+            // operator used the storeNumber override at registration time or edited
+            // settings afterwards — without it, Pull queries the wrong number and
+            // always reports "no transactions" even though payments are flowing fine.
+            const candidates = Array.from(new Set([
+                ...(isBuyGoods && cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+                String(cfg.shortcode).trim(),
+                ...(cfg.tillNumber ? [String(cfg.tillNumber).trim()] : []),
+                ...(account.registeredShortCode ? [String(account.registeredShortCode).trim()] : []),
+            ].filter(Boolean)));
+            const codeSet = accountCodes(account);
+
+            let queriedCode = candidates[0] || '';
+            let seenForAccount = 0;
+            for (const sc of candidates) {
+                let offset = 0, pages = 0, seenHere = 0;
+                while (pages < 20) {
+                const data: any = await pullTransactions(cfg, fmt(start), fmt(end), offset, sc);
+                // Response[0] is the array of transaction objects.
+                const batch: any[] = (data?.Response && Array.isArray(data.Response[0])) ? data.Response[0] : (Array.isArray(data?.Response) ? data.Response : []);
+                if (!batch.length) break;
+                pages++; seenHere += batch.length;
+                for (const t of batch) {
+                    const transId = String(t.transactionId || t.TransID || t.receiptNo || '').toUpperCase();
+                    if (!transId) continue;
+                    const amount = Number(t.amount ?? t.transactionAmount ?? t.TransAmount) || 0;
+                    const msisdn = String(t.msisdn || t.MSISDN || t.phoneNumber || '');
+                    const acct = String(t.billReferenceNumber || t.BillRefNumber || t.accountReference || '');
+                    const when = t.trxDate || t.transactionDate || t.TransTime;
+                    const upd = await meta.collection('mpesa_c2b_payments').updateOne(
+                        { TransID: transId },
+                        { $setOnInsert: {
+                            TransID: transId, BusinessShortCode: codeSet[0] || cfg.shortcode,
+                            TransAmount: amount, MSISDN: msisdn, BillRefNumber: acct,
+                            FirstName: t.firstName || t.FirstName || '', MiddleName: '', LastName: t.lastName || t.LastName || '',
+                            receivedAt: when ? new Date(when) : new Date(), source: 'pull',
+                        } },
+                        { upsert: true },
+                    );
+                    if (upd.upsertedCount) {
+                        imported++;
+                        // Auto-match by account number → apply to the student's fees.
+                        if (acct) {
+                            try {
+                                const stu = await db.collection('students').findOne({ $or: [{ registrationNo: acct }, { admNo: acct }] });
+                                if (stu) {
+                                    const dup = await db.collection('payments').findOne({ is_voided: { $ne: true }, $or: [{ mpesaCode: transId }, { transactionId: transId }] });
+                                    if (!dup) { await applyMpesaPayment(db, { studentId: String(stu._id), studentName: stu.studentName, registrationNo: acct, amount, receipt: transId, phone: msisdn }); matched++; }
+                                }
+                            } catch { /* skip match */ }
+                        }
                     }
                 }
+                offset += batch.length;
+                }
+                queriedCode = sc;
+                seenForAccount += seenHere;
+                if (seenHere > 0) break;   // found data on this number; stop trying others for this account
             }
-            offset += batch.length;
-            }
-            queriedCode = sc;
-            totalSeen += seenHere;
-            if (seenHere > 0) break;   // found data on this number; stop trying others
+            totalSeen += seenForAccount;
+            perAccount.push({ account: account.name, queriedCode, seen: seenForAccount });
         }
         res.json({
-            ok: true, imported, matched, totalSeen, shortcode: queriedCode, triedCodes: candidates, from: fmt(start), to: fmt(end),
+            ok: true, imported, matched, totalSeen, accounts: perAccount, from: fmt(start), to: fmt(end),
             message: imported
                 ? `Pulled ${imported} new transaction(s); ${matched} auto-matched to students.`
                 : totalSeen
                     ? `Safaricom returned ${totalSeen} transaction(s) but all were already recorded.`
-                    : `Safaricom returned no transactions for number(s) ${candidates.join(', ')} in that period. For a Till, money lands on the till number (not the store number) — make sure the Till Number is filled in M-PESA settings, and widen the date range.`,
+                    : `Safaricom returned no transactions for any account in that period. For a Till, money lands on the till number (not the store number) — make sure the Till Number is filled in for each M-PESA account, and widen the date range.`,
         });
     } catch (e: any) {
-        const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Settings → M-PESA).` : e.message;
+        const msg = /register/i.test(e.message) ? `${e.message} — register the Pull API first (Integrations → M-PESA).` : e.message;
         res.status(400).json({ message: msg });
     }
-});
-
-// One-time Pull API registration for the school's shortcode.
-router.post('/integrations/mpesa/register-pull', requireRole('ADMIN'), async (req: Request, res: Response) => {
-    try {
-        const db = getRequestDb(req);
-        const cfg = await resolveMpesaConfig(db);
-        if (!isMpesaConfigured(cfg)) return res.status(400).json({ message: 'Configure your M-PESA credentials first.' });
-        if (!platformCallbackBase()) return res.status(400).json({ message: 'Platform callback URL is not configured by the operator.' });
-        const nominated = String(req.body?.nominatedNumber || '').replace(/\D/g, '');
-        if (!/^2547\d{8}$/.test(nominated) && !/^07\d{8}$/.test(nominated)) return res.status(400).json({ message: 'Provide the nominated phone number registered on the M-PESA org portal (e.g. 0712345678).' });
-        const base = platformCallbackBaseV1().replace(/mpesa/gi, 'pesa');
-        const result = await registerPullUrl(cfg, `${base}/pesa/pull/result`, nominated.startsWith('07') ? '254' + nominated.slice(1) : nominated);
-        await db.collection('mpesa_settings').updateOne({}, { $set: { pullRegistered: true, pullRegisteredAt: new Date(), pullNominatedNumber: nominated } }, { upsert: true });
-        res.json({ ok: true, result, message: 'Pull API registered — you can now Sync transactions from Safaricom.' });
-    } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
 // ── Org context for the CURRENT school (for the in-app branch switcher) ───────
@@ -748,19 +763,19 @@ router.post('/payments/:id/reverse', requireRole('ADMIN'), async (req: Request, 
     } catch (e: any) { res.status(400).json({ message: e.message }); }
 });
 
-// Re-link C2B inbox rows that arrived BEFORE this school's mpesa_settings had the
+// Re-link C2B inbox rows that arrived BEFORE this school's M-PESA account had the
 // right shortcode on file (e.g. registered against a store number that differed
 // from the configured Paybill/Till at the time) — they were stored with no
-// tenantDbName and so never showed up in this Inbox. Re-resolves against the
-// school's current shortcode/tillNumber/registeredShortCode and claims any match.
+// tenantDbName and so never showed up in this Inbox. Re-resolves against every
+// account's current shortcode/tillNumber/registeredShortCode and claims any match.
 router.post('/payments/inbox/reclaim-orphans', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
         const tenantDb = getRequestDb(req);
         const tenant = (req as any).tenantContext;
         if (!tenant?.databaseName) return res.status(400).json({ message: 'No tenant context.' });
-        const s: any = (await tenantDb.collection('mpesa_settings').findOne({})) || {};
-        const codes = [s.shortcode, s.tillNumber, s.registeredShortCode].map((v: any) => String(v || '').trim()).filter(Boolean);
-        if (!codes.length) return res.status(400).json({ message: 'No M-PESA shortcode configured for this school.' });
+        const accounts = await listMpesaAccounts(tenantDb);
+        const codes = [...new Set(accounts.flatMap(accountCodes))];
+        if (!codes.length) return res.status(400).json({ message: 'No M-PESA account configured for this school.' });
 
         const meta = getMetaDb();
         const orphans = await meta.collection('c2b_inbox').find({ tenantDbName: null, BusinessShortCode: { $in: codes } }).toArray();
@@ -815,7 +830,7 @@ router.get('/schools/:sid/fee-structures', async (req: Request, res: Response) =
 });
 
 // POST /schools/:sid/fee-structures
-router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.post('/schools/:sid/fee-structures', requireRole('ADMIN'), feeStructureGuard, async (req: Request, res: Response) => {
     try {
     const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
@@ -882,14 +897,16 @@ router.get('/schools/:sid/fee-structures/:id', async (req: Request, res: Respons
 });
 
 // PUT /schools/:sid/fee-structures/:id
-router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.put('/schools/:sid/fee-structures/:id', requireRole('ADMIN'), feeStructureGuard, async (req: Request, res: Response) => {
     try {
     const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
-        const { name, items, discount_type, discount_value, class_ids } = req.body;
+        const { name, items, discount_type, discount_value, class_ids, academic_year_id, semester_id } = req.body;
 
-        const updateData: any = {};
+        const updateData: any = { updatedAt: new Date().toISOString() };
         if (name) updateData.name = name;
+        if (academic_year_id) updateData.academic_year_id = String(academic_year_id);
+        if (semester_id) updateData.semester_id = String(semester_id);
         if (class_ids) updateData.class_ids = class_ids;
         if (items) {
             updateData.items = items.map((item: any) => ({
@@ -995,6 +1012,10 @@ router.post('/schools/:sid/fee-structures/:id/duplicate', requireRole('ADMIN'), 
             createdAt: new Date().toISOString()
         };
 
+        const clash = await feeStructureConflicts(db, duplicated);
+        if (clash.length) {
+            return res.status(409).json({ data: null, meta: {}, errors: [{ code: 'CLASS_ALREADY_IN_TERM_STRUCTURE', message: conflictMessage(clash) }] });
+        }
         await db.collection('fee_structures').insertOne(duplicated);
         res.status(201).json({ data: duplicated, meta: {}, errors: [] });
     } catch (e: any) {
@@ -1018,83 +1039,96 @@ const getDaysOverdue = (invoice: any) => {
     return 0;
 };
 
-// GET /schools/:sid/invoices
+// GET /schools/:sid/invoices — list with filters (year, term, status, class, search) + status counts and totals
 router.get('/schools/:sid/invoices', async (req: Request, res: Response) => {
     try {
-    const db = getRequestDb(req);
+        const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
-        const { student_id, class_id, academic_year_id, semester_id, status, search, page = 1, limit = 20, sort_by = 'createdAt', sort_dir = 'DESC' } = req.query;
+        const { student_id, class_id, class_name, academic_year_id, semester_id, status, search, page = 1, limit = 20, sort_by = 'createdAt', sort_dir = 'DESC' } = req.query;
 
-        const query: any = {
-            $or: [
-                { schoolId },
-                { schoolId: { $exists: false } }
-            ]
-        };
-        if (student_id) query.student_id = student_id.toString();
-        if (class_id) query.class_id = class_id.toString();
-        if (academic_year_id) query.academic_year_id = academic_year_id.toString();
-        if (semester_id) query.semester_id = semester_id.toString();
-        if (status && status !== 'ALL') query.status = status.toString();
-
-        if (search) {
-            const matchedStudents = await db.collection('students').find({
-                $or: [
-                    { studentName: { $regex: search.toString(), $options: 'i' } },
-                    { firstName: { $regex: search.toString(), $options: 'i' } },
-                    { lastName: { $regex: search.toString(), $options: 'i' } },
-                    { registrationNo: { $regex: search.toString(), $options: 'i' } },
-                    { studentId: { $regex: search.toString(), $options: 'i' } }
-                ]
-            }).toArray();
-            const studentIds = matchedStudents.map((s: any) => s._id.toString());
-
-            query.$and = [
-                {
-                    $or: [
-                        { student_id: { $in: studentIds } },
-                        { studentId: { $in: studentIds } },
-                        { invoice_no: { $regex: search.toString(), $options: 'i' } }
-                    ]
-                }
-            ];
+        const base: any = { $and: [{ $or: [{ schoolId }, { schoolId: { $exists: false } }] }] };
+        if (student_id) base.$and.push({ student_id: student_id.toString() });
+        if (class_id) base.$and.push({ class_id: class_id.toString() });
+        if (academic_year_id) base.$and.push({ academic_year_id: academic_year_id.toString() });
+        if (semester_id) base.$and.push({ semester_id: semester_id.toString() });
+        if (class_name) {
+            const esc = String(class_name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const rx = { $regex: `^\\s*${esc}(\\s|$)`, $options: 'i' };
+            const inClass = await db.collection('students').find({ $or: [{ studentClass: rx }, { currentClass: rx }] }, { projection: { _id: 1 } }).toArray();
+            base.$and.push({ $or: [{ class_name: rx }, { classAtTime: rx }, { class_id: rx }, { student_id: { $in: inClass.map((x: any) => x._id.toString()) } }] });
+        }
+        if (search && String(search).trim()) {
+            const q = String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const matched = await db.collection('students').find({ $or: [
+                { studentName: { $regex: q, $options: 'i' } }, { firstName: { $regex: q, $options: 'i' } }, { lastName: { $regex: q, $options: 'i' } },
+                { registrationNo: { $regex: q, $options: 'i' } }, { admNo: { $regex: q, $options: 'i' } }, { studentId: { $regex: q, $options: 'i' } },
+            ] }, { projection: { _id: 1 } }).limit(500).toArray();
+            base.$and.push({ $or: [
+                { student_id: { $in: matched.map((x: any) => x._id.toString()) } },
+                { invoice_no: { $regex: q, $options: 'i' } },
+                { class_name: { $regex: q, $options: 'i' } },
+            ] });
         }
 
-        const p = parseInt(page as string) || 1;
-        const l = parseInt(limit as string) || 20;
-        const skip = (p - 1) * l;
+        // Counts per status for the same filters (cards on the page), and money totals.
+        const groups = await db.collection('invoices').aggregate([
+            { $match: base },
+            { $group: { _id: '$status', n: { $sum: 1 }, due: { $sum: { $ifNull: ['$total_due', 0] } }, paid: { $sum: { $ifNull: ['$amount_paid', 0] } }, bal: { $sum: { $ifNull: ['$balance', 0] } } } },
+        ]).toArray();
+        const counts: any = { ALL: 0, UNPAID: 0, PARTIAL: 0, PAID: 0, OVERDUE: 0, VOIDED: 0, WAIVED: 0 };
+        const money = { billed: 0, collected: 0, outstanding: 0 };
+        for (const g of groups) {
+            const k = String(g._id || 'UNPAID').toUpperCase();
+            counts[k] = (counts[k] || 0) + g.n;
+            if (k === 'VOIDED') continue;
+            counts.ALL += g.n;
+            money.billed += g.due; money.collected += g.paid;
+            if (k !== 'WAIVED') money.outstanding += Math.max(0, g.bal);
+        }
 
+        const query: any = { ...base, $and: [...base.$and] };
+        const st = String(status || 'ALL').toUpperCase();
+        if (st === 'ALL') query.$and.push({ status: { $ne: 'VOIDED' } });
+        else if (st === 'UNPAID') query.$and.push({ status: { $in: ['UNPAID', 'OVERDUE'] } });
+        else query.$and.push({ status: st });
+
+        const p = Math.max(1, parseInt(page as string) || 1);
+        const l = Math.min(200, Math.max(1, parseInt(limit as string) || 20));
         const total = await db.collection('invoices').countDocuments(query);
-        const docs = await db.collection('invoices')
-            .find(query)
-            .sort({ [sort_by as string]: sort_dir === 'DESC' ? -1 : 1 })
-            .skip(skip)
-            .limit(l)
-            .toArray();
+        const docs = await db.collection('invoices').find(query)
+            .sort({ [String(sort_by)]: sort_dir === 'ASC' ? 1 : -1, _id: -1 })
+            .skip((p - 1) * l).limit(l).toArray();
 
-        // Hydrate invoices with student information & calculate days overdue
-        const hydrated = await Promise.all(docs.map(async (doc: any) => {
-            let student = null;
-            try {
-                if (doc.student_id) {
-                    student = await db.collection('students').findOne({ _id: new ObjectId(doc.student_id) });
-                }
-            } catch {}
-            const days_overdue = getDaysOverdue(doc);
+        // One lookup each for the students, terms and years on this page.
+        const oids = (xs: any[]) => xs.map(x => { try { return new ObjectId(String(x)); } catch { return null; } }).filter(Boolean) as ObjectId[];
+        const [studs, terms, years] = await Promise.all([
+            db.collection('students').find({ _id: { $in: oids([...new Set(docs.map((d: any) => d.student_id).filter(Boolean))]) } }).toArray(),
+            db.collection('terms').find({ _id: { $in: oids([...new Set(docs.map((d: any) => d.semester_id).filter(Boolean))]) } }).toArray().catch(() => []),
+            db.collection('academic_years').find({ _id: { $in: oids([...new Set(docs.map((d: any) => d.academic_year_id).filter(Boolean))]) } }).toArray().catch(() => []),
+        ]);
+        const sMap = new Map(studs.map((x: any) => [x._id.toString(), x]));
+        const tMap = new Map(terms.map((x: any) => [x._id.toString(), x]));
+        const yMap = new Map(years.map((x: any) => [x._id.toString(), x]));
+        const hydrated = docs.map((doc: any) => {
+            const student: any = sMap.get(String(doc.student_id));
+            const term: any = tMap.get(String(doc.semester_id));
+            const year: any = yMap.get(String(doc.academic_year_id));
             return {
                 ...doc,
-                due_date: doc.due_date || doc.dueDate,
-                days_overdue,
+                due_date: doc.due_date || doc.dueDate || null,
+                days_overdue: getDaysOverdue(doc),
                 student_name: student?.studentName || `${student?.firstName || ''} ${student?.lastName || ''}`.trim() || doc.studentName || 'N/A',
-                admission_no: student?.registrationNo || student?.studentId || doc.registrationNo || 'N/A',
-                class_name: student?.studentClass || student?.currentClass || doc.class_name || doc.class_id || doc.classId || '—'
+                admission_no: student?.registrationNo || student?.admNo || student?.studentId || doc.registrationNo || '',
+                class_name: doc.class_name || doc.classAtTime || student?.studentClass || student?.currentClass || (/^[0-9a-f]{24}$/i.test(String(doc.class_id || '')) ? '' : doc.class_id) || '—',
+                term_label: doc.term_label || term?.name || '',
+                year_label: doc.year_label || year?.name || (year?.year ? String(year.year) : ''),
             };
-        }));
+        });
 
         res.json({
             data: hydrated,
-            meta: { page: p, limit: l, total, pages: Math.ceil(total / l) },
-            errors: []
+            meta: { page: p, limit: l, total, pages: Math.max(1, Math.ceil(total / l)), counts, money, paid: counts.PAID, unpaid: counts.UNPAID + counts.OVERDUE, partial: counts.PARTIAL },
+            errors: [],
         });
     } catch (e: any) {
         res.status(500).json({ data: null, meta: {}, errors: [{ code: 'SERVER_ERROR', message: e.message }] });
@@ -1195,10 +1229,18 @@ router.post('/schools/:sid/invoices', requireRole('ADMIN'), async (req: Request,
             updatedAt: new Date().toISOString()
         };
 
-        // Stamp the class name the student was in when invoiced (for per-class history).
+        // Stamp the class the student was in and the term names (for lists, filters and history).
         try {
             const stu = await db.collection('students').findOne({ _id: new ObjectId(String(student_id)) }, { projection: { studentClass: 1, className: 1, currentClass: 1 } }).catch(() => null);
-            (invoice as any).classAtTime = stu?.studentClass || stu?.className || stu?.currentClass || '';
+            (invoice as any).classAtTime = stu?.studentClass || stu?.currentClass || stu?.className || '';
+            (invoice as any).class_name = (invoice as any).classAtTime;
+            const [t, y] = await Promise.all([
+                db.collection('terms').findOne({ _id: new ObjectId(String(semester_id)) }).catch(() => null),
+                db.collection('academic_years').findOne({ _id: new ObjectId(String(academic_year_id)) }).catch(() => null),
+            ]);
+            (invoice as any).term_label = t?.name || '';
+            (invoice as any).year_label = y?.name || (y?.year ? String(y.year) : '');
+            (invoice as any).fee_structure_name = structure.name || '';
         } catch { /* optional */ }
 
         const ins = await db.collection('invoices').insertOne(invoice);
@@ -1384,244 +1426,215 @@ router.get('/schools/:sid/invoices/bulk/:job_id/status', async (req: Request, re
     }
 });
 
-// GET /schools/:sid/fees/invoice-jobs
+// GET /schools/:sid/fees/invoice-jobs — recent class-wide generation runs
 router.get('/schools/:sid/fees/invoice-jobs', async (req: Request, res: Response) => {
     try {
-    const db = getRequestDb(req);
+        const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
-        const jobs = await db.collection('bulk_jobs').find({ schoolId }).sort({ createdAt: -1 }).toArray();
+        const jobs = await db.collection('bulk_jobs').find({ schoolId }).sort({ createdAt: -1 }).limit(25).toArray();
         res.json({ data: jobs, meta: {}, errors: [] });
     } catch (e: any) {
         res.status(500).json({ data: null, meta: {}, errors: [{ code: 'SERVER_ERROR', message: e.message }] });
     }
 });
 
-// POST /schools/:sid/fees/invoice-jobs/precheck — how many target students already have an active invoice this term
+// GET /schools/:sid/fees/term-coverage?academic_year_id&semester_id
+// Every class with its active learners, how many already have this term's invoice, and the
+// fee structure that will be used — so the admin sees gaps before generating.
+router.get('/schools/:sid/fees/term-coverage', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const schoolId = getSchoolId(req);
+        const yearId = String(req.query.academic_year_id || ''), termId = String(req.query.semester_id || '');
+        if (!yearId || !termId) return res.status(400).json({ data: null, errors: [{ message: 'Choose the academic year and term' }] });
+        const IB = await import('../services/invoiceBuilder.service');
+        const ctx = await IB.loadTermContext(db, yearId, termId);
+        const [classes, students, invoiced] = await Promise.all([
+            db.collection('classes').find({}).toArray(),
+            db.collection('students').find({}).toArray(),
+            db.collection('invoices').distinct('student_id', { schoolId, academic_year_id: yearId, semester_id: termId, status: { $nin: ['VOIDED'] } }),
+        ]);
+        const done = new Set(invoiced.map(String));
+        const rows = classes.map((c: any) => {
+            const name = String(c.name || c.levelName || '').trim();
+            const members = IB.studentsInClasses(students, [name]);
+            const sample = members[0] || { studentClass: name };
+            const plan = IB.planStudentInvoice(sample, ctx);
+            return {
+                className: name,
+                students: members.length,
+                invoiced: members.filter((m: any) => done.has(String(m._id))).length,
+                structure: plan.ok ? { id: String(plan.structure._id), name: plan.structure.name || name, how: plan.how, total: plan.total_due } : null,
+                problem: plan.ok ? null : plan.error,
+            };
+        }).filter((r: any) => r.className).sort((a: any, b: any) => a.className.localeCompare(b.className, undefined, { numeric: true }));
+        res.json({ data: { term: ctx.termLabel, year: ctx.yearLabel, classes: rows } });
+    } catch (e: any) { res.status(500).json({ data: null, errors: [{ message: e.message }] }); }
+});
+
+// GET /schools/:sid/fees/invoice-preview?student_id&academic_year_id&semester_id
+// What this student's invoice for the term would be — same rules as the class-wide run.
+router.get('/schools/:sid/fees/invoice-preview', async (req: Request, res: Response) => {
+    try {
+        const db = getRequestDb(req);
+        const schoolId = getSchoolId(req);
+        const { student_id, academic_year_id, semester_id } = req.query as any;
+        if (!student_id || !academic_year_id || !semester_id) return res.status(400).json({ data: null, errors: [{ message: 'Choose a student, year and term' }] });
+        const student = await db.collection('students').findOne({ _id: new ObjectId(String(student_id)) });
+        if (!student) return res.status(404).json({ data: null, errors: [{ message: 'Student not found' }] });
+        const IB = await import('../services/invoiceBuilder.service');
+        const ctx = await IB.loadTermContext(db, String(academic_year_id), String(semester_id));
+        let plan: any = IB.planStudentInvoice(student, ctx);
+        // A structure chosen by hand (Per Student page) — same line rules, that structure.
+        if (req.query.structure_id) {
+            const chosen = ctx.structures.find((st: any) => String(st._id) === String(req.query.structure_id));
+            if (chosen) {
+                const { line_items, notes } = IB.buildLines(chosen, student, ctx);
+                plan = { ok: true, structure: chosen, how: 'Chosen by hand', line_items, notes, ...IB.totals(line_items, chosen.discount_type, chosen.discount_value) };
+            }
+        }
+        const existing = await db.collection('invoices').findOne({ schoolId, student_id: String(student._id), academic_year_id: String(academic_year_id), semester_id: String(semester_id), status: { $ne: 'VOIDED' } });
+        const forClass = ctx.structures
+            .filter((st: any) => IB.termRank(st, ctx) > 0)
+            .map((st: any) => ({ id: String(st._id), name: st.name || st.className || 'Fee structure', classes: IB.structureClasses(st, ctx), rank: IB.termRank(st, ctx) }));
+        res.json({
+            data: {
+                student: { id: String(student._id), name: IB.studentName(student), className: IB.studentClassName(student), transportZone: student.transportZone || '' },
+                term: ctx.termLabel, year: ctx.yearLabel,
+                plan: plan.ok ? { structureId: String(plan.structure._id), structureName: plan.structure.name, how: plan.how, line_items: plan.line_items, notes: plan.notes, subtotal: plan.subtotal, discount_type: plan.discount_type, discount_value: plan.discount_value, discount_amount: plan.discount_amount, total_due: plan.total_due } : null,
+                problem: plan.ok ? null : plan.error,
+                structures: forClass,
+                existing: existing ? { id: String(existing._id), invoice_no: existing.invoice_no, total_due: existing.total_due, balance: existing.balance, status: existing.status } : null,
+            },
+        });
+    } catch (e: any) { res.status(500).json({ data: null, errors: [{ message: e.message }] }); }
+});
+
+// POST /schools/:sid/fees/invoice-jobs/precheck — how many target students already have an invoice this term
 router.post('/schools/:sid/fees/invoice-jobs/precheck', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-        const metaDb = getRequestDb(req);
-        const tenantDb = (req as any).tenantDb || metaDb;
+        const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const { class_ids, academic_year_id, semester_id } = req.body;
         if (!Array.isArray(class_ids) || !class_ids.length) return res.json({ data: { totalStudents: 0, existing: 0 } });
-        const norm = new Set<string>();
-        class_ids.forEach((c: string) => { norm.add(c); norm.add(c.toLowerCase()); norm.add(c.toUpperCase()); });
-        const list = Array.from(norm);
-        const students = await tenantDb.collection('students').find({ $or: [{ studentClass: { $in: list } }, { currentClass: { $in: list } }] }).toArray();
+        const IB = await import('../services/invoiceBuilder.service');
+        const students = IB.studentsInClasses(await db.collection('students').find({}).toArray(), class_ids);
         const ids = students.map((s: any) => s._id.toString());
-        const existing = ids.length ? await tenantDb.collection('invoices').countDocuments({ schoolId, student_id: { $in: ids }, academic_year_id, semester_id, status: { $ne: 'VOIDED' } }) : 0;
+        const existing = ids.length ? await db.collection('invoices').countDocuments({ schoolId, student_id: { $in: ids }, academic_year_id, semester_id, status: { $ne: 'VOIDED' } }) : 0;
         res.json({ data: { totalStudents: students.length, existing } });
     } catch (e: any) { res.status(500).json({ data: null, errors: [{ message: e.message }] }); }
 });
 
-// POST /schools/:sid/fees/invoice-jobs
+// POST /schools/:sid/fees/invoice-jobs — invoice every active learner in the chosen classes for a term.
+// Each learner gets the fee structure set for their class AND this term (invoiceBuilder.service).
 router.post('/schools/:sid/fees/invoice-jobs', requireRole('ADMIN'), async (req: Request, res: Response) => {
     try {
-    const db = getRequestDb(req);
-        const tenantDb = (req as any).tenantDb || db;   // students & fee_structures live here
+        const db = getRequestDb(req);
         const schoolId = getSchoolId(req);
         const user = (req as any).user;
         const { class_ids, academic_year_id, semester_id, due_date, fine_amount } = req.body;
-        const mode = req.body.mode === 'overwrite' ? 'overwrite' : 'skip';   // duplicate handling
+        const mode = req.body.mode === 'overwrite' ? 'overwrite' : 'skip';
+        const notifyParents = req.body.notify_parents === true;
 
         if (!Array.isArray(class_ids) || class_ids.length === 0 || !academic_year_id || !semester_id) {
-            return res.status(400).json({
-                data: null,
-                meta: {},
-                errors: [{ code: 'VALIDATION_ERROR', message: 'Missing class_ids, academic_year_id, or semester_id' }]
-            });
+            return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'VALIDATION_ERROR', message: 'Choose the classes, academic year and term' }] });
         }
+        if (due_date && isNaN(new Date(due_date).getTime())) {
+            return res.status(400).json({ data: null, meta: {}, errors: [{ code: 'VALIDATION_ERROR', message: 'The due date is not valid' }] });
+        }
+        // One run per term at a time — two at once could double-invoice learners.
+        const busy = await db.collection('bulk_jobs').findOne({ schoolId, academic_year_id, semester_id, status: { $in: ['PENDING', 'RUNNING'] }, createdAt: { $gt: new Date(Date.now() - 30 * 60_000) } });
+        if (busy) return res.status(409).json({ data: null, meta: {}, errors: [{ code: 'JOB_RUNNING', message: 'Invoices for this term are already being generated. Wait for that run to finish.' }] });
 
+        const IB = await import('../services/invoiceBuilder.service');
+        const ctx = await IB.loadTermContext(db, String(academic_year_id), String(semester_id));
         const jobId = new ObjectId();
         const startTime = Date.now();
+        await db.collection('bulk_jobs').insertOne({
+            _id: jobId, id: jobId.toString(), schoolId, status: 'PENDING', mode,
+            semester_id, academic_year_id, term_label: ctx.termLabel, year_label: ctx.yearLabel,
+            class_ids, due_date: due_date || null, fine_amount: Number(fine_amount) || 0,
+            progress: 0, processed_count: 0, total_count: 0, created_count: 0, skipped_count: 0, replaced_count: 0, failed_count: 0,
+            total_billed: 0, errors: [], created_by: user?.sub || 'SYSTEM', createdAt: new Date(),
+        });
 
-        const jobDoc = {
-            _id: jobId,
-            id: jobId.toString(),
-            schoolId,
-            status: 'PENDING',
-            semester_id,
-            academic_year_id,
-            class_ids,
-            progress: 0,
-            processed_count: 0,
-            total_count: 0,
-            errors: [],
-            createdAt: new Date()
-        };
-
-        await db.collection('bulk_jobs').insertOne(jobDoc);
-
-        // Run in background
         setTimeout(async () => {
+            const errors: any[] = [];
+            let processed = 0, created = 0, skipped = 0, replaced = 0, billed = 0;
+            const flush = async (extra: any = {}) => db.collection('bulk_jobs').updateOne({ _id: jobId }, { $set: {
+                processed_count: processed, created_count: created, skipped_count: skipped, replaced_count: replaced, failed_count: errors.length,
+                total_billed: Math.round(billed * 100) / 100, errors: errors.slice(0, 200), ...extra,
+            } });
             try {
-                // Normalize chosen class names to lowercase and uppercase
-                const normalizedClasses = new Set<string>();
-                class_ids.forEach(c => {
-                    normalizedClasses.add(c);
-                    normalizedClasses.add(c.toLowerCase());
-                    normalizedClasses.add(c.toUpperCase());
-                });
-                const classNamesList = Array.from(normalizedClasses);
+                const students = IB.studentsInClasses(await db.collection('students').find({}).toArray(), class_ids);
+                const total = students.length;
+                await db.collection('bulk_jobs').updateOne({ _id: jobId }, { $set: { status: 'RUNNING', total_count: total } });
+                const { applyCreditToInvoice } = await import('../services/feeCredit.service');
 
-                // Find all target students matching the class names (case-insensitive) — TENANT db.
-                const students = await tenantDb.collection('students').find({
-                    $or: [
-                        { studentClass: { $in: classNamesList } },
-                        { currentClass: { $in: classNamesList } }
-                    ]
-                }).toArray();
+                for (const student of students) {
+                    const sId = student._id.toString();
+                    const who = { student_name: IB.studentName(student), class_name: IB.studentClassName(student), admission_no: student.registrationNo || student.admNo || '' };
+                    try {
+                        const plan = IB.planStudentInvoice(student, ctx);
+                        if (!plan.ok) { errors.push({ ...who, message: plan.error }); continue; }
 
-                const total_count = students.length;
-                await db.collection('bulk_jobs').updateOne(
-                    { _id: jobId },
-                    { $set: { status: 'RUNNING', total_count } }
-                );
-
-                if (total_count === 0) {
-                    await db.collection('bulk_jobs').updateOne(
-                        { _id: jobId },
-                        { $set: { status: 'COMPLETED', progress: 100, duration_ms: Date.now() - startTime } }
-                    );
-                    return;
-                }
-
-                let processed_count = 0;
-                const errors: any[] = [];
-
-                for (let index = 0; index < students.length; index++) {
-                    const student = students[index];
-                    const studentClass = student.studentClass || student.currentClass || '';
-
-                    // Find the fee structure for this student's CLASS — TENANT db.
-                    // Fee structures store year/term as NAMES ("2026" / "Term 2"), not the
-                    // selected IDs, so we match primarily by class and prefer the latest.
-                    const clsRx = new RegExp(`^${studentClass}$`, 'i');
-                    const structure = await tenantDb.collection('fee_structures').findOne(
-                        { $or: [
-                            { className: { $regex: clsRx } },
-                            { class_ids: studentClass },
-                            { class_ids: { $in: [studentClass] } },
-                            { class_ids: { $elemMatch: { $regex: clsRx } } },
-                        ] },
-                        { sort: { createdAt: -1, updatedAt: -1 } }
-                    );
-
-                    if (!structure) {
-                        errors.push({
-                            student_name: student.studentName || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
-                            message: `No fee structure found for class: ${studentClass}`
-                        });
-                        processed_count++;
-                        const progress = Math.round((processed_count / total_count) * 100);
-                        await db.collection('bulk_jobs').updateOne(
-                            { _id: jobId },
-                            { $set: { progress, processed_count, errors } }
-                        );
-                        continue;
-                    }
-
-                    // Check if invoice already exists for this student, period, and structure (not voided)
-                    const existing = await tenantDb.collection('invoices').findOne({
-                        schoolId,
-                        student_id: student._id.toString(),
-                        academic_year_id,
-                        semester_id,
-                        status: { $ne: 'VOIDED' }
-                    });
-
-                    if (existing) {
-                        if (mode === 'overwrite') {
-                            // Void the old invoice so the new one replaces it for this term.
-                            await tenantDb.collection('invoices').updateOne({ _id: existing._id }, { $set: { status: 'VOIDED', voidedAt: new Date(), voidedReason: 'Replaced by bulk re-generation' } });
-                        } else {
-                            processed_count++;
-                            const progress = Math.round((processed_count / total_count) * 100);
-                            await db.collection('bulk_jobs').updateOne({ _id: jobId }, { $set: { progress, processed_count, skipped_count: (await db.collection('bulk_jobs').findOne({ _id: jobId }))?.skipped_count + 1 || 1 } });
-                            continue;
+                        const existing = await db.collection('invoices').findOne({ schoolId, student_id: sId, academic_year_id, semester_id, status: { $ne: 'VOIDED' } });
+                        if (existing) {
+                            if (mode !== 'overwrite') { skipped++; continue; }
+                            if (Number(existing.amount_paid || existing.paid_amount || 0) > 0) {
+                                // Never throw away money already received against an invoice.
+                                errors.push({ ...who, message: `${existing.invoice_no} already has payments — not replaced` });
+                                continue;
+                            }
+                            await db.collection('invoices').updateOne({ _id: existing._id }, { $set: { status: 'VOIDED', voidedAt: new Date(), voidedReason: 'Replaced by class-wide re-generation', updatedAt: new Date().toISOString() } });
+                            replaced++;
                         }
+
+                        const due = due_date || new Date(Date.now() + 14 * 864e5).toISOString().split('T')[0];
+                        const invoice: any = {
+                            _id: new ObjectId(),
+                            invoice_no: await getNextInvoiceNo(db, schoolId),
+                            schoolId,
+                            student_id: sId,
+                            class_id: who.class_name,
+                            class_name: who.class_name,
+                            classAtTime: who.class_name,
+                            academic_year_id, semester_id,
+                            term_label: ctx.termLabel, year_label: ctx.yearLabel,
+                            fee_structure_id: String(plan.structure._id),
+                            fee_structure_name: plan.structure.name || '',
+                            line_items: plan.line_items,
+                            subtotal: plan.subtotal,
+                            discount_type: plan.discount_type,
+                            discount_value: plan.discount_value,
+                            discount_amount: plan.discount_amount,
+                            total_due: plan.total_due,
+                            amount_paid: 0,
+                            balance: plan.total_due,
+                            due_date: due,
+                            fine_amount: Number(fine_amount) || 0,
+                            status: plan.total_due === 0 ? 'PAID' : (new Date(due) < new Date(new Date().toDateString()) ? 'OVERDUE' : 'UNPAID'),
+                            generated_by_job: jobId.toString(),
+                            created_by: user?.sub || 'SYSTEM',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                        };
+                        await db.collection('invoices').insertOne(invoice);
+                        await applyScholarshipsToInvoice(db, invoice, user?.sub || 'SYSTEM');
+                        try { await applyCreditToInvoice(db, invoice, { studentId: sId, registrationNo: student.registrationNo }); } catch { /* optional */ }
+                        created++; billed += plan.total_due;
+                        if (notifyParents) emailInvoiceToParent(req, db, invoice, sId);
+                    } catch (err: any) {
+                        errors.push({ ...who, message: err.message });
+                    } finally {
+                        processed++;
+                        if (processed % 10 === 0 || processed === total) await flush({ progress: total ? Math.round((processed / total) * 100) : 100 });
                     }
-
-                    // Extract items from structure
-                    let line_items: any[] = [];
-                    if (Array.isArray(structure.items)) {
-                        line_items = structure.items.map((i: any) => ({
-                            id: i.id || new ObjectId().toString(),
-                            category: i.category,
-                            description: i.description || '',
-                            amount: parseFloat(i.amount) || 0,
-                            is_required: !!i.is_required
-                        }));
-                    } else if (structure.amounts) {
-                        // Support old amounts structure mapping
-                        line_items = Object.entries(structure.amounts).map(([category, amount]) => ({
-                            id: new ObjectId().toString(),
-                            category: category,
-                            description: `${category} Fee`,
-                            amount: parseFloat(amount as string) || 0,
-                            is_required: true
-                        }));
-                    }
-
-                    const subtotal = line_items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || 0), 0);
-                    
-                    let discount_amount = 0;
-                    const discountType = structure.discount_type || 'NONE';
-                    const discountVal = parseFloat(structure.discount_value) || 0;
-
-                    if (discountType === 'FIXED') {
-                        discount_amount = discountVal;
-                    } else if (discountType === 'PERCENTAGE') {
-                        discount_amount = (subtotal * discountVal) / 100;
-                    }
-                    
-                    const total_due = Math.max(0, subtotal - discount_amount);
-                    const invoice_no = await getNextInvoiceNo(tenantDb, schoolId);
-
-                    const invoice = {
-                        _id: new ObjectId(),
-                        invoice_no,
-                        schoolId,
-                        student_id: student._id.toString(),
-                        class_id: studentClass,
-                        academic_year_id,
-                        semester_id,
-                        fee_structure_id: structure._id.toString(),
-                        line_items,
-                        subtotal,
-                        discount_type: discountType,
-                        discount_value: discountVal,
-                        discount_amount,
-                        total_due,
-                        amount_paid: 0,
-                        balance: total_due,
-                        due_date: due_date || structure.items?.[0]?.due_date || new Date().toISOString().split('T')[0],
-                        status: total_due === 0 ? 'PAID' : (new Date(due_date) < new Date() ? 'OVERDUE' : 'UNPAID'),
-                        created_by: user?.sub || 'SYSTEM',
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-
-                    await tenantDb.collection('invoices').insertOne(invoice);
-                    await applyScholarshipsToInvoice(tenantDb, invoice, user?.sub || 'SYSTEM');
-
-                    processed_count++;
-                    const progress = Math.round((processed_count / total_count) * 100);
-                    await db.collection('bulk_jobs').updateOne(
-                        { _id: jobId },
-                        { $set: { progress, processed_count } }
-                    );
                 }
-
-                await db.collection('bulk_jobs').updateOne(
-                    { _id: jobId },
-                    { $set: { status: 'COMPLETED', progress: 100, duration_ms: Date.now() - startTime } }
-                );
+                await flush({ status: 'COMPLETED', progress: 100, duration_ms: Date.now() - startTime, finishedAt: new Date() });
             } catch (err: any) {
-                await db.collection('bulk_jobs').updateOne(
-                    { _id: jobId },
-                    { $set: { status: 'FAILED', errors: [{ message: err.message }] } }
-                );
+                errors.push({ message: err.message });
+                await flush({ status: 'FAILED', duration_ms: Date.now() - startTime });
             }
         }, 0);
 
@@ -2489,7 +2502,7 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
 
             <div style="font-size: 11px; font-weight: bold; margin-bottom: 15px;">
                 ${invoiceBalance <= 0 
-                    ? '<span style="color: #10b981;">✓ FULLY PAID (KSh 0 Balance)</span>' 
+                    ? '<span style="color: #10b981;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20 6 9 17l-5-5"/></svg> FULLY PAID (KSh 0 Balance)</span>' 
                     : `<span style="color: #ef4444;">Balance Remaining: KSh ${invoiceBalance.toLocaleString()}</span>`}
             </div>
 
@@ -2532,7 +2545,7 @@ router.get('/schools/:sid/payments/:id/receipt', async (req: Request, res: Respo
         </head>
         <body>
             ${stubHtml('School Copy')}
-            <div class="stub-divider">✂ - - - - - - - - - - STUDENT COPY - - - - - - - - - - ✂</div>
+            <div class="stub-divider"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg> - - - - - - - - - - STUDENT COPY - - - - - - - - - - <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg></div>
             ${stubHtml('Student Copy')}
             <script>window.print();</script>
         </body>

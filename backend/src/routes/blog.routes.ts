@@ -379,13 +379,36 @@ router.get('/blog/public/rss.xml', async (req, res) => {
     } catch (e: any) { res.status(500).send(String(e.message)); }
 });
 
-// Sitemap for blog posts
+// Sitemap for blog posts (the site's main sitemap is built with the frontend: shulecloud.com/sitemap.xml).
+// Only live, public, indexable posts; a post whose canonical URL points elsewhere is left out;
+// lastmod is the post's own updatedAt/publishAt — never the request time.
 router.get('/blog/public/sitemap.xml', async (_req, res) => {
     try {
-        const site = process.env.PUBLIC_SITE_URL || 'https://shulecloud.com';
-        const items = await getDb().collection('blog_posts').find(liveFilter()).project({ slug: 1, updatedAt: 1 }).toArray();
-        const urls = items.map(p => `<url><loc>${site}/blogs/${p.slug}</loc><lastmod>${new Date(p.updatedAt || Date.now()).toISOString()}</lastmod></url>`).join('');
-        res.set('Content-Type', 'application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${site}/blogs</loc></url>${urls}</urlset>`);
+        const site = (process.env.PUBLIC_SITE_URL || 'https://shulecloud.com').replace(/\/+$/, '');
+        const siteHost = (() => { try { return new URL(site).host; } catch { return ''; } })();
+        const items = await getDb().collection('blog_posts')
+            .find({ ...liveFilter(), visibility: { $in: ['public', undefined as any] } })
+            .project({ slug: 1, updatedAt: 1, publishAt: 1, canonicalUrl: 1, robots: 1 }).toArray();
+        const seen = new Set<string>();
+        const urls: string[] = [];
+        const add = (loc: string, mod?: any) => {
+            if (seen.has(loc)) return;
+            seen.add(loc);
+            const d = mod ? new Date(mod) : null;
+            const lastmod = d && !isNaN(d.getTime()) && d.getTime() <= Date.now() ? `<lastmod>${d.toISOString()}</lastmod>` : '';
+            urls.push(`<url><loc>${escapeXml(loc)}</loc>${lastmod}</url>`);
+        };
+        add(`${site}/blogs`);
+        for (const p of items) {
+            if (!p.slug || /noindex/i.test(String(p.robots || ''))) continue;
+            let loc = `${site}/blogs/${encodeURIComponent(p.slug)}`;
+            if (p.canonicalUrl) {
+                try { const c = new URL(String(p.canonicalUrl)); if (c.host !== siteHost || c.protocol !== 'https:') continue; loc = `${site}${c.pathname}`; } catch { continue; }
+            }
+            add(loc, p.updatedAt || p.publishAt);
+        }
+        res.set('Content-Type', 'application/xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600')
+            .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`);
     } catch (e: any) { res.status(500).send(String(e.message)); }
 });
 

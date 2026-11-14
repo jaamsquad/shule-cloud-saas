@@ -10,7 +10,7 @@
 import { useState, useMemo } from "react";
 import {
     Search, GraduationCap, BookOpen, Users, Check, X, Loader2,
-    School, Plus, Trash2, ChevronDown, ArrowRight
+    School, Plus, Trash2, ChevronDown, ArrowRight, AlertTriangle
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -284,7 +284,7 @@ export default function Teachers() {
                                                 </div>
                                             )}
                                             {!className && Object.keys(grouped).length === 0 && (
-                                                <p className="text-[10px] text-amber-500 font-bold mt-1.5">⚠ No assignments yet — click Assign</p>
+                                                <p className="text-[10px] text-amber-500 font-bold mt-1.5 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />No assignments yet — click Assign</p>
                                             )}
                                         </div>
                                     </div>
@@ -426,7 +426,7 @@ export default function Teachers() {
 
                                 {subjectAssignments.length === 0 && (
                                     <p className="text-[10px] text-amber-500 font-bold mt-2 flex items-center gap-1">
-                                        ⚠ No subject assignments yet
+                                        <AlertTriangle className="w-3 h-3" />No subject assignments yet
                                     </p>
                                 )}
                             </div>

@@ -3,13 +3,26 @@ import { login, getTenantProfile, updateTenantProfile, updateUser, deleteUser } 
 import { getMetaDb, getTenantDb, subdomainToDbName } from '../lib/mongodb';
 import { Db, ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
-import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits } from '../services/wallet.service';
-import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, checkStkAndComplete, platformCallbackBaseV1 } from '../services/mpesa.service';
+import { ensureWallet, creditWallet, debitWallet, getTransactions, setWalletStatus, setWalletLimits, getWalletSettings } from '../services/wallet.service';
+import { resolveMpesaConfig, stkPush, stkQuery, isMpesaConfigured, applyMpesaPayment, platformCallbackBaseV1 } from '../services/mpesa.service';
+import { checkStkAndComplete, getAccount as getMpesaAccount, getDefaultAccount as getDefaultMpesaAccount, toConfig as toMpesaConfig } from '../services/mpesaAccounts.service';
 import { resolveStaffPermissions, permsToModules, resolveStaffCrud } from '../lib/permissions';
 import { buildStudentExamRouter } from '../modules/onlineExam/onlineExam.student.routes';
 import { currentTerm as cbcCurrentTerm } from '../modules/cbc/cbcTerm';
 import { finishSchoolLogin } from '../lib/schoolLogin';
+import { marksWindow, examInWindow, WINDOW_MESSAGE } from '../lib/examWindow';
+import { idForms, onePublishedTimetable, studentClassSlotFilter } from '../lib/portalTimetable';
+import analyticsRoutes from './analytics.routes';
+import { printableReports } from '../lib/portalReportCard';
+import { scholarSheetData, reportCardSettings } from './reports.routes';
+import { signToken, publicAppUrl } from '../lib/verifyDocs';
 
+import { signoutsOn, excusedLabel } from '../lib/signoutAttendance';
+import { onlyPublished, levelKey } from '../lib/examPublish';
+import { schoolScope, visibleToSchool } from '../lib/globalResourceScope';
+import { resolveGrading, Grading } from '../lib/grading';
+import { papersForSubject, papersForSubjectName, combinePapers } from '../lib/subjectPapers';
+import { SCALES } from '../modules/skills/skills.routes';
 const router = Router();
 
 // Institution data (staff / students) lives in the tenant's isolated database.
@@ -180,6 +193,16 @@ export async function userLoginPayload(user: any, username: string, ctx: { tenan
         if (staffInfo) {
             const d = (staffInfo.designation || '').toLowerCase();
             if (d.includes('teacher') || staffInfo.isTeachingStaff) role = 'teacher';
+        } else if (user.isSchoolAdmin) {
+            // Self-heal accounts registered before admins got a staff record of their own
+            // (see onboard.controller.ts) — gives them a Staff / Teachers list entry too.
+            const name = user.name || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : null) || username.split('@')[0];
+            const r = await ctx.tenantDb.collection('staff').insertOne({
+                employeeName: name, email: username, phone: user.phone || '',
+                designation: 'School Administrator', isTeachingStaff: false, portalAccess: 'admin',
+                status: 'Active', createdAt: new Date(),
+            }).catch(() => null);
+            if (r) staffInfo = { _id: r.insertedId, employeeName: name };
         }
     } catch (_) {}
 
@@ -284,7 +307,12 @@ router.post('/smart-login', async (req, res) => {
         };
 
         if (subdomain) {
-            const t = await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            // The mobile app sends the ShuleCloud School ID (A482917M); the web sends the subdomain.
+            const { isSchoolId, normalizeSchoolId } = await import('../lib/schoolId');
+            const t = isSchoolId(String(subdomain))
+                ? await metaDb.collection('Tenant').findOne({ shulecloudId: normalizeSchoolId(String(subdomain)) })
+                : await metaDb.collection('Tenant').findOne({ subdomain: subdomain.toLowerCase() });
+            if (!t && isSchoolId(String(subdomain))) return res.status(404).json({ message: `School ID "${normalizeSchoolId(String(subdomain))}" not found. Check the ID with your school.` });
             if (t) {
                 // Block login for schools still under review (registered but not activated).
                 if (t.status && t.status !== 'active') {
@@ -470,6 +498,12 @@ router.get('/my-permissions', async (req, res) => {
             return mods.filter(m => ALWAYS.includes(m) || enabledModules!.includes(m));
         };
 
+        // Apps the platform owner switched off for this school: hidden for everyone, admins included.
+        const { disabledAppsFor, modulesOfApps } = await import('../lib/permissions');
+        const disabledApps = await disabledAppsFor(tid);
+        const disabledModules = modulesOfApps(disabledApps);
+        const dropDisabled = (mods: string[]) => mods.filter(m => !disabledModules.includes(m));
+
         // planModules tells the UI which modules the school's PLAN allows (null =
         // unrestricted). The sidebar uses it to LOCK out-of-plan modules instead of
         // hiding them. ALWAYS modules are implicitly included.
@@ -477,7 +511,7 @@ router.get('/my-permissions', async (req, res) => {
 
         // ── Full admin → wildcard, but capped by the school's enabled modules ──
         if (userRole === 'school_admin' || userRole === 'super_admin') {
-            return res.json({ role: userRole, userId, modules: enabledModules ? capModules(['*']) : ['*'], permissions: ['*'], crud: {}, planModules });
+            return res.json({ role: userRole, userId, modules: enabledModules ? dropDisabled(capModules(['*'])) : ['*'], permissions: ['*'], crud: {}, planModules, disabledApps, disabledModules });
         }
 
         // ── Resolve the staff member's effective permission CODES, then map them
@@ -499,10 +533,10 @@ router.get('/my-permissions', async (req, res) => {
         // teacher fallback, no built-in role defaults. A freshly registered
         // teacher therefore sees nothing until an admin grants access.
         const codes = await resolveStaffPermissions(db, staffForPerms, { teacherFallback: false, useRoleDefaults: false });
-        const resolvedModules = capModules(permsToModules(codes));
+        const resolvedModules = dropDisabled(capModules(permsToModules(codes)));
         const crud = await resolveStaffCrud(db, staffForPerms);
 
-        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud, planModules });
+        res.json({ role: userRole, userId, modules: resolvedModules, permissions: codes, crud, planModules, disabledApps, disabledModules });
     } catch (e: any) {
         res.status(500).json({ message: e.message });
     }
@@ -831,7 +865,7 @@ router.get('/student-portal/marks', async (req, res) => {
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
         // Only APPROVED marks reach the student (un-approved batches are hidden until
         // the HOD/admin approves). Legacy marks with no flag stay visible.
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
+        const marks = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray());
         res.json(marks);
     } catch (e: any) {
         res.status(401).json({ message: 'Invalid or expired token' });
@@ -859,7 +893,7 @@ router.get('/student-portal/exam-results', async (req, res) => {
         const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'shulecloud_student_secret_2024');
 
         // Only approved marks are shown to the student.
-        const marks = await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray();
+        const marks = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: decoded.studentId, approved: { $ne: false } }).toArray());
         const exams = await db.collection('exams').find({}).toArray();
         const examMap: Record<string, any> = {};
         exams.forEach((e: any) => { examMap[e._id.toString()] = e; });
@@ -1255,7 +1289,8 @@ const buildExamResults = async (db: Db, studentId: string) => {
     // Match exam marks whether studentId is stored as a string or ObjectId.
     const ids: any[] = [studentId];
     if (isObjId(studentId)) ids.push(new ObjectId(studentId));
-    const marks = await db.collection('exam_marks').find({ $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }] }).toArray();
+    // Only published results (Exams → Manage Exams).
+    const marks = await onlyPublished(db, await db.collection('exam_marks').find({ $or: [{ studentId: { $in: ids } }, { student_id: { $in: ids } }] }).toArray());
     const exams = await db.collection('exams').find({}).toArray();
     const examMap: Record<string, any> = {};
     exams.forEach((e: any) => { examMap[e._id.toString()] = e; });
@@ -1299,40 +1334,25 @@ const templateFamily = (id?: string, curriculum?: string): Family => {
     return c === 'cbc' ? 'CBC' : c === 'cambridge' ? 'Cambridge' : c === 'ib' ? 'IB' : 'KCSE';
 };
 
-// Returns { grade, points, level } appropriate to the chosen curriculum.
-const gradeFor = (family: Family, percent: number): { grade: string; points: number; level: string } => {
+// Grade / points / level come from the student's CONFIGURED grading (class template →
+// class criteria → global criteria → curriculum settings → default). The curriculum
+// family only decides how points aggregate (KCSE totals subject points).
+const gradeFor = (grading: Grading, percent: number): { grade: string; points: number; level: string } => {
     const p = Math.max(0, Math.min(100, percent));
-    if (family === 'CBC') {
-        const level = p >= 80 ? 'EE' : p >= 60 ? 'ME' : p >= 40 ? 'AE' : 'BE';
-        return { grade: level, points: 0, level };
-    }
-    if (family === 'Cambridge') {
-        const grade = p >= 90 ? 'A*' : p >= 80 ? 'A' : p >= 70 ? 'B' : p >= 60 ? 'C' : p >= 50 ? 'D' : p >= 40 ? 'E' : p >= 30 ? 'F' : p >= 20 ? 'G' : 'U';
-        return { grade, points: 0, level: grade };
-    }
-    if (family === 'IB') {
-        const pts = p >= 85 ? 7 : p >= 75 ? 6 : p >= 65 ? 5 : p >= 50 ? 4 : p >= 40 ? 3 : p >= 30 ? 2 : 1;
-        return { grade: String(pts), points: pts, level: String(pts) };
-    }
-    // KCSE / 8-4-4 — 12-point scale
-    const table: [number, string, number][] = [
-        [80, 'A', 12], [75, 'A-', 11], [70, 'B+', 10], [65, 'B', 9], [60, 'B-', 8],
-        [55, 'C+', 7], [50, 'C', 6], [45, 'C-', 5], [40, 'D+', 4], [35, 'D', 3], [30, 'D-', 2], [0, 'E', 1],
-    ];
-    const row = table.find(([min]) => p >= min) || table[table.length - 1];
-    return { grade: row[1], points: row[2], level: row[1] };
+    const band = grading.gradeOf(p);
+    return { grade: band.grade, points: band.points, level: band.grade };
 };
 
-// Decorate grouped exam results with family-specific grade / points / level.
-const decorateResults = (results: any[], family: Family) =>
+// Decorate grouped exam results with grade / points / level from the configured scale.
+const decorateResults = (results: any[], family: Family, grading: Grading) =>
     results.map(exam => {
         const subjects = (exam.subjects || []).map((s: any) => {
             const percent = s.outOf > 0 ? (s.marks / s.outOf) * 100 : 0;
-            const g = gradeFor(family, percent);
-            return { ...s, percent: Math.round(percent * 10) / 10, grade: s.grade || g.grade, points: g.points, level: g.level };
+            const g = gradeFor(grading, percent);
+            return { ...s, percent: Math.round(percent * 10) / 10, grade: s.outOf > 0 ? g.grade : (s.grade || g.grade), points: g.points, level: g.level };
         });
         const meanPercent = exam.average || 0;
-        const mean = gradeFor(family, meanPercent);
+        const mean = gradeFor(grading, meanPercent);
         const totalPoints = subjects.reduce((sum: number, s: any) => sum + (s.points || 0), 0);
         return { ...exam, subjects, meanGrade: mean.grade, meanLevel: mean.level, points: family === 'KCSE' ? totalPoints : mean.points };
     });
@@ -1381,6 +1401,7 @@ const resolveClassId = async (db: Db, className?: string): Promise<string | null
 const buildTimetable = async (db: Db, filter: any) => {
     let slots: any[] = [];
     try { slots = await db.collection('timetable_slots').find(filter || {}).toArray(); } catch { slots = []; }
+    slots = await onePublishedTimetable(db, slots);
     if (slots.length === 0) return { timeSlots: [], grid: {} };
 
     const [subjects, staff, rooms, pers] = await Promise.all([
@@ -1517,8 +1538,7 @@ router.post('/student-portal/registration', authed(async (req, res, db, decoded)
 // ─── Student Portal: timetable ────────────────────────────────────────────────
 router.get('/student-portal/timetable', authed(async (req, res, db, decoded) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) });
-    const classId = student?.classId ? String(student.classId) : await resolveClassId(db, student?.studentClass || student?.currentClass);
-    res.json(await buildTimetable(db, { classId: classId || '___none___' }));
+    res.json(await buildTimetable(db, await studentClassSlotFilter(db, student)));
 }));
 
 // ─── Student Portal: assignments & homework (view + submit) ───────────────────
@@ -1555,15 +1575,30 @@ router.post('/student-portal/tasks/:type/:id/submit', authed(async (req, res, db
 }));
 
 // ─── Notes & Resources visibility ─────────────────────────────────────────────
-// Students: resources marked available (isPublic) for their class (or unscoped).
+// Students: resources marked available (isPublic) for their class (or unscoped), plus the
+// owner-uploaded shared library (ShuleCloud Library) matching their class/grade — gated to
+// what this school offers that grade (see lib/globalResourceScope.ts).
 router.get('/student-portal/resources', authed(async (req, res, db, decoded) => {
     const student: any = await db.collection('students').findOne({ _id: new ObjectId(decoded.studentId) }).catch(() => null);
     const cls = String(student?.studentClass || student?.className || '').toLowerCase();
     const all = await db.collection('academic_resources').find({ isPublic: { $ne: false } }).sort({ createdAt: -1 }).toArray();
-    res.json(all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls));
+    const mine = all.filter((r: any) => !r.className || !cls || String(r.className).toLowerCase() === cls);
+
+    const myLevel = levelKey(student?.studentClass || student?.currentClass || '');
+    const origin = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`).replace(/\/$/, '');
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (!r.className || !myLevel || levelKey(r.className) === myLevel))
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
-// Teachers: resources matching their assigned subjects (unscoped resources always shown).
+// Teachers: resources matching their assigned subjects (unscoped resources always shown),
+// plus the owner-uploaded shared library (ShuleCloud Resources) — matched by subject NAME
+// since those aren't tied to this school's own subject ids.
 router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const staffId = String(decoded.staffId || '');
     const staff: any = await db.collection('staff').findOne({ _id: new ObjectId(staffId) }).catch(() => null);
@@ -1572,7 +1607,24 @@ router.get('/staff-portal/resources', authed(async (req, res, db, decoded) => {
     const links = await db.collection('staff_subjects').find({ $or: [{ teacherId: staffId }, { staffId }] }).toArray().catch(() => []);
     links.forEach((l: any) => subjectIds.add(String(l.subjectId)));
     const all = await db.collection('academic_resources').find({}).sort({ createdAt: -1 }).toArray();
-    res.json(subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all);
+    const mine = subjectIds.size ? all.filter((r: any) => !r.subjectId || subjectIds.has(String(r.subjectId))) : all;
+
+    const norm = (v: any) => String(v ?? '').toLowerCase().trim();
+    const mySubjectNames = new Set<string>();
+    if (subjectIds.size) {
+        const subs = await db.collection('subjects').find({ _id: { $in: [...subjectIds].map(safeObjId).filter(Boolean) as any[] } }, { projection: { name: 1, subjectName: 1 } }).toArray().catch(() => []);
+        subs.forEach((s: any) => mySubjectNames.add(norm(s.name || s.subjectName)));
+    }
+    // Absolute file URL so it resolves outside the /api/v1 prefix (same pattern as blog uploads).
+    const origin = process.env.PUBLIC_API_URL || `${req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+    const [global, scope] = await Promise.all([
+        getMetaDb().collection('global_resources').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+        schoolScope(db),
+    ]);
+    const globalMine = global
+        .filter((r: any) => visibleToSchool(r, scope) && (mySubjectNames.size === 0 || !r.subjectName || mySubjectNames.has(norm(r.subjectName))))
+        .map((r: any) => ({ ...r, isGlobal: true, fileData: r.fileUrl ? `${origin.replace(/\/$/, '')}${r.fileUrl}` : '' }));
+    res.json([...globalMine, ...mine]);
 }));
 
 // ─── Student Portal: academic requisitions ────────────────────────────────────
@@ -1654,9 +1706,11 @@ router.get('/student-portal/fee-structure', authed(async (req, res, db, decoded)
 
 // ─── Shared M-PESA STK helpers (student & parent) ─────────────────────────────
 const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 'wallet' = 'fees') => {
-    const { phone, amount, invoiceId } = req.body || {};
+    const { phone, amount, invoiceId, accountId } = req.body || {};
     if (!phone || !amount || Number(amount) <= 0) throw new Error('Phone number and a valid amount are required');
-    const cfg = await resolveMpesaConfig(db);
+    const account = accountId ? await getMpesaAccount(db, String(accountId)) : await getDefaultMpesaAccount(db);
+    if (!account) throw new Error('M-PESA payment is not set up for your school yet.');
+    const cfg = toMpesaConfig(account);
     if (!isMpesaConfigured(cfg)) throw new Error('M-PESA payment is not set up for your school yet.');
     if (!cfg.callbackBase) throw new Error('M-PESA callback URL is not configured. Contact the school administrator.');
 
@@ -1672,6 +1726,7 @@ const initiateStk = async (req: Request, db: Db, sid: string, purpose: 'fees' | 
         checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, purpose,
         tenantDbName: (req as any).tenantContext?.databaseName, studentId: sid, studentName: student?.studentName,
         registrationNo: regNo, invoiceId: purpose === 'wallet' ? null : (invoiceId || null), amount: Number(amount), phone,
+        accountId: String(account._id),
         status: 'pending', applied: false, createdAt: new Date(),
     });
     return { checkoutRequestId: r.checkoutRequestId, message: r.customerMessage || 'Enter your M-PESA PIN on your phone to complete.' };
@@ -1696,11 +1751,13 @@ router.get('/student-portal/mpesa-status', authed(async (req, res, db) => {
 router.get('/student-portal/wallet', authed(async (req, res, db, decoded) => {
     const wallet = await ensureWallet(db, decoded.studentId);
     const transactions = await getTransactions(db, wallet.walletId);
-    res.json({ wallet, transactions });
+    const settings = await getWalletSettings(db);
+    res.json({ wallet, transactions, walletEnabled: settings.enabled });
 }));
 
 // Wallet top-up via M-PESA STK Push (credited on confirmation).
 router.post('/student-portal/wallet/topup', authed(async (req, res, db, decoded) => {
+    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
     res.json(await initiateStk(req, db, decoded.studentId, 'wallet'));
 }));
 
@@ -1773,15 +1830,40 @@ const buildReportCard = async (db: Db, req: Request, sid: string, fallbackName?:
     const curriculumId = String(((await db.collection('curriculum_settings').findOne({}).catch(() => null)) as any)?.curriculumId || '');
     const family = templateFamily(tenant?.reportTemplate, curriculumId);
 
-    const all = decorateResults(await buildExamResults(db, sid), family);
+    const grading = await resolveGrading(db, student?.classId ? String(student.classId) : undefined, String(student?.studentClass || student?.currentClass || student?.className || '') || undefined);
+    const all = decorateResults(await buildExamResults(db, sid), family, grading);
     const terms = Array.from(new Set(all.map((r: any) => r.term).filter(Boolean)));
     const selectedTerm = req.query.term ? String(req.query.term) : (terms[0] || '');
     const results = selectedTerm ? all.filter((r: any) => r.term === selectedTerm) : all;
 
+    // The card exactly as the school prints it (same template, maths and verify QR).
+    let printable: any = null;
+    try {
+        const examIds = results.map((r: any) => String(r.examId)).filter(id => id && id !== 'unknown');
+        printable = await printableReports(db, req, sid, examIds);
+        if (printable?.templateId === 'scholarsheet') {
+            const settings = await reportCardSettings(db);
+            const slug = String((req as any).tenantContext?.tenantSubdomain || '').toLowerCase();
+            for (const id of examIds) {
+                const out = await scholarSheetData(req, sid, id);
+                if (out.status !== 200 || !out.body) continue;
+                const d = out.body;
+                const verifyUrl = d.notReady ? '' : `${publicAppUrl()}/${slug}/report/verify/online/${signToken({
+                    s: sid, n: d.student?.name || '', r: d.student?.adm || '', c: d.student?.className || '',
+                    t: d.termYear || '', y: String(d.termYear || '').match(/\d{4}/)?.[0] || '', e: d.termYear || '',
+                    a: Number(d.summary?.meanScore) || null, g: String(d.summary?.meanGrade || ''), at: Date.now(),
+                })}`;
+                printable.exams[id] = { ...(printable.exams[id] || {}), scholar: { ...d, settings }, verifyUrl: verifyUrl || printable.exams[id]?.verifyUrl };
+            }
+        }
+    } catch (e: any) { console.warn('[report-card] printable failed:', e?.message); }
+
     return {
+        printable,
         template: { id: tenant?.reportTemplate || 'kcse_classic', family },
         school: { name: tenant?.name || '', crest: tenant?.crest || tenant?.logo || null },
         student: {
+            id: sid,
             name: student?.studentName || fallbackName,
             registrationNo: student?.registrationNo || student?.admNo,
             class: student?.studentClass || student?.currentClass,
@@ -1829,7 +1911,7 @@ const staffAssignments = async (db: Db, decoded: any) => {
     const staff = oid ? await db.collection('staff').findOne({ _id: oid }) : null;
     const sa: any[] = Array.isArray(staff?.subjectAssignments) ? staff!.subjectAssignments : [];
 
-    const assignments: { classId: string; className: string; subject: string }[] = [];
+    const assignments: { classId: string; className: string; subject: string; subjectId: string }[] = [];
     const seen = new Set<string>();
     sa.forEach((a: any) => {
         const className = a.className || a.class || '';
@@ -1837,7 +1919,7 @@ const staffAssignments = async (db: Db, decoded: any) => {
         const key = `${className}|${subject}`;
         if (!className || !subject || seen.has(key)) return;
         seen.add(key);
-        assignments.push({ classId: String(a.classId || ''), className, subject });
+        assignments.push({ classId: String(a.classId || ''), className, subject, subjectId: String(a.subjectId || '') });
     });
 
     // Class register: prefer classes the teacher formally heads; otherwise fall
@@ -1969,8 +2051,41 @@ router.get('/staff-portal/my-classes', authed(async (req, res, db, decoded) => {
     res.json(out);
 }));
 
+// Class list for one of the teacher's classes (My Classes → click a class): the learners
+// plus the school's name and logo for the printed list. Only classes the teacher teaches
+// or heads are allowed.
+router.get('/staff-portal/my-classes/students', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || '').trim();
+    if (!className) return res.status(400).json({ message: 'className is required' });
+    const { assignments, classTeacherOf } = await staffAssignments(db, decoded);
+    const same = (a: any) => String(a || '').trim().toLowerCase() === className.toLowerCase();
+    const mine = assignments.filter(a => same(a.className));
+    if (!mine.length && !classTeacherOf.some(c => same(c.className))) {
+        return res.status(403).json({ message: 'You are not assigned to this class' });
+    }
+    const rows = await studentsInClass(db, mine[0]?.className || className);
+    const tenant: any = await tenantMetaRecord(req);
+    res.json({
+        className: mine[0]?.className || className,
+        subjects: [...new Set(mine.map(a => a.subject).filter(Boolean))],
+        school: {
+            name: tenant?.name || tenant?.instituteName || (req as any).tenantContext?.tenantName || 'School',
+            logo: tenant?.logo || tenant?.logoUrl || '',
+            address: [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', '),
+            phone: tenant?.phone || '', email: tenant?.email || '', motto: tenant?.tagline || tenant?.targetLine || '',
+        },
+        students: rows.map((s: any) => ({
+            _id: String(s._id),
+            name: s.studentName || `${s.firstName || ''} ${s.lastName || ''}`.trim() || s.name || '—',
+            admNo: s.admissionNumber || s.admNo || s.registrationNo || '',
+            gender: s.gender || '',
+            status: s.status || '',
+        })),
+    });
+}));
+
 router.get('/staff-portal/timetable', authed(async (req, res, db, decoded) => {
-    res.json(await buildTimetable(db, { teacherId: decoded.staffId }));
+    res.json(await buildTimetable(db, { teacherId: { $in: idForms([decoded.staffId]) } }));
 }));
 
 // Exams selectable for MARKS ENTRY — inactive exams (Draft/Archived/Completed)
@@ -1979,14 +2094,32 @@ router.get('/staff-portal/timetable', authed(async (req, res, db, decoded) => {
 const INACTIVE_EXAM_STATUS = new Set(['draft', 'archived', 'completed', 'inactive']);
 
 router.get('/staff-portal/exams', authed(async (req, res, db) => {
+    // Teachers only see this term's exams — earlier ones are for admins (lib/examWindow).
+    const win = await marksWindow(db);
     const exams = (await db.collection('exams').find({}).sort({ createdAt: -1 }).toArray())
-        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()));
+        .filter((e: any) => !INACTIVE_EXAM_STATUS.has(String(e.status || '').toLowerCase()))
+        .filter((e: any) => examInWindow(e, win));
     res.json(exams.map((e: any) => ({
         _id: String(e._id), name: e.examName || e.name || e.type || 'Exam',
         term: e.term, academicYear: e.academicYear,
         totalMarks: Number(e.settings?.totalMarks) || 100,   // "Out Of" from exam settings
     })));
 }));
+
+// Which term marks entry is open for (shown on the Marks page).
+router.get('/staff-portal/marks-window', authed(async (_req, res, db) => {
+    const win = await marksWindow(db);
+    res.json({ restricted: !!win, term: win?.term || '', year: win?.year || '', label: win?.label || '' });
+}));
+
+// Guard: the exam belongs to the current term (teachers can't touch earlier exams).
+const examOpenForTeacher = async (db: Db, examId: string) => {
+    const win = await marksWindow(db);
+    if (!win) return { ok: true, win };
+    const oid = safeObjId(examId);
+    const exam = await db.collection('exams').findOne(oid ? { _id: oid } : ({ _id: examId } as any)).catch(() => null);
+    return { ok: examInWindow(exam, win), win };
+};
 
 // Guard: confirm this teacher is assigned to (className, subject) before mutating.
 const assertAssigned = async (db: Db, decoded: any, className: string, subject?: string) => {
@@ -1995,38 +2128,52 @@ const assertAssigned = async (db: Db, decoded: any, className: string, subject?:
     return classTeacherOf.some(c => c.className === className) || assignments.some(a => a.className === className);
 };
 
-// Roster + existing marks for an exam+subject in a class.
+// Roster + existing marks for an exam+subject in a class. When the subject has papers
+// configured (General Settings → Subject Paper Ratios), `papers` lists them so the teacher
+// can pick one; pass `paperId` to see/edit that paper's own score instead of the subject's
+// combined one.
 router.get('/staff-portal/roster', authed(async (req, res, db, decoded) => {
     const className = String(req.query.className || '');
     const subject = String(req.query.subject || '');
+    const subjectId = String(req.query.subjectId || '');
     const examId = String(req.query.examId || '');
+    const paperId = String(req.query.paperId || '');
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    if (examId) { const w = await examOpenForTeacher(db, examId); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const students = await studentsInClass(db, className);
-    // "Out Of" is determined by the exam's Total Marks setting.
+    // subjectId (carried from the teacher's own assignment) is the reliable key into
+    // subject_papers — a name match breaks if the subject was later renamed. Fall back
+    // to the name lookup only when the client doesn't have a subjectId yet.
+    const papers = subjectId ? await papersForSubject(db, subjectId) : await papersForSubjectName(db, subject);
+    const paper = paperId ? papers.find(p => p._id === paperId) : null;
+    // "Out Of" is the chosen paper's own max score, else the exam's Total Marks setting.
     const examDoc = examId ? await db.collection('exams').findOne({ _id: safeObjId(examId) || (examId as any) }) : null;
-    const examOutOf = Number(examDoc?.settings?.totalMarks) || 100;
+    const outOf = paper ? paper.outOf : (Number(examDoc?.settings?.totalMarks) || 100);
     const existing = examId ? await db.collection('exam_marks').find({ examId, subjectName: subject, className }).toArray() : [];
     const markMap: Record<string, any> = {};
     existing.forEach((m: any) => { markMap[String(m.studentId)] = m; });
-    res.json(students.map((s: any) => ({
-        studentId: String(s._id),
-        name: s.studentName,
-        registrationNo: s.registrationNo || s.admNo,
-        marks: markMap[String(s._id)]?.marksObtained ?? '',
-        outOf: examOutOf,
-    })));
+    res.json({
+        papers, outOf,
+        rows: students.map((s: any) => ({
+            studentId: String(s._id),
+            name: s.studentName,
+            registrationNo: s.registrationNo || s.admNo,
+            marks: paper ? (markMap[String(s._id)]?.papers?.[paperId]?.marksObtained ?? '') : (markMap[String(s._id)]?.marksObtained ?? ''),
+        })),
+    });
 }));
 
 router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
-    const { examId, examName, className, subject, term, outOf, marks } = req.body || {};
+    const { examId, examName, className, subject, subjectId, term, outOf, marks, paperId, paperLabel } = req.body || {};
     if (!examId || !className || !subject || !Array.isArray(marks)) {
         return res.status(400).json({ message: 'examId, className, subject and marks are required' });
     }
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     // Respect the exam's active status + "Allow Marks Entry" setting (default allowed).
     try {
         const oid = safeObjId(examId);
@@ -2048,13 +2195,31 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         if (batch) return res.status(423).json({ message: `These marks are ${String(batch.status).toLowerCase()} by the HOD and can no longer be edited. Ask the HOD to unlock first.` });
     } catch { /* non-fatal */ }
     const total = Number(outOf || 100);
+    // A subject with configured papers (General Settings → Subject Paper Ratios) is scored
+    // one paper at a time; each save folds this paper's scores into the doc's `papers` map
+    // and recombines, weighted by ratio and normalised by each paper's own "out of".
+    const paperDefs = paperId ? (subjectId ? await papersForSubject(db, String(subjectId)) : await papersForSubjectName(db, subject)) : [];
     // Read the CURRENT marks first so we can record exactly what changed — this
     // powers the "changes made after approval" trail the HOD sees on re-submission.
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
     const prevMarks = await db.collection('exam_marks')
         .find({ examId, subjectName: subject }).toArray().catch(() => []);
     const prevByStudent: Record<string, number | null> = {};
-    prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; });
+    const prevDocByStudent: Record<string, any> = {};
+    prevMarks.forEach((m: any) => { prevByStudent[String(m.studentId)] = (m.marksObtained ?? null) as any; prevDocByStudent[String(m.studentId)] = m; });
+
+    // Stamp each mark with the student's class + academic year AT SAVE TIME (first insert
+    // only — see $setOnInsert below), so a promotion afterwards never rewrites which class a
+    // student's past exam belongs to: it stays their Grade 10 result even once they're in
+    // Grade 11, same as the admin-side marks entry (academics.routes.ts).
+    const period = await db.collection('periods').findOne({ isCurrent: true }).catch(() => null);
+    const year = period?.academicYear || new Date().getFullYear();
+    const sIds = Array.from(new Set(marks.map((m: any) => String(m.studentId)).filter(Boolean)));
+    const studentDocs = sIds.length
+        ? await db.collection('students').find({ _id: { $in: sIds.map(id => safeObjId(id) || id) as any[] } }, { projection: { studentClass: 1, className: 1, currentClass: 1, classId: 1 } }).toArray().catch(() => [])
+        : [];
+    const classByStudent: Record<string, { name: string; id: string }> = {};
+    studentDocs.forEach((s: any) => { classByStudent[String(s._id)] = { name: s.studentClass || s.className || s.currentClass || className, id: String(s.classId || '') }; });
 
     let saved = 0;
     const changes: Array<{ studentId: string; from: number | null; to: number }> = [];
@@ -2065,13 +2230,24 @@ router.post('/staff-portal/marks', authed(async (req, res, db, decoded) => {
         if (before === undefined || Number(before) !== obtained) {
             changes.push({ studentId: String(m.studentId), from: before === undefined ? null : (before as number), to: obtained });
         }
+        let scoreSet: any = { marksObtained: obtained, totalMarks: total };
+        if (paperId) {
+            const papers = { ...(prevDocByStudent[String(m.studentId)]?.papers || {}) };
+            papers[paperId] = { marksObtained: obtained, totalMarks: total, label: paperLabel || '' };
+            const combined = combinePapers(papers, paperDefs) || { marksObtained: obtained, totalMarks: total };
+            scoreSet = { papers, marksObtained: combined.marksObtained, totalMarks: combined.totalMarks };
+        }
+        const cls = classByStudent[String(m.studentId)] || { name: className, id: '' };
         await db.collection('exam_marks').updateOne(
             { examId, subjectName: subject, studentId: String(m.studentId) },
             { $set: {
                 examId, examName: examName || 'Exam', term: term || '', className,
                 subjectName: subject, studentId: String(m.studentId),
-                marksObtained: obtained, totalMarks: total, markedBy: decoded.name, updatedAt: new Date(),
-            } },
+                ...scoreSet, markedBy: decoded.name, updatedAt: new Date(),
+            },
+            // classAtTime/classIdAtTime/academicYear set only on first insert, so re-saving
+            // marks (or a later promotion) never rewrites the historical class attribution.
+            $setOnInsert: { createdAt: new Date(), classAtTime: cls.name, classIdAtTime: cls.id, academicYear: String(year) } },
             { upsert: true },
         );
         saved++;
@@ -2137,6 +2313,7 @@ router.post('/staff-portal/marks/submit', authed(async (req, res, db, decoded) =
     if (!(await assertAssigned(db, decoded, className, subject))) {
         return res.status(403).json({ message: 'You are not assigned to this class/subject' });
     }
+    { const w = await examOpenForTeacher(db, String(examId)); if (!w.ok) return res.status(403).json({ message: WINDOW_MESSAGE(w.win), code: 'EXAM_OUTSIDE_TERM' }); }
     const nrmS = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
     const key = { examId: String(examId), subjectNorm: nrmS };
 
@@ -2217,16 +2394,22 @@ router.get('/staff-portal/attendance', authed(async (req, res, db, decoded) => {
     }
     const students = await studentsInClass(db, className);
     const existing = await db.collection('student_attendance').find({ className, date, subject: subject || 'General' }).toArray();
-    const map: Record<string, string> = {};
-    existing.forEach((r: any) => { map[String(r.studentId)] = r.status; });
+    const map: Record<string, any> = {};
+    existing.forEach((r: any) => { map[String(r.studentId)] = r; });
+    // Students signed out at the front desk that day → shown as Excused (reason).
+    const signouts = await signoutsOn(db, date, students.map((s: any) => String(s._id)));
     res.json({
         className, subject: subject || 'General', date,
-        students: students.map((s: any) => ({
-            studentId: String(s._id), name: s.studentName,
-            // Empty status = unmarked. The teacher must explicitly set each student's
-            // status; unmarked students are not saved (see POST below).
-            registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)] || '',
-        })),
+        students: students.map((s: any) => {
+            const so = signouts.get(String(s._id));
+            return {
+                studentId: String(s._id), name: s.studentName,
+                // Empty status = unmarked. The teacher must explicitly set each student's
+                // status; unmarked students are not saved (see POST below).
+                registrationNo: s.registrationNo || s.admNo, status: map[String(s._id)]?.status || '', remarks: map[String(s._id)]?.remarks || '',
+                signout: so ? { reason: so.reason, timeOut: so.timeOut, pickedBy: so.pickedBy, label: excusedLabel(so) } : null,
+            };
+        }),
     });
 }));
 
@@ -2245,7 +2428,7 @@ router.post('/staff-portal/attendance', authed(async (req, res, db, decoded) => 
         if (!r.status) continue;
         await db.collection('student_attendance').updateOne(
             { studentId: String(r.studentId), className, date, subject: subj },
-            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, markedBy: decoded.name, updatedAt: new Date() } },
+            { $set: { studentId: String(r.studentId), className, date, subject: subj, status: r.status, remarks: String(r.remarks || '').slice(0, 200), markedBy: decoded.name, updatedAt: new Date() } },
             { upsert: true },
         );
         saved++;
@@ -2471,10 +2654,29 @@ router.get('/parent-portal/announcements', authed(async (req, res, db) => {
     res.json(items);
 }));
 
+// ─── Parent (and student) portal: performance analytics ─────────────────────
+// The portal API lives under /auth, so the analytics pages call /auth/analytics/…; serve
+// those from the analytics routes, always for the parent's own active child (the student
+// id in the URL is ignored — parentStudentId only allows this parent's children).
+const childAnalytics = (path: (sid: string) => string) => authed(async (req, res, db, decoded) => {
+    const sid = parentStudentId(req, decoded);
+    if (!isObjId(sid)) return res.status(404).json({ message: 'Child not found' });
+    (req as any).tenantDb = db;
+    req.query = { ...req.query, studentId: sid } as any;
+    req.url = path(sid);
+    await new Promise<void>(resolve => {
+        res.once('finish', () => resolve());
+        res.once('close', () => resolve());
+        (analyticsRoutes as any).handle(req, res, () => { res.status(404).json({ message: 'Not found' }); });
+    });
+});
+router.get('/analytics/exams', childAnalytics(() => '/analytics/exams'));
+router.get('/analytics/student/:studentId', childAnalytics(sid => `/analytics/student/${sid}`));
+router.get('/analytics/student/:studentId/over-time', childAnalytics(sid => `/analytics/student/${sid}/over-time`));
+
 router.get('/parent-portal/timetable', authed(async (req, res, db, decoded) => {
     const student = await db.collection('students').findOne({ _id: new ObjectId(parentStudentId(req, decoded)) });
-    const classId = student?.classId ? String(student.classId) : await resolveClassId(db, student?.studentClass || student?.currentClass);
-    res.json(await buildTimetable(db, { classId: classId || '___none___' }));
+    res.json(await buildTimetable(db, await studentClassSlotFilter(db, student)));
 }));
 
 router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => {
@@ -2493,7 +2695,7 @@ router.get('/parent-portal/attendance', authed(async (req, res, db, decoded) => 
         present,
         absent: records.length - present,
         rate: records.length ? Math.round((present / records.length) * 100) : 0,
-        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present' })),
+        records: records.map((r: any) => ({ date: r.date, subject: r.subject || 'General', status: r.status || 'Present', remarks: r.remarks || '' })),
     });
 }));
 
@@ -2532,10 +2734,12 @@ router.get('/parent-portal/mpesa-status', authed(async (req, res, db) => {
 router.get('/parent-portal/wallet', authed(async (req, res, db, decoded) => {
     const wallet = await ensureWallet(db, parentStudentId(req, decoded));
     const transactions = await getTransactions(db, wallet.walletId);
-    res.json({ wallet, transactions });
+    const settings = await getWalletSettings(db);
+    res.json({ wallet, transactions, walletEnabled: settings.enabled });
 }));
 
 router.post('/parent-portal/wallet/topup', authed(async (req, res, db, decoded) => {
+    if (!(await getWalletSettings(db)).enabled) return res.status(400).json({ message: 'Wallet top-ups are currently disabled by the school administrator.' });
     res.json(await initiateStk(req, db, parentStudentId(req, decoded), 'wallet'));
 }));
 
@@ -2770,9 +2974,12 @@ router.get('/tenant/subscription', async (req, res) => {
         const plans = await meta.collection('Plan').find({ isActive: { $ne: false } }).sort({ price: 1 }).toArray();
         const sub = await meta.collection('TenantSubscription').findOne({ tenantId: new ObjectId(tid) });
         const current = sub?.planId ? await meta.collection('Plan').findOne({ _id: sub.planId }) : null;
+        const { schoolPrice } = await import('../lib/planPricing');
+        const tenant = await meta.collection('Tenant').findOne({ _id: new ObjectId(tid) });
+        // the price THIS school pays (its own price / discount), per billing cycle
         res.json({
-            plans: plans.map((p: any) => ({ _id: String(p._id), name: p.name, price: Number(p.price || 0), maxStudents: p.limits?.maxStudents ?? null, modules: p.modules || [], description: p.description || '' })),
-            current: current ? { _id: String(current._id), name: current.name, price: Number(current.price || 0) } : null,
+            plans: plans.map((p: any) => { const sp = schoolPrice(tenant, p); return { _id: String(p._id), name: p.name, price: sp.price, listPrice: sp.listPrice, per: sp.per, cycle: sp.cycle, cycleLabel: sp.cycleLabel, discount: sp.discount, maxStudents: p.limits?.maxStudents ?? null, modules: p.modules || [], description: p.description || '' }; }),
+            current: current ? { _id: String(current._id), name: current.name, price: schoolPrice(tenant, current).price, per: schoolPrice(tenant, current).per } : null,
             status: sub?.status || 'none',
             expiresAt: sub?.expiresAt || sub?.currentPeriodEnd || null,
         });
@@ -2790,7 +2997,8 @@ router.post('/tenant/subscribe', async (req, res) => {
         const plan = await meta.collection('Plan').findOne({ _id: new ObjectId(planId) });
         if (!plan) return res.status(404).json({ message: 'Plan not found' });
         const tenantId = new ObjectId(tid);
-        const price = Number(plan.price || 0);
+        const { schoolPrice } = await import('../lib/planPricing');
+        const price = schoolPrice(await meta.collection('Tenant').findOne({ _id: tenantId }), plan).price;   // this school's price after its discount
 
         // Plan duration + grace from the plan config (defaults: 30 days / 0 grace).
         const durationDays = Number(plan.durationDays) > 0 ? Number(plan.durationDays) : 30;
@@ -2942,12 +3150,14 @@ router.post('/staff-portal/cbc/assess', authed(async (req, res, db, decoded) => 
     const activity: any = b.activityId ? await db.collection('cbc_activities').findOne({ _id: safeObjId(b.activityId)! }).catch(() => null) : null;
     const maxMarks = Number(activity?.maxMarks || b.maxMarks || 0);
     const cur = await cbcCurrentTerm(db).catch(() => null);
+    // Marks → level uses the class's configured grading scale (e.g. a CBC EE/ME/AE/BE template).
+    const grading = await resolveGrading(db, b.classId ? String(b.classId) : undefined, className || undefined);
     const ops = records.filter(r => r.studentId && (r.level || r.marks != null && r.marks !== '')).map(r => {
         // If only marks given, derive the level band; if only level given, keep it.
         let level = r.level;
         if (!level && r.marks != null && r.marks !== '' && maxMarks > 0) {
             const pct = (Number(r.marks) / maxMarks) * 100;
-            level = pct >= 80 ? 'EE' : pct >= 60 ? 'ME' : pct >= 40 ? 'AE' : 'BE';
+            level = grading.gradeOf(pct).grade;
         }
         return {
             updateOne: {
@@ -2986,6 +3196,114 @@ router.get('/staff-portal/cbc/progress/:studentId', authed(async (req, res, db, 
     const latest = terms[terms.length - 1]; const prev = terms[terms.length - 2];
     const areaRow = (term?: string) => term ? Object.fromEntries(Object.entries(byTermArea[term]).map(([ar, v]) => [ar, CBC_SCORE_LEVEL(v.sum / v.n)])) : {};
     res.json({ terms, current: { term: latest || '', areas: areaRow(latest) }, previous: { term: prev || '', areas: areaRow(prev) }, total: all.length });
+}));
+
+// ─── Teacher-portal Skill-Based Reports ──────────────────────────────────────
+// Reuses the SAME skill_areas / skill_assessments collections (and rating SCALES)
+// the admin "Exams → Skill-Based Reports" module reads/writes, but scoped so a
+// teacher may only assess/print for the (class, subject) pairs they're assigned
+// — the same staffAssignments-based enforcement as the CBC endpoints above.
+router.get('/staff-portal/skills/scope', authed(async (req, res, db, decoded) => {
+    const { assignments } = await staffAssignments(db, decoded);
+    const classMap: Record<string, { classId: string; className: string; subjects: Set<string> }> = {};
+    assignments.forEach(a => {
+        if (!a.className || !a.subject) return;
+        const key = cbcNorm(a.className);
+        (classMap[key] ||= { classId: a.classId, className: a.className, subjects: new Set() }).subjects.add(a.subject);
+    });
+    res.json({ classes: Object.values(classMap).map(c => ({ classId: c.classId, className: c.className, subjects: Array.from(c.subjects).sort() })) });
+}));
+
+// Fields of study set up for a subject (read-only; the teacher never edits the framework).
+router.get('/staff-portal/skills/frameworks', authed(async (req, res, db, decoded) => {
+    const subject = String(req.query.subject || '').trim();
+    const { assignments } = await staffAssignments(db, decoded);
+    const mySubjects = new Set(assignments.map(a => cbcNorm(a.subject)));
+    if (subject && !mySubjects.has(cbcNorm(subject))) return res.status(403).json({ message: 'Not your subject.' });
+    const rows: any[] = await db.collection('skill_areas').find(subject ? { subject } : {}).toArray();
+    const list = subject ? rows : rows.filter((r: any) => mySubjects.has(cbcNorm(r.subject)));
+    res.json(list.sort((a: any, b: any) => a.subject.localeCompare(b.subject) || (a.order ?? 0) - (b.order ?? 0)));
+}));
+
+// Roster + existing ratings for a class/subject/term the teacher is assigned.
+router.get('/staff-portal/skills/assessments', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || ''), subject = String(req.query.subject || ''), term = String(req.query.term || ''), year = String(req.query.year || '');
+    if (!className || !subject || !term) return res.status(400).json({ message: 'className, subject and term are required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    if (!assignments.some(a => cbcNorm(a.className) === cbcNorm(className) && cbcNorm(a.subject) === cbcNorm(subject))) return res.status(403).json({ message: 'Not your class/subject.' });
+    const students = await studentsInClass(db, className);
+    const learners = students.map((s: any) => ({ _id: String(s._id), name: s.studentName || s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), regNo: s.registrationNo || s.admNo || '', className, gender: s.gender || '' })).sort((a, b) => a.name.localeCompare(b.name));
+    const ids = learners.map(l => l._id);
+    const rows: any[] = ids.length ? await db.collection('skill_assessments').find({ studentId: { $in: ids }, subject, term, year }).toArray() : [];
+    const ratings: Record<string, Record<string, string>> = {};
+    rows.forEach((r: any) => { (ratings[r.studentId] ||= {})[r.skillId] = r.rating; });
+    res.json({ learners, ratings });
+}));
+
+router.post('/staff-portal/skills/assessments/bulk', authed(async (req, res, db, decoded) => {
+    const b = req.body || {};
+    const className = String(b.className || ''), subject = String(b.subject || ''), term = String(b.term || ''), year = String(b.year || '');
+    const records: any[] = Array.isArray(b.records) ? b.records.slice(0, 5000) : [];
+    if (!className || !subject || !term || !year || !records.length) return res.status(400).json({ message: 'className, subject, term, year and records are required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    if (!assignments.some(a => cbcNorm(a.className) === cbcNorm(className) && cbcNorm(a.subject) === cbcNorm(subject))) return res.status(403).json({ message: 'Not your class/subject.' });
+    // Only students actually in this class — a tampered studentId from elsewhere is dropped.
+    const roster = await studentsInClass(db, className);
+    const rosterIds = new Set(roster.map((s: any) => String(s._id)));
+    const frameworks: any[] = await db.collection('skill_areas').find({ subject }).toArray();
+    const skillInfo = new Map<string, { area: string; scale: string }>();
+    frameworks.forEach((f: any) => (f.skills || []).forEach((s: any) => skillInfo.set(s.id, { area: f.area, scale: f.scale })));
+    const ops: any[] = []; let saved = 0, cleared = 0, skipped = 0;
+    for (const r of records) {
+        const studentId = String(r.studentId || '');
+        const info = skillInfo.get(String(r.skillId));
+        if (!rosterIds.has(studentId) || !info) { skipped++; continue; }
+        const key = { studentId, skillId: String(r.skillId), term, year };
+        if (!r.rating) { ops.push({ deleteOne: { filter: key } }); cleared++; continue; }
+        if (!SCALES[info.scale]?.ratings.some((x: any) => x.code === String(r.rating))) { skipped++; continue; }
+        ops.push({ updateOne: { filter: key, update: { $set: { ...key, subject, area: info.area, rating: String(r.rating), updatedAt: new Date(), updatedBy: decoded.name || decoded.staffId || 'teacher' }, $setOnInsert: { createdAt: new Date() } }, upsert: true } }); saved++;
+    }
+    if (ops.length) await db.collection('skill_assessments').bulkWrite(ops);
+    res.json({ saved, cleared, skipped });
+}));
+
+// Report data for printing — one class, the subjects (default: all this teacher's
+// subjects for that class) across all terms of the given year.
+router.get('/staff-portal/skills/report', authed(async (req, res, db, decoded) => {
+    const className = String(req.query.className || '');
+    const year = String(req.query.year || '');
+    if (!className) return res.status(400).json({ message: 'className is required' });
+    const { assignments } = await staffAssignments(db, decoded);
+    const mySubjectsForClass = assignments.filter(a => cbcNorm(a.className) === cbcNorm(className)).map(a => a.subject);
+    if (!mySubjectsForClass.length) return res.status(403).json({ message: 'Not your class.' });
+    const wantSubjects = String(req.query.subjects || '').split(',').map(s => s.trim()).filter(Boolean);
+    const subjects = wantSubjects.length ? wantSubjects.filter(s => mySubjectsForClass.some(m => cbcNorm(m) === cbcNorm(s))) : mySubjectsForClass;
+    if (!subjects.length) return res.status(403).json({ message: 'Not your subject.' });
+    const terms = ['Term 1', 'Term 2', 'Term 3'];
+    const students = await studentsInClass(db, className);
+    const learners = students.map((s: any) => ({ _id: String(s._id), name: s.studentName || s.name || '', regNo: s.registrationNo || s.admNo || '', className, gender: s.gender || '' }));
+    const frameworks: any[] = (await db.collection('skill_areas').find({ subject: { $in: subjects } }).toArray())
+        .filter((f: any) => !f.levels?.length || f.levels.some((l: string) => cbcNorm(className).startsWith(cbcNorm(l))));
+    const ids = learners.map(l => l._id);
+    const rows: any[] = ids.length ? await db.collection('skill_assessments').find({ studentId: { $in: ids }, year }).toArray() : [];
+    const byStudent = new Map<string, any[]>(); rows.forEach((r: any) => { (byStudent.get(r.studentId) || byStudent.set(r.studentId, []).get(r.studentId)!).push(r); });
+    const subjectNames = Array.from(new Set(frameworks.map((f: any) => f.subject))).sort();
+    res.json({
+        year, terms, scales: SCALES,
+        reports: learners.map(l => {
+            const mine = byStudent.get(l._id) || [];
+            return {
+                student: l,
+                subjects: subjectNames.map(subject => ({
+                    subject,
+                    areas: frameworks.filter((f: any) => f.subject === subject).sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)).map((f: any) => ({
+                        area: f.area, scale: f.scale,
+                        skills: (f.skills || []).map((s: any) => ({ id: s.id, name: s.name, ratings: Object.fromEntries(terms.map(t => [t, mine.find((r: any) => r.skillId === s.id && r.term === t)?.rating || ''])) })),
+                    })),
+                })),
+            };
+        }),
+    });
 }));
 
 // ─── Online Examination — student-portal exam taking ─────────────────────────

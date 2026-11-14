@@ -11,6 +11,9 @@ import crypto from 'crypto';
 import { Db, ObjectId } from 'mongodb';
 import { publicAppUrl } from './verifyDocs';
 import { formatExamName } from './examName';
+import { onlyPublished, publishedView } from './examPublish';
+import { resolveGrading } from './grading';
+import { averageAcrossSourceExams } from '../routes/analytics.routes';
 
 const secret = () => process.env.DOC_VERIFY_SECRET || process.env.JWT_SECRET || 'shulecloud_doc_verify_secret';
 
@@ -37,28 +40,30 @@ export async function findExamByCode(db: Db, code: string): Promise<any | null> 
     return hit ? db.collection('exams').findOne({ _id: hit._id }) : null;
 }
 
-// Grade for a percentage from the school's grading criteria (falls back to a plain A–E scale).
-async function gradeFn(db: Db) {
-    const g: any = await db.collection('grading_criteria').findOne({}).catch(() => null);
-    const grades: any[] = (g?.grades || []).map((x: any) => ({ grade: x.grade, from: Number(x.from), upto: Number(x.upto) })).filter((x: any) => x.grade && !isNaN(x.from));
-    return (pct: number) => {
-        const hit = grades.find(x => pct >= x.from && pct <= x.upto);
-        if (hit) return hit.grade;
-        return pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E';
-    };
-}
-
 /** One student's results for one exam, ready to show. Returns null when there are no marks. */
 export async function resultSnapshot(db: Db, examId: string, studentId: string) {
     let sOid: ObjectId, eOid: ObjectId;
     try { sOid = new ObjectId(studentId); eOid = new ObjectId(examId); } catch { return null; }
-    const [marks, exam, student, grade] = await Promise.all([
-        db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []),
+    const [exam, student] = await Promise.all([
         db.collection('exams').findOne({ _id: eOid }).catch(() => null) as Promise<any>,
         db.collection('students').findOne({ _id: sOid }).catch(() => null) as Promise<any>,
-        gradeFn(db),
     ]);
+    // Consolidated/Year Average exams have no marks of their own — average their source
+    // exams' published marks for this student instead, tagged with this exam's own id.
+    const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
+        ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+    // Consolidated/Year Average is published as its own step in Manage Exams.
+    if (sourceExamIds.length) {
+        const view = await publishedView(db);
+        if (view.statusOf(examId, undefined, exam?.classLevel) !== 'Published') return null;
+    }
+    const marks: any[] = sourceExamIds.length
+        ? averageAcrossSourceExams(await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: sourceExamIds }, studentId }).toArray().catch(() => []))).map((m: any) => ({ ...m, examId }))
+        : await db.collection('exam_marks').find({ examId, studentId }).toArray().catch(() => []).then(m => onlyPublished(db, m));
     if (!student || !exam || !marks.length) return null;
+    // Grades follow the student's CLASS grading (template → class → global → curriculum → default).
+    const grading = await resolveGrading(db, student.classId ? String(student.classId) : undefined, String(student.studentClass || student.currentClass || '') || undefined);
+    const grade = (pct: number) => grading.gradeOf(pct).grade;
     const subjects = marks.map((m: any) => {
         const outOf = Number(m.totalMarks) || 100, score = Number(m.marksObtained) || 0, pct = outOf ? Math.round((score / outOf) * 100) : 0;
         return { name: m.subjectName || m.subject || '', marks: score, outOf, pct, grade: grade(pct) };

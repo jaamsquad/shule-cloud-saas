@@ -28,7 +28,7 @@ export default function PublicDoc() {
     );
 
     return (
-        <div className="min-h-screen bg-slate-100 py-6 px-3">
+        <div className="rsp min-h-screen bg-slate-100 py-6 px-3">
             <div className="max-w-[860px] mx-auto mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
                 <div className="flex items-center gap-2 text-sm font-bold text-slate-700">{doc.company?.companyName || "ShuleCloud"} · {doc.number} <StatusBadge status={doc.status} /></div>
                 <button onClick={() => window.print()} className="h-9 px-4 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 flex items-center gap-2 hover:border-[#534AB7]"><Printer className="w-4 h-4" /> Print / Save PDF</button>

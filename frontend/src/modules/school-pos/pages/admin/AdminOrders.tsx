@@ -4,7 +4,7 @@ import toast from 'sonner'
 import api from '@/lib/api'
 import { format } from 'date-fns'
 import {
-  Search, Eye, RefreshCw, XCircle
+  Search, Eye, RefreshCw, XCircle, X
 } from 'lucide-react'
 
 export default function AdminOrders() {
@@ -141,7 +141,7 @@ export default function AdminOrders() {
                 <h2 className="text-base font-bold text-white">Order Details</h2>
                 <p className="text-xs text-gray-500">{selectedOrder.orderNumber}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-xs">

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import posApi from '../../lib/posApi'
 import { usePOSCartStore } from '../../stores/posCartStore'
-import { ShoppingBag, ArrowLeft, ShieldCheck, Check } from 'lucide-react'
+import { ShoppingBag, ArrowLeft, ShieldCheck, Check, Shirt } from 'lucide-react'
 
 export default function StoreProductDetail() {
   const { id } = useParams()
@@ -71,7 +71,7 @@ export default function StoreProductDetail() {
           {product.imageUrl ? (
             <img src={product.imageUrl} alt={product.name} className="max-h-[380px] max-w-full object-contain rounded-2xl" />
           ) : (
-            <span className="text-8xl select-none">👕</span>
+            <Shirt className="w-24 h-24 text-slate-400" />
           )}
         </div>
 

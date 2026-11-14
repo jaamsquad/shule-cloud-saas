@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X, ListChecks } from "lucide-react";
+import { Home, Plus, Search, Edit, Trash2, User, Loader2, LayoutGrid, List, Check, X, ListChecks, ArrowRightLeft } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -48,6 +48,23 @@ export default function AllStudents() {
         queryClient.invalidateQueries({ queryKey: STUDENT_TRASH_KEY });
         if (ok) toast.success(`${ok} student${ok === 1 ? "" : "s"} moved to Trash${failed ? ` · ${failed} could not be deleted` : ""}`);
         else toast.error("Could not delete the selected students.");
+        exitSelect();
+    };
+    // Assign / move the selected students to a class (and stream)
+    const [moveOpen, setMoveOpen] = useState(false);
+    const [moving, setMoving] = useState(false);
+    const moveSelected = async (payload: any) => {
+        const ids = Array.from(selected);
+        setMoving(true);
+        let ok = 0, failed = 0;
+        for (let i = 0; i < ids.length; i += 4) {
+            await Promise.all(ids.slice(i, i + 4).map(id => api.patch(`/students/${id}`, payload).then(() => { ok++; }).catch(() => { failed++; })));
+        }
+        setMoving(false);
+        queryClient.invalidateQueries({ queryKey: ["students"] });
+        if (ok) toast.success(`${ok} student${ok === 1 ? "" : "s"} now in ${payload.studentClass}${failed ? ` · ${failed} could not be moved` : ""}`);
+        else toast.error("Could not move the selected students.");
+        setMoveOpen(false);
         exitSelect();
     };
     const [viewMode, setViewMode] = useState<'grid'|'list'>(localStorage.getItem('studentViewMode') as any || 'grid');
@@ -402,9 +419,15 @@ export default function AllStudents() {
 
             {selectMode && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                    <div className="bg-gray-900 text-white pl-5 pr-3 py-3 rounded-2xl shadow-2xl flex items-center gap-4 text-sm font-bold">
+                    <div className="bg-gray-900 text-white pl-5 pr-3 py-3 rounded-2xl shadow-2xl flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-bold w-max max-w-[calc(100vw-1.5rem)]">
                         <span>{selected.size} selected</span>
                         {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:text-white">Clear</button>}
+                        {canUpdate && (
+                            <button onClick={() => setMoveOpen(true)} disabled={selected.size === 0}
+                                className="px-4 py-2 rounded-xl bg-white text-gray-900 hover:bg-gray-100 disabled:opacity-40 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition-colors">
+                                <ArrowRightLeft className="w-3.5 h-3.5" /> {filterClassId === NO_CLASS ? "Assign class" : "Move to class"}
+                            </button>
+                        )}
                         <button onClick={() => setConfirmDelete(true)} disabled={selected.size === 0}
                             className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-40 disabled:hover:bg-rose-500 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition-colors">
                             <Trash2 className="w-3.5 h-3.5" /> Delete {selected.size > 1 ? "students" : "student"}
@@ -430,6 +453,12 @@ export default function AllStudents() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {moveOpen && (
+                <MoveClassDialog count={selected.size} classes={classes} saving={moving}
+                    noClass={students.filter((x: any) => selected.has(x._id) && !String(x.studentClass || x.currentClass || x.className || "").trim()).length}
+                    onCancel={() => !moving && setMoveOpen(false)} onSave={moveSelected} />
             )}
 
             {showTrash && <StudentTrashDialog onClose={() => setShowTrash(false)} />}
@@ -512,6 +541,48 @@ function ClassStreamEditor({ student, classes, saving, onCancel, onSave }: {
             <button onClick={onCancel} className="w-7 h-7 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center" title="Cancel">
                 <X className="w-3.5 h-3.5" />
             </button>
+        </div>
+    );
+}
+
+// Assign / move several students to one class + stream (same fields the inline editor saves).
+function MoveClassDialog({ count, noClass, classes, saving, onCancel, onSave }: { count: number; noClass: number; classes: any[]; saving: boolean; onCancel: () => void; onSave: (payload: any) => void }) {
+    const [classId, setClassId] = useState("");
+    const [streamId, setStreamId] = useState("");
+    const { data: streams = [] } = useQuery<any[]>({ queryKey: ["v2_streams", classId], enabled: !!classId, queryFn: async () => (await api.get("/v2/streams", { params: { classId } })).data || [] });
+    const cls = classes.find((c: any) => String(c._id) === classId);
+    const stream = streams.find((x: any) => String(x._id) === streamId);
+    const fullName = cls ? (stream ? (stream.fullName || `${cls.name} ${stream.name}`) : cls.name) : "";
+    const save = () => cls && onSave({ classId, className: cls.name, studentClass: fullName, currentClass: fullName, streamId: streamId || null, stream: stream?.name || "", streamName: stream?.name || "" });
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onCancel}>
+            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+                <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center"><ArrowRightLeft className="w-5 h-5" /></div>
+                <div>
+                    <h3 className="font-black text-slate-800 text-lg">{noClass === count ? "Assign a class" : "Move to another class"}</h3>
+                    <p className="text-sm text-slate-500 mt-1">{count} student{count === 1 ? "" : "s"} selected{noClass ? ` · ${noClass} with no class yet` : ""}.</p>
+                </div>
+                <div className="space-y-3">
+                    <label className="block text-xs font-bold text-slate-500">Class
+                        <select value={classId} onChange={e => { setClassId(e.target.value); setStreamId(""); }} className="mt-1 w-full h-11 px-3 border border-gray-200 rounded-xl text-sm bg-white text-slate-800">
+                            <option value="">Choose class…</option>
+                            {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                        </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-500">Stream
+                        <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!classId} className="mt-1 w-full h-11 px-3 border border-gray-200 rounded-xl text-sm bg-white text-slate-800 disabled:bg-gray-50">
+                            <option value="">{streams.length ? "No stream" : "No streams in this class"}</option>
+                            {streams.map((x: any) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                        </select>
+                    </label>
+                </div>
+                <div className="flex justify-end gap-3">
+                    <button onClick={onCancel} disabled={saving} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">Cancel</button>
+                    <button onClick={save} disabled={!cls || saving} className="px-5 py-2.5 rounded-xl font-bold text-white bg-gray-900 hover:bg-black flex items-center gap-2 disabled:opacity-50">
+                        {saving && <Loader2 className="w-4 h-4 animate-spin" />} {fullName ? `Move to ${fullName}` : "Move"}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

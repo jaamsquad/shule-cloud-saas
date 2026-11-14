@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Home, Plus, Trash2, Check, X, Loader2, Megaphone, Search, Bell } from "lucide-react";
+import { Home, Plus, Trash2, Check, X, Loader2, Megaphone, Search, Bell, Pin, Pencil } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
@@ -100,7 +100,7 @@ export default function Announcements() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                {ann.isPinned && <span className="px-2 py-0.5 bg-[#5C67F2] text-white text-[8px] font-black uppercase rounded-full">📌 Pinned</span>}
+                                                {ann.isPinned && <span className="px-2 py-0.5 bg-[#5C67F2] text-white text-[8px] font-black uppercase rounded-full inline-flex items-center gap-1"><Pin className="w-2.5 h-2.5" />Pinned</span>}
                                                 <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase ${PRIORITY_COLORS[ann.priority] || PRIORITY_COLORS.Normal}`}>{ann.priority}</span>
                                                 <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black uppercase rounded-lg">{ann.audience}</span>
                                             </div>
@@ -115,7 +115,7 @@ export default function Announcements() {
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         <button onClick={() => { setEditId(ann._id); setForm({ title: ann.title, message: ann.message, audience: ann.audience, priority: ann.priority, expiryDate: ann.expiryDate || "", isPinned: ann.isPinned || false }); setShowModal(true); }}
                                             className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 flex items-center justify-center border border-slate-100">
-                                            ✎
+                                            <Pencil className="w-3.5 h-3.5" />
                                         </button>
                                         {confirmDelete === ann._id ? (
                                             <><button onClick={() => delMut.mutate(ann._id)} className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></button>
@@ -169,7 +169,7 @@ export default function Announcements() {
                                         <input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700" />
                                     </div>
                                     <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-4 h-11 border border-slate-100">
-                                        <span className="text-[9px] font-black uppercase text-slate-500">📌 Pin to Top</span>
+                                        <span className="text-[9px] font-black uppercase text-slate-500 inline-flex items-center gap-1"><Pin className="w-3 h-3" />Pin to Top</span>
                                         <button onClick={() => setForm({ ...form, isPinned: !form.isPinned })} className={`w-10 h-5 rounded-full transition-all relative ${form.isPinned ? "bg-[#5C67F2]" : "bg-slate-200"}`}><div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${form.isPinned ? "right-0.5" : "left-0.5"}`} /></button>
                                     </div>
                                 </div>

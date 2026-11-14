@@ -14,27 +14,37 @@ export default function StaffMarksEntry() {
 
     const [examId, setExamId] = useState("");
     const [pair, setPair] = useState("");
+    const [paperId, setPaperId] = useState("");
     const [rows, setRows] = useState<any[]>([]);
 
+    // Marks entry is open for this term's exams only (the server lists only those).
+    const { data: win } = useQuery<any>({
+        queryKey: ["staff_marks_window"],
+        queryFn: async () => (await api.get("/staff-portal/marks-window")).data,
+    });
     const { data: exams = [] } = useQuery({
         queryKey: ["staff_exams"],
         queryFn: async () => (await api.get("/staff-portal/exams")).data,
         retry: false,
     });
 
-    const { className, subject } = pair ? parsePair(pair) : { className: "", subject: "" };
+    const { className, subject, subjectId } = pair ? parsePair(pair) : { className: "", subject: "", subjectId: "" };
+    useEffect(() => { setPaperId(""); }, [pair]);
 
     const { data: roster, isFetching, refetch } = useQuery({
-        queryKey: ["staff_roster", examId, pair],
-        queryFn: async () => (await api.get(`/staff-portal/roster?examId=${examId}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}`)).data,
+        queryKey: ["staff_roster", examId, pair, paperId],
+        queryFn: async () => (await api.get(`/staff-portal/roster?examId=${examId}&className=${encodeURIComponent(className)}&subject=${encodeURIComponent(subject)}${subjectId ? `&subjectId=${subjectId}` : ""}${paperId ? `&paperId=${paperId}` : ""}`)).data,
         enabled: !!examId && !!pair,
         retry: false,
     });
+    const papers: { _id: string; label: string; outOf: number }[] = roster?.papers || [];
+    const paper = papers.find(p => p._id === paperId);
 
-    useEffect(() => { if (roster) setRows(roster.map((r: any) => ({ ...r }))); }, [roster]);
+    useEffect(() => { if (roster) setRows((roster.rows || []).map((r: any) => ({ ...r }))); }, [roster]);
 
     const exam = exams.find((e: any) => e._id === examId);
-    const outOf = Number(exam?.totalMarks) || 100;   // from the exam's Total Marks setting
+    // A configured paper is marked out of its own total; otherwise the exam's Total Marks setting.
+    const outOf = paper ? paper.outOf : (Number(exam?.totalMarks) || 100);
 
     // Approval status of this (exam × subject) — locked marks can't be edited.
     const { data: markStatus, refetch: refetchStatus } = useQuery({
@@ -50,7 +60,8 @@ export default function StaffMarksEntry() {
 
     const save = useMutation({
         mutationFn: async () => (await api.post("/staff-portal/marks", {
-            examId, examName: exam?.name, term: exam?.term, className, subject, outOf,
+            examId, examName: exam?.name, term: exam?.term, className, subject, subjectId: subjectId || undefined, outOf,
+            paperId: paperId || undefined, paperLabel: paper?.label,
             marks: rows.map(r => ({ studentId: r.studentId, marks: r.marks })),
         })).data,
         onSuccess: (d: any) => {
@@ -72,6 +83,12 @@ export default function StaffMarksEntry() {
     return (
         <>
             <PageTitle title="Exam Marks Entry" />
+            {win?.restricted && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>You can record marks for <b>{win.label}</b> exams. Earlier exams are managed by the school administrator.</span>
+                </div>
+            )}
 
             <PanelCard title="Select Exam, Class & Subject">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -104,8 +121,22 @@ export default function StaffMarksEntry() {
                 )}
             </PanelCard>
 
-            {examId && pair && (
-                <PanelCard title={`${className} — ${subject}`}
+            {examId && pair && papers.length > 0 && (
+                <PanelCard title="Which paper?">
+                    <div className="flex flex-wrap gap-2">
+                        {papers.map(p => (
+                            <button key={p._id} onClick={() => setPaperId(p._id)}
+                                className={`h-9 px-3.5 rounded-lg text-xs font-bold border ${paperId === p._id ? "bg-[#159a52] text-white border-[#159a52]" : "bg-white text-slate-600 border-black/10"}`}>
+                                {p.label} <span className="opacity-70">/{p.outOf}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-2">Each paper is marked separately; the subject's overall score is combined automatically from the ratios set in General Settings.</p>
+                </PanelCard>
+            )}
+
+            {examId && pair && (papers.length === 0 || paperId) && (
+                <PanelCard title={`${className} — ${subject}${paper ? ` (${paper.label})` : ""}`}
                     action={
                         <div className="flex items-center gap-2">
                             {statusLabel && statusLabel !== "Draft" && (

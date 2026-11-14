@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { GraduationCap, Building2, Mail, ArrowLeft, CheckCircle2, Loader2, User } from "lucide-react";
+import { GraduationCap, Building2, Mail, ArrowLeft, CheckCircle2, Loader2, User, KeyRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { currentTenantSubdomain } from "@/lib/portal";
@@ -64,7 +64,7 @@ export default function ForgotPassword() {
               </div>
             )}
             <p className="text-[11px] text-gray-500 font-medium">{sent ? "Check your inbox for the reset link." : "We'll email you a link to reset your password."}</p>
-            <h2 className="text-base font-bold text-[#5C67F2]">{sent ? "Email Sent ✉️" : "Reset Password 🔑"}</h2>
+            <h2 className="text-base font-bold text-[#5C67F2] flex items-center gap-1.5">{sent ? <>Email Sent <Mail className="w-4 h-4 text-slate-400" /></> : <>Reset Password <KeyRound className="w-4 h-4 text-slate-400" /></>}</h2>
           </div>
 
           {!sent ? (

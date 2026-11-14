@@ -1,11 +1,18 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Wallet, Search, Smartphone, Lock, Unlock, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Loader2, Wallet, Search, Smartphone, Lock, Unlock, ArrowDownLeft, ArrowUpRight, ShieldOff, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 
 export default function AdminWallets() {
     const qc = useQueryClient();
+    const { data: walletSettings } = useQuery({ queryKey: ["wallet_settings"], queryFn: async () => (await api.get("/wallets/settings")).data });
+    const walletEnabled = walletSettings?.enabled !== false;
+    const toggleWallet = useMutation({
+        mutationFn: async (enabled: boolean) => (await api.post("/wallets/settings", { enabled })).data,
+        onSuccess: (d: any) => { toast.success(d.enabled ? "Wallet top-ups enabled" : "Wallet top-ups disabled — students/parents can no longer deposit"); qc.invalidateQueries({ queryKey: ["wallet_settings"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
     const [studentSearch, setStudentSearch] = useState("");
     const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
     const [amount, setAmount] = useState("");
@@ -71,10 +78,22 @@ export default function AdminWallets() {
 
     return (
         <div className="flex-1 bg-[#f8fafc] min-h-screen p-6">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><Wallet className="w-5 h-5 text-indigo-600" /></div>
-                <div><h1 className="text-xl font-black text-slate-800">Student Wallets</h1><p className="text-xs text-slate-500">Top up, freeze and track student wallets</p></div>
+            <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center"><Wallet className="w-5 h-5 text-indigo-600" /></div>
+                    <div><h1 className="text-xl font-black text-slate-800">Student Wallets</h1><p className="text-xs text-slate-500">Top up, freeze and track student wallets</p></div>
+                </div>
+                <button onClick={() => toggleWallet.mutate(!walletEnabled)} disabled={toggleWallet.isPending}
+                    className={`h-10 px-4 rounded-xl text-xs font-bold inline-flex items-center gap-2 disabled:opacity-50 ${walletEnabled ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                    {toggleWallet.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : walletEnabled ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />}
+                    {walletEnabled ? "Wallet top-ups enabled" : "Wallet top-ups disabled"} — click to {walletEnabled ? "disable" : "enable"}
+                </button>
             </div>
+            {!walletEnabled && (
+                <div className="mb-6 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-700 font-semibold">
+                    Wallet top-ups are disabled school-wide. Students and parents cannot deposit money, and the admin top-up below is also blocked. Existing balances can still be spent.
+                </div>
+            )}
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {cards.map(c => <div key={c.l} className="bg-white rounded-xl border border-slate-100 shadow-sm p-4"><p className="text-lg font-black text-slate-800">{c.v}</p><p className="text-[11px] text-slate-500 font-bold uppercase">{c.l}</p></div>)}
@@ -133,7 +152,11 @@ export default function AdminWallets() {
                             <p className="text-2xl font-black text-indigo-600 mb-4">KSh {Number(wallet.balance || 0).toLocaleString()}</p>
 
                             <label className="block text-[11px] font-bold text-slate-500 mb-1">Top up via M-PESA</label>
-                            {stk === "waiting" ? (
+                            {!walletEnabled ? (
+                                <div className="mb-3 flex items-center gap-2 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                                    <ShieldOff className="w-4 h-4" /> Top-ups are disabled school-wide.
+                                </div>
+                            ) : stk === "waiting" ? (
                                 <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                                     <Loader2 className="w-4 h-4 animate-spin" /> Awaiting M-PESA confirmation on the phone…
                                 </div>

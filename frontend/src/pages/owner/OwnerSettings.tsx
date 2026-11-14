@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText } from "lucide-react";
+import { Loader2, Check, Power, Smartphone, AtSign, Video, FileText, X, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import OwnerAiCard from "@/components/owner/OwnerAiCard";
+import OwnerCalendarCard from "@/components/owner/OwnerCalendarCard";
 
 const PRIMARY = "#534AB7";
 
@@ -43,6 +45,19 @@ export default function OwnerSettings() {
         <div><label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
             <input type={type} value={mp[k] ?? ""} onChange={(e) => setMp((p: any) => ({ ...p, [k]: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} /></div>
     );
+
+    // SMS pricing — how many SMS 1 KSH buys, and the free welcome bonus for a new school
+    const { data: smsPricing } = useQuery({
+        queryKey: ["owner_sms_pricing"],
+        queryFn: async () => { try { return (await api.get("/owner/sms-pricing")).data; } catch { return {}; } },
+    });
+    const [sp, setSp] = useState<any>({ smsPerKsh: 2, welcomeBonus: 200 });
+    useEffect(() => { if (smsPricing) setSp((p: any) => ({ ...p, ...smsPricing })); }, [smsPricing]);
+    const saveSmsPricing = useMutation({
+        mutationFn: async () => api.post("/owner/sms-pricing", sp),
+        onSuccess: () => { toast.success("SMS pricing saved"); qc.invalidateQueries({ queryKey: ["owner_sms_pricing"] }); },
+        onError: (e: any) => toast.error(e.response?.data?.message || "Failed"),
+    });
 
     // Platform Jitsi / JaaS (Live Classes) — one account shared by all schools
     const { data: meetingCfg } = useQuery({
@@ -106,6 +121,12 @@ export default function OwnerSettings() {
 
     return (
         <div className="space-y-5">
+            {/* AI assistant (Groq) — the key every school's AI uses */}
+            <OwnerAiCard />
+
+            {/* Google Calendar OAuth client — every school's "Connect Google Calendar" button */}
+            <OwnerCalendarCard />
+
             {/* Public registration toggle */}
             <div className="bg-white rounded-xl p-5 flex items-center justify-between" style={{ border: "0.5px solid #e5e7eb" }}>
                 <div>
@@ -149,12 +170,32 @@ export default function OwnerSettings() {
                 <p className="text-[10px] text-slate-400 mt-3">Production STK endpoint: <code>https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest</code> (used automatically when Environment = Production).</p>
             </div>
 
+            {/* SMS pricing — ratio + welcome bonus */}
+            <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><MessageSquare className="w-4 h-4" style={{ color: PRIMARY }} /> SMS Credits Pricing</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Schools buy SMS credits via STK push to the platform M-PESA above, and get a free welcome bonus when they're activated.</p>
+                    </div>
+                    <button onClick={() => saveSmsPricing.mutate()} disabled={saveSmsPricing.isPending} className="h-9 px-4 text-white rounded-lg text-xs font-bold flex items-center gap-1.5" style={{ background: PRIMARY }}>{saveSmsPricing.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">SMS per 1 KSH</label>
+                        <input type="number" min={0.1} step="0.1" value={sp.smsPerKsh} onChange={(e) => setSp((p: any) => ({ ...p, smsPerKsh: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} />
+                    </div>
+                    <div><label className="block text-[11px] font-bold text-slate-600 mb-1">Welcome Bonus (free SMS on activation)</label>
+                        <input type="number" min={0} value={sp.welcomeBonus} onChange={(e) => setSp((p: any) => ({ ...p, welcomeBonus: e.target.value }))} className="w-full h-10 px-3 rounded-lg text-sm" style={{ border: "0.5px solid #e5e7eb" }} />
+                    </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3">e.g. at {sp.smsPerKsh} SMS per KSH, KSH 100 buys {Math.floor(Number(sp.smsPerKsh || 0) * 100)} SMS credits.</p>
+            </div>
+
             {/* Platform Live Classes (Jitsi / 8x8 JaaS) — shared by all schools */}
             <div className="bg-white rounded-xl p-5" style={{ border: "0.5px solid #e5e7eb" }}>
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Video className="w-4 h-4" style={{ color: PRIMARY }} /> Live Classes — Jitsi / 8x8 JaaS</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">One JaaS account used by <b>all schools</b>. Each school's rooms stay isolated (namespaced by school). {meetingCfg?.configured ? "Configured ✓" : "Not configured yet."}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">One JaaS account used by <b>all schools</b>. Each school's rooms stay isolated (namespaced by school). {meetingCfg?.configured ? <>Configured <Check className="w-3.5 h-3.5 inline align-[-2px]" /></> : "Not configured yet."}</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => setMt((p: any) => ({ ...p, jitsiEnabled: !p.jitsiEnabled }))}
@@ -166,7 +207,7 @@ export default function OwnerSettings() {
                 {mtTest && (
                     <div className={`rounded-lg px-3 py-2 mb-3 text-[12px] font-semibold ${mtTest.ok ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
                         {mtTest.message}
-                        {mtTest.kid && <div className="mt-1 font-mono text-[10px] text-slate-500">kid: {mtTest.kid} · key {mtTest.keyLooksPem ? "PEM ✓" : "not PEM ✗"} ({mtTest.keyLength} chars)</div>}
+                        {mtTest.kid && <div className="mt-1 font-mono text-[10px] text-slate-500">kid: {mtTest.kid} · key {mtTest.keyLooksPem ? <>PEM <Check className="w-3 h-3 inline align-[-2px]" /></> : <>not PEM <X className="w-3 h-3 inline align-[-2px]" /></>} ({mtTest.keyLength} chars)</div>}
                     </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -197,7 +238,7 @@ export default function OwnerSettings() {
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><FileText className="w-4 h-4" style={{ color: PRIMARY }} /> KRA PIN Checker</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">One KRA app used by <b>all schools</b> to look up an employee's KRA PIN by National ID or PIN when registering staff. {kraCfg?.configured ? "Configured ✓" : "Not configured yet."}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">One KRA app used by <b>all schools</b> to look up an employee's KRA PIN by National ID or PIN when registering staff. {kraCfg?.configured ? <>Configured <Check className="w-3.5 h-3.5 inline align-[-2px]" /></> : "Not configured yet."}</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => testKra.mutate()} disabled={testKra.isPending} className="h-9 px-3 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 flex items-center gap-1.5">{testKra.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Test</button>

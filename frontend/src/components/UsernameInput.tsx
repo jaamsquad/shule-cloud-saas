@@ -72,12 +72,12 @@ export default function UsernameInput({ value, onChange, excludeId, excludeType,
             {/* Inline message */}
             {status === "taken" && (
                 <p className="text-[9px] font-black text-rose-500 uppercase tracking-wide flex items-center gap-1 pl-1">
-                    ✕ {message}
+                    <XCircle className="w-3 h-3 shrink-0" /> {message}
                 </p>
             )}
             {status === "ok" && (
                 <p className="text-[9px] font-black text-emerald-500 uppercase tracking-wide flex items-center gap-1 pl-1">
-                    ✓ {message}
+                    <CheckCircle2 className="w-3 h-3 shrink-0" /> {message}
                 </p>
             )}
         </div>

@@ -1,4 +1,4 @@
-import { Home, Eye, EyeOff, Save, Mail, Key, RefreshCcw, ExternalLink, Loader2, Search } from "lucide-react";
+import { Home, Eye, EyeOff, Save, Mail, Key, RefreshCcw, ExternalLink, Loader2, Search, Lock, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import UsernameInput from "@/components/UsernameInput";
 import { useItems } from "@/hooks/useItems";
@@ -14,6 +14,15 @@ function generatePassword(id: string): string {
 function generateUsername(id: string, name: string): string {
     if (id) return id;
     return name?.toLowerCase().replace(/\s+/g, ".").slice(0, 15) || "staff";
+}
+
+// The school's own login page, as seen from this very browser tab (same subdomain
+// the admin is on right now) — the one address that will actually work for staff.
+const schoolLoginLink = () => `${window.location.origin}/login`;
+
+function credentialsSmsText(staff: any, username: string, password: string): string {
+    const name = staff.employeeName || staff.name || "there";
+    return `Hi ${name}, here are your staff portal login details — Username: ${username}, Password: ${password}. Login at: ${schoolLoginLink()}`;
 }
 
 export default function StaffManageLogin() {
@@ -82,6 +91,24 @@ export default function StaffManageLogin() {
         toast.success(`Generating credentials for ${ungenerated.length} staff...`);
     };
 
+    const smsMut = useMutation({
+        mutationFn: async (staff: any) => {
+            if (!staff.phone) throw new Error("No phone number on file for this staff member");
+            if (!staff.portalUsername || !staff.portalPassword) throw new Error("Generate or save credentials for this staff member first");
+            const message = credentialsSmsText(staff, staff.portalUsername, staff.portalPassword);
+            return api.post("/communications/sms/send", { to: staff.phone, message });
+        },
+        onSuccess: () => toast.success("Login details sent by SMS!"),
+        onError: (e: any) => toast.error(e?.response?.data?.message || e?.message || "Failed to send SMS"),
+    });
+
+    const smsAll = () => {
+        const recipients = (staffList as any[]).filter((s: any) => s.phone && s.portalUsername && s.portalPassword);
+        if (!recipients.length) { toast.info("No staff with both a phone number and saved credentials"); return; }
+        recipients.forEach((s: any) => smsMut.mutate(s));
+        toast.success(`Sending login details by SMS to ${recipients.length} staff...`);
+    };
+
     const designations = [...new Set((staffList as any[]).map((s: any) => s.designation).filter(Boolean))];
 
     return (
@@ -94,7 +121,7 @@ export default function StaffManageLogin() {
                     <Home className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-500 font-medium text-sm">Manage Login</span>
                 </div>
-                <a href="/staff-portal" target="_blank" rel="noopener noreferrer"
+                <a href="/login" target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-2 h-9 px-4 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100">
                     <ExternalLink className="w-3.5 h-3.5" /> Open Staff Portal ↗
                 </a>
@@ -119,6 +146,9 @@ export default function StaffManageLogin() {
                         </div>
                         <button onClick={bulkGenerate} className="h-10 px-6 bg-[#5C67F2] hover:bg-indigo-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all shadow-md">
                             <Key className="w-3.5 h-3.5" /> Generate All
+                        </button>
+                        <button onClick={smsAll} className="h-10 px-6 bg-teal-600 hover:bg-teal-700 text-white font-black text-[9px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all shadow-md">
+                            <MessageSquare className="w-3.5 h-3.5" /> SMS All
                         </button>
                     </div>
                 </div>
@@ -163,7 +193,7 @@ export default function StaffManageLogin() {
                                         {/* Password */}
                                         <td className="py-3 px-4">
                                             <div className="relative">
-                                                <div className="absolute -top-2 left-3 w-4 h-4 bg-[#868DF4] rounded-full flex items-center justify-center z-10 text-white text-[8px]">🔒</div>
+                                                <div className="absolute -top-2 left-3 w-4 h-4 bg-[#868DF4] rounded-full flex items-center justify-center z-10 text-white text-[8px]"><Lock className="w-2.5 h-2.5" /></div>
                                                 <input type={visiblePasswords[s._id] ? "text" : "password"}
                                                     value={getDisplayValue(s, "password")} onChange={e => setFieldValue(s._id, "password", e.target.value)}
                                                     className="w-full h-9 px-3 pr-9 border border-slate-200 rounded-xl focus:outline-none focus:border-[#5C67F2] text-xs font-bold text-slate-700"
@@ -188,6 +218,12 @@ export default function StaffManageLogin() {
                                                     <button onClick={() => generateMut.mutate(s)} title="Generate credentials"
                                                         className="w-8 h-8 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 rounded-xl flex items-center justify-center transition-colors">
                                                         <Key className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                                {s.portalUsername && s.portalPassword && (
+                                                    <button onClick={() => smsMut.mutate(s)} title={s.phone ? "SMS login details" : "No phone number on file"} disabled={!s.phone}
+                                                        className="w-8 h-8 bg-teal-50 hover:bg-teal-100 text-teal-600 border border-teal-100 rounded-xl flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                                                        <MessageSquare className="w-3.5 h-3.5" />
                                                     </button>
                                                 )}
                                             </div>

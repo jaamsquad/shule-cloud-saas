@@ -4,6 +4,11 @@ import { Db, ObjectId } from 'mongodb';
 import { formatExamName } from '../lib/examName';
 import { getCurriculumConfig, curriculumFromClassLabel, resolveClassCurriculum } from '../lib/curriculum';
 import { yearlyStatus, computeYearly, classStudents } from '../lib/yearlyReport';
+import { onlyPublished, publishedView } from '../lib/examPublish';
+import { resolveGrading, gradeFromScale, meanGradeFromScale, makeGradingCache } from '../lib/grading';
+import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
+import { backfillOnlineCategoryForExam } from '../lib/onlineCategoryBackfill';
+import { averageAcrossSourceExams } from './analytics.routes';
 
 const getRequestDb = (req: Request): Db => (req as any).tenantDb || getMetaDb();
 
@@ -18,49 +23,22 @@ const router = Router();
 const N = (v: any) => Number(v) || 0;
 const RND = (n: number, d = 0) => { const f = 10 ** d; return Math.round((Number(n) || 0) * f) / f; };
 
+// The class's grading = the single resolver in lib/grading (class template → class
+// grading_criteria → global grading_criteria → curriculum settings → default).
+// Only the built-in default keeps this report card's traditional remark wording.
+const DEFAULT_REMARKS: Record<string, string> = {
+    A: 'EXCELLENT', 'A-': 'V.GOOD', 'B+': 'GOOD', B: 'GOOD', 'B-': 'GOOD', 'C+': 'FAIR', C: 'FAIR',
+    'C-': 'C.AVERAGE', 'D+': 'AIM HIGHER', D: 'AIM HIGHER', 'D-': 'WEAK', E: 'PULL UP YOUR SOCKS',
+};
 async function loadGrading(database: Db, classId?: string, className?: string) {
-    const DEF = [
-        { grade: 'A', from: 80, upto: 100, points: 12, remark: 'EXCELLENT' }, { grade: 'A-', from: 75, upto: 79, points: 11, remark: 'V.GOOD' },
-        { grade: 'B+', from: 70, upto: 74, points: 10, remark: 'GOOD' }, { grade: 'B', from: 65, upto: 69, points: 9, remark: 'GOOD' },
-        { grade: 'B-', from: 60, upto: 64, points: 8, remark: 'GOOD' }, { grade: 'C+', from: 55, upto: 59, points: 7, remark: 'FAIR' },
-        { grade: 'C', from: 50, upto: 54, points: 6, remark: 'FAIR' }, { grade: 'C-', from: 45, upto: 49, points: 5, remark: 'C.AVERAGE' },
-        { grade: 'D+', from: 40, upto: 44, points: 4, remark: 'AIM HIGHER' }, { grade: 'D', from: 35, upto: 39, points: 3, remark: 'AIM HIGHER' },
-        { grade: 'D-', from: 30, upto: 34, points: 2, remark: 'WEAK' }, { grade: 'E', from: 0, upto: 29, points: 1, remark: 'PULL UP YOUR SOCKS' },
-    ];
-    // Resolution order: the class's assigned GRADING TEMPLATE → a class-specific
-    // grading_criteria → the global grading_criteria → built-in default.
-    let rec: any = null;
-    // Resolve the v2 class by its _id OR by NAME (a student may be keyed by class
-    // text, not the v2 id), then read the grading template assigned to it.
-    const nrm = (v: any) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const level = (s: string) => { const m = String(s || '').match(/(form|grade)\s*\d+/i); return m ? m[0] : String(s || ''); };
-    let cls: any = null;
-    if (classId) {
-        const clsOid = (() => { try { return new ObjectId(classId); } catch { return null; } })();
-        if (clsOid) cls = await database.collection('v2_classes').findOne({ _id: clsOid }).catch(() => null);
-    }
-    if (!cls && className) {
-        const v2 = await database.collection('v2_classes').find({ deletedAt: { $exists: false } }).toArray().catch(() => []);
-        const want = nrm(className); const wantLevel = nrm(level(className));
-        cls = v2.find((c: any) => nrm(c.name) === want || nrm(c.name) === wantLevel || nrm(level(c.name)) === wantLevel) || null;
-    }
-    if (cls?.gradingTemplateId) {
-        const tOid = (() => { try { return new ObjectId(String(cls.gradingTemplateId)); } catch { return null; } })();
-        if (tOid) rec = await database.collection('grading_templates').findOne({ _id: tOid }).catch(() => null);
-    }
-    if (!rec && classId) rec = await database.collection('grading_criteria').findOne({ classId }).catch(() => null);
-    if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
-    const raw = (rec?.grades || rec?.gradingScale || []);
-    const scale = raw.length ? raw.map((g: any, i: number) => ({
-        grade: g.grade ?? g.name ?? '', from: N(g.from ?? g.minPercent ?? g.min), upto: N(g.upto ?? g.maxPercent ?? g.max ?? 100),
-        points: N(g.points ?? g.point ?? (raw.length - i)), remark: g.remark ?? g.status ?? g.label ?? '',
-    })).sort((a: any, b: any) => b.upto - a.upto) : DEF;
-    const gradeOf = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
-    const meanGrade = (mp: number) => { let best = scale[scale.length - 1]; for (const s of scale) { if (mp >= s.points - 0.5) { best = s; break; } } return best?.grade || '-'; };
+    const g = await resolveGrading(database, classId, className);
+    const scale = g.source === 'default' ? g.scale.map(b => ({ ...b, remark: DEFAULT_REMARKS[b.grade] ?? b.remark })) : g.scale;
+    const gradeOf = (pct: number) => gradeFromScale(scale, pct);
+    const meanGrade = (mp: number) => meanGradeFromScale(scale, mp);
     return { scale, gradeOf, meanGrade };
 }
 
-router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:studentId'], async (req: Request, res: Response) => {
+const scholarSheetHandler = async (req: Request, res: Response) => {
     try {
         const database = getRequestDb(req);
         const sid = req.params.studentId;
@@ -70,6 +48,23 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const student: any = await database.collection('students').findOne({ _id: new ObjectId(sid) }).catch(() => null);
         if (!student) return res.status(404).json({ message: 'Student not found' });
         const exam: any = await database.collection('exams').findOne({ _id: new ObjectId(examId) }).catch(() => null);
+        // A Consolidated or Year Average exam has no marks of its own — it's an average
+        // across the real written-test exams picked when it was created (sourceExamIds).
+        // Resolve those here, then AVERAGE their published marks and tag the merged rows
+        // with this exam's own id, so every downstream step below (generations, columns,
+        // positions, change-vs-previous) treats it exactly like a normal single exam —
+        // no special-casing needed past this point.
+        const sourceExamIds: string[] = (exam?.examCategory === 'consolidated' || exam?.examCategory === 'year_average') && Array.isArray(exam?.sourceExamIds)
+            ? exam.sourceExamIds.map(String).filter(Boolean) : [];
+        const isComputedExam = sourceExamIds.length > 0;
+        // A Consolidated/Year Average exam is published as its own step in Manage Exams
+        // (it has no exam_marks of its own to gate on) — not published yet, no card.
+        if (isComputedExam) {
+            const view = await publishedView(database);
+            if (view.statusOf(examId, undefined, exam?.classLevel) !== 'Published') {
+                return res.json({ notReady: true, student: { name: student.studentName || `${student.firstName || ''} ${student.lastName || ''}`.trim(), className: exam?.classLevel || '' } });
+            }
+        }
         // School profile = the Tenant record in the meta DB (name, logo, etc.),
         // merged with any tenant-DB profile collection extras.
         const tenantId = (req as any).tenantContext?.tenantId;
@@ -77,9 +72,19 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const extra: any = await database.collection('school_profile').findOne({}).catch(() => null)
             || await database.collection('tenant_profile').findOne({}).catch(() => null) || {};
         const profile: any = { ...(tenant || {}), ...extra, name: tenant?.instituteName || tenant?.name || extra?.name };
-        const classId = String(student.classId || '');
-        const myClass = student.studentClass || student.currentClass || '';
-        const myStream = student.stream || student.streamName || '';
+        // The class this card is FOR is the class the student was in when they sat this
+        // exam (exam_marks.classAtTime/classIdAtTime, stamped once at save time) — never
+        // their current class. Without this, a student promoted since the exam (Form 3 ->
+        // Form 4) would print their old Form 3 exam under a "Form 4" heading, which is wrong:
+        // the exam, its subjects/curriculum, grading and title must all stay Form 3.
+        await Promise.all((isComputedExam ? sourceExamIds : [examId]).map(id => backfillClassAtTimeForExam(database, id)));
+        const examMarkForMe: any = await database.collection('exam_marks').findOne({ examId: isComputedExam ? { $in: sourceExamIds } : examId, studentId: sid, $or: [{ classAtTime: { $exists: true, $ne: '' } }, { classIdAtTime: { $exists: true, $ne: '' } }] }).catch(() => null);
+        const classId = String(examMarkForMe?.classIdAtTime || student.classId || '');
+        const myClass = examMarkForMe?.classAtTime || student.studentClass || student.currentClass || '';
+        // Stream at the time, pulled from the classAtTime label itself ("Form 3 East" -> "East");
+        // falls back to the student's current stream when there's no classAtTime to read it from.
+        const streamAtTimeMatch = examMarkForMe?.classAtTime ? String(examMarkForMe.classAtTime).match(/(?:form|grade)\s*\d+\s+(.+)$/i) : null;
+        const myStream = streamAtTimeMatch?.[1] || student.stream || student.streamName || '';
         // Grading resolves via the class's assigned template (by id OR name).
         const { gradeOf, meanGrade } = await loadGrading(database, classId, myClass);
 
@@ -98,7 +103,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // Report-card display settings (KCPE/positions/columns/change).
         const rcSettingsDoc = await database.collection('report_card_settings').findOne({}).catch(() => null);
         const rcSettings = {
-            showKcpe: true, showPositions: true, showChange: false,
+            showKcpe: true, showPositions: true, showChange: false, showHistory: true,
             ...(rcSettingsDoc || {}),
             columns: { point: true, grade: true, pos: true, remarks: true, initials: true, ...(rcSettingsDoc?.columns || {}) },
         };
@@ -123,43 +128,21 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             (g.mainExamId && String(g.mainExamId) === examId && (norm(myClass).includes(norm(g.className)) || norm(g.className).includes(norm(myClass))));
         // The generation for the exam that was OPENED wins. Only its own CATs / Mid Term are shown alongside —
         // a CAT that belongs to another term's generation of the same class must not leak into this card.
-        const gen: any = generations.find((g: any) => String(g.mainExamId) === examId && sameClassGen(g))
-            || generations.find((g: any) => String(g.mainExamId) === examId)
-            || generations.find(sameClassGen);
+        // A Consolidated/Year Average exam has no class-term generation of its own — it isn't
+        // a single sat exam, so skip generation matching for it entirely.
+        const gen: any = isComputedExam ? null
+            : generations.find((g: any) => String(g.mainExamId) === examId && sameClassGen(g))
+                || generations.find((g: any) => String(g.mainExamId) === examId)
+                || generations.find(sameClassGen);
         const genIsForOpenedExam = !!gen && String(gen.mainExamId) === examId;
         const mainEff = genIsForOpenedExam ? String(gen.mainExamId) : examId;   // the exam this card is built around
 
-        // If the class has no generated report card for this term, the result isn't
-        // ready — tell the frontend to show "Result not ready yet for this term".
-        if (!gen) {
-            return res.json({ notReady: true, message: 'Result not ready yet for this term.',
-                student: { name: student.studentName || student.name, adm: student.registrationNo || student.admNo || '', className: classFull } });
-        }
+        // No class-level report-card generation exists for this term — that's fine:
+        // the card still works straight off the opened exam's own published marks
+        // (a generation only ever ADDS extra CAT/Mid Term columns alongside it; it
+        // was never a precondition for printing the exam the admin already published).
+        // Having no published marks at all for this student is checked below instead.
 
-        // The exam set = the exam the user opened (always shown) + the generation's
-        // main End Term + any additional internal assessments. The selected exam
-        // comes first so its column leads. De-duplicated.
-        const examIds: string[] = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
-            .filter((v, i, a) => v && a.indexOf(v) === i);
-        const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
-        // Additional assessments may be regular exams OR online exams, so look in both
-        // collections — otherwise online CAT/Mid Term docs are missed and their column
-        // falls back to a generic "EXAM" title with no type.
-        const [regularExamDocs, onlineExamDocs] = await Promise.all([
-            database.collection('exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
-            database.collection('online_exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
-        ]);
-        const examMeta: Record<string, any> = {};
-        [...regularExamDocs, ...onlineExamDocs].forEach((e: any) => { if (!examMeta[String(e._id)]) examMeta[String(e._id)] = e; });
-
-        // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
-        // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
-        // "END-TERM". When several exams of the same type cover the same subject
-        // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
-        // Each DISTINCT exam becomes its own column, labelled by its type/name
-        // (e.g. "CAT 1", "CAT 2", "MID TERM", "END TERM") — so every exam picked for
-        // this term that has marks shows as a separate column. Only the End-Term main
-        // is normalised so the leading column reads "END-TERM".
         const typeOf = (e: any): string => {
             const raw = String(e?.type || e?.examType || e?.category || e?.examName || e?.title || e?.name || '').trim();
             const t = norm(raw);
@@ -167,52 +150,142 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             // Otherwise keep the exam's own label (CAT 1 / CAT 2 / Mid Term / Mock …).
             return (raw || 'EXAM').toUpperCase().slice(0, 14);
         };
-        // The main exam defines the leading column's type.
-        const mainType = typeOf(examMeta[mainEff] || examMeta[examId]) || 'END-TERM';
-        // Map each pinned examId → its type, and each type → the examIds under it.
-        const typeByExam: Record<string, string> = {};
-        const examIdsByType: Record<string, string[]> = {};
-        examIds.forEach(id => {
-            const ty = typeOf(examMeta[id]) || 'EXAM';
-            typeByExam[id] = ty;
-            (examIdsByType[ty] ||= []).push(id);
-        });
+        // A mark written when an online exam's results were published carries its OWN
+        // assessment type (CAT / Mid Term / End Term / …) even though it shares the
+        // PARENT exam's examId — give it that type so the report card gives it its own
+        // column instead of silently folding it under the parent's label.
+        const onlineMarkType = (m: any): string | null => (m?.source === 'online_exam' && m?.onlineCategory) ? typeOf({ type: m.onlineCategory }) : null;
         // Column order: the main exam's column first, then END-TERM, then every other
-        // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…).
-        const typeOrder = (ty: string) => ty === mainType ? 0 : ty === 'END-TERM' ? 1 : 2;
-        let examColumns: Array<{ type: string; title: string; examIds: string[] }> =
-            Object.keys(examIdsByType)
+        // exam label alphabetically (CAT 1, CAT 2, MID TERM, MOCK…). `mainType` is
+        // assigned below (in each branch) before this is ever called.
+        let mainTypeForOrder = '';
+        const typeOrder = (ty: string) => ty === mainTypeForOrder ? 0 : ty === 'END-TERM' ? 1 : 2;
+
+        let examIds: string[]; let examMeta: Record<string, any>; let mainType: string;
+        let typeByExam: Record<string, string>; let examIdsByType: Record<string, string[]>;
+        let examColumns: Array<{ type: string; title: string; examIds: string[] }>; let multiExam: boolean;
+        let allMarks: any[]; let onlineExamDocs: any[];
+        let computedAvgRows: any[] = [];   // the averaged rows only — used for ranking (not the raw per-term rows, which would double-count)
+
+        if (isComputedExam) {
+            // One column per SOURCE exam (labelled by its own term, "T1"/"T2"…) — not
+            // collapsed into a single averaged column, so a Consolidated/Year Average card
+            // shows each term's actual marks. The card's own built-in "AGGREGATE"/"OVERALL"
+            // column (shown whenever there's more than one column) then IS the average —
+            // the same mechanism a normal CAT/Mid Term/End Term card already uses, so no
+            // separate "AVG" column is added here.
+            const srcOids = sourceExamIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
+            const sourceExamDocs = await database.collection('exams').find({ _id: { $in: srcOids } }).toArray().catch(() => []);
+            const srcMetaById: Record<string, any> = {};
+            sourceExamDocs.forEach((e: any) => { srcMetaById[String(e._id)] = e; });
+
+            const rawSource = await database.collection('exam_marks').find({ examId: { $in: sourceExamIds } }).toArray().catch(() => []);
+            const publishedSource = await onlyPublished(database, rawSource);
+            allMarks = publishedSource;
+            // Used only for ranking below — the raw per-term rows above would otherwise
+            // double-count a subject once per term in the position/points totals.
+            computedAvgRows = averageAcrossSourceExams(publishedSource).map((m: any) => ({ ...m, examId: String(examId) }));
+            onlineExamDocs = [];
+            examMeta = {};
+            examIds = sourceExamIds;
+
+            const termLabel = (e: any): string => { const n = String(e?.term || '').match(/\d+/)?.[0]; return n ? `T${n}` : (e?.term || 'EXAM').toString().toUpperCase().slice(0, 8); };
+            typeByExam = {};
+            examIdsByType = {};
+            sourceExamIds.forEach(id => {
+                const ty = termLabel(srcMetaById[id]);
+                typeByExam[id] = ty;
+                (examIdsByType[ty] ||= []).push(id);
+            });
+            const termColsSorted = Object.keys(examIdsByType).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            mainType = termColsSorted[0] || 'EXAM';
+            mainTypeForOrder = mainType;
+            examColumns = termColsSorted.map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
+            multiExam = examColumns.length > 1;
+        } else {
+            // The exam set = the exam the user opened (always shown) + the generation's
+            // main End Term + any additional internal assessments. The selected exam
+            // comes first so its column leads. De-duplicated.
+            examIds = [String(examId), ...(genIsForOpenedExam ? [String(gen.mainExamId || ''), ...((gen.additionalExamIds || []).map((x: any) => String(x)))] : [])]
+                .filter((v, i, a) => v && a.indexOf(v) === i);
+            // Marks published by an online exam before its category was tracked on
+            // exam_marks itself are stuck under the parent's own column — recover it
+            // from the online exam doc that produced them, once.
+            await Promise.all(examIds.map(id => backfillOnlineCategoryForExam(database, id)));
+            const examOids = examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } });
+            // Additional assessments may be regular exams OR online exams, so look in both
+            // collections — otherwise online CAT/Mid Term docs are missed and their column
+            // falls back to a generic "EXAM" title with no type.
+            const [regularExamDocs, onlineDocs] = await Promise.all([
+                database.collection('exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+                database.collection('online_exams').find({ _id: { $in: examOids } }).toArray().catch(() => []),
+            ]);
+            onlineExamDocs = onlineDocs;
+            examMeta = {};
+            [...regularExamDocs, ...onlineExamDocs].forEach((e: any) => { if (!examMeta[String(e._id)]) examMeta[String(e._id)] = e; });
+
+            // Columns are grouped by assessment TYPE, not per exam. All CATs collapse
+            // into one "CAT" column, all Mid Terms into "MIDTERM", the main into
+            // "END-TERM". When several exams of the same type cover the same subject
+            // (e.g. two online CATs), that subject's cell is the AVERAGE of them.
+            // Each DISTINCT exam becomes its own column, labelled by its type/name
+            // (e.g. "CAT 1", "CAT 2", "MID TERM", "END TERM") — so every exam picked for
+            // this term that has marks shows as a separate column. Only the End-Term main
+            // is normalised so the leading column reads "END-TERM".
+            // The main exam defines the leading column's type.
+            mainType = typeOf(examMeta[mainEff] || examMeta[examId]) || 'END-TERM';
+            mainTypeForOrder = mainType;
+            // Map each pinned examId → its type, and each type → the examIds under it.
+            typeByExam = {};
+            examIdsByType = {};
+            examIds.forEach(id => {
+                const ty = typeOf(examMeta[id]) || 'EXAM';
+                typeByExam[id] = ty;
+                (examIdsByType[ty] ||= []).push(id);
+            });
+            examColumns = Object.keys(examIdsByType)
                 .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b, undefined, { numeric: true }))
                 .map(ty => ({ type: ty, title: ty, examIds: examIdsByType[ty] }));
-        let multiExam = examColumns.length > 1;
+            multiExam = examColumns.length > 1;
 
-        // Marks across ALL exams in the set (for positions + per-student aggregate).
-        // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
-        // the report card stays stable after generation — later exam_marks edits don't
-        // change it until the class is regenerated. Otherwise read live.
-        const frozen: any[] = Array.isArray(gen.frozenMarks) ? gen.frozenMarks : [];
-        const allMarks: any[] = frozen.length
-            ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
-            : await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []);
+            // Marks across ALL exams in the set (for positions + per-student aggregate).
+            // SNAPSHOT: if this generation froze its marks, render from the FROZEN copy so
+            // the report card stays stable after generation — later exam_marks edits don't
+            // change it until the class is regenerated. Otherwise read live.
+            const frozen: any[] = Array.isArray(gen?.frozenMarks) ? gen.frozenMarks : [];
+            allMarks = frozen.length
+                ? frozen.filter((m: any) => examIds.includes(String(m.examId)))
+                : await onlyPublished(database, await database.collection('exam_marks').find({ examId: { $in: examIds } }).toArray().catch(() => []));
 
-        // Supplement with ONLINE-exam attempt scores for any online exams in the set
-        // whose results haven't been published into exam_marks yet, so their CAT/Mid
-        // Term columns still show real marks. Normalized to the exam_marks shape.
-        const onlineIds = onlineExamDocs.map((e: any) => String(e._id));
-        if (onlineIds.length) {
-            const attempts = await database.collection('online_exam_attempts')
-                .find({ examId: { $in: onlineIds }, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
-                .toArray().catch(() => []);
-            const onlineById: Record<string, any> = {}; onlineExamDocs.forEach((e: any) => onlineById[String(e._id)] = e);
-            const haveInMarks = new Set(allMarks.map((m: any) => `${String(m.examId)}|${String(m.studentId)}`));
-            attempts.forEach((a: any) => {
-                const key = `${String(a.examId)}|${String(a.studentId)}`;
-                if (haveInMarks.has(key)) return;   // already published to exam_marks
-                const ex = onlineById[String(a.examId)] || {};
-                const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
-                const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
-                allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total });
-            });
+            // Supplement with ONLINE-exam attempt scores for any online exams in the set
+            // whose results haven't been published into exam_marks yet, so their CAT/Mid
+            // Term columns still show real marks. Normalized to the exam_marks shape.
+            const onlineIds = onlineExamDocs.map((e: any) => String(e._id));
+            if (onlineIds.length) {
+                const attempts = await database.collection('online_exam_attempts')
+                    .find({ examId: { $in: onlineIds }, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
+                    .toArray().catch(() => []);
+                const onlineById: Record<string, any> = {}; onlineExamDocs.forEach((e: any) => onlineById[String(e._id)] = e);
+                const haveInMarks = new Set(allMarks.map((m: any) => `${String(m.examId)}|${String(m.studentId)}`));
+                attempts.forEach((a: any) => {
+                    const key = `${String(a.examId)}|${String(a.studentId)}`;
+                    if (haveInMarks.has(key)) return;   // already published to exam_marks
+                    const ex = onlineById[String(a.examId)] || {};
+                    const total = N(a.maxScore ?? a.totalMarks ?? ex.totalMarks ?? ex.maxScore ?? 100) || 100;
+                    const score = N(a.finalScore ?? a.score ?? a.totalScore ?? 0);
+                    allMarks.push({ examId: String(a.examId), studentId: String(a.studentId), subjectName: ex.subjectName || ex.subject || a.subjectName || 'Subject', marksObtained: score, totalMarks: total, source: 'online_exam', onlineCategory: ex.category || '' });
+                });
+            }
+
+            // Marks published from an online exam into THIS exam's own id (merged under
+            // the parent so every subject lands in one report-card entry) may carry an
+            // assessment type different from the parent's — give those a column of
+            // their own, labelled by the online exam's own category.
+            const extraTypes = new Set<string>();
+            allMarks.forEach((m: any) => { const t = onlineMarkType(m); if (t && t !== mainType && !examIdsByType[t]) extraTypes.add(t); });
+            extraTypes.forEach(t => { examIdsByType[t] = examIds; examColumns.push({ type: t, title: t, examIds }); });
+            if (extraTypes.size) examColumns = examColumns.sort((a, b) => typeOrder(a.type) - typeOrder(b.type) || a.type.localeCompare(b.type, undefined, { numeric: true }));
+            multiExam = examColumns.length > 1;
         }
 
         // Column visibility rule (airtight):
@@ -236,22 +309,41 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const students = await database.collection('students').find({}).toArray().catch(() => []);
         const sMeta: Record<string, any> = {}; students.forEach((s: any) => sMeta[String(s._id)] = s);
         // Marks used for ranking: the End-Term (main) exam across ALL students. If for
-        // some reason that's empty, fall back to the full pinned exam set.
+        // some reason that's empty, fall back to the full pinned exam set. A computed
+        // exam ranks on its AVERAGED rows only — allMarks also carries each term's raw
+        // marks (for the T1/T2 columns), which would double-count a subject per term.
         const rankExamId = mainEff;
-        const rankMarksMain = await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []);
+        const rankMarksMain = isComputedExam ? computedAvgRows
+            : await onlyPublished(database, await database.collection('exam_marks').find({ examId: rankExamId }).toArray().catch(() => []));
         const rankMarks = rankMarksMain.length ? rankMarksMain : allMarks;
 
-        // Normalized class identity for a student — prefer the v2 classId, else the
-        // normalized class-name text. Used so "FORM 4 WEST" == "Form 4 West".
-        const myClassId = String(student.classId || '');
+        // Normalized class identity for a student AT THE TIME OF THIS EXAM — prefer each
+        // mark's own classAtTime/classIdAtTime (stamped when it was saved) over the
+        // student's live class, so the whole cohort is grouped by who they sat the exam
+        // WITH, not who shares their class now. Without this, ranking a historical exam
+        // after the class has since been promoted would scatter the real cohort across
+        // "old class" (this student) vs "new class" (everyone already promoted).
+        const classAtTimeByStudent: Record<string, { cid: string; name: string }> = {};
+        rankMarks.forEach((m: any) => {
+            const id = String(m.studentId);
+            if (!classAtTimeByStudent[id] && (m.classAtTime || m.classIdAtTime)) {
+                classAtTimeByStudent[id] = { cid: String(m.classIdAtTime || ''), name: norm(m.classAtTime || '') };
+            }
+        });
+        const myClassId = classId;
         const classKeyOf = (id: string): { cid: string; name: string } => {
+            const at = classAtTimeByStudent[id];
+            if (at) return at;
             const meta = sMeta[id] || {};
             return { cid: String(meta.classId || ''), name: norm(meta.studentClass || meta.currentClass || meta.class || meta.className || '') };
         };
         // Class level (Form/Grade N) from any class label, e.g. "Form 4 West" → "form 4".
         const levelOfLabel = (s: string) => { const m = norm(s).match(/(form|grade)\s*\d+/); return m ? m[0] : norm(s); };
-        // Stream label from a student, e.g. "West".
+        // Stream label for a student AT THE TIME — from the classAtTime label when we
+        // have one (e.g. "Form 3 East" -> "east"), else their current stream.
         const streamOf = (id: string): string => {
+            const at = classAtTimeByStudent[id];
+            if (at?.name) { const m = at.name.match(/(?:form|grade)\s*\d+\s+(.+)$/i); if (m) return norm(m[1]); }
             const meta = sMeta[id] || {};
             return norm(meta.stream || meta.streamName || '');
         };
@@ -340,42 +432,23 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         // Subject rows for THIS student, with a column per exam in the set and an
         // AGGREGATE (average of the per-exam percentages). Group this student's marks
         // by subject, then per exam.
-        let mine = allMarks.filter((m: any) => String(m.studentId) === sid);
-        // Safety net: if the exam set yielded NO marks for this student (e.g. the
-        // generation pinned an exam the student wasn't marked in), fall back to ALL
-        // of this student's marks for the SAME TERM as the selected exam, so the card
-        // shows results instead of an empty table.
-        if (mine.length === 0) {
-            const selExam: any = exam || examMeta[examId];
-            const term = String(selExam?.term || '').toLowerCase();
-            const studentMarks = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
-            const examsAll = await database.collection('exams').find({}).toArray().catch(() => []);
-            const eById: Record<string, any> = {}; examsAll.forEach((e: any) => eById[String(e._id)] = e);
-            const termMarks = studentMarks.filter((m: any) => {
-                const e = eById[String(m.examId)];
-                return term ? String(e?.term || '').toLowerCase() === term : true;
-            });
-            if (termMarks.length) {
-                mine = termMarks;
-                // Rebuild TYPE columns from the exams actually present in the fallback marks.
-                const byType: Record<string, string[]> = {};
-                termMarks.forEach((m: any) => {
-                    const ty = typeOf(eById[String(m.examId)]) || 'EXAM';
-                    typeByExam[String(m.examId)] = ty;
-                    (byType[ty] ||= []).push(String(m.examId));
-                });
-                examColumns = Object.keys(byType)
-                    .sort((a, b) => typeOrder(a) - typeOrder(b) || a.localeCompare(b))
-                    .map(ty => ({ type: ty, title: ty, examIds: Array.from(new Set(byType[ty])) }));
-            }
-        }
+        const mine = allMarks.filter((m: any) => String(m.studentId) === sid);
+        // NOTE: there used to be a "safety net" here that, when this exam set had no
+        // marks for the student, fell back to ANY of their marks sharing the exam's
+        // term label — even from a completely different exam/year. That silently
+        // showed another exam's results on a card for an exam that genuinely has no
+        // marks yet (e.g. a freshly created exam), which looked like a data glitch.
+        // The pinned exam set already covers every legitimate component (the opened
+        // exam + the generation's main/additional assessments) via `allMarks` above,
+        // so if `mine` is still empty here the student truly has no marks for this
+        // exam — the card below renders that correctly as "-" per subject.
         // Group this student's marks by subject, then by assessment TYPE. A subject
         // may have several exams of the same type (e.g. two CATs) — keep them all so
         // the cell can average them.
         const bySubject: Record<string, Record<string, any[]>> = {};
         for (const m of mine) {
             const sub = m.subjectName || m.subject || 'Subject';
-            const ty = typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
+            const ty = onlineMarkType(m) || typeByExam[String(m.examId)] || typeOf(examMeta[String(m.examId)]) || 'EXAM';
             ((bySubject[sub] ||= {})[ty] ||= []).push(m);
         }
         // ── "Change" column: this student's subject % vs the PREVIOUS exam ──────────
@@ -392,7 +465,7 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             const eById2: Record<string, any> = {};
             [...examsAll2, ...onlineAll2].forEach((e: any) => { if (!eById2[String(e._id)]) eById2[String(e._id)] = e; });
             const [regMarks, onlineAttempts] = await Promise.all([
-                database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+                database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(database, m)),
                 database.collection('online_exam_attempts')
                     .find({ studentId: sid, status: { $in: ['submitted', 'auto_submitted', 'marked', 'published'] } })
                     .toArray().catch(() => []),
@@ -509,13 +582,24 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
         const valueAdded = kcpeMean ? RND(meanPoint - (kcpeMean / 100 * 12), 1) : null;
 
         // Historical grid: from this student's exam_marks across exams → Form×Term MP/MG/POS.
-        const myAll = await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []);
+        const myAll = await onlyPublished(database, await database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []));
         const exams = await database.collection('exams').find({}).toArray().catch(() => []);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
         // Level system comes from the resolved curriculum (Form/Grade/Year), not a
-        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year.
+        // string guess — CBC → Grade, 8-4-4 → Form, Cambridge → Year. Used only as a
+        // fallback below — each historical column instead uses the word actually
+        // saved on its own exam_marks.classAtTime, so a school that renamed its
+        // classes (e.g. Form → Grade) still shows each old term under the name it
+        // was really sat under, instead of relabelling history with today's system.
         const levelPrefix = curriculumConfig.levelPrefix || 'Form';
         const levelSys = { prefix: levelPrefix, short: levelPrefix.charAt(0).toUpperCase() };
+        // The level-system word as saved on a class label itself (e.g. "Form 4 East" →
+        // "Form", "Grade 11 East" → "Grade") — falls back to the curriculum's own word
+        // when the label doesn't carry one (e.g. a bare class name).
+        const prefixWordOf = (cls: string): string => {
+            const m = String(cls || '').match(/form|grade|pp|class|year/i);
+            return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : levelPrefix;
+        };
 
         const histAgg: Record<string, { sum: number; pts: number; n: number; cls: string; year: number; term: number }> = {};
         for (const m of myAll) {
@@ -525,21 +609,57 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             (histAgg[key] ||= { sum: 0, pts: 0, n: 0, cls: m.classAtTime || myClass || '', year: N(e.academicYear ?? e.year), term: N(String(e.term || '').match(/\d+/)?.[0] || 0) });
             histAgg[key].sum += pct; histAgg[key].pts += gradeOf(pct).points; histAgg[key].n += 1;
         }
+        // A Consolidated/Year Average exam explicitly "marked as a term's exam" (a real
+        // Term N, not the default "Year"/"Term 1 + Term 2" label) has no exam_marks of its
+        // own, so it would never show up above even though it IS that term's result.
+        // Fold each one in from its averaged source marks — processed after the real
+        // exams above, so a term an admin has explicitly assigned to a computed exam
+        // reflects that exam's result rather than a leftover written test for the same term.
+        const computedTermExams = exams.filter((e: any) =>
+            (e.examCategory === 'consolidated' || e.examCategory === 'year_average')
+            && Array.isArray(e.sourceExamIds) && e.sourceExamIds.length
+            && /term\s*\d+/i.test(String(e.term || '')));
+        if (computedTermExams.length) {
+            const histView = await publishedView(database);
+            for (const ce of computedTermExams) {
+                const ceId = String(ce._id);
+                if (histView.statusOf(ceId, undefined, ce.classLevel) !== 'Published') continue;
+                const srcIds: string[] = (ce.sourceExamIds as any[]).map(String);
+                const rawCe = await database.collection('exam_marks').find({ examId: { $in: srcIds }, studentId: sid }).toArray().catch(() => []);
+                const pubCe = await onlyPublished(database, rawCe);
+                if (!pubCe.length) continue;
+                const avgCe = averageAcrossSourceExams(pubCe);
+                const clsAtTime = pubCe.find((m: any) => m.classAtTime)?.classAtTime || myClass || ce.classLevel || '';
+                const bucket = (histAgg[ceId] ||= { sum: 0, pts: 0, n: 0, cls: clsAtTime, year: N(ce.academicYear), term: N(String(ce.term || '').match(/\d+/)?.[0] || 0) });
+                avgCe.forEach((m: any) => {
+                    const max = N(m.totalMarks) || 100; const pct = max > 0 ? (N(m.marksObtained) / max) * 100 : 0;
+                    bucket.sum += pct; bucket.pts += gradeOf(pct).points; bucket.n += 1;
+                });
+            }
+        }
         // Build the grid + chart from the (level, term) combos that ACTUALLY have
         // data, so only filled cells/bars are shown — and report which levels &
         // terms exist so the frontend renders just those columns.
         const grid: Record<string, { mp: number; mg: string }> = {};
-        const chart: Array<{ label: string; value: number }> = [];
+        // Keyed the same as `grid` so two histAgg entries for the same (level, term) —
+        // e.g. a leftover test exam alongside the real one — collapse to one chart point
+        // instead of plotting a duplicate, with the later-processed entry winning.
+        const chartByKey: Record<string, { label: string; value: number }> = {};
         const levelsSet = new Set<number>(); const termsSet = new Set<number>();
+        const levelLabels: Record<number, string> = {};
         for (const v of Object.values(histAgg)) {
             if (!v.n) continue;
             const lvlMatch = String(v.cls).match(/(\d+)/); const lvl = lvlMatch ? Number(lvlMatch[1]) : 0;
             if (lvl < 1 || v.term < 1) continue;
             const mp = RND(v.pts / v.n, 0);
-            grid[`l${lvl}t${v.term}`] = { mp, mg: meanGrade(v.pts / v.n) };
-            chart.push({ label: `${levelSys.short}${lvl}T${v.term}`, value: mp });
+            const ownPrefix = prefixWordOf(v.cls);
+            const key = `l${lvl}t${v.term}`;
+            grid[key] = { mp, mg: meanGrade(v.pts / v.n) };
+            chartByKey[key] = { label: `${ownPrefix.charAt(0)}${lvl}T${v.term}`, value: mp };
             levelsSet.add(lvl); termsSet.add(v.term);
+            levelLabels[lvl] = ownPrefix;   // the word THIS level was actually saved under
         }
+        const chart = Object.values(chartByKey);
         const levels = Array.from(levelsSet).sort((a, b) => a - b);
         const terms = Array.from(termsSet).sort((a, b) => a - b);
         chart.sort((a, b) => a.label.localeCompare(b.label));
@@ -600,14 +720,36 @@ router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:stude
             subjects,
             chart,
             history: grid,
-            levelSystem: levelSys.prefix,    // "Form" | "Grade"
+            levelSystem: levelSys.prefix,    // "Form" | "Grade" — fallback when a level has no saved label
+            levelLabels,                     // { 4: "Form", 11: "Grade" } — the word each level was actually saved under
             levels,                          // e.g. [3, 4] — only those with data
             terms,                           // e.g. [2, 3] — only those with data
             comments: { classTeacher: '', principal: '', principalName: profile.principalName || '' },
             nextTermBegins,
         });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
-});
+};
+router.get(['/reports/scholar-sheet/:studentId', '/reports/kithimani-card/:studentId'], scholarSheetHandler);
+
+/** The ScholarSheet payload for one learner and exam (used by the student & parent portals). */
+export function scholarSheetData(req: Request, studentId: string, examId: string): Promise<{ status: number; body: any }> {
+    return new Promise(resolve => {
+        const r: any = Object.create(req);
+        r.params = { ...(req.params || {}), studentId };
+        r.query = { ...(req.query || {}), examId };
+        const out: any = {
+            statusCode: 200,
+            status(c: number) { this.statusCode = c; return this; },
+            json(body: any) { resolve({ status: this.statusCode, body }); return this; },
+        };
+        scholarSheetHandler(r, out).catch((e: any) => resolve({ status: 500, body: { message: e?.message } }));
+    });
+}
+
+/** Report Card Settings (columns shown on the ScholarSheet). */
+export async function reportCardSettings(db: Db) {
+    return mergeRcSettings(await db.collection('report_card_settings').findOne({}).catch(() => null));
+}
 
 // Academic History — the classes a student has been in (current + previous after
 // promotion) and the exams sat in each, so the profile can list each class's
@@ -621,7 +763,7 @@ router.get('/reports/student-academic-history/:studentId', async (req: Request, 
         const currentClass = student.studentClass || student.currentClass || '';
 
         const [marks, exams] = await Promise.all([
-            database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            database.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(database, m)),
             database.collection('exams').find({}).toArray().catch(() => []),
         ]);
         const examById: Record<string, any> = {}; exams.forEach((e: any) => examById[String(e._id)] = e);
@@ -665,7 +807,7 @@ router.get('/reports/student-history/:studentId', async (req: Request, res: Resp
         const fallbackClass = student.studentClass || student.className || student.currentClass || 'Class';
 
         const [marks, invoices, payments, exams] = await Promise.all([
-            db.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []),
+            db.collection('exam_marks').find({ studentId: sid }).toArray().catch(() => []).then(m => onlyPublished(db, m)),
             db.collection('invoices').find({ $or: [{ student_id: sid }, { studentId: sid }] }).toArray().catch(() => []),
             db.collection('payments').find({ $or: [{ student_id: sid }, { studentId: sid }], is_voided: { $ne: true } }).toArray().catch(() => []),
             db.collection('exams').find({}).toArray().catch(() => []),
@@ -783,7 +925,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         // (fields: studentId, subjectId, subjectName, examId, marksObtained, totalMarks).
         const examIds: string[] = String(exam_id || '').split(',').map(s => s.trim()).filter(Boolean);
         const marks = examIds.length
-            ? await db.collection('exam_marks').find({ examId: { $in: examIds } }).toArray()
+            ? await onlyPublished(db, await db.collection('exam_marks').find({ examId: { $in: examIds } }).toArray())
             : [];
         const examDocs = examIds.length
             ? await db.collection('exams').find({ _id: { $in: examIds.map(id => { try { return new ObjectId(id); } catch { return id as any; } }) } }).toArray()
@@ -846,7 +988,7 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
         const cutoff = selectedOrders.length ? selectedOrders[selectedOrders.length - 1] : '￿';
         // All marks for the students in this report (for the trend), keyed by student+exam.
         const sIds = students.map((s: any) => s._id.toString());
-        const allMarksForTrend = await db.collection('exam_marks').find({ studentId: { $in: sIds } }).toArray().catch(() => []);
+        const allMarksForTrend = await onlyPublished(db, await db.collection('exam_marks').find({ studentId: { $in: sIds } }).toArray().catch(() => []));
         const isAnnual = examIds.length > 1;
 
         // ── Real attendance (student_attendance) summarised per student ──────────────
@@ -879,13 +1021,19 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
             });
         }
 
-        const gradeFor = (pct: number) => pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'E';
+        // Each student's subjects are graded with their CLASS's configured grading.
+        const gradingFor = makeGradingCache(db);
+        const gradingByStudent: Record<string, Awaited<ReturnType<typeof resolveGrading>>> = {};
+        for (const st of students as any[]) {
+            gradingByStudent[st._id.toString()] = await gradingFor(st.classId ? String(st.classId) : undefined, st.studentClass || st.className || st.currentClass || undefined);
+        }
 
         const reportCards = students.map((student: any) => {
             const sid = student._id.toString();
             const studentMarks = marks.filter((m: any) =>
                 String(m.studentId) === sid || m.studentId === student.admNo || m.studentId === student.registrationNo);
             const studentClassName = student.studentClass || student.className || student.currentClass || "General Class";
+            const grading = gradingByStudent[sid];
 
             // ONLY the subjects assigned to this student's class. Resolve by the
             // student's classId first, else by class name. No all-subjects fallback.
@@ -924,8 +1072,8 @@ router.get('/reports/report-cards', async (req: Request, res: Response) => {
                     score: avgPct,
                     scoreDisplay: hasMark ? avgPct : "-",
                     perExam,
-                    grade: hasMark ? gradeFor(avgPct) : '-',
-                    remarks: hasMark ? (avgPct >= 70 ? "Excellent" : avgPct >= 50 ? "Good" : "Needs improvement") : "No marks entered",
+                    grade: hasMark ? grading.gradeOf(avgPct).grade : '-',
+                    remarks: hasMark ? (grading.gradeOf(avgPct).remark || (avgPct >= 70 ? "Excellent" : avgPct >= 50 ? "Good" : "Needs improvement")) : "No marks entered",
                 };
             });
 
@@ -1522,6 +1670,7 @@ router.get('/reports/student-progress', async (req: Request, res: Response) => {
                     ...(student.registrationNo ? [{ studentId: student.registrationNo }, { student_id: student.registrationNo }] : [])
                 ]
             }).toArray();
+            marks = await onlyPublished(db, marks);
         }
 
         const exams = await db.collection('exams').find({}).toArray();
@@ -1796,6 +1945,7 @@ const DEFAULT_RC_SETTINGS = {
     showKcpe: true,
     showPositions: true,
     showChange: false,       // "Change" column: improvement/drop vs previous exam
+    showHistory: true,       // the Form/Grade × Term MP/MG history grid + performance graph
     columns: { point: true, grade: true, pos: true, remarks: true, initials: true },
     // Analysis (Merit List) column toggles.
     analysis: { avg: true, tm: true, mg: true, pg: true, stream: true, subjects: true },
@@ -1867,11 +2017,16 @@ router.post('/report_card_generations', async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'classId and mainExamId are required' });
         }
         const examSet = [String(payload.mainExamId), ...(Array.isArray(payload.additionalExamIds) ? payload.additionalExamIds.map((id: any) => String(id)) : [])].filter(Boolean);
+        // Report cards only from PUBLISHED results (Exams → Manage Exams → Publish results).
+        const pubView = await publishedView(db);
+        if (pubView.statusOf(String(payload.mainExamId), String(payload.classV2Id || payload.classId || '') || undefined, payload.className) !== 'Published') {
+            return res.status(409).json({ message: `This exam's results for ${payload.className || 'this class'} are not published yet. Publish them first under Exams → Manage Exams.` });
+        }
         // SNAPSHOT: freeze the marks AS THEY ARE NOW so the generated report card is
         // stable — later edits to exam_marks don't change it until regenerated.
-        const frozenMarks = await db.collection('exam_marks').find({ examId: { $in: examSet } })
-            .project({ studentId: 1, examId: 1, subjectId: 1, subjectName: 1, marksObtained: 1, totalMarks: 1, className: 1 })
-            .toArray().catch(() => []);
+        const frozenMarks = (await db.collection('exam_marks').find({ examId: { $in: examSet } })
+            .project({ studentId: 1, examId: 1, subjectId: 1, subjectName: 1, marksObtained: 1, totalMarks: 1, className: 1, classId: 1, classIdAtTime: 1, classAtTime: 1 })
+            .toArray().catch(() => [])).filter(pubView.ok);
         const generation = {
             classId: String(payload.classId),
             classV2Id: payload.classV2Id ? String(payload.classV2Id) : null,
@@ -1950,12 +2105,17 @@ async function yearlyDocForGeneration(req: Request, gen: any) {
     const db = getRequestDb(req);
     const tid = (req as any).tenantContext?.tenantId;
     const tenant: any = tid ? await getMetaDb().collection('Tenant').findOne({ _id: new ObjectId(String(tid)) }).catch(() => null) : null;
-    const grading: any = await db.collection('grading_criteria').findOne({}).catch(() => null);
-    const bands = ((grading?.grades || []) as any[]).map(b => ({ grade: String(b.grade || ''), lo: Number(b.from ?? 0), hi: Number(b.upto ?? 100) })).filter(b => b.grade);
+    // Grade boundaries = each learner's CLASS grading (template → class → global → …).
+    const gradingFor = makeGradingCache(db);
+    const bandsOf = async (y: any) => (await gradingFor((gen.classV2Id || gen.classId) ? String(gen.classV2Id || gen.classId) : undefined, y?.className || gen.className || undefined)).scale
+        .map(b => ({ grade: String(b.grade || ''), lo: b.from, hi: b.upto })).filter(b => b.grade);
     const { yearlyDocumentHtml } = require('../services/report-card-pdf.service');
+    const { classTeacherSignatureFor } = require('../lib/classTeacherSignature');
     const address = [tenant?.address || tenant?.location, tenant?.city || tenant?.county].filter(Boolean).join(', ');
     const list: any[] = gen.yearly?.students || [];
-    return { html: yearlyDocumentHtml(list.map(y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, ...y, bands }))), count: list.length };
+    const classTeacherSignature = await classTeacherSignatureFor(db, gen.className || list[0]?.className || '');
+    const pages = await Promise.all(list.map(async y => ({ school: tenant?.instituteName || tenant?.name, logo: tenant?.logo, address, template: tenant?.reportTemplate, signature: tenant?.principalSignature || null, stamp: tenant?.schoolStamp || null, signerName: tenant?.principalName || null, classTeacherSignature, ...y, bands: await bandsOf(y) })));
+    return { html: yearlyDocumentHtml(pages), count: list.length };
 }
 router.get('/report_card_generations/:id/yearly-html', async (req: Request, res: Response) => {
     try {
@@ -2051,6 +2211,9 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
             </style>
         `;
 
+        const classScale = (await resolveGrading(db, String(classDoc._id), classDoc.levelName || classDoc.name || undefined)).scale;
+        const { classTeacherSignatureFor } = require('../lib/classTeacherSignature');
+        const classTeacherSignature = await classTeacherSignatureFor(db, classDoc.levelName || classDoc.name || '');
         for (const student of students) {
             try {
                 // Fetch marks for this student
@@ -2064,14 +2227,16 @@ router.get('/report_card_generations/:id/pdf', async (req: Request, res: Respons
                         school: school.schoolName || 'School',
                         logo: school.logo || null,
                         motto: school.motto || '',
-                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', signature: tenantRc?.principalSignature || null, stamp: tenantRc?.schoolStamp || null, signerName: tenantRc?.principalName || null, curriculum: mainExam.curriculum || '',
+                        template: tenantRc?.reportTemplate || mainExam.curriculum || 'CBC', signature: tenantRc?.principalSignature || null, stamp: tenantRc?.schoolStamp || null, signerName: tenantRc?.principalName || null, classTeacherSignature, curriculum: mainExam.curriculum || '',
                         student: {
                             ...student,
                             className: classDoc.levelName || classDoc.name
                         },
                         exam: mainExam,
                         className: classDoc.levelName || classDoc.name,
-                        marks
+                        marks,
+                        // The class's configured grading scale.
+                        scale: classScale,
                     };
 
                     const html = reportCardHtml(reportData);

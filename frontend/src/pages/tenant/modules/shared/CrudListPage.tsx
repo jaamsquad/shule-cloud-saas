@@ -31,7 +31,7 @@ export type Column = { key: string; label: string; render?: (row: any) => React.
  * DELETE /sports/:id.
  */
 export default function CrudListPage({
-    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New", moduleKey,
+    title, subtitle, icon, endpoint, queryKey, fields, columns, addLabel = "Add New", moduleKey, rowActions, onAdd,
 }: {
     title: string;
     subtitle?: string;
@@ -42,6 +42,8 @@ export default function CrudListPage({
     columns: Column[];
     addLabel?: string;
     moduleKey?: string;   // gates create/delete buttons by the user's CRUD matrix
+    rowActions?: (row: any) => React.ReactNode;   // extra buttons before Edit / Delete
+    onAdd?: () => void;   // replace the built-in "Add" form with the page's own
 }) {
     const qc = useQueryClient();
     const moduleCrud = useModuleCrud(moduleKey || "__none__");
@@ -161,7 +163,7 @@ export default function CrudListPage({
                         </div>
                     </div>
                     {canCreate && (
-                        <button onClick={openCreate} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
+                        <button onClick={onAdd || openCreate} className="h-10 px-4 bg-[#5C67F2] text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4a54c4]">
                             <Plus className="w-4 h-4" /> {addLabel}
                         </button>
                     )}
@@ -190,6 +192,7 @@ export default function CrudListPage({
                                         ))}
                                         <td className="py-3 px-4">
                                             <div className="flex items-center gap-1.5 justify-end">
+                                                {rowActions?.(row)}
                                                 {canUpdate && (
                                                     <button onClick={() => openEdit(row)} title="Edit" className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-[#5C67F2]/10 text-slate-400 hover:text-[#5C67F2] flex items-center justify-center">
                                                         <Pencil className="w-3.5 h-3.5" />

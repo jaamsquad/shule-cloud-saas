@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import AppSidebar from "./AppSidebar";
 import TopHeader from "./TopHeader";
 import PermissionGuard from "./PermissionGuard";
-import SmartAssistant from "./SmartAssistant";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
@@ -82,7 +81,7 @@ export default function DashboardLayout() {
 
     return (
         <div className="flex flex-col h-screen w-full bg-[#f8fafc] overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
-            {!isStandaloneLibrary && <TopHeader onMenuClick={() => setSidebarOpen(v => !v)} />}
+            {!isStandaloneLibrary && <div data-app-chrome><TopHeader onMenuClick={() => setSidebarOpen(v => !v)} /></div>}
 
             <div className="flex flex-1 overflow-hidden relative">
                 {/* ── Mobile overlay backdrop ─────────────────────────────── */}
@@ -95,7 +94,7 @@ export default function DashboardLayout() {
 
                 {/* ── Sidebar ─────────────────────────────────────────────── */}
                 {/* Desktop: pushes content. Mobile: overlays as drawer from left. */}
-                {!isStandaloneLibrary && <div className={`
+                {!isStandaloneLibrary && <div data-app-chrome className={`
                     transition-all duration-300 ease-in-out flex-shrink-0
                     md:relative md:top-0 md:z-auto
                     fixed left-0 top-16 bottom-0 z-30
@@ -106,19 +105,13 @@ export default function DashboardLayout() {
 
                 {/* ── Main content ─────────────────────────────────────────── */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-slate-50/10">
+                    <div className="rsp flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar bg-slate-50/10">
                         <PermissionGuard>
                             <Outlet />
                         </PermissionGuard>
                     </div>
-                    {!isStandaloneLibrary && <>
-                        <div className="absolute top-0 right-0 w-96 h-96 bg-[#5C67F2]/5 rounded-full blur-[100px] pointer-events-none -mr-48 -mt-48" />
-                        <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#FFC165]/5 rounded-full blur-[100px] pointer-events-none -ml-48 -mb-48" />
-                    </>}
                 </main>
             </div>
-            {/* Global floating Smart Assistant — button-driven live insights */}
-            {!isStandaloneLibrary && <SmartAssistant />}
         </div>
     );
 }

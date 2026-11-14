@@ -82,7 +82,7 @@ export default function POSAdminLayout() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="rsp flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>

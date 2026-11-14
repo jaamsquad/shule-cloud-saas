@@ -60,25 +60,40 @@ type ClassRoute =
 
 export function resolveClassRoute(cls: any, classes: any[], graduateFinal = true): ClassRoute {
     const live = classes.filter(c => !c.deletedAt && c.isActive !== false);
+    // A class never promotes a student into a different curriculum's classes — in particular
+    // CBC's senior school (Grade 10-12) and 8-4-4 (Form 1-4) both sit in the "Secondary (Senior
+    // School)" catalog group and can coexist in the same school, so without this guard a name
+    // or level coincidence (or a mis-set manual nextClassId) could cross-promote a CBC learner
+    // into an 844 class or vice versa. Applies to every route below, including the admin's own
+    // manual override.
+    const cur = nrm(cls.curriculumType || '844');
+    const sameCurriculum = (c: any) => nrm(c.curriculumType || '844') === cur;
     if (cls.isFinal) return graduateFinal ? { action: 'graduate', via: 'Marked as final class' } : { action: 'unresolved', reason: 'Final class (graduation is off for this run)' };
     if (cls.nextClassId) {
         const t = live.find(c => sid(c._id) === sid(cls.nextClassId));
-        if (t && sid(t._id) !== sid(cls._id)) return { action: 'promote', toClass: t, via: 'Set in class setup' };
+        if (t && sid(t._id) !== sid(cls._id)) {
+            if (!sameCurriculum(t)) return { action: 'unresolved', reason: `The class set to follow it (${t.name}) is a different curriculum — update class setup` };
+            return { action: 'promote', toClass: t, via: 'Set in class setup' };
+        }
         return { action: 'unresolved', reason: 'The class set to follow it no longer exists' };
     }
     const next = nextClassName(cls.name);
     if (next === null) return graduateFinal ? { action: 'graduate', via: 'Top class' } : { action: 'unresolved', reason: 'Top class (graduation is off for this run)' };
     if (next) {
-        const byName = live.filter(c => nrm(c.name) === nrm(next) && sid(c._id) !== sid(cls._id));
+        const byName = live.filter(c => nrm(c.name) === nrm(next) && sid(c._id) !== sid(cls._id) && sameCurriculum(c));
         if (byName.length === 1) return { action: 'promote', toClass: byName[0], via: `Next class by name (${next})` };
         if (byName.length > 1) return { action: 'unresolved', reason: `More than one class is named ${next}` };
     }
     const lvl = Number(cls.level);
     if (Number.isFinite(lvl)) {
-        const cur = nrm(cls.curriculumType || '844');
-        const up = live.filter(c => Number(c.level) === lvl + 1 && nrm(c.curriculumType || '844') === cur && sid(c._id) !== sid(cls._id));
+        const up = live.filter(c => Number(c.level) === lvl + 1 && sameCurriculum(c) && sid(c._id) !== sid(cls._id));
         if (up.length === 1) return { action: 'promote', toClass: up[0], via: `Next level (${lvl + 1})` };
         if (up.length > 1) return { action: 'unresolved', reason: `Several classes are at level ${lvl + 1} — choose one in class setup` };
+        // No class one level up. If this is the highest level the school actually offers in this
+        // curriculum (e.g. a CBC school that stops at Grade 9, never ticking Grade 10-12 in Classes
+        // We Offer), that's the end of the ladder — graduate — not a data error to leave unresolved.
+        const maxLvl = Math.max(0, ...live.filter(sameCurriculum).map(c => Number(c.level) || 0));
+        if (lvl >= maxLvl) return graduateFinal ? { action: 'graduate', via: 'Highest class the school offers' } : { action: 'unresolved', reason: 'Highest class offered (graduation is off for this run)' };
     }
     return { action: 'unresolved', reason: next ? `No class named ${next} — create it or choose the next class in class setup` : 'No next class — choose one in class setup or mark it final' };
 }
@@ -196,7 +211,7 @@ export async function buildPromotionPlan(db: any, opts: PromotionOptions = {}) {
     };
 }
 
-const CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName', 'academicYear'];
+export const CLASS_FIELDS = ['classId', 'className', 'studentClass', 'currentClass', 'streamId', 'stream', 'streamName', 'academicYear'];
 
 /**
  * Apply a promotion. `runId` identifies the run (the schedule id): students already done
@@ -312,6 +327,28 @@ export async function runSchedule(db: any, sch: any, by: string) {
     } catch (e: any) {
         await db.collection('promotion_schedules').updateOne({ _id: sch._id }, { $set: { status: 'failed', error: e.message, failedAt: new Date() } });
         throw e;
+    }
+}
+
+/**
+ * Auto-promotes every active student onto the next class, the moment the academic YEAR
+ * itself advances (not a term-to-term move within the same year — see cbcTerm.ts's
+ * syncCurrentTerm, the only caller). Grade 1 → Grade 2 → … → Grade 9, then Grade 10-12 if
+ * the school offers senior school (else graduates at 9); Form 1 → 2 → 3 → 4 → graduates —
+ * all via the same class ladder (resolveClassRoute) the manual/scheduled promotion UI uses.
+ *
+ * Idempotent: `runId` is deterministic per year, so if this fires more than once (another
+ * tenant request, a retry) the per-student `lastPromotion.toYear` / `promotion_run_items`
+ * guards already in buildPromotionPlan/executePromotion make every call after the first a
+ * cheap no-op — never double-promotes.
+ */
+export async function runAutoPromotionForYearTransition(db: any, newYear: number | string) {
+    const runId = `auto-year-${newYear}`;
+    try {
+        return await executePromotion(db, runId, { academicYear: String(newYear), graduateFinal: true }, 'auto-year-transition');
+    } catch (e: any) {
+        // Never let a promotion failure break the term/year sync that triggered it.
+        return { error: e.message };
     }
 }
 

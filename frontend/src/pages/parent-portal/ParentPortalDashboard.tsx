@@ -6,6 +6,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { API_ORIGIN } from "@/lib/config";
+import { useGrading } from "@/lib/grading";
 
 const pApi = axios.create({ baseURL: `${API_ORIGIN}/api/v1` });
 pApi.interceptors.request.use(cfg => {
@@ -14,10 +15,6 @@ pApi.interceptors.request.use(cfg => {
     return cfg;
 });
 
-function grade(p: number) {
-    if (p >= 80) return "A"; if (p >= 70) return "B+"; if (p >= 60) return "B";
-    if (p >= 50) return "C+"; if (p >= 40) return "C"; if (p >= 33) return "D"; return "F";
-}
 function gc(p: number) { return p >= 70 ? "text-emerald-400" : p >= 50 ? "text-amber-400" : "text-rose-400"; }
 
 type Tab = "home" | "performance" | "fees" | "notices";
@@ -29,7 +26,7 @@ export default function ParentPortalDashboard() {
 
     useEffect(() => {
         const info = localStorage.getItem("parent_info");
-        if (!info || !localStorage.getItem("parent_token")) { navigate("/parent-portal"); return; }
+        if (!info || !localStorage.getItem("parent_token")) { navigate("/login"); return; }
         setParent(JSON.parse(info));
     }, [navigate]);
 
@@ -40,6 +37,10 @@ export default function ParentPortalDashboard() {
         queryFn: async () => { const r = await pApi.get("/auth/parent-portal/student"); return r.data; },
         enabled: !!studentId,
     });
+
+    // The school's configured grading for the child's class (fetched with the portal token).
+    const grading = useGrading(student?.classId, student?.class || student?.studentClass || parent?.student?.class, pApi);
+    const grade = (p: number) => grading.grade(p);
 
     const { data: examResults = [], isLoading: loadExams } = useQuery({
         queryKey: ["pp_exams"],
@@ -77,7 +78,7 @@ export default function ParentPortalDashboard() {
     const outstanding = invoices.reduce((s: number, i: any) => s + Math.max(0, Number(i.balance || i.outstanding || 0)), 0);
     const trendData = [...examResults].reverse().map((e: any) => ({ name: e.examName?.slice(0, 10), Avg: Number(e.average.toFixed(1)) }));
 
-    const handleLogout = () => { localStorage.removeItem("parent_token"); localStorage.removeItem("parent_info"); toast.success("Logged out"); navigate("/parent-portal"); };
+    const handleLogout = () => { localStorage.removeItem("parent_token"); localStorage.removeItem("parent_info"); toast.success("Logged out"); navigate("/login"); };
 
     if (!parent) return null;
 

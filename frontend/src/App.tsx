@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { SeoManager } from "@/seo/seo";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { resolvePortal } from "@/lib/portal";
 
@@ -12,15 +13,12 @@ import StaffApp from "@/portals/staff/StaffApp";
 import ParentApp from "@/portals/parent/ParentApp";
 
 // Student Portal
-import StudentPortalLogin from "./pages/student-portal/StudentPortalLogin";
 import StudentPortalDashboard from "./pages/student-portal/StudentPortalDashboard";
 
 // Parent Portal
-import ParentPortalLogin from "./pages/parent-portal/ParentPortalLogin";
 import ParentPortalDashboard from "./pages/parent-portal/ParentPortalDashboard";
 
 // Staff Portal
-import StaffPortalLogin from "./pages/staff-portal/StaffPortalLogin";
 
 // Public pages
 import Landing from "./pages/public/Landing";
@@ -44,6 +42,7 @@ import PaymentInbox from "./pages/tenant/modules/PaymentInbox";
 import Login from "./pages/tenant/auth/Login";
 import Logout from "./pages/tenant/auth/Logout";
 import AccessDenied from "./pages/tenant/auth/AccessDenied";
+import HelpPage from "./pages/tenant/apps/HelpPage";
 import ForgotPassword from "./pages/tenant/auth/ForgotPassword";
 import ResetPassword from "./pages/tenant/auth/ResetPassword";
 import AcceptInvite from "./pages/tenant/auth/AcceptInvite";
@@ -60,11 +59,14 @@ import OwnerAudit from "./pages/owner/Audit";
 import OwnerAnnouncements from "./pages/owner/Announcements";
 import OwnerSettings from "./pages/owner/Settings";
 import OwnerBilling from "./pages/owner/Billing";
+import OwnerLibrary from "./pages/owner/Library";
 import OwnerGuard from "./pages/owner/OwnerGuard";
 import PublicDoc from "./pages/public/PublicDoc";
 import VerifyDoc from "./pages/public/VerifyDoc";
 import ResultOnline from "./pages/public/ResultOnline";
-import SkillReports from "./pages/tenant/modules/skills/SkillReports";
+import SkillsSetupPage from "./pages/tenant/modules/skills/SkillsSetupPage";
+import SkillsAssessPage from "./pages/tenant/modules/skills/SkillsAssessPage";
+import SkillsPrintPage from "./pages/tenant/modules/skills/SkillsPrintPage";
 import FeesDashboard from "./pages/tenant/modules/FeesDashboard";
 import Scholarships from "./pages/tenant/modules/fees/Scholarships";
 import Sponsors from "./pages/tenant/modules/fees/Sponsors";
@@ -103,7 +105,10 @@ import Guardians from "./pages/tenant/modules/Guardians";
 import ManageFamilies from "./pages/tenant/modules/ManageFamilies";
 import NewFamily from "./pages/tenant/modules/NewFamily";
 import Classes from "./pages/tenant/modules/Classes";
+import GraduatedClasses from "./pages/tenant/modules/classes/GraduatedClasses";
+import GraduatedClassDetail from "./pages/tenant/modules/classes/GraduatedClassDetail";
 import NewClass from "./pages/tenant/modules/NewClass";
+import ClassesOffered from "./pages/tenant/modules/classes/ClassesOffered";
 import ClassDetail from "./pages/tenant/modules/ClassDetail";
 import Promotions from "./pages/tenant/modules/Promotions";
 import Staff from "./pages/tenant/modules/Staff";
@@ -112,7 +117,8 @@ import StaffIdCards from "./pages/tenant/modules/StaffIdCards";
 import Departments from "./pages/tenant/modules/Departments";
 import Subjects from "./pages/tenant/modules/Subjects";
 import AllSubjects from "./pages/tenant/modules/AllSubjects";
-import NewSubject from "./pages/tenant/modules/NewSubject";
+import SubjectsOffered from "./pages/tenant/modules/subjects/SubjectsOffered";
+import SubjectPathways from "./pages/tenant/modules/subjects/Pathways";
 import AssignSubjects from "./pages/tenant/modules/AssignSubjects";
 import CoCurricularActivities from "./pages/tenant/modules/CoCurricularActivities";
 import AddStudent from "./pages/tenant/modules/AddStudent";
@@ -175,6 +181,7 @@ import LiveClassSettings from "./pages/tenant/modules/liveclass/LiveClassSetting
 import MeetingRoom from "./pages/tenant/modules/liveclass/MeetingRoom";
 import Announcements from "./pages/tenant/modules/communications/Announcements";
 import BulkSMS from "./pages/tenant/modules/communications/BulkSMS";
+import SmsCredits from "./pages/tenant/modules/communications/SmsCredits";
 import ParentMessaging from "./pages/tenant/modules/communications/ParentMessaging";
 import ChannelComposer from "./pages/tenant/modules/communications/ChannelComposer";
 import Meetings from "./pages/tenant/modules/communications/Meetings";
@@ -196,6 +203,7 @@ import OrgLayout from "./pages/org/OrgLayout";
 import AccountSwitcher from "./pages/org/AccountSwitcher";
 import OrgCommunications from "./pages/org/OrgCommunications";
 import IntegrationDetail from "./pages/tenant/modules/integrations/IntegrationDetail";
+import MpesaAccounts from "./pages/tenant/modules/integrations/MpesaAccounts";
 import RolesPermissions from "./pages/tenant/modules/RolesPermissions";
 import LMSDashboard from "./pages/tenant/modules/lms/LMSDashboard";
 import LMSCourses from "./pages/tenant/modules/lms/LMSCourses";
@@ -226,6 +234,7 @@ import SchemeForm from "./pages/tenant/modules/academics2/SchemeForm";
 import NotesResources from "./pages/tenant/modules/academics2/NotesResources";
 import ResourceForm from "./pages/tenant/modules/academics2/ResourceForm";
 import AssignmentsManagement from "./pages/tenant/modules/academics2/AssignmentsManagement";
+import CbcMaterials from "./pages/tenant/modules/academics/CbcMaterials";
 import AssignmentForm from "./pages/tenant/modules/academics2/AssignmentForm";
 import LibraryDashboard from "./pages/tenant/modules/library/LibraryDashboard";
 import LibraryBooks from "./pages/tenant/modules/library/LibraryBooks";
@@ -286,6 +295,7 @@ import NemisDataEntry from "./pages/tenant/modules/nemis/NemisDataEntry";
 import NemisHistory from "./pages/tenant/modules/nemis/NemisHistory";
 import NemisSettings from "./pages/tenant/modules/nemis/NemisSettings";
 import GenericReport from "./pages/tenant/modules/reports/GenericReport";
+import ReportViewer from "./pages/tenant/modules/reports/ReportViewer";
 import StudentsInfoReport from "./pages/tenant/modules/reports/StudentsInfoReport";
 import ParentsInfoReport from "./pages/tenant/modules/reports/ParentsInfoReport";
 import StudentsMonthlyAttendanceReport from "./pages/tenant/modules/reports/StudentsMonthlyAttendanceReport";
@@ -303,6 +313,10 @@ import SubjectChapters from "./pages/tenant/modules/SubjectChapters";
 import CreateQuestionPaper from "./pages/tenant/modules/CreateQuestionPaper";
 import QuestionPaperForm from "./pages/tenant/modules/QuestionPaperForm";
 import AIQuestionImporter from "./pages/tenant/modules/AIQuestionImporter";
+import PaperImport from "./pages/tenant/modules/papers/PaperImport";
+import AfeyPage from "./pages/tenant/afey/AfeyPage";
+import QuestionBankPage from "./pages/tenant/modules/papers/QuestionBankPage";
+import PaperBuilder from "./pages/tenant/modules/papers/PaperBuilder";
 import Exams from "./pages/tenant/modules/Exams";
 import MarkEntry from "./pages/tenant/modules/MarkEntry";
 import Results from "./pages/tenant/modules/Results";
@@ -311,11 +325,12 @@ import ExamMarks from "./pages/tenant/modules/academics/exams/ExamMarks";
 import ResultCard from "./pages/tenant/modules/academics/exams/ResultCard";
 import ClassReportCards from "./pages/tenant/modules/academics/exams/ClassReportCards";
 import NewExamPage from "./pages/tenant/modules/academics/exams/NewExamPage";
-import GenerateReportCards from "./pages/tenant/modules/academics/exams/GenerateReportCards";
-import ViewGeneratedReportCards from "./pages/tenant/modules/academics/exams/ViewGeneratedReportCards";
 import ReportCardSettings from "./pages/tenant/modules/academics/exams/ReportCardSettings";
 import ScholarSheetPage from "./pages/tenant/modules/academics/exams/ScholarSheetPage";
 import OnlineExamBuilder from "./pages/tenant/modules/academics/exams/OnlineExamBuilder";
+import ManageExams from "./pages/tenant/modules/academics/exams/ManageExams";
+import ExamPrintouts from "./pages/tenant/modules/academics/exams/printouts/Printouts";
+import SchoolRules from "./pages/tenant/modules/academics/exams/printouts/SchoolRules";
 import ExamAnalytics from "./pages/tenant/modules/academics/exams/Analytics";
 import ExamDetail from "./pages/tenant/modules/academics/exams/ExamDetail";
 import ExamRankings from "./pages/tenant/modules/academics/exams/ExamRankings";
@@ -328,6 +343,7 @@ import Strands from "./pages/tenant/modules/Strands";
 import GradingPresets from "./pages/tenant/modules/academics/GradingPresets";
 import GradingCriteria from "./pages/tenant/modules/academics/GradingCriteria";
 import ExamTypes from "./pages/tenant/modules/academics/ExamTypes";
+import SubjectPapers from "./pages/tenant/modules/academics/SubjectPapers";
 import SubjectGroups from "./pages/tenant/modules/academics/SubjectGroups";
 import Curricula from "./pages/tenant/modules/academics/Curricula";
 import Grades from "./pages/tenant/modules/academics/Grades";
@@ -361,6 +377,7 @@ import ThemeLanguage from "./pages/tenant/modules/ThemeLanguage";
 import AccountSettings from "./pages/tenant/modules/AccountSettings";
 import FeeParticulars from "./pages/tenant/modules/FeeParticulars";
 import FeeStructure from "./pages/tenant/modules/FeeStructure";
+import ClassTuition from "./pages/tenant/modules/ClassTuition";
 import FeesSettings from "./pages/tenant/modules/FeesSettings";
 import DiscountTypes from "./pages/tenant/modules/DiscountTypes";
 
@@ -395,7 +412,6 @@ import AdminWallets from "./pages/tenant/modules/wallet/AdminWallets";
 // Custom domain + branding
 import DomainSettings from "./pages/tenant/modules/settings/DomainSettings";
 import OrganizationSetup from "./pages/tenant/modules/settings/OrganizationSetup";
-import AcademicTermSettings from "./pages/tenant/modules/settings/AcademicTermSettings";
 import DepartmentManagement from "./pages/tenant/modules/departments/Departments";
 import CurriculumSettings from "./pages/tenant/modules/academics-v2/CurriculumSettings";
 import BlankForms from "./pages/tenant/modules/forms/BlankForms";
@@ -461,6 +477,7 @@ const App = () => {
           <Sonner />
           <InstallPrompt />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <SeoManager />
             {portalApp}
           </BrowserRouter>
         </TooltipProvider>
@@ -476,6 +493,7 @@ const App = () => {
         <Sonner />
         <InstallPrompt />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <SeoManager />
           <Routes>
             {/* 1. PUBLIC WEBSITE */}
             <Route path="/" element={<Landing />} />
@@ -494,6 +512,7 @@ const App = () => {
             {/* what a certificate / report-card QR code opens */}
             <Route path="/:school/certificate/verify/online/:certId" element={<VerifyDoc kind="certificate" />} />
             <Route path="/:school/report/verify/online/:token" element={<VerifyDoc kind="report" />} />
+            <Route path="/:school/paper/verify/online/:token" element={<VerifyDoc kind="paper" />} />
             <Route path="/:school/result/:examCode/:resultId/:studentId" element={<ResultOnline />} />   {/* shareable invoice / quotation / contract */}
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<Activate />} />
@@ -517,20 +536,19 @@ const App = () => {
               <Route path="/owner/announcements" element={<OwnerAnnouncements />} />
               <Route path="/owner/settings" element={<OwnerSettings />} />
               <Route path="/owner/billing" element={<OwnerBilling />} />
+              <Route path="/owner/library" element={<OwnerLibrary />} />
+              <Route path="/owner/business" element={<OwnerDashboard initialTab="business" />} />
             </Route>
 
-            {/* Student Portal — standalone */}
-            <Route path="/student-portal" element={<StudentPortalLogin />} />
-            <Route path="/student-portal/login" element={<StudentPortalLogin />} />
+            {/* Everyone signs in on the school's one login page — the old portal
+                login addresses just send people there (bookmarks, printed slips). */}
+            <Route path="/student-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/student-portal/login" element={<Navigate to="/login" replace />} />
             <Route path="/student-portal/dashboard" element={<StudentPortalDashboard />} />
-
-            {/* Staff Portal — standalone login, redirects to main dashboard */}
-            <Route path="/staff-portal" element={<StaffPortalLogin />} />
-            <Route path="/staff-portal/login" element={<StaffPortalLogin />} />
-
-            {/* Parent Portal — standalone */}
-            <Route path="/parent-portal" element={<ParentPortalLogin />} />
-            <Route path="/parent-portal/login" element={<ParentPortalLogin />} />
+            <Route path="/staff-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/staff-portal/login" element={<Navigate to="/login" replace />} />
+            <Route path="/parent-portal" element={<Navigate to="/login" replace />} />
+            <Route path="/parent-portal/login" element={<Navigate to="/login" replace />} />
             <Route path="/parent-portal/dashboard" element={<ParentPortalDashboard />} />
 
             {/* ORGANIZATION (multi-branch) — branded portal, guarded by org_token */}
@@ -627,7 +645,12 @@ const App = () => {
 
               {/* M-PESA integration */}
               {/* M-PESA config is consolidated on the Integrations → Daraja page. */}
-              <Route path="/settings/mpesa" element={<Navigate to="/integrations/daraja" replace />} />
+              <Route path="/settings/mpesa" element={<Navigate to="/integrations/mpesa-accounts" replace />} />
+              {/* The sidebar is the way around; old Home/Apps links land on the dashboard. */}
+              <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/apps" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/apps/:key" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/help" element={<HelpPage />} />
               <Route path="/students/promote" element={<PromoteStudents />} />
               <Route path="/students/promote/auto" element={<AutoPromotion />} />
                <Route path="/students/admissions" element={<Admissions />} />
@@ -657,6 +680,9 @@ const App = () => {
               {/* Classes */}
               <Route path="/classes" element={<Classes />} />
               <Route path="/classes/new" element={<NewClass />} />
+              <Route path="/classes/offered" element={<ClassesOffered />} />
+              <Route path="/classes/graduated" element={<GraduatedClasses />} />
+              <Route path="/classes/graduated/:className/:year" element={<GraduatedClassDetail />} />
               <Route path="/classes/room/:streamId" element={<ClassRoster />} />
               <Route path="/classes/:id" element={<ClassDetail />} />
               <Route path="/classes/streams" element={<Classes />} />
@@ -665,7 +691,9 @@ const App = () => {
               {/* Subjects */}
               <Route path="/subjects" element={<Subjects />} />
               <Route path="/subjects/all" element={<AllSubjects />} />
-              <Route path="/subjects/new" element={<NewSubject />} />
+              <Route path="/subjects/new" element={<Navigate to="/subjects/offered" replace />} />
+              <Route path="/subjects/offered" element={<SubjectsOffered />} />
+              <Route path="/subjects/pathways" element={<SubjectPathways />} />
               <Route path="/subjects/assign" element={<AssignSubjects />} />
               <Route path="/subjects/activities" element={<CoCurricularActivities />} />
               <Route path="/subjects/categories" element={<PlaceholderPage title="Subject Categories" subtitle="Organize subjects by department" />} />
@@ -674,8 +702,6 @@ const App = () => {
               {/* Academic System V2 — Enrollment-Based Architecture */}
               {/* /academic-system/years uses the same unified Periods page as /academics/periods */}
               <Route path="/academic-system/years" element={<Periods />} />
-              <Route path="/settings/term-settings" element={<AcademicTermSettings />} />
-              <Route path="/settings/term-settings/:termId" element={<AcademicTermSettings />} />
               <Route path="/settings/curriculum" element={<CurriculumSettings />} />
               <Route path="/departments" element={<DepartmentManagement />} />
               <Route path="/blank-forms" element={<BlankForms />} />
@@ -725,6 +751,7 @@ const App = () => {
               <Route path="/academics/assignments" element={<AssignmentsManagement />} />
               <Route path="/academics/assignments/new" element={<AssignmentForm />} />
               <Route path="/academics/assignments/:id/edit" element={<AssignmentForm />} />
+              <Route path="/academics/cbc-materials" element={<CbcMaterials />} />
 
               {/* Staff HR */}
               <Route path="/staff/departments" element={<Departments />} />
@@ -759,6 +786,7 @@ const App = () => {
               <Route path="/academics/grading-criteria" element={<GradingCriteria />} />
               <Route path="/academics/grades" element={<Grades />} />
               <Route path="/academics/exam-types" element={<ExamTypes />} />
+              <Route path="/academics/subject-papers" element={<SubjectPapers />} />
               <Route path="/academics/subject-groups" element={<SubjectGroups />} />
               <Route path="/academics/curricula" element={<Curricula />} />
               <Route path="/academics/audit-trails" element={<PlaceholderPage title="Audit Trails" subtitle="Track all academic changes" />} />
@@ -771,21 +799,29 @@ const App = () => {
               <Route path="/assessments/results" element={<Results />} />
 
               {/* Question Paper Management Module */}
-              <Route path="/papers/import" element={<AIQuestionImporter />} />
+              <Route path="/afey" element={<AfeyPage />} />
+              <Route path="/papers/import" element={<PaperImport />} />
+              <Route path="/papers/import/ai" element={<AIQuestionImporter />} />
               <Route path="/papers/chapters" element={<SubjectChapters />} />
-              <Route path="/papers/questions" element={<QuestionBank />} />
-              <Route path="/papers/create" element={<CreateQuestionPaper />} />
+              <Route path="/papers/questions" element={<QuestionBankPage />} />
+              <Route path="/papers/create" element={<PaperBuilder />} />
+              <Route path="/papers/older" element={<CreateQuestionPaper />} />
               <Route path="/papers/create/new" element={<QuestionPaperForm />} />
               <Route path="/papers/create/new/:id" element={<QuestionPaperForm />} />
 
               {/* Exams Management Module */}
               <Route path="/exams" element={<Exams />} />
               <Route path="/exams/create" element={<CreateExam />} />
-              <Route path="/exams/skills" element={<SkillReports />} />
+              <Route path="/exams/manage" element={<ManageExams />} />
+              <Route path="/exams/printouts" element={<ExamPrintouts />} />
+              <Route path="/exams/skills" element={<Navigate to="/exams/skills/setup" replace />} />
+              <Route path="/exams/skills/setup" element={<SkillsSetupPage />} />
+              <Route path="/exams/skills/assess" element={<SkillsAssessPage />} />
+              <Route path="/exams/skills/print" element={<SkillsPrintPage />} />
               <Route path="/exams/marks" element={<ExamMarks />} />
               <Route path="/exams/new" element={<NewExamPage />} />
-              <Route path="/exams/generate-reports" element={<GenerateReportCards />} />
-              <Route path="/exams/generated-reports" element={<ViewGeneratedReportCards />} />
+              <Route path="/exams/generate-reports" element={<Navigate to="/exams/scholar-sheet" replace />} />
+              <Route path="/exams/generated-reports" element={<Navigate to="/exams/scholar-sheet" replace />} />
               <Route path="/exams/report-card-settings" element={<ReportCardSettings />} />
               <Route path="/exams/edit/:id" element={<NewExamPage />} />
               <Route path="/exams/:id/rankings" element={<ExamRankings />} />
@@ -800,6 +836,7 @@ const App = () => {
               <Route path="/exams/schedule" element={<ExamSchedule />} />
               <Route path="/exams/date-sheet" element={<DateSheet />} />
               <Route path="/exams/blank-award-list" element={<BlankAwardList />} />
+              <Route path="/exams/school-rules" element={<SchoolRules />} />
 
               {/* Communications */}
               <Route path="/communications" element={<Announcements />} />
@@ -807,6 +844,7 @@ const App = () => {
               <Route path="/communications/meetings" element={<Meetings />} />
               <Route path="/communications/templates" element={<MessageTemplates />} />
               <Route path="/communications/sms" element={<BulkSMS />} />
+              <Route path="/communications/sms-credits" element={<SmsCredits />} />
               <Route path="/communications/parent-messages" element={<ParentMessaging />} />
               <Route path="/communications/email" element={<ChannelComposer channel="email" />} />
               <Route path="/communications/whatsapp" element={<ChannelComposer channel="whatsapp" />} />
@@ -817,6 +855,7 @@ const App = () => {
 
               {/* Integrations */}
               <Route path="/integrations" element={<IntegrationsPage />} />
+              <Route path="/integrations/mpesa-accounts" element={<MpesaAccounts />} />
               <Route path="/integrations/:key" element={<IntegrationDetail />} />
 
               {/* Roles & Permissions */}
@@ -1025,6 +1064,7 @@ const App = () => {
               <Route path="/reports/student-progress" element={<StudentProgressReport />} />
               <Route path="/reports/accounts" element={<AccountsReport />} />
               <Route path="/reports/custom" element={<CustomisedReports />} />
+              <Route path="/reports/:reportKey" element={<ReportViewer />} />
 
               {/* Institutional Modules */}
               {/* Library Module */}
@@ -1049,6 +1089,7 @@ const App = () => {
               <Route path="/settings/profile" element={<InstituteProfile />} />
               <Route path="/settings/fees-particulars" element={<FeeParticulars />} />
               <Route path="/settings/fees-structure" element={<FeeStructure />} />
+              <Route path="/settings/class-tuition" element={<ClassTuition />} />
               <Route path="/fees/settings" element={<FeesSettings />} />
               <Route path="/settings/discount-type" element={<DiscountTypes />} />
               <Route path="/settings/accounts" element={<AccountsForFees />} />

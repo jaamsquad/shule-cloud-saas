@@ -13,10 +13,12 @@
  *   DELETE /grading-templates/:id             → delete (unassigns classes)
  *   POST   /grading-templates/:id/assign      → assign classes { classIds: [] }
  *   GET    /grading-templates/resolve/:classId → the scale a class effectively uses
+ *   GET    /grading/resolve?classId=&className= → same, by id or class name (lib/grading)
  */
 import { Router, Request, Response } from 'express';
 import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
+import { resolveGrading } from '../lib/grading';
 
 const router = Router();
 const db = (req: Request): Db => (req as any).tenantDb || getMetaDb();
@@ -88,22 +90,19 @@ router.post('/grading-templates/:id/assign', async (req: Request, res: Response)
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
-// Resolve the effective scale a class uses (template → global fallback).
+// Resolve the effective scale a class uses (template → class → global → Curriculum Settings → default).
 router.get('/grading-templates/resolve/:classId', async (req: Request, res: Response) => {
     try {
-        const d = db(req);
-        const cls: any = oid(req.params.classId)
-            ? await d.collection('v2_classes').findOne({ _id: oid(req.params.classId)! }).catch(() => null)
-            : null;
-        let template: any = null;
-        if (cls?.gradingTemplateId) template = await d.collection('grading_templates').findOne({ _id: oid(cls.gradingTemplateId)! }).catch(() => null);
-        const global = await d.collection('grading_criteria').findOne({}).catch(() => null);
-        res.json({
-            classId: req.params.classId,
-            source: template ? 'template' : 'global',
-            templateName: template?.name || null,
-            grades: template?.grades || global?.grades || [],
-        });
+        const g = await resolveGrading(db(req), req.params.classId);
+        res.json({ classId: req.params.classId, source: g.source, templateName: g.templateName || null, grades: g.scale });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Same, by class id and/or class name — used by every screen that shows grades.
+router.get('/grading/resolve', async (req: Request, res: Response) => {
+    try {
+        const g = await resolveGrading(db(req), req.query.classId ? String(req.query.classId) : undefined, req.query.className ? String(req.query.className) : undefined);
+        res.json({ source: g.source, templateName: g.templateName || null, scale: g.scale });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 

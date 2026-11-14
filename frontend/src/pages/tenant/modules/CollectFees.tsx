@@ -158,7 +158,7 @@ export default function CollectFees() {
                 await new Promise(res => setTimeout(res, 3000));
                 const s = (await api.get("/schools/default/payments/stk-status", { params: { checkoutRequestId } })).data;
                 if (s.status === "completed") {
-                    toast.success("Payment received and applied 🎉");
+                    toast.success("Payment received and applied");
                     setStkMsg(""); setStkPhone(""); setAmount(""); setSelectedInvoice(null);
                     refetchSummary();
                     queryClient.invalidateQueries({ queryKey: ["recent_payments_dashboard"] });
@@ -439,7 +439,7 @@ export default function CollectFees() {
                                     <div key={p.receipt_no} className="flex items-center justify-between p-4 border border-slate-50 rounded-2xl hover:bg-slate-50 transition-colors">
                                         <div className="flex items-center gap-4">
                                             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center font-black text-xs">
-                                                ✓
+                                                <Check className="w-4 h-4" />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-black text-slate-700 uppercase">{p.student_name}</p>

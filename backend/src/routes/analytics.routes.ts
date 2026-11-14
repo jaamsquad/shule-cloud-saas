@@ -3,7 +3,11 @@ import { Db, ObjectId } from 'mongodb';
 import { getMetaDb } from '../lib/mongodb';
 import { formatExamName } from '../lib/examName';
 import { canonicalCode, curriculumFromClassLabel } from '../lib/curriculum';
-import { makeGradingCache, resolveGrading } from '../lib/grading';
+import { makeGradingCache, resolveGrading, meanGradeFromScale, GradeBand } from '../lib/grading';
+import { marksWindow, examInWindow } from '../lib/examWindow';
+import { enforceCrud } from '../lib/permissions';
+import { publishedView, onlyPublished } from '../lib/examPublish';
+import { backfillClassAtTimeForExam } from '../lib/classAtTimeBackfill';
 
 const router = Router();
 const db = (req: any): Db => (req.tenantDb as Db) || getMetaDb();
@@ -17,50 +21,107 @@ const levelOf = (s: string) => {
     return String(s || 'Class').trim();
 };
 
-// ─── Grading (KCSE 12-point) ───────────────────────────────────────────────────
-// Loads the school's grading scale and exposes pct → { grade, points }. Falls
-// back to the standard Kenyan 12-point scale if none is configured.
-const DEFAULT_SCALE = [
-    { grade: 'A', from: 80, upto: 100, points: 12 }, { grade: 'A-', from: 75, upto: 79, points: 11 },
-    { grade: 'B+', from: 70, upto: 74, points: 10 }, { grade: 'B', from: 65, upto: 69, points: 9 },
-    { grade: 'B-', from: 60, upto: 64, points: 8 }, { grade: 'C+', from: 55, upto: 59, points: 7 },
-    { grade: 'C', from: 50, upto: 54, points: 6 }, { grade: 'C-', from: 45, upto: 49, points: 5 },
-    { grade: 'D+', from: 40, upto: 44, points: 4 }, { grade: 'D', from: 35, upto: 39, points: 3 },
-    { grade: 'D-', from: 30, upto: 34, points: 2 }, { grade: 'E', from: 0, upto: 29, points: 1 },
-];
+/**
+ * Class levels that still exist (v2 classes + their streams, and the older class list).
+ * Analytics only shows these — a deleted class/grade no longer appears even if old marks
+ * mention it. null = the school has no classes set up yet (then nothing is hidden).
+ */
+async function liveLevels(database: Db): Promise<Set<string> | null> {
+    const [v2, legacy] = await Promise.all([
+        database.collection('v2_classes').find({ deletedAt: { $exists: false } }, { projection: { name: 1 } }).toArray().catch(() => [] as any[]),
+        database.collection('classes').find({}, { projection: { name: 1, levelName: 1 } }).toArray().catch(() => [] as any[]),
+    ]);
+    const set = new Set<string>();
+    v2.forEach((c: any) => c.name && set.add(levelOf(c.name).toLowerCase()));
+    legacy.forEach((c: any) => { const n = c.levelName || c.name; if (n) set.add(levelOf(n).toLowerCase()); });
+    return set.size ? set : null;
+}
 
+// ─── Analytics settings (Exams → Analysis → Settings) ──────────────────────────
+// The basic views are on by default; the extra insights are opt-in.
+export const DEFAULT_ANALYTICS_SETTINGS = {
+    views: {
+        meritList: true, comparison: true, subjects: true, classes: true, improved: true,   // basics
+        distribution: true,                                                                  // grade spread + pass rate
+        gender: false, topBottom: false, atRisk: false, subjectRanking: false,               // extra insights
+    },
+    passMarkPct: 50,          // a learner "passes" at this mean %
+    atRiskBelowPct: 40,       // at risk when the mean % is below this…
+    atRiskDropPoints: 1,      // …or the mean points fell by at least this since the last exam
+    topBottomCount: 10,
+    defaultToCurrentTerm: true,
+};
+export async function analyticsSettings(database: Db) {
+    const s: any = await database.collection('analytics_settings').findOne({ _id: 'default' as any }).catch(() => null);
+    return { ...DEFAULT_ANALYTICS_SETTINGS, ...(s || {}), views: { ...DEFAULT_ANALYTICS_SETTINGS.views, ...(s?.views || {}) } };
+}
+
+// ─── Grading ──────────────────────────────────────────────────────────────────
+// Always the configured grading (lib/grading resolveGrading: class template → class
+// criteria → global criteria → curriculum settings → KCSE default).
 async function loadScale(database: Db, classId?: string) {
-    let rec: any = classId ? await database.collection('grading_criteria').findOne({ classId }).catch(() => null) : null;
-    if (!rec) rec = await database.collection('grading_criteria').findOne({}).catch(() => null);
-    const raw = (rec?.grades || rec?.gradingScale || []);
-    const scale = raw.length ? raw.map((g: any, i: number) => ({
-        grade: g.grade ?? g.name ?? g.label ?? '',
-        from: num(g.from ?? g.minPercent ?? g.min),
-        upto: num(g.upto ?? g.maxPercent ?? g.max ?? 100),
-        points: num(g.points ?? g.point ?? (raw.length - i)),
-    })).sort((a: any, b: any) => b.upto - a.upto) : DEFAULT_SCALE;
-    const grade = (pct: number) => scale.find((s: any) => pct >= s.from && pct <= s.upto) || scale[scale.length - 1];
-    return { scale, grade };
+    const g = await resolveGrading(database, classId);
+    return { scale: g.scale, grade: g.gradeOf };
 }
 
 // Mean grade from a mean points value (reverse lookup, nearest band).
-const meanGradeFromPoints = (scale: any[], meanPoints: number) => {
-    let best = scale[scale.length - 1];
-    for (const s of scale) { if (meanPoints >= s.points - 0.5) { best = s; break; } }
-    return best?.grade || '-';
-};
+const meanGradeFromPoints = (scale: GradeBand[], meanPoints: number) => meanGradeFromScale(scale, meanPoints);
 
 // ─── Core: build per-student results for an exam ───────────────────────────────
 // Returns one row per student: { studentId, name, adm, stream, subjects[], totalMarks,
 // meanPct, totalPoints, meanPoints, meanGrade }.
 // Exported so the Department Analysis (departments.routes) can reuse the exact same
 // results-building + grading logic instead of duplicating it.
-export async function buildExamResults(database: Db, examId: string) {
-    const marks = await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
+/** Merge raw exam_marks from several real exams into one row per (student, subject) — the
+ *  mean of that subject's percentage across whichever of those exams the student sat (a
+ *  student absent from one source exam isn't penalised; its percentage is simply excluded).
+ *  Expressed back out of 100 so it drops into the normal single-exam marks pipeline unchanged. */
+export function averageAcrossSourceExams(raw: any[]) {
+    const nrm = (v: any) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const groups = new Map<string, { studentId: string; subjectName: string; classAtTime: string; sumPct: number; count: number }>();
+    for (const m of raw) {
+        const max = num(m.totalMarks) || 100;
+        const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
+        const subjectName = m.subjectName || m.subject || 'Subject';
+        const key = `${m.studentId}|${nrm(subjectName)}`;
+        const g = groups.get(key) || { studentId: String(m.studentId), subjectName, classAtTime: m.classAtTime || '', sumPct: 0, count: 0 };
+        g.sumPct += pct; g.count += 1; g.classAtTime = g.classAtTime || m.classAtTime || '';
+        groups.set(key, g);
+    }
+    return [...groups.values()].map(g => ({ studentId: g.studentId, subjectName: g.subjectName, subject: g.subjectName, marksObtained: round(g.sumPct / g.count, 1), totalMarks: 100, classAtTime: g.classAtTime }));
+}
+
+export async function buildExamResults(database: Db, examId: string, opts: { includeUnpublished?: boolean } = {}) {
+    // A Consolidated or Year Average exam has no marks of its own — it's an average across
+    // the real written-test exams picked when it was created (sourceExamIds). Resolve to
+    // those here so everything downstream (merit lists, report cards, transcripts,
+    // printouts) works unchanged, the same way they already do for a single exam.
+    const examDoc: any = await database.collection('exams').findOne({ _id: ObjectId.isValid(examId) ? new ObjectId(examId) : (examId as any) }).catch(() => null);
+    const sourceIds: string[] = (examDoc?.examCategory === 'consolidated' || examDoc?.examCategory === 'year_average') && Array.isArray(examDoc?.sourceExamIds)
+        ? examDoc.sourceExamIds.map(String).filter(Boolean) : [];
+
+    // A Consolidated/Year Average exam is published as ITS OWN step in Manage Exams (it has
+    // no exam_marks of its own to gate on) — not published yet means no result, same as the
+    // source exams being unpublished would.
+    if (sourceIds.length && !opts.includeUnpublished) {
+        const view = await publishedView(database);
+        if (view.statusOf(String(examId), undefined, examDoc?.classLevel) !== 'Published') return { rows: [], scale: [] };
+    }
+
+    // Recover classAtTime on any older mark that predates the stamp, before reading —
+    // otherwise a promoted student's historical exam would fall back to their current class.
+    await Promise.all((sourceIds.length ? sourceIds : [String(examId)]).map(id => backfillClassAtTimeForExam(database, id)));
+    // Only published results (Exams → Manage Exams) unless the caller is a moderation view.
+    const raw = sourceIds.length
+        ? await database.collection('exam_marks').find({ examId: { $in: sourceIds } }).toArray().catch(() => [])
+        : await database.collection('exam_marks').find({ examId: String(examId) }).toArray().catch(() => []);
+    const published = opts.includeUnpublished ? raw : await onlyPublished(database, raw);
+    const marks = sourceIds.length ? averageAcrossSourceExams(published) : published;
     // Grade PER CLASS using the class's assigned template (grading cache avoids
-    // re-querying). The overall `scale` (for grade-list axes) is the global one.
+    // re-querying). The overall `scale` (for grade-list axes) is the school one.
     const gradingFor = makeGradingCache(database);
     const { scale } = await loadScale(database);
+    const studentScale: Record<string, GradeBand[]> = {};
 
     // Pre-load each student's classId so per-student grading can resolve the template.
     const studentIdsAll = Array.from(new Set(marks.map((m: any) => String(m.studentId))));
@@ -87,7 +148,9 @@ export async function buildExamResults(database: Db, examId: string) {
         const max = num(m.totalMarks) || 100;
         const pct = max > 0 ? (num(m.marksObtained) / max) * 100 : 0;
         const scls = sClassById[sid] || { id: '', name: m.classAtTime || '' };
-        const g = (await gradingFor(scls.id, scls.name || m.classAtTime)).gradeOf(pct);
+        const grading = await gradingFor(scls.id, scls.name || m.classAtTime);
+        studentScale[sid] ||= grading.scale;   // the mean grade uses the same scale as the subjects
+        const g = grading.gradeOf(pct);
         const subName = m.subjectName || m.subject || 'Subject';
         (byStudent[sid] ||= { studentId: sid, subjects: [], classAtTime: m.classAtTime }).subjects.push({
             name: subName, shortCode: shortCodeFor(subName), marks: num(m.marksObtained), max, pct: round(pct, 1),
@@ -140,10 +203,11 @@ export async function buildExamResults(database: Db, examId: string) {
             adm: stu.registrationNo || stu.admNo || stu.admissionNo || '',
             stream,
             className,
-            kcpe: num(stu.kcpeMarks ?? stu.kcpe),
+            kcpe: num(stu.kcpeMarks ?? stu.kcpe ?? stu.kcpeScore),
+            gender: String(stu.gender || stu.sex || '').trim(),
             subjects, totalMarks, totalPoints,
             meanPct: round(meanPct, 2), meanPoints: round(meanPoints, 2),
-            meanGrade: meanGradeFromPoints(scale, meanPoints),
+            meanGrade: meanGradeFromPoints(studentScale[sid] || scale, meanPoints),
         };
     });
 
@@ -181,9 +245,9 @@ router.get('/analytics/exams', async (req: Request, res: Response) => {
             const filtered = exams.filter((e: any) => satSet.has(String(e._id)));
             if (filtered.length) exams = filtered;   // fall back to all if none matched (legacy ids)
         }
-        if (String(req.query.onlyPublished || '') === '1') {
-            exams = exams.filter((e: any) => /publish/i.test(String(e.publishStatus || '')) || e.publishStatus === undefined);
-        }
+        // Exams with no published results yet are not offered (Exams → Manage Exams → Publish).
+        const pubView = await publishedView(database);
+        exams = exams.filter((e: any) => pubView.examListed(String(e._id)));
         const data = exams.map((e: any) => ({
             id: String(e._id), examName: e.examName, examType: e.type || e.examType,
             term: e.term, academicYear: e.academicYear ?? e.year,
@@ -192,7 +256,21 @@ router.get('/analytics/exams', async (req: Request, res: Response) => {
         // Group by term label.
         const groups: Record<string, any[]> = {};
         data.forEach((e: any) => { (groups[e.term || 'Other'] ||= []).push(e); });
-        res.json({ exams: data, groups });
+        // Default: the latest exam of the CURRENT term that has marks (else of the current
+        // term, else the latest exam overall).
+        let currentExamId: string | null = null;
+        const settings = await analyticsSettings(database);
+        if (settings.defaultToCurrentTerm) {
+            const win = await marksWindow(database).catch(() => null);
+            const inTerm = win ? exams.filter((e: any) => examInWindow(e, win)) : [];
+            if (inTerm.length) {
+                const withMarks = new Set((await database.collection('exam_marks').distinct('examId', { examId: { $in: inTerm.map((e: any) => String(e._id)) } }).catch(() => [])).map(String));
+                const pick = [...inTerm].reverse().find((e: any) => withMarks.has(String(e._id))) || inTerm[inTerm.length - 1];
+                currentExamId = String(pick._id);
+            }
+        }
+        if (!currentExamId && data.length) currentExamId = data[data.length - 1].id;
+        res.json({ exams: data, groups, currentExamId, currentTerm: (await marksWindow(database).catch(() => null))?.label || null });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -258,9 +336,13 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
         }
         classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
+        // Only classes that still exist — a deleted class/grade is not shown.
+        const live = await liveLevels(database);
+        const shown = live ? classes.filter(c => live.has(String(c.name).toLowerCase())) : classes;
+
         // Each class already carries its own `curriculum` + `grades`. Return the
         // school-default `grades` too for any consumer that wants the fallback set.
-        res.json({ classes, grades });
+        res.json({ classes: shown, grades });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -448,10 +530,15 @@ router.get('/analytics/subject-sheet', async (req: Request, res: Response) => {
 router.get('/analytics/class-levels', async (req: Request, res: Response) => {
     try {
         const examId = String(req.query.examId || '');
-        const { rows, scale } = await buildExamResults(db(req), examId);
+        const { rows } = await buildExamResults(db(req), examId);
         const byLevel: Record<string, any[]> = {};
         rows.forEach(r => { (byLevel[levelOf(r.className || r.stream)] ||= []).push(r); });
+        // Each class level's mean grade uses that level's configured grading.
+        const gradingFor = makeGradingCache(db(req));
+        const levelScale: Record<string, GradeBand[]> = {};
+        for (const [level, list] of Object.entries(byLevel)) levelScale[level] = (await gradingFor(undefined, level || list[0]?.className)).scale;
         const classes = Object.entries(byLevel).map(([level, list]) => {
+            const scale = levelScale[level];
             const byStream: Record<string, any[]> = {};
             list.forEach(r => { (byStream[r.stream || '(No stream)'] ||= []).push(r); });
             const mp = list.reduce((a, r) => a + r.meanPoints, 0) / list.length;
@@ -462,7 +549,101 @@ router.get('/analytics/class-levels', async (req: Request, res: Response) => {
                 streams: Object.entries(byStream).map(([stream, sl]) => ({ stream, students: sl.length, meanPoints: round(sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length, 2), meanPct: round(sl.reduce((a, r) => a + r.meanPct, 0) / sl.length, 2), meanGrade: meanGradeFromPoints(scale, sl.reduce((a, r) => a + r.meanPoints, 0) / sl.length) })).sort((a, b) => b.meanPoints - a.meanPoints),
             };
         }).sort((a, b) => a.level.localeCompare(b.level));
-        res.json({ classes });
+        const live = await liveLevels(db(req));
+        res.json({ classes: live ? classes.filter(c => live.has(c.level.toLowerCase())) : classes });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Analytics settings: which views show, and the thresholds the insights use.
+router.get('/analytics/settings', async (req: Request, res: Response) => {
+    try { res.json(await analyticsSettings(db(req))); } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+router.put('/analytics/settings', enforceCrud('exams', 'update'), async (req: Request, res: Response) => {
+    try {
+        const b = req.body || {};
+        const cur = await analyticsSettings(db(req));
+        const views: any = { ...cur.views };
+        for (const k of Object.keys(DEFAULT_ANALYTICS_SETTINGS.views)) if (typeof b.views?.[k] === 'boolean') views[k] = b.views[k];
+        const clamp = (v: any, lo: number, hi: number, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+        const next = {
+            views,
+            passMarkPct: clamp(b.passMarkPct, 0, 100, cur.passMarkPct),
+            atRiskBelowPct: clamp(b.atRiskBelowPct, 0, 100, cur.atRiskBelowPct),
+            atRiskDropPoints: clamp(b.atRiskDropPoints, 0, 12, cur.atRiskDropPoints),
+            topBottomCount: Math.round(clamp(b.topBottomCount, 3, 50, cur.topBottomCount)),
+            defaultToCurrentTerm: typeof b.defaultToCurrentTerm === 'boolean' ? b.defaultToCurrentTerm : cur.defaultToCurrentTerm,
+            updatedAt: new Date(),
+        };
+        await db(req).collection('analytics_settings').updateOne({ _id: 'default' as any }, { $set: next }, { upsert: true });
+        res.json(next);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+});
+
+// Extra insights for one form in one exam: grade spread + pass rate, gender, top &
+// bottom learners, learners at risk, and subjects ranked (with their teachers).
+router.get('/analytics/insights', async (req: Request, res: Response) => {
+    try {
+        const database = db(req);
+        const examId = String(req.query.examId || '');
+        const form = String(req.query.form || '');
+        if (!examId) return res.status(400).json({ message: 'examId required' });
+        const settings = await analyticsSettings(database);
+        const inForm = (rows: any[]) => form ? rows.filter(r => levelOf(r.className || r.stream).toLowerCase() === levelOf(form).toLowerCase()) : rows;
+        const { rows: all } = await buildExamResults(database, examId);
+        const rows = inForm(all);
+        const g = await resolveGrading(database, undefined, form || (rows[0]?.className || ''));
+        const grades = g.scale.map((b: any) => b.grade);
+        const mean = (list: any[], k: string) => list.length ? round(list.reduce((a, r) => a + (r[k] || 0), 0) / list.length, 2) : 0;
+
+        // grade spread + pass rate
+        const counts: Record<string, number> = {}; grades.forEach((x: string) => counts[x] = 0);
+        rows.forEach(r => { const gr = g.meanGrade(r.meanPoints); counts[gr] = (counts[gr] || 0) + 1; });
+        const passed = rows.filter(r => r.meanPct >= settings.passMarkPct).length;
+        const distribution = { grades, counts, passMarkPct: settings.passMarkPct, passed, failed: rows.length - passed, passRate: rows.length ? round((passed / rows.length) * 100, 1) : 0 };
+
+        // gender
+        const gKey = (v: string) => /^f/i.test(v) ? 'Female' : /^m/i.test(v) ? 'Male' : 'Not recorded';
+        const byG: Record<string, any[]> = {};
+        rows.forEach(r => { (byG[gKey(r.gender)] ||= []).push(r); });
+        const gender = Object.entries(byG).map(([k, list]) => ({ gender: k, students: list.length, meanPoints: mean(list, 'meanPoints'), meanPct: mean(list, 'meanPct'), meanGrade: g.meanGrade(mean(list, 'meanPoints')) }))
+            .sort((a, b) => b.meanPoints - a.meanPoints);
+
+        // top / bottom
+        const n = settings.topBottomCount;
+        const ranked = [...rows].sort((a, b) => b.meanPoints - a.meanPoints || b.meanPct - a.meanPct);
+        const brief = (r: any) => ({ name: r.name, adm: r.adm, stream: r.stream, meanPoints: r.meanPoints, meanPct: r.meanPct, meanGrade: g.meanGrade(r.meanPoints) });
+        const top = ranked.slice(0, n).map(brief);
+        const bottom = ranked.slice(-n).reverse().map(brief);
+
+        // at risk: low mean %, or a big drop since the previous exam
+        const exams = await examsChrono(database);
+        const idx = exams.findIndex((e: any) => String(e._id) === examId);
+        const prev = idx > 0 ? exams[idx - 1] : null;
+        const prevBy: Record<string, any> = {};
+        if (prev) inForm((await buildExamResults(database, String(prev._id))).rows).forEach((r: any) => prevBy[r.studentId] = r);
+        const atRisk = rows.map(r => {
+            const p = prevBy[r.studentId];
+            const drop = p ? round(p.meanPoints - r.meanPoints, 2) : 0;
+            const reasons: string[] = [];
+            if (r.meanPct < settings.atRiskBelowPct) reasons.push(`Mean ${r.meanPct}% (below ${settings.atRiskBelowPct}%)`);
+            if (p && drop >= settings.atRiskDropPoints && drop > 0) reasons.push(`Dropped ${drop} points since ${formatExamName(prev)}`);
+            const weak = r.subjects.filter((s: any) => s.pct < settings.passMarkPct).map((s: any) => s.name);
+            return reasons.length ? { ...brief(r), reasons, weakSubjects: weak } : null;
+        }).filter(Boolean).sort((a: any, b: any) => a.meanPct - b.meanPct);
+
+        // subjects ranked, with the teacher who teaches each in this form
+        const staff: any[] = await database.collection('staff').find({}, { projection: { name: 1, employeeName: 1, firstName: 1, lastName: 1, subjectAssignments: 1 } }).toArray().catch(() => []);
+        const teachersOf = (subject: string) => [...new Set(staff.filter(t => (t.subjectAssignments || []).some((a: any) =>
+            String(a.subjectName || a.subject || '').toLowerCase() === subject.toLowerCase() && (!form || levelOf(a.className || a.class || '').toLowerCase() === levelOf(form).toLowerCase())))
+            .map(t => t.employeeName || t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim()).filter(Boolean))];
+        const agg: Record<string, { pts: number; pct: number; n: number; pass: number }> = {};
+        rows.forEach(r => r.subjects.forEach((s: any) => { const a = (agg[s.name] ||= { pts: 0, pct: 0, n: 0, pass: 0 }); a.pts += s.points; a.pct += s.pct; a.n++; if (s.pct >= settings.passMarkPct) a.pass++; }));
+        const subjectRanking = Object.entries(agg).map(([name, a]) => ({
+            name, students: a.n, meanPoints: round(a.pts / a.n, 2), meanPct: round(a.pct / a.n, 1), grade: g.meanGrade(a.pts / a.n),
+            passRate: round((a.pass / a.n) * 100, 1), teachers: teachersOf(name),
+        })).sort((x, y) => y.meanPoints - x.meanPoints).map((x, i) => ({ rank: i + 1, ...x }));
+
+        res.json({ settings, students: rows.length, distribution, gender, top, bottom, atRisk, subjectRanking, comparedTo: prev ? formatExamName(prev) : null });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
 });
 
@@ -546,7 +727,7 @@ router.get('/analytics/student/:studentId/over-time', async (req: Request, res: 
         const exams = await examsChrono(database);
         const series: any[] = [];
         for (const e of exams) {
-            const marks = await database.collection('exam_marks').find({ examId: String(e._id), studentId: sid }).toArray().catch(() => []);
+            const marks = await onlyPublished(database, await database.collection('exam_marks').find({ examId: String(e._id), studentId: sid }).toArray().catch(() => []));
             if (!marks.length) continue;
             const mean = marks.reduce((a: number, m: any) => { const max = num(m.totalMarks) || 100; return a + (max > 0 ? (num(m.marksObtained) / max) * 100 : 0); }, 0) / marks.length;
             series.push({ exam: formatExamName(e), mean: round(mean, 1) });

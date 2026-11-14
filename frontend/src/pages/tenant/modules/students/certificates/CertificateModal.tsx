@@ -90,7 +90,7 @@ export default function CertificateModal({ student, onClose }: { student: any; o
                             <div className="grid grid-cols-3 gap-2">
                                 {types.map(t => (
                                     <button key={t.key} onClick={() => pickType(t.key)} className={`p-2 rounded-xl border-2 text-center transition-all ${type === t.key ? "border-[#5C67F2] bg-indigo-50" : "border-gray-100 hover:border-indigo-200"}`}>
-                                        <div className="text-xl">{t.icon}</div><div className="text-[10px] font-bold text-slate-700 leading-tight mt-0.5">{t.label}</div>
+                                        <t.icon className="w-5 h-5 mx-auto text-slate-500" /><div className="text-[10px] font-bold text-slate-700 leading-tight mt-0.5">{t.label}</div>
                                     </button>
                                 ))}
                             </div>
@@ -164,4 +164,4 @@ export default function CertificateModal({ student, onClose }: { student: any; o
 }
 
 // a tiny neutral QR-looking tile for the preview only (the real code is made when the certificate is issued)
-const PLACEHOLDER_QR = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 9 9"><rect width="9" height="9" fill="#fff"/><g fill="#111"><rect x="0" y="0" width="3" height="3"/><rect x="6" y="0" width="3" height="3"/><rect x="0" y="6" width="3" height="3"/><rect x="4" y="1" width="1" height="1"/><rect x="4" y="4" width="2" height="1"/><rect x="7" y="5" width="1" height="2"/><rect x="4" y="7" width="2" height="1"/><rect x="5" y="3" width="1" height="1"/></g><g fill="#fff"><rect x="1" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/></g></svg>`);
+export const PLACEHOLDER_QR = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 9 9"><rect width="9" height="9" fill="#fff"/><g fill="#111"><rect x="0" y="0" width="3" height="3"/><rect x="6" y="0" width="3" height="3"/><rect x="0" y="6" width="3" height="3"/><rect x="4" y="1" width="1" height="1"/><rect x="4" y="4" width="2" height="1"/><rect x="7" y="5" width="1" height="2"/><rect x="4" y="7" width="2" height="1"/><rect x="5" y="3" width="1" height="1"/></g><g fill="#fff"><rect x="1" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/></g></svg>`);

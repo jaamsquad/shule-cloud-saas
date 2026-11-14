@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Home, Loader2, Plus, Trash2, Pencil, Save, Printer, X, ListChecks, Settings2, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, Save, Printer, X, Sparkles, ChevronDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { toast } from "sonner";
@@ -8,7 +8,6 @@ import { useSchoolBrand } from "@/lib/printDoc";
 import { outputHtmlDoc } from "@/lib/pdfDoc";
 import { SKILL_TEMPLATES, SKILL_THEMES, skillReportHtml, SkillPrint } from "./skillTemplates";
 
-const TABS = [{ k: "setup", l: "1 · Skills setup", i: Settings2 }, { k: "assess", l: "2 · Assess learners", i: ListChecks }, { k: "print", l: "3 · Print reports", i: FileText }] as const;
 const inp = "h-10 px-3 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-[#5C67F2]";
 const TERMS = ["Term 1", "Term 2", "Term 3"];
 
@@ -35,34 +34,33 @@ function useLists() {
     const scales = useQuery<Record<string, any>>({ queryKey: ["skill_scales"], queryFn: async () => (await api.get("/skills/scales")).data });
     const v2 = useQuery<any[]>({ queryKey: ["skills_classes"], queryFn: async () => (await api.get("/v2/classes")).data || [] });
     const frameworks = useQuery<any[]>({ queryKey: ["skill_frameworks"], queryFn: async () => (await api.get("/skills/frameworks")).data || [] });
-    return { classes: classes.data || [], groups: classGroups(v2.data || [], classes.data || []), subjects: subjects.data || [], scales: scales.data || {}, frameworks: frameworks.data || [] };
-}
-
-export default function SkillReports() {
-    const [tab, setTab] = useState<(typeof TABS)[number]["k"]>("setup");
-    return (
-        <div className="flex-1 bg-[#f4f7f6] min-h-screen flex flex-col items-center">
-            <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center shadow-sm z-10 m-4 rounded-xl w-[calc(100%-2rem)]">
-                <span className="font-bold text-gray-800 text-lg mr-2">Exams</span><span className="text-gray-300 mx-2">|</span><Home className="w-4 h-4 text-gray-500 mr-2" /><span className="text-gray-500 font-medium">- Skill-Based Reports</span>
-            </div>
-            <div className="p-6 pt-0 w-full space-y-5">
-                <div className="flex flex-wrap gap-2">
-                    {TABS.map(t => <button key={t.k} onClick={() => setTab(t.k)} className={`h-10 px-4 rounded-full text-sm font-bold flex items-center gap-2 ${tab === t.k ? "bg-[#5C67F2] text-white shadow-sm" : "bg-white border border-gray-200 text-gray-600 hover:border-[#5C67F2]"}`}><t.i className="w-4 h-4" />{t.l}</button>)}
-                </div>
-                {tab === "setup" && <Setup />}{tab === "assess" && <Assess />}{tab === "print" && <PrintTab />}
-            </div>
-        </div>
-    );
+    const defaults = useQuery<{ subjects: string[]; areas: any[] }>({ queryKey: ["skill_cbc_defaults"], queryFn: async () => (await api.get("/skills/defaults")).data });
+    return { classes: classes.data || [], groups: classGroups(v2.data || [], classes.data || []), subjects: subjects.data || [], scales: scales.data || {}, frameworks: frameworks.data || [], cbcDefaults: defaults.data || { subjects: [], areas: [] } };
 }
 
 // ── 1. Setup: subject → field of study → skills ───────────────────────────────
-function Setup() {
-    const qc = useQueryClient(); const { groups, subjects, scales, frameworks } = useLists();
+export function Setup() {
+    const qc = useQueryClient(); const { groups, subjects, scales, frameworks, cbcDefaults } = useLists();
     const blank = { subject: "", area: "", scale: "mastery", skills: "", levels: [] as string[] };
     const [f, setF] = useState<any>(blank); const [editId, setEditId] = useState<string | null>(null); const [saving, setSaving] = useState(false);
     const toggle = (l: string) => setF((cur: any) => ({ ...cur, levels: cur.levels.includes(l) ? cur.levels.filter((x: string) => x !== l) : [...cur.levels, l] }));
     const grouped = useMemo(() => { const m: Record<string, any[]> = {}; frameworks.forEach(x => (m[x.subject] ||= []).push(x)); return m; }, [frameworks]);
     const refresh = () => qc.invalidateQueries({ queryKey: ["skill_frameworks"] });
+
+    // Quick-start: load KICD CBC strands/skills instead of typing every subject's
+    // fields of study from scratch (see backend/cbcDefaults.ts for sourcing notes).
+    const [showDefaults, setShowDefaults] = useState(false);
+    const [pickDefaults, setPickDefaults] = useState<string[]>([]);
+    const [loadingDefaults, setLoadingDefaults] = useState(false);
+    const toggleDefault = (s: string) => setPickDefaults(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]);
+    const loadDefaults = async (subjectsToLoad: string[]) => {
+        setLoadingDefaults(true);
+        try {
+            const r = (await api.post("/skills/frameworks/seed-defaults", subjectsToLoad.length ? { subjects: subjectsToLoad } : {})).data;
+            toast.success(r.added ? `Loaded ${r.added} field${r.added === 1 ? "" : "s"} of study${r.skipped ? ` · ${r.skipped} already set up` : ""}` : "Already set up — nothing new to add");
+            setPickDefaults([]); refresh();
+        } catch (e: any) { toast.error(e.response?.data?.message || "Could not load defaults"); } finally { setLoadingDefaults(false); }
+    };
 
     const save = async () => {
         if (!f.subject.trim() || !f.area.trim()) { toast.error("Give the subject and the field of study."); return; }
@@ -76,7 +74,29 @@ function Setup() {
     const del = async (x: any) => { if (!confirm(`Delete "${x.area}" (${x.subject}) and all ratings given for its skills?`)) return; try { await api.delete(`/skills/frameworks/${x._id}`); refresh(); toast.success("Deleted"); } catch (e: any) { toast.error(e.response?.data?.message || "Failed"); } };
 
     return (
-        <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
+        <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <button onClick={() => setShowDefaults(s => !s)} className="w-full flex items-center justify-between gap-3 p-5 text-left">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0"><Sparkles className="w-5 h-5 text-[#5C67F2]" /></div>
+                        <div><h3 className="font-black text-slate-800">Quick start: load CBC defaults</h3><p className="text-xs text-slate-400 mt-0.5">Pre-filled strands and skills for every KICD CBC subject — load them instead of typing each one from scratch, then edit to match your own scheme of work.</p></div>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${showDefaults ? "rotate-180" : ""}`} />
+                </button>
+                {showDefaults && (
+                    <div className="px-5 pb-5 space-y-3 border-t border-gray-50 pt-4">
+                        <div className="flex flex-wrap gap-1.5">
+                            {cbcDefaults.subjects.map(s => { const on = pickDefaults.includes(s); return <button key={s} type="button" onClick={() => toggleDefault(s)} className={`px-2.5 h-7 rounded-full text-[11px] font-bold border ${on ? "bg-[#5C67F2] text-white border-[#5C67F2]" : "bg-white text-slate-500 border-slate-200"}`}>{s}</button>; })}
+                        </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                            <button onClick={() => loadDefaults(pickDefaults)} disabled={loadingDefaults || !pickDefaults.length} className="h-9 px-4 rounded-xl bg-[#5C67F2] hover:bg-[#4a54c4] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-40">{loadingDefaults ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Load selected ({pickDefaults.length})</button>
+                            <button onClick={() => loadDefaults([])} disabled={loadingDefaults} className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40">Load all subjects</button>
+                        </div>
+                        <p className="text-[10px] text-slate-400">Fields of study you've already added (by subject + name) are skipped, so this is safe to run more than once.</p>
+                    </div>
+                )}
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3 h-fit">
                 <h3 className="font-black text-slate-800">{editId ? "Edit field of study" : "Add a field of study"}</h3>
                 <p className="text-xs text-slate-400">Example: subject <b>English</b> → field <b>Reading</b> → skills "Reads grade-appropriate text independently".</p>
@@ -110,12 +130,13 @@ function Setup() {
                     </div>
                 ))}
             </div>
+            </div>
         </div>
     );
 }
 
 // ── 2. Assess: learners × skills for a class, subject and term ────────────────
-function Assess() {
+export function Assess() {
     const { groups, scales, frameworks } = useLists();
     const [cls, setCls] = useState(""); const [subject, setSubject] = useState(""); const [term, setTerm] = useState(TERMS[0]); const [year, setYear] = useState(String(new Date().getFullYear()));
     const [areaId, setAreaId] = useState(""); const [draft, setDraft] = useState<Record<string, Record<string, string>>>({}); const [saving, setSaving] = useState(false);
@@ -191,7 +212,7 @@ function Assess() {
 }
 
 // ── 3. Print: choose a design and print a class (or one learner) ──────────────
-function PrintTab() {
+export function PrintTab() {
     const { groups, subjects: _s, frameworks } = useLists(); const school = useSchoolBrand();
     const [cls, setCls] = useState(""); const [studentId, setStudentId] = useState(""); const [template, setTemplate] = useState("checklist"); const [theme, setTheme] = useState("blue");
     const [term, setTerm] = useState(TERMS[0]); const [year, setYear] = useState(String(new Date().getFullYear())); const [pick, setPick] = useState<string[]>([]);

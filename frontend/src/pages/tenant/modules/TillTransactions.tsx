@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle, DownloadCloud } from "lucide-react";
+import { Loader2, Smartphone, Search, X, Download, RefreshCw, AlertTriangle, CheckCircle2, PlusCircle, DownloadCloud, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -22,6 +22,9 @@ export default function TillTransactions() {
     // Applied filters (only sent to the server when "Search" is pressed).
     const [params, setParams] = useState<Record<string, string>>({});
     const [showApply, setShowApply] = useState(false);
+    // Prefill when "Assign" is clicked on a specific unassigned row, instead of a
+    // blank form the clerk would have to retype the code/amount/phone into.
+    const [assignRow, setAssignRow] = useState<any>(null);
 
     const { data, isLoading, refetch, isFetching } = useQuery({
         queryKey: ["till_transactions", params],
@@ -34,11 +37,13 @@ export default function TillTransactions() {
     // Trigger a server-side Pull-sync once when the page opens (best-effort),
     // so the freshest Safaricom transactions are fetched without a manual click.
     useEffect(() => { api.post("/fees/till-transactions/sync", {}).catch(() => { }); }, []);
-    // M-PESA integration status — to explain WHY direct till payments may be missing.
-    const { data: mpesa } = useQuery({
-        queryKey: ["mpesa_settings"],
-        queryFn: async () => (await api.get("/integrations/mpesa/settings")).data,
+    // M-PESA account(s) — to explain WHY direct till payments may be missing.
+    const { data: mpesaAccounts = [] } = useQuery<any[]>({
+        queryKey: ["mpesa_accounts"],
+        queryFn: async () => (await api.get("/integrations/mpesa/accounts")).data || [],
     });
+    const enabledAccounts = mpesaAccounts.filter(a => a.enabled);
+    const anyRegistered = enabledAccounts.some(a => a.registered);
     const rows: any[] = data?.data || [];
     const summary = data?.summary || { count: 0, total: 0 };
     // Did any directly-paid (C2B) transaction come through?
@@ -98,16 +103,17 @@ export default function TillTransactions() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                 <div className="bg-white rounded-2xl border border-slate-100 p-4"><div className="text-2xl font-black text-slate-800">{summary.count}</div><div className="text-[11px] font-bold text-slate-400">Transactions</div></div>
                 <div className="bg-white rounded-2xl border border-slate-100 p-4"><div className="text-2xl font-black text-emerald-600">{ksh(summary.total)}</div><div className="text-[11px] font-bold text-slate-400">Total Received</div></div>
+                <div className={`rounded-2xl border p-4 ${summary.unassigned > 0 ? "bg-amber-50 border-amber-100" : "bg-white border-slate-100"}`}><div className={`text-2xl font-black ${summary.unassigned > 0 ? "text-amber-600" : "text-slate-800"}`}>{summary.unassigned || 0}</div><div className="text-[11px] font-bold text-slate-400">Not yet assigned to a student</div></div>
             </div>
 
             {/* Direct-payment (C2B) capture status — explains why manual till payments may be missing */}
-            {mpesa && !hasC2B && (
-                mpesa.registered ? (
+            {mpesaAccounts.length > 0 && !hasC2B && (
+                anyRegistered ? (
                     <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 mb-5 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                         <div className="text-sm text-emerald-800">
                             <p className="font-bold">Direct payment capture is ON.</p>
-                            <p className="text-emerald-700/80 mt-0.5">Your C2B URLs are registered with Safaricom, so payments made directly to your {mpesa.txType === "CustomerBuyGoodsOnline" ? "Till" : "Paybill"} will appear here automatically. If a recent one is missing, it can take a moment — hit Refresh. (Note: Safaricom only sends these notifications in <b>Production</b>, and many <b>Till/Buy-Goods</b> shortcodes don't deliver C2B — Paybills do.)</p>
+                            <p className="text-emerald-700/80 mt-0.5">Your C2B URLs are registered with Safaricom, so payments made directly to your Till/Paybill will appear here automatically. If a recent one is missing, it can take a moment — hit Refresh. (Note: Safaricom only sends these notifications in <b>Production</b>, and many <b>Till/Buy-Goods</b> shortcodes don't deliver C2B — Paybills do.)</p>
                         </div>
                     </div>
                 ) : (
@@ -116,7 +122,7 @@ export default function TillTransactions() {
                         <div className="text-sm text-amber-800">
                             <p className="font-bold">Payments made directly to your Till/Paybill aren't being captured yet.</p>
                             <p className="text-amber-700/80 mt-0.5">To pull in transactions customers make on their own phones (Lipa na M-PESA → Paybill/Buy Goods), you must register your C2B notification URLs with Safaricom — one click.</p>
-                            <Link to="/integrations/daraja" className="inline-flex items-center gap-1.5 mt-2 h-9 px-4 rounded-xl bg-amber-600 text-white font-bold text-xs">Go to M-PESA Integration → Register C2B URLs</Link>
+                            <Link to="/integrations/mpesa-accounts" className="inline-flex items-center gap-1.5 mt-2 h-9 px-4 rounded-xl bg-amber-600 text-white font-bold text-xs">Go to M-PESA Accounts → Register C2B URLs</Link>
                         </div>
                     </div>
                 )
@@ -158,10 +164,11 @@ export default function TillTransactions() {
                                 <th className="text-right px-4 py-3 font-black">Amount</th>
                                 <th className="text-left px-4 py-3 font-black">Source</th>
                                 <th className="text-left px-4 py-3 font-black">Paid At</th>
+                                <th className="text-left px-4 py-3 font-black">Student</th>
                             </tr></thead>
                             <tbody>
                                 {rows.map((r, i) => (
-                                    <tr key={r.code + i} className="border-b border-slate-50 hover:bg-slate-50/60">
+                                    <tr key={r.code + i} className={`border-b border-slate-50 hover:bg-slate-50/60 ${!r.assigned ? "bg-amber-50/40" : ""}`}>
                                         <td className="px-4 py-3 font-mono text-xs font-bold text-[#0E7490]">{r.code || "—"}</td>
                                         <td className="px-4 py-3 text-slate-600">{r.phone || "—"}</td>
                                         <td className="px-4 py-3 font-bold text-slate-700">{r.name}</td>
@@ -169,6 +176,13 @@ export default function TillTransactions() {
                                         <td className="px-4 py-3 text-right font-black text-emerald-700">{ksh(r.amount)}</td>
                                         <td className="px-4 py-3"><span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{r.source || "M-PESA"}</span></td>
                                         <td className="px-4 py-3 text-slate-400 text-xs">{fmt(r.paidAt)}</td>
+                                        <td className="px-4 py-3">
+                                            {r.assigned ? (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5" /> Assigned</span>
+                                            ) : (
+                                                <button onClick={() => setAssignRow(r)} className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold"><UserPlus className="w-3.5 h-3.5" /> Assign</button>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -177,17 +191,25 @@ export default function TillTransactions() {
                 )}
             </div>
 
-            {showApply && <ApplyTillPayment onClose={() => setShowApply(false)} onDone={() => { setShowApply(false); qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch(); }} />}
+            {(showApply || assignRow) && (
+                <ApplyTillPayment
+                    initial={assignRow}
+                    onClose={() => { setShowApply(false); setAssignRow(null); }}
+                    onDone={() => { setShowApply(false); setAssignRow(null); qc.invalidateQueries({ queryKey: ["till_transactions"] }); refetch(); }}
+                />
+            )}
         </div>
     );
 }
 
 // Record a payment a customer made directly to the Till (Buy Goods) by pasting
-// its M-PESA code and choosing the student. Applied to outstanding fees.
-function ApplyTillPayment({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-    const [code, setCode] = useState("");
-    const [amount, setAmount] = useState("");
-    const [phone, setPhone] = useState("");
+// its M-PESA code and choosing the student, OR — when opened via "Assign" on an
+// already-received confirmation — with the code/amount/phone prefilled so the
+// clerk only has to pick the student. Applied to outstanding fees either way.
+function ApplyTillPayment({ initial, onClose, onDone }: { initial?: any; onClose: () => void; onDone: () => void }) {
+    const [code, setCode] = useState(initial?.code || "");
+    const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : "");
+    const [phone, setPhone] = useState(initial?.phone || "");
     const [q, setQ] = useState("");
     const [student, setStudent] = useState<any>(null);
 
@@ -220,15 +242,19 @@ function ApplyTillPayment({ onClose, onDone }: { onClose: () => void; onDone: ()
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                    <h2 className="font-black text-slate-800 flex items-center gap-2"><PlusCircle className="w-5 h-5 text-emerald-600" /> Record Till Payment</h2>
+                    <h2 className="font-black text-slate-800 flex items-center gap-2"><PlusCircle className="w-5 h-5 text-emerald-600" /> {initial ? "Assign Payment to a Student" : "Record Till Payment"}</h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="p-5 space-y-3">
-                    <p className="text-xs text-slate-500 leading-relaxed">Paste the M-PESA code from the customer's confirmation SMS, enter the amount, and choose the student. It will be applied to their outstanding fees.</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                        {initial
+                            ? "This M-PESA payment was received but hasn't been applied to a student yet. Choose the student to apply it to their outstanding fees."
+                            : "Paste the M-PESA code from the customer's confirmation SMS, enter the amount, and choose the student. It will be applied to their outstanding fees."}
+                    </p>
                     <div>
                         <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">M-PESA Code</label>
-                        <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="e.g. SLJ7ABC123" maxLength={15}
-                            className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:outline-none focus:border-emerald-500" />
+                        <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="e.g. SLJ7ABC123" maxLength={15} readOnly={!!initial}
+                            className={`w-full h-11 px-3 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:outline-none focus:border-emerald-500 ${initial ? "bg-slate-50 text-slate-500" : ""}`} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div>

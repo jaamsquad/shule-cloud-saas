@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { useGrading } from '@/lib/grading';
 import { toast } from 'sonner';
 import { 
     Calculator, CheckCircle2, ChevronDown, ClipboardList, 
@@ -28,6 +29,9 @@ export default function ManageTestMarks() {
         date: new Date().toISOString().split('T')[0],
         description: ''
     });
+
+    // Configured grading for the test's class (class template → class/school criteria → settings).
+    const grading = useGrading(selectedTest?.class_id || selectedClass?._id, selectedClass?.name || selectedClass?.levelName);
 
     // Student entries state
     const [entries, setEntries] = useState<any[]>([]);
@@ -165,15 +169,11 @@ export default function ManageTestMarks() {
                 const isOutOfRange = marksObtained !== '' && marksObtained > selectedTest.total_marks;
                 
                 // Client-side quick grade mapping
+                // (configured scale for the test's class; the server decides the saved grade)
                 let grade = '';
                 if (marksObtained !== '') {
                     const pct = (Number(marksObtained) / selectedTest.total_marks) * 100;
-                    if (pct >= 90) grade = 'A+';
-                    else if (pct >= 80) grade = 'A';
-                    else if (pct >= 70) grade = 'B';
-                    else if (pct >= 60) grade = 'C';
-                    else if (pct >= 50) grade = 'D';
-                    else grade = 'F';
+                    grade = grading.grade(pct);
                 }
 
                 return {

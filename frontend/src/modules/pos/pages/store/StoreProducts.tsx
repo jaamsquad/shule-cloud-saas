@@ -97,7 +97,7 @@ export default function StoreProducts() {
                     {p.imageUrl ? (
                       <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200" />
                     ) : (
-                      <span className="text-5xl">🛍️</span>
+                      <ShoppingBag className="w-10 h-10 text-slate-400" />
                     )}
                     {outOfStock && (
                       <span className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-bold text-red-400 uppercase tracking-widest">

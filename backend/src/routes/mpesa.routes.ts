@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getMetaDb, getTenantDb } from '../lib/mongodb';
 import { parseStkCallback, applyMpesaPayment, stkResultMessage } from '../services/mpesa.service';
 import { creditWallet } from '../services/wallet.service';
+import { creditSmsWallet } from '../services/smsWallet.service';
 import { handleBusinessCallback } from '../services/bizDocs.service';
 import { activateSubscription } from '../services/subscription.service';
 
@@ -57,7 +58,9 @@ router.post(['/mpesa/callback', '/mpesa/stk-callback'], async (req, res) => {
             );
             if (upd.modifiedCount > 0 && txn.tenantDbName) {
                 const tdb = getTenantDb(txn.tenantDbName);
-                if (txn.purpose === 'wallet') {
+                if (txn.purpose === 'sms') {
+                    await creditSmsWallet(tdb, txn.smsCount, { source: 'M-PESA', reference: m.mpesaReceiptNumber, description: `Topped up with KSH ${txn.amount}` });
+                } else if (txn.purpose === 'wallet') {
                     await creditWallet(tdb, txn.studentId, m.amount || txn.amount, { source: 'M-PESA', reference: m.mpesaReceiptNumber, by: 'mpesa' });
                 } else {
                     await applyMpesaPayment(tdb, {
@@ -145,6 +148,65 @@ router.post(['/mpesa/transaction-status/result', '/pesa/transaction-status/resul
             );
         }
     } catch (e) { console.error('[M-PESA] txn-status result error:', e); }
+});
+
+// ─── Reversal result callback ─────────────────────────────────────────────────
+// Safaricom's verdict for a TransactionReversal request. We flip the reversal
+// record to completed/failed; the SOFT reversal on the payment (done at request
+// time by c2bInbox.service.reverse) is already in effect, so this is audit +
+// restoring state if Daraja refused.
+router.post(['/mpesa/reversal/result', '/pesa/reversal/result'], async (req, res) => {
+    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    try {
+        const meta = getMetaDb();
+        const r = req.body?.Result || {};
+        const params: any[] = r.ResultParameters?.ResultParameter || [];
+        const pick = (k: string) => params.find(p => p.Key === k)?.Value;
+        const originalId = String(pick('OriginalTransactionID') || pick('TransactionID') || r.ConversationID || '').toUpperCase();
+        const ok = Number(r.ResultCode) === 0;
+        await meta.collection('mpesa_reversals').updateOne(
+            { conversationId: r.ConversationID },
+            {
+                $set: {
+                    status: ok ? 'completed' : 'failed',
+                    resultCode: Number(r.ResultCode),
+                    resultDesc: r.ResultDesc || '',
+                    originalTransactionId: originalId || undefined,
+                    completedAt: new Date(),
+                    raw: req.body,
+                },
+            },
+            { upsert: true },
+        );
+    } catch (e) { console.error('[M-PESA] reversal result error:', e); }
+});
+
+// ─── B2C result callback ──────────────────────────────────────────────────────
+router.post(['/mpesa/b2c/result', '/pesa/b2c/result'], async (req, res) => {
+    res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    try {
+        const meta = getMetaDb();
+        const r = req.body?.Result || {};
+        const params: any[] = r.ResultParameters?.ResultParameter || [];
+        const pick = (k: string) => params.find(p => p.Key === k)?.Value;
+        const ok = Number(r.ResultCode) === 0;
+        await meta.collection('mpesa_b2c').updateOne(
+            { conversationId: r.ConversationID },
+            {
+                $set: {
+                    status: ok ? 'completed' : 'failed',
+                    resultCode: Number(r.ResultCode),
+                    resultDesc: r.ResultDesc || '',
+                    transactionReceipt: pick('TransactionReceipt') || undefined,
+                    transactionAmount: Number(pick('TransactionAmount')) || undefined,
+                    recipient: pick('ReceiverPartyPublicName') || undefined,
+                    completedAt: new Date(),
+                    raw: req.body,
+                },
+            },
+            { upsert: true },
+        );
+    } catch (e) { console.error('[M-PESA] b2c result error:', e); }
 });
 
 router.post(['/mpesa/timeout', '/pesa/timeout'], (_req, res) => res.json({ ResultCode: 0, ResultDesc: 'Accepted' }));

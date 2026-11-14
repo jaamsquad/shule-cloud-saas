@@ -83,7 +83,7 @@ export default function Activate() {
         {/* Step B — activation code (after email verified) */}
         {emailVerified && (
           <form onSubmit={activate} className="space-y-3">
-            <div className="flex items-center gap-2 text-emerald-600"><ShieldCheck className="w-5 h-5" /><span className="text-xs font-bold">Email verified ✓</span></div>
+            <div className="flex items-center gap-2 text-emerald-600"><ShieldCheck className="w-5 h-5" /><span className="text-xs font-bold">Email verified</span></div>
             <div className="relative">
               <KeyRound className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Activation code (e.g. SCH-4827)"

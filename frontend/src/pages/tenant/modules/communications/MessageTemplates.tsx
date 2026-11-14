@@ -42,16 +42,16 @@ export function CommNav({ active }: { active: "meetings" | "templates" }) {
     );
 }
 
-export function CommShell({ title, subtitle, icon: Icon, actions, active, children }: { title: string; subtitle: string; icon: any; actions?: React.ReactNode; active: "meetings" | "templates"; children: React.ReactNode }) {
+export function CommShell({ title, subtitle, icon: Icon, actions, active, children, section = "Communication", nav = true }: { title: string; subtitle: string; icon: any; actions?: React.ReactNode; active: "meetings" | "templates"; children: React.ReactNode; section?: string; nav?: boolean }) {
     return (
         <div className="flex-1 min-h-screen bg-[#F8FAFC] pb-16">
             <div className="bg-white/80 backdrop-blur border-b border-slate-100 sticky top-0 z-20">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 pb-2 space-y-2">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold">
                         <Home className="w-3.5 h-3.5 text-[#5C67F2]" /><ChevronRight className="w-3 h-3" />
-                        <span>Communication</span><ChevronRight className="w-3 h-3" /><span className="text-slate-700">{title}</span>
+                        <span>{section}</span><ChevronRight className="w-3 h-3" /><span className="text-slate-700">{title}</span>
                     </div>
-                    <CommNav active={active} />
+                    {nav && <CommNav active={active} />}
                 </div>
             </div>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">

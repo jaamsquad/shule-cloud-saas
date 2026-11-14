@@ -5,21 +5,13 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { FeesPage } from "@/components/fees/FeesUI";
+import { ClassTuitionModal } from "@/components/fees/ClassTuitionGrid";
 import { ListChecks as ListChecksPageIcon } from "lucide-react";
 
 export default function FeeParticulars() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [category, setCategory] = useState("All Students");
-
-    // Classes query for setup
-    const { data: classes = [] } = useQuery({
-        queryKey: ["classes"],
-        queryFn: async () => {
-            const r = await api.get("/academics/classes");
-            return r.data || [];
-        },
-    });
 
     const { data: particularsData, isLoading } = useQuery({
         queryKey: ["fee_particulars", category],
@@ -32,7 +24,6 @@ export default function FeeParticulars() {
 
     const [rows, setRows] = useState<any[]>([]);
     const [classSetupModalOpen, setClassSetupModalOpen] = useState(false);
-    const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
     useEffect(() => {
         if (particularsData?.particulars) {
@@ -93,35 +84,8 @@ export default function FeeParticulars() {
     };
 
     // Open class setup modal for a tuition row
-    const openClassSetup = (index: number) => {
-        setSelectedRowIndex(index);
+    const openClassSetup = (_index: number) => {
         setClassSetupModalOpen(true);
-    };
-
-    // Update class amounts in the row
-    const handleClassAmountChange = (classIdOrName: string, amount: string) => {
-        if (selectedRowIndex === null) return;
-        setRows(prev => {
-            const copy = [...prev];
-            const rowCopy = { ...copy[selectedRowIndex] };
-            const classAmountsCopy = { ...(rowCopy.classAmounts || {}) };
-            classAmountsCopy[classIdOrName] = amount;
-            rowCopy.classAmounts = classAmountsCopy;
-            
-            // Set average or fallback amount to main field for visualization
-            const vals = Object.values(classAmountsCopy).map(v => parseFloat(v as string) || 0);
-            if (vals.length > 0) {
-                rowCopy.amount = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(0);
-            }
-            
-            copy[selectedRowIndex] = rowCopy;
-            return copy;
-        });
-    };
-
-    const handleClassSetupDone = () => {
-        setClassSetupModalOpen(false);
-        saveMutation.mutate(rows);
     };
 
     const handleAddParticular = () => {
@@ -219,57 +183,8 @@ export default function FeeParticulars() {
                 </div>
             </div>
 
-            {/* Class Setup Modal */}
-            {classSetupModalOpen && selectedRowIndex !== null && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-                        <div className="px-8 py-5 bg-gradient-to-r from-[#5C67F2] to-indigo-500 text-white flex justify-between items-center">
-                            <div>
-                                <h3 className="text-sm font-black uppercase tracking-wider">Setup Class Tuition Fees</h3>
-                                <p className="text-[10px] opacity-80 font-bold uppercase mt-0.5">{rows[selectedRowIndex]?.label}</p>
-                            </div>
-                            <button 
-                                onClick={() => setClassSetupModalOpen(false)}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="p-8 max-h-[55vh] overflow-y-auto space-y-4">
-                            {classes.length > 0 ? (
-                                classes.map((c: any) => {
-                                    const classIdentifier = c.name || c.levelName;
-                                    return (
-                                        <div key={c._id || classIdentifier} className="flex items-center justify-between gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                            <span className="text-xs font-black text-slate-700 uppercase">{classIdentifier}</span>
-                                            <div className="w-32 relative">
-                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400">KES</span>
-                                                <input 
-                                                    type="number"
-                                                    value={rows[selectedRowIndex]?.classAmounts?.[classIdentifier] || ""}
-                                                    onChange={(e) => handleClassAmountChange(classIdentifier, e.target.value)}
-                                                    placeholder="0"
-                                                    className="w-full text-xs p-2 pl-9 bg-white border border-slate-150 rounded-lg outline-none focus:border-[#5C67F2] font-black text-slate-700 text-right"
-                                                />
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <p className="text-center text-xs text-slate-400 py-6 uppercase font-bold tracking-wider">No classes created yet. Setup classes in Academics module.</p>
-                            )}
-                        </div>
-                        <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end">
-                            <button
-                                onClick={handleClassSetupDone}
-                                className="px-6 py-2 bg-[#5C67F2] hover:bg-indigo-600 text-white text-xs font-black rounded-lg uppercase tracking-wider shadow-sm transition-all"
-                            >
-                                Done
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Class tuition (per class, per term) */}
+            {classSetupModalOpen && <ClassTuitionModal onClose={() => setClassSetupModalOpen(false)} />}
         </FeesPage>
     );
 }
@@ -327,7 +242,7 @@ function ParticularRow({
                     title="Setup amount for each class individually"
                 >
                     <Settings2 className="w-3.5 h-3.5" />
-                    Setup per Class
+                    Per class &amp; term
                 </button>
             )}
 

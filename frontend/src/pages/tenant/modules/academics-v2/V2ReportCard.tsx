@@ -5,8 +5,8 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { openPrintDoc } from "@/lib/pdfDoc";
 import { reportQr } from "@/lib/reportQr";
+import { useGrading } from "@/lib/grading";
 
-function grade(pct: number | null) { if (pct === null) return "—"; if (pct >= 80) return "A"; if (pct >= 70) return "B+"; if (pct >= 60) return "B"; if (pct >= 50) return "C+"; if (pct >= 40) return "C"; if (pct >= 33) return "D"; return "F"; }
 function gradeColor(pct: number | null) { if (pct === null) return "text-gray-400"; return pct >= 70 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-rose-600"; }
 
 export default function V2ReportCard() {
@@ -35,6 +35,10 @@ export default function V2ReportCard() {
             setPrincipalComment(data.comments?.principal || "");
         },
     });
+
+    // Configured grading for the enrollment's (historical) class.
+    const grading = useGrading(selectedEnrollment?.classId, selectedEnrollment?.className || (reportCard as { enrollment?: { class?: string } } | undefined)?.enrollment?.class);
+    const grade = (pct: number | null | undefined) => (pct === null || pct === undefined ? "—" : grading.grade(pct));
 
     const saveComments = async () => {
         if (!selectedEnrollment) return;
